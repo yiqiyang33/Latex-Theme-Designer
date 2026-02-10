@@ -19,10 +19,40 @@
 % If you want to tune colors globally, edit theme.sty instead of this file.
 
 % Definition
-\newtcbtheorem[number within=section]{mydefinition}{Definition}
-{
-    theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
-}{defn}
+\makeatletter
+\newif\ifThemeTheoremNumberingNone
+\ThemeTheoremNumberingNonefalse
+\def\ThemeTheoremCounterWithin{section}
+\@ifundefined{ThemeResolvedTheoremNumbering}{}{
+    \def\theme@theorem@chapter{chapter}
+    \def\theme@theorem@section{section}
+    \def\theme@theorem@none{none}
+    \ifx\ThemeResolvedTheoremNumbering\theme@theorem@chapter
+        \@ifundefined{chapter}{
+            \def\ThemeTheoremCounterWithin{section}
+        }{
+            \def\ThemeTheoremCounterWithin{chapter}
+        }
+    \else
+        \ifx\ThemeResolvedTheoremNumbering\theme@theorem@none
+            \ThemeTheoremNumberingNonetrue
+        \else
+            \def\ThemeTheoremCounterWithin{section}
+        \fi
+    \fi
+}
+\ifThemeTheoremNumberingNone
+    \newtcbtheorem{mydefinition}{Definition}
+    {
+        theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
+    }{defn}
+\else
+    \newtcbtheorem[number within=\ThemeTheoremCounterWithin]{mydefinition}{Definition}
+    {
+        theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
+    }{defn}
+\fi
+\makeatother
 
 
 \NewDocumentCommand{\defn}{mm+m}{

@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+import tempfile
+import time
 import unittest
 
 from tools import theme_designer_core as td
@@ -113,6 +116,227 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("recipe step 2", output)
         self.assertIn("recipe step 3", output)
         self.assertEqual(pdf_rel, "tools/tests/_tmp_recipe_target.pdf")
+
+    def test_expected_output_pdf_tracks_recipe_outdir(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_outdir_target.tex"
+        target_abs = root / target_rel
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{article}\\begin{document}x\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        original_catalog = td._load_vscode_recipe_catalog
+        try:
+            td._load_vscode_recipe_catalog = lambda: {
+                "tools": {
+                    "latexmk": {
+                        "name": "latexmk",
+                        "command": "latexmk",
+                        "args": ["-outdir=build/%DOC%", "%DOCFILE%"],
+                    }
+                },
+                "recipes": [
+                    {
+                        "id": "vscode-1-outdir",
+                        "name": "latexmk-outdir",
+                        "tools": ["latexmk"],
+                    }
+                ],
+                "errors": [],
+            }
+            pdf_rel = td._expected_output_pdf_for_selection(
+                target_rel,
+                "vscode-1-outdir",
+                use_internal_fallback=False,
+            )
+        finally:
+            td._load_vscode_recipe_catalog = original_catalog
+            if target_abs.exists():
+                target_abs.unlink()
+
+        self.assertEqual(
+            pdf_rel,
+            "tools/tests/build/_tmp_outdir_target/_tmp_outdir_target.pdf",
+        )
+
+    def test_compile_fails_when_pdf_is_older_than_source(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_stale_target.tex"
+        target_abs = root / target_rel
+        pdf_abs = target_abs.with_suffix(".pdf")
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{article}\\begin{document}stale\\end{document}\n",
+            encoding="utf-8",
+        )
+        pdf_abs.write_bytes(b"%PDF-1.4\n")
+
+        now = time.time()
+        os.utime(pdf_abs, (now - 20, now - 20))
+        os.utime(target_abs, (now, now))
+
+        original_resolve_binary = td._resolve_binary
+        original_run_command = td._run_command
+        try:
+            td._resolve_binary = lambda name: "/usr/bin/latexmk" if name == "latexmk" else None
+            td._run_command = lambda command, cwd=td.ROOT_DIR: (True, 0, "ok")
+            success, output, pdf_rel = td._compile_tex_target(target_rel)
+        finally:
+            td._resolve_binary = original_resolve_binary
+            td._run_command = original_run_command
+            if target_abs.exists():
+                target_abs.unlink()
+            if pdf_abs.exists():
+                pdf_abs.unlink()
+
+        self.assertFalse(success)
+        self.assertIn("Stale preview risk", output)
+        self.assertEqual(pdf_rel, "tools/tests/_tmp_stale_target.pdf")
+
+    def test_refresh_derived_state_detects_book_and_article_modes(self) -> None:
+        root = td.ROOT_DIR
+        book_rel = "tools/tests/_tmp_class_book.tex"
+        article_rel = "tools/tests/_tmp_class_article.tex"
+        book_abs = root / book_rel
+        article_abs = root / article_rel
+        book_abs.parent.mkdir(parents=True, exist_ok=True)
+        book_abs.write_text(
+            "\\documentclass{book}\\begin{document}\\chapter{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+        article_abs.write_text(
+            "\\documentclass{article}\\begin{document}\\section{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            state = {
+                "compile_target": book_rel,
+                "compile_recipe": "",
+                "compile_use_internal_fallback": True,
+                "compile_recipes": [],
+                "class_config": {"theme_class_mode": "auto"},
+            }
+            td._refresh_derived_state(state)
+            self.assertEqual(state["effective_theme_class"], "book")
+            self.assertTrue(state["detected_document_class_has_chapter"])
+
+            state["compile_target"] = article_rel
+            td._refresh_derived_state(state)
+            self.assertEqual(state["effective_theme_class"], "article")
+            self.assertFalse(state["detected_document_class_has_chapter"])
+
+            state["class_config"]["theme_class_mode"] = "book"
+            td._refresh_derived_state(state)
+            self.assertEqual(state["effective_theme_class"], "book")
+        finally:
+            if book_abs.exists():
+                book_abs.unlink()
+            if article_abs.exists():
+                article_abs.unlink()
+
+    def test_write_override_files_includes_class_config_macros(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+                state = td._load_state()
+                state["class_config"]["theme_class_mode"] = "article"
+                state["class_config"]["theme_theorem_numbering_policy"] = "none"
+                td._write_override_files(state)
+                text = toggle_path.read_text(encoding="utf-8")
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertIn("\\def\\ThemeClassMode{article}", text)
+        self.assertIn("\\def\\ThemeTheoremNumberingPolicy{none}", text)
+
+    def test_normalize_payload_rejects_invalid_class_config(self) -> None:
+        base_state = td._load_state()
+        with self.assertRaisesRegex(ValueError, "theme_class_mode"):
+            td._normalize_payload(
+                {"class_config": {"theme_class_mode": "invalid-mode"}},
+                base_state,
+            )
+
+    def test_compile_smoke_minimal_book_target(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_smoke_book.tex"
+        target_abs = root / target_rel
+        pdf_abs = target_abs.with_suffix(".pdf")
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{book}\\begin{document}\\chapter{Smoke}\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        original_resolve_binary = td._resolve_binary
+        original_run_command = td._run_command
+        try:
+            td._resolve_binary = lambda name: "/usr/bin/latexmk" if name == "latexmk" else None
+
+            def fake_run(command, cwd=td.ROOT_DIR):
+                (Path(cwd) / "_tmp_smoke_book.pdf").write_bytes(b"%PDF-1.4\n")
+                return True, 0, "ok"
+
+            td._run_command = fake_run
+            success, _, pdf_rel = td._compile_tex_target(target_rel)
+        finally:
+            td._resolve_binary = original_resolve_binary
+            td._run_command = original_run_command
+            if target_abs.exists():
+                target_abs.unlink()
+            if pdf_abs.exists():
+                pdf_abs.unlink()
+
+        self.assertTrue(success)
+        self.assertEqual(pdf_rel, "tools/tests/_tmp_smoke_book.pdf")
+
+    def test_compile_smoke_minimal_article_target(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_smoke_article.tex"
+        target_abs = root / target_rel
+        pdf_abs = target_abs.with_suffix(".pdf")
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{article}\\begin{document}\\section{Smoke}\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        original_resolve_binary = td._resolve_binary
+        original_run_command = td._run_command
+        try:
+            td._resolve_binary = lambda name: "/usr/bin/latexmk" if name == "latexmk" else None
+
+            def fake_run(command, cwd=td.ROOT_DIR):
+                (Path(cwd) / "_tmp_smoke_article.pdf").write_bytes(b"%PDF-1.4\n")
+                return True, 0, "ok"
+
+            td._run_command = fake_run
+            success, _, pdf_rel = td._compile_tex_target(target_rel)
+        finally:
+            td._resolve_binary = original_resolve_binary
+            td._run_command = original_run_command
+            if target_abs.exists():
+                target_abs.unlink()
+            if pdf_abs.exists():
+                pdf_abs.unlink()
+
+        self.assertTrue(success)
+        self.assertEqual(pdf_rel, "tools/tests/_tmp_smoke_article.pdf")
 
 
 if __name__ == "__main__":

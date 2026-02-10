@@ -80,57 +80,57 @@ Goal: split `tools/theme_designer.py` into clear modules without behavior change
 
 ---
 
-## Phase 2: Output and Preview Robustness
+## Phase 2 (Done): Output and Preview Robustness
 
 Goal: make compile/output behavior reliable across recipes and targets.
 
 ### Tasks
 
-- [ ] Track expected output PDF path per recipe/target.
+- [x] Track expected output PDF path per recipe/target.
   - Handle `%OUTDIR%`.
   - Handle target basename changes.
-- [ ] Add UI output indicator:
+- [x] Add UI output indicator:
   - current output PDF path
   - last compile timestamp
-- [ ] Add backend check for "PDF exists and newer than source".
-- [ ] Improve `Refresh PDF Preview` to follow dynamic PDF path.
-- [ ] Add stale-preview diagnostics in compile log.
+- [x] Add backend check for "PDF exists and newer than source".
+- [x] Improve `Refresh PDF Preview` to follow dynamic PDF path.
+- [x] Add stale-preview diagnostics in compile log.
 
 ### Acceptance Criteria
 
-- [ ] PDF preview always points to the correct output file for current recipe+target.
-- [ ] No stale preview after compile.
-- [ ] UI clearly reports where latest PDF was read from.
+- [x] PDF preview always points to the correct output file for current recipe+target.
+- [x] No stale preview after compile.
+- [x] UI clearly reports where latest PDF was read from.
 
 ---
 
-## Phase 3: `book` / `article` Adaptation
+## Phase 3 (Done): `book` / `article` Adaptation
 
 Goal: make theme behavior class-aware and configurable.
 
 ### Tasks
 
-- [ ] Detect document class from selected target (`\\documentclass{...}`).
-- [ ] Add class mode in UI:
+- [x] Detect document class from selected target (`\\documentclass{...}`).
+- [x] Add class mode in UI:
   - Auto (detect)
   - Force book
   - Force article
-- [ ] Extend theme configuration model with class-aware keys:
+- [x] Extend theme configuration model with class-aware keys:
   - heading rules (`chapter` only for book)
   - page style differences
   - theorem numbering policy options
-- [ ] Ensure article mode works without chapter styling assumptions.
-- [ ] Add compatibility layer in `theme.sty`:
+- [x] Ensure article mode works without chapter styling assumptions.
+- [x] Add compatibility layer in `theme.sty`:
   - guard chapter-specific formatting when class has no `\\chapter`.
-- [ ] Add compile smoke tests:
+- [x] Add compile smoke tests:
   - one minimal `book` target
   - one minimal `article` target
 
 ### Acceptance Criteria
 
-- [ ] `article` target compiles cleanly with UI-selected settings.
-- [ ] `book` target behavior stays backward-compatible.
-- [ ] Heading/TOC/page styles do not reference unavailable sectioning commands.
+- [x] `article` target compiles cleanly with UI-selected settings.
+- [x] `book` target behavior stays backward-compatible.
+- [x] Heading/TOC/page styles do not reference unavailable sectioning commands.
 
 ---
 
@@ -151,5 +151,5 @@ Goal: make theme behavior class-aware and configurable.
 - [x] P0 stability hotfixes
 - [x] P1 recipe support from VSCode settings
 - [x] P1.5 codebase split and cleanup
-- [ ] P2 output/preview robustness
-- [ ] P3 book/article adaptation
+- [x] P2 output/preview robustness
+- [x] P3 book/article adaptation

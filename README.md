@@ -23,6 +23,7 @@ xelatex main.tex
 
 - Structured template with centralized theme system (`theme.sty`).
 - Color and visual toggle customization through override files.
+- Class-aware theme behavior (`book` / `article`) with auto-detect and override controls.
 - Bibliography support with `biblatex` + `biber`.
 - Theorem/callout styling with switchable enhanced environment style.
 - Optional local Theme Designer UI for tuning styles and compiling.
@@ -45,7 +46,7 @@ See full tool documentation in:
 - `theme.colors.tex`
   - Color overrides.
 - `theme.overrides.tex`
-  - Feature toggle overrides.
+  - Feature toggle and class-aware overrides.
 - `theme.ui.json`
   - UI state cache.
 

@@ -19,6 +19,11 @@ Default URL: `http://127.0.0.1:8765`
   - page header theme
   - enhanced environment style
   - block shadow
+- Class-aware controls:
+  - class mode: auto / force book / force article
+  - chapter heading rule
+  - page header rule
+  - theorem numbering policy
 - Save overrides to files and reload state from disk.
 - Compile LaTeX from UI:
   - choose compile target `.tex` file from dropdown
@@ -34,17 +39,13 @@ Default URL: `http://127.0.0.1:8765`
 - `theme.colors.tex`
   - Auto-generated color overrides.
 - `theme.overrides.tex`
-  - Auto-generated toggle overrides.
+  - Auto-generated toggle and class-aware overrides.
 - `theme.ui.json`
   - UI state cache.
 
 These files are loaded automatically by:
 - `main.tex` (`theme.overrides.tex`)
 - `theme.sty` (`theme.colors.tex`)
-
-## Current Limitation
-
-- Class-aware behavior (book vs article) is not yet exposed in UI.
 
 ## Troubleshooting
 

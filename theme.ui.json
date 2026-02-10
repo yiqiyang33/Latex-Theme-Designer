@@ -1,4 +1,10 @@
 {
+  "class_config": {
+    "theme_class_mode": "article",
+    "theme_heading_chapter_mode": "auto",
+    "theme_page_header_mode": "auto",
+    "theme_theorem_numbering_policy": "auto"
+  },
   "colors": {
     "assump-accent": "#949400",
     "assump-bg": "#FFFFE6",
@@ -55,6 +61,10 @@
     "theorem-title-bg": "#B8FFFF",
     "theorem-title-fg": "#004C4C"
   },
+  "compile_last_compile_at": "2026-02-10T16:10:38Z",
+  "compile_last_success": true,
+  "compile_output_pdf": "main.pdf",
+  "compile_output_pdf_expected": "main.pdf",
   "compile_recipe": "vscode-1-xelatex",
   "compile_target": "main.tex",
   "compile_use_internal_fallback": true,

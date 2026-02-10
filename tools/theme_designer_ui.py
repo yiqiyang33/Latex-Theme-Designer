@@ -140,6 +140,35 @@ HTML_PAGE = """<!doctype html>
       color: #64748b;
       font-size: 12px;
     }
+    .compile-meta {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #475569;
+    }
+    .class-config {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 10px 80px;
+    }
+    .class-config-row {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) minmax(180px, 240px);
+      gap: 8px;
+      align-items: center;
+    }
+    .class-config-row label {
+      font-size: 12px;
+      color: #334155;
+      font-weight: 600;
+    }
+    .class-config-row select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: 12px;
+      color: #1f2937;
+      background: #fff;
+    }
     button {
       border: 1px solid #bfd3ff;
       background: #eef4ff;
@@ -230,7 +259,7 @@ HTML_PAGE = """<!doctype html>
   <div class="layout">
     <section class="panel">
       <h1>Theme Designer</h1>
-      <p class="hint">Adjust block colors and feature switches. Save writes <code>theme.colors.tex</code> and <code>theme.overrides.tex</code>.</p>
+      <p class="hint">Adjust colors, feature switches, and class-aware options. Save writes <code>theme.colors.tex</code> and <code>theme.overrides.tex</code>.</p>
       <h2>Feature Toggles</h2>
       <div id="toggleBox" class="toggles"></div>
       <h2>Colors</h2>
@@ -251,8 +280,10 @@ HTML_PAGE = """<!doctype html>
         <input id="useInternalFallback" type="checkbox">
         <label for="useInternalFallback">Use internal fallback pipeline</label>
       </div>
+      <div id="classConfigBox" class="class-config"></div>
       <div id="compileHelp" class="compile-help">When fallback is enabled, recipe selection is ignored.</div>
       <code id="targetInfo"></code>
+      <div class="compile-meta"><code id="outputInfo"></code></div>
       <div class="actions">
         <button id="saveBtn" class="primary">Save Overrides</button>
         <button id="compileBtn">Compile PDF</button>
@@ -305,8 +336,32 @@ HTML_PAGE = """<!doctype html>
       return "";
     }
 
+    function classConfigValue(id) {
+      const config = model.state.class_config || {};
+      return config[id] || "auto";
+    }
+
+    function effectiveThemeClass() {
+      const mode = classConfigValue("theme_class_mode");
+      if (mode === "book" || mode === "article") return mode;
+      return model.state.detected_document_class_has_chapter ? "book" : "article";
+    }
+
     function currentPdfPath() {
-      return model.state.compile_output_pdf || pdfPathForTarget(model.state.compile_target);
+      return model.state.compile_output_pdf
+        || model.state.compile_output_pdf_expected
+        || pdfPathForTarget(model.state.compile_target);
+    }
+
+    function currentExpectedPdfPath() {
+      return model.state.compile_output_pdf_expected || pdfPathForTarget(model.state.compile_target);
+    }
+
+    function formatCompileTimestamp(raw) {
+      if (!raw) return "never";
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return raw;
+      return parsed.toLocaleString();
     }
 
     function currentCompileLabel() {
@@ -317,7 +372,9 @@ HTML_PAGE = """<!doctype html>
 
     function renderTargetInfo() {
       const info = document.getElementById("targetInfo");
-      info.textContent = `target: ${model.state.compile_target || "(none)"} | mode: ${currentCompileLabel()} | pdf: ${currentPdfPath()}`;
+      const outputInfo = document.getElementById("outputInfo");
+      info.textContent = `target: ${model.state.compile_target || "(none)"} | mode: ${currentCompileLabel()} | class: ${model.state.detected_document_class || "(unknown)"} -> ${effectiveThemeClass()}`;
+      outputInfo.textContent = `current pdf: ${currentPdfPath()} | expected: ${currentExpectedPdfPath()} | last compile: ${formatCompileTimestamp(model.state.compile_last_compile_at)}`;
     }
 
     // ---------- Renderers ----------
@@ -385,6 +442,36 @@ HTML_PAGE = """<!doctype html>
         help.textContent = "When fallback is enabled, recipe selection is ignored.";
       }
       renderTargetInfo();
+    }
+
+    function renderClassConfig() {
+      const box = document.getElementById("classConfigBox");
+      box.innerHTML = "";
+      const fields = model.schema.class_config || [];
+      for (const field of fields) {
+        const row = document.createElement("div");
+        row.className = "class-config-row";
+        const label = document.createElement("label");
+        label.textContent = field.label;
+        label.title = field.help || "";
+        const select = document.createElement("select");
+        for (const opt of (field.options || [])) {
+          const node = document.createElement("option");
+          node.value = opt.value;
+          node.textContent = opt.label || opt.value;
+          select.appendChild(node);
+        }
+        select.value = classConfigValue(field.id);
+        select.onchange = () => {
+          if (!model.state.class_config) model.state.class_config = {};
+          model.state.class_config[field.id] = select.value;
+          renderTargetInfo();
+          renderPreview();
+        };
+        row.appendChild(label);
+        row.appendChild(select);
+        box.appendChild(row);
+      }
     }
 
     function renderToggles() {
@@ -474,11 +561,18 @@ HTML_PAGE = """<!doctype html>
 
     function renderPreview() {
       const docPreview = document.getElementById("docPreview");
-      docPreview.innerHTML = `
-        <div class="chapter" style="color:${color("theme-chapter")}">Chapter 1. Variational Inference</div>
-        <div class="section" style="color:${color("theme-section")}">1.1 Intro</div>
-        <div class="subsection" style="color:${color("theme-subsection")}">1.1.1 The objective</div>
-      `;
+      if (effectiveThemeClass() === "book") {
+        docPreview.innerHTML = `
+          <div class="chapter" style="color:${color("theme-chapter")}">Chapter 1. Variational Inference</div>
+          <div class="section" style="color:${color("theme-section")}">1.1 Intro</div>
+          <div class="subsection" style="color:${color("theme-subsection")}">1.1.1 The objective</div>
+        `;
+      } else {
+        docPreview.innerHTML = `
+          <div class="section" style="color:${color("theme-section")}">1 Intro</div>
+          <div class="subsection" style="color:${color("theme-subsection")}">1.1 The objective</div>
+        `;
+      }
 
       const noteShadow = toggleOn("enable_block_shadow") ? "box-shadow: 0 3px 0 rgba(17,24,39,0.11);" : "";
       const noteCard = `
@@ -533,6 +627,8 @@ HTML_PAGE = """<!doctype html>
         model = result;
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
+        renderClassConfig();
+        renderPreview();
         setStatus("Saved to theme.colors.tex and theme.overrides.tex", "ok");
       } catch (err) {
         setStatus(err.message, "err");
@@ -547,6 +643,8 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/target", { compile_target: selected });
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
+        renderClassConfig();
+        renderPreview();
         refreshPdf();
         setStatus(`Compile target set to ${model.state.compile_target}`, "ok");
       } catch (err) {
@@ -564,6 +662,9 @@ HTML_PAGE = """<!doctype html>
           compile_use_internal_fallback: useInternal
         });
         renderCompileRecipeSelector();
+        renderClassConfig();
+        renderPreview();
+        refreshPdf();
         setStatus("Compile mode updated.", "ok");
       } catch (err) {
         setStatus(err.message, "err");
@@ -577,6 +678,7 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/reset", {});
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
+        renderClassConfig();
         renderToggles();
         renderColorGroups();
         renderPreview();
@@ -614,8 +716,31 @@ HTML_PAGE = """<!doctype html>
         if (result.pdf_path) {
           model.state.compile_output_pdf = result.pdf_path;
         }
+        if (result.compile_output_pdf_expected) {
+          model.state.compile_output_pdf_expected = result.compile_output_pdf_expected;
+        }
+        if (result.compile_last_compile_at !== undefined) {
+          model.state.compile_last_compile_at = result.compile_last_compile_at;
+        }
+        if (result.compile_last_success !== undefined) {
+          model.state.compile_last_success = !!result.compile_last_success;
+        }
+        if (result.class_config && typeof result.class_config === "object") {
+          model.state.class_config = result.class_config;
+        }
+        if (result.detected_document_class !== undefined) {
+          model.state.detected_document_class = result.detected_document_class;
+        }
+        if (result.detected_document_class_has_chapter !== undefined) {
+          model.state.detected_document_class_has_chapter = !!result.detected_document_class_has_chapter;
+        }
+        if (result.effective_theme_class !== undefined) {
+          model.state.effective_theme_class = result.effective_theme_class;
+        }
         renderCompileRecipeSelector();
+        renderClassConfig();
         renderTargetInfo();
+        renderPreview();
         if (result.success) {
           setStatus("Compile succeeded.", "ok");
           refreshPdf();
@@ -634,6 +759,7 @@ HTML_PAGE = """<!doctype html>
       model = await getState();
       renderCompileTargetSelector();
       renderCompileRecipeSelector();
+      renderClassConfig();
       renderToggles();
       renderColorGroups();
       renderPreview();

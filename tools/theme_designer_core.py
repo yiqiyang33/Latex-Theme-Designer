@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import threading
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -86,6 +87,64 @@ TOGGLE_SCHEMA: List[Dict[str, str]] = [
     },
 ]
 
+CLASS_CONFIG_SCHEMA: List[Dict[str, Any]] = [
+    {
+        "id": "theme_class_mode",
+        "command": "ThemeClassMode",
+        "label": "Class Mode",
+        "help": "Auto follows target document class; force book/article when needed.",
+        "options": [
+            {"value": "auto", "label": "Auto (detect target class)"},
+            {"value": "book", "label": "Force book"},
+            {"value": "article", "label": "Force article"},
+        ],
+    },
+    {
+        "id": "theme_heading_chapter_mode",
+        "command": "ThemeHeadingChapterMode",
+        "label": "Chapter Heading Rule",
+        "help": "Control chapter heading styling when chapter is available.",
+        "options": [
+            {"value": "auto", "label": "Auto (book-only)"},
+            {"value": "on", "label": "On if chapter exists"},
+            {"value": "off", "label": "Always off"},
+        ],
+    },
+    {
+        "id": "theme_page_header_mode",
+        "command": "ThemePageHeaderMode",
+        "label": "Page Header Rule",
+        "help": "Choose chapter-mark or section-mark page headers.",
+        "options": [
+            {"value": "auto", "label": "Auto by class"},
+            {"value": "chapter", "label": "Prefer chapter mark"},
+            {"value": "section", "label": "Prefer section mark"},
+        ],
+    },
+    {
+        "id": "theme_theorem_numbering_policy",
+        "command": "ThemeTheoremNumberingPolicy",
+        "label": "Theorem Numbering",
+        "help": "Select theorem counter scope for definition/theorem family.",
+        "options": [
+            {"value": "auto", "label": "Auto (book=chapter, article=section)"},
+            {"value": "section", "label": "Within section"},
+            {"value": "chapter", "label": "Within chapter (fallback section)"},
+            {"value": "none", "label": "Global continuous counter"},
+        ],
+    },
+]
+
+CHAPTER_CLASS_NAMES = {
+    "book",
+    "report",
+    "memoir",
+    "scrbook",
+    "scrreprt",
+    "ctexbook",
+    "ctexrep",
+    "bxjsbook",
+}
 
 COLOR_GROUPS: List[Dict[str, Any]] = [
     {
@@ -205,6 +264,17 @@ COLOR_ORDER: List[str] = [
 
 COLOR_SET = set(COLOR_ORDER)
 TOGGLE_IDS = [entry["id"] for entry in TOGGLE_SCHEMA]
+CLASS_CONFIG_IDS = [entry["id"] for entry in CLASS_CONFIG_SCHEMA]
+CLASS_CONFIG_COMMANDS = {
+    entry["id"]: str(entry["command"]) for entry in CLASS_CONFIG_SCHEMA
+}
+CLASS_CONFIG_DEFAULTS = {
+    entry["id"]: str(entry["options"][0]["value"]) for entry in CLASS_CONFIG_SCHEMA
+}
+CLASS_CONFIG_VALID_OPTIONS = {
+    entry["id"]: {str(opt["value"]) for opt in entry["options"]}
+    for entry in CLASS_CONFIG_SCHEMA
+}
 
 BASE_COLORS: Dict[str, Tuple[int, int, int]] = {
     "white": (255, 255, 255),
@@ -562,6 +632,66 @@ def _resolve_pdf_path_for_outdir(ctx: CompileContext, outdir: str) -> str:
     return (resolved_dir / f"{ctx.docstem}.pdf").relative_to(ROOT_DIR).as_posix()
 
 
+def _recipe_entry_by_id(
+    recipe_id: str,
+    recipes: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    for recipe in recipes:
+        if str(recipe.get("id", "")) == recipe_id:
+            return recipe
+    return None
+
+
+def _recipe_outdir_for_context(
+    ctx: CompileContext,
+    recipe_id: str,
+    catalog: Dict[str, Any],
+) -> str:
+    """Resolve final %OUTDIR% value for one target+recipe pair."""
+
+    recipes = catalog.get("recipes", [])
+    recipe = _recipe_entry_by_id(recipe_id, recipes)
+    if recipe is None:
+        return "."
+
+    tools = catalog.get("tools", {})
+    outdir = "."
+    for tool_name in recipe.get("tools", []):
+        tool = tools.get(tool_name)
+        if not isinstance(tool, dict):
+            continue
+        raw_args = tool.get("args", [])
+        args = [_replace_recipe_tokens(str(arg), ctx, outdir) for arg in raw_args]
+        detected = _extract_recipe_outdir(args)
+        if detected:
+            outdir = detected
+    return outdir
+
+
+def _expected_output_pdf_for_selection(
+    compile_target: str,
+    compile_recipe: str,
+    use_internal_fallback: bool,
+    recipe_catalog: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Predict output PDF path for the selected compile configuration."""
+
+    if not compile_target:
+        return "main.pdf"
+
+    try:
+        ctx = _resolve_compile_context(compile_target)
+    except ValueError:
+        return _compile_output_pdf_relpath(compile_target)
+
+    if use_internal_fallback:
+        return ctx.default_pdf_rel
+
+    catalog = recipe_catalog if recipe_catalog is not None else _load_vscode_recipe_catalog()
+    outdir = _recipe_outdir_for_context(ctx, compile_recipe, catalog)
+    return _resolve_pdf_path_for_outdir(ctx, outdir)
+
+
 def _resolve_recipe_command(raw_command: str) -> str:
     command = raw_command.strip()
     if not command:
@@ -616,9 +746,117 @@ def _is_subpath(path: Path, parent: Path) -> bool:
         return False
 
 
-def _has_documentclass(tex_path: Path) -> bool:
+def _normalize_class_config_value(field_id: str, raw_value: Any) -> str:
+    valid = CLASS_CONFIG_VALID_OPTIONS.get(field_id, set())
+    parsed = str(raw_value or "").strip().lower()
+    if parsed in valid:
+        return parsed
+    return CLASS_CONFIG_DEFAULTS[field_id]
+
+
+def _validate_class_config_value(field_id: str, raw_value: Any) -> str:
+    parsed = str(raw_value or "").strip().lower()
+    valid = CLASS_CONFIG_VALID_OPTIONS.get(field_id, set())
+    if parsed in valid:
+        return parsed
+    options = ", ".join(sorted(valid))
+    raise ValueError(f"Invalid value for {field_id}: {raw_value}. Expected one of: {options}")
+
+
+def _normalize_class_config_map(raw_map: Dict[str, Any]) -> Dict[str, str]:
+    config = dict(CLASS_CONFIG_DEFAULTS)
+    if not isinstance(raw_map, dict):
+        return config
+    for field_id in CLASS_CONFIG_IDS:
+        if field_id in raw_map:
+            config[field_id] = _normalize_class_config_value(field_id, raw_map[field_id])
+    return config
+
+
+def _extract_documentclass_name(tex_path: Path) -> str:
     text = _read_text(tex_path)
-    return bool(re.search(r"\\documentclass(?:\[[^\]]*\])?\{[^}]+\}", text))
+    match = re.search(r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", text)
+    if not match:
+        return ""
+    raw_name = match.group(1).strip()
+    if "," in raw_name:
+        raw_name = raw_name.split(",", 1)[0]
+    return raw_name.strip().lower()
+
+
+def _is_chapter_capable_class(class_name: str) -> bool:
+    name = (class_name or "").strip().lower()
+    if not name:
+        return False
+    if name in CHAPTER_CLASS_NAMES:
+        return True
+    return name.endswith("book") or name.endswith("report")
+
+
+def _detect_target_documentclass(compile_target: str) -> str:
+    if not compile_target:
+        return ""
+    try:
+        target_abs = _resolve_compile_context(compile_target).target_abs
+    except ValueError:
+        return ""
+    return _extract_documentclass_name(target_abs)
+
+
+def _effective_theme_class(theme_class_mode: str, detected_document_class: str) -> str:
+    mode = _normalize_class_config_value("theme_class_mode", theme_class_mode)
+    if mode in {"book", "article"}:
+        return mode
+    if _is_chapter_capable_class(detected_document_class):
+        return "book"
+    return "article"
+
+
+def _has_documentclass(tex_path: Path) -> bool:
+    return bool(_extract_documentclass_name(tex_path))
+
+
+def _class_profile_for_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    class_config = _normalize_class_config_map(state.get("class_config", {}))
+    detected = _detect_target_documentclass(str(state.get("compile_target", "")))
+    detected_has_chapter = _is_chapter_capable_class(detected)
+    effective = _effective_theme_class(
+        class_config.get("theme_class_mode", "auto"),
+        detected,
+    )
+    return {
+        "class_config": class_config,
+        "detected_document_class": detected or "(unknown)",
+        "detected_document_class_has_chapter": detected_has_chapter,
+        "effective_theme_class": effective,
+    }
+
+
+def _refresh_derived_state(
+    state: Dict[str, Any],
+    recipe_catalog: Optional[Dict[str, Any]] = None,
+) -> None:
+    compile_target_value = str(state.get("compile_target", ""))
+    compile_recipe_value = str(state.get("compile_recipe", ""))
+    use_internal_value = bool(state.get("compile_use_internal_fallback", True))
+    compile_recipes = state.get("compile_recipes", [])
+    if isinstance(compile_recipes, list):
+        state["compile_recipe_name"] = _recipe_name_by_id(
+            compile_recipe_value,
+            compile_recipes,
+        )
+    state["compile_output_pdf_expected"] = _expected_output_pdf_for_selection(
+        compile_target_value,
+        compile_recipe_value,
+        use_internal_value,
+        recipe_catalog=recipe_catalog,
+    )
+
+    profile = _class_profile_for_state(state)
+    state["class_config"] = profile["class_config"]
+    state["detected_document_class"] = profile["detected_document_class"]
+    state["detected_document_class_has_chapter"] = profile["detected_document_class_has_chapter"]
+    state["effective_theme_class"] = profile["effective_theme_class"]
 
 
 # -------------------- Compile Target Discovery --------------------
@@ -705,6 +943,25 @@ def _resolve_workspace_pdf(rel_path: str) -> Tuple[Path, str]:
         raise ValueError("PDF path is outside workspace.")
 
     return resolved, resolved.relative_to(ROOT_DIR).as_posix()
+
+
+def _safe_workspace_pdf_relpath(raw_path: Any) -> str:
+    """Best-effort normalize of workspace-relative PDF path."""
+
+    try:
+        _, rel = _resolve_workspace_pdf(str(raw_path))
+        return rel
+    except (TypeError, ValueError):
+        return ""
+
+
+def _iso8601_utc_from_epoch(epoch_seconds: float) -> str:
+    dt = datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).replace(microsecond=0)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _now_iso8601_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 # -------------------- Theme Defaults and Overrides --------------------
@@ -795,6 +1052,17 @@ def _parse_toggle_override_file(path: Path) -> Dict[str, bool]:
     return found
 
 
+def _parse_class_override_file(path: Path) -> Dict[str, str]:
+    text = _read_text(path)
+    parsed: Dict[str, str] = {}
+    for field_id in CLASS_CONFIG_IDS:
+        command = CLASS_CONFIG_COMMANDS[field_id]
+        matches = re.findall(rf"\\def\\{command}\{{([^}}]+)\}}", text)
+        if matches:
+            parsed[field_id] = _normalize_class_config_value(field_id, matches[-1])
+    return parsed
+
+
 def _parse_color_override_file(path: Path) -> Dict[str, str]:
     text = _read_text(path)
     define_map: Dict[str, str] = {
@@ -827,10 +1095,19 @@ def _load_state() -> Dict[str, Any]:
     state = {
         "toggles": _parse_main_toggle_defaults(),
         "colors": _parse_theme_color_defaults(),
+        "class_config": dict(CLASS_CONFIG_DEFAULTS),
         "compile_target": _default_compile_target(compile_targets),
         "compile_recipe": _default_compile_recipe(compile_recipes),
         "compile_use_internal_fallback": True,
+        "compile_output_pdf": "",
+        "compile_output_pdf_expected": "",
+        "compile_last_compile_at": "",
+        "compile_last_success": None,
     }
+    persisted_output_pdf = ""
+    persisted_output_pdf_expected = ""
+    persisted_last_compile_at = ""
+    persisted_last_success: Optional[bool] = None
 
     if CONFIG_PATH.exists():
         try:
@@ -846,6 +1123,9 @@ def _load_state() -> Dict[str, Any]:
                     parsed = _parse_hex_color(str(value))
                     if parsed:
                         state["colors"][key] = parsed
+            state["class_config"] = _normalize_class_config_map(
+                persisted.get("class_config", state["class_config"])
+            )
             if "compile_target" in persisted:
                 try:
                     state["compile_target"] = _normalize_compile_target(
@@ -870,9 +1150,18 @@ def _load_state() -> Dict[str, Any]:
                     parsed = _bool_from_str(raw_mode)
                     if parsed is not None:
                         state["compile_use_internal_fallback"] = parsed
+            if isinstance(persisted.get("compile_output_pdf"), str):
+                persisted_output_pdf = persisted.get("compile_output_pdf", "")
+            if isinstance(persisted.get("compile_output_pdf_expected"), str):
+                persisted_output_pdf_expected = persisted.get("compile_output_pdf_expected", "")
+            if isinstance(persisted.get("compile_last_compile_at"), str):
+                persisted_last_compile_at = persisted.get("compile_last_compile_at", "")
+            if isinstance(persisted.get("compile_last_success"), bool):
+                persisted_last_success = persisted.get("compile_last_success")
 
     if TOGGLE_OVERRIDE_PATH.exists():
         state["toggles"].update(_parse_toggle_override_file(TOGGLE_OVERRIDE_PATH))
+        state["class_config"].update(_parse_class_override_file(TOGGLE_OVERRIDE_PATH))
     if COLOR_OVERRIDE_PATH.exists():
         state["colors"].update(_parse_color_override_file(COLOR_OVERRIDE_PATH))
 
@@ -884,11 +1173,21 @@ def _load_state() -> Dict[str, Any]:
     state["compile_targets"] = compile_targets
     state["compile_recipes"] = compile_recipes
     state["compile_recipe_errors"] = recipe_catalog.get("errors", [])
-    state["compile_recipe_name"] = _recipe_name_by_id(
-        state["compile_recipe"],
-        compile_recipes,
-    )
-    state["compile_output_pdf"] = _compile_output_pdf_relpath(state["compile_target"])
+    for field_id in CLASS_CONFIG_IDS:
+        state["class_config"][field_id] = _normalize_class_config_value(
+            field_id,
+            state["class_config"].get(field_id, CLASS_CONFIG_DEFAULTS[field_id]),
+        )
+
+    _refresh_derived_state(state, recipe_catalog=recipe_catalog)
+    expected_output_pdf = str(state.get("compile_output_pdf_expected", "main.pdf"))
+    state["compile_output_pdf"] = expected_output_pdf
+    maybe_persisted_output = _safe_workspace_pdf_relpath(persisted_output_pdf)
+    maybe_persisted_expected = _safe_workspace_pdf_relpath(persisted_output_pdf_expected)
+    if maybe_persisted_output and maybe_persisted_expected == expected_output_pdf:
+        state["compile_output_pdf"] = maybe_persisted_output
+    state["compile_last_compile_at"] = persisted_last_compile_at
+    state["compile_last_success"] = persisted_last_success
 
     return state
 
@@ -899,6 +1198,7 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
     normalized = {
         "toggles": dict(base_state["toggles"]),
         "colors": dict(base_state["colors"]),
+        "class_config": _normalize_class_config_map(base_state.get("class_config", {})),
         "compile_target": base_state.get("compile_target", ""),
         "compile_recipe": base_state.get("compile_recipe", ""),
         "compile_use_internal_fallback": bool(
@@ -929,6 +1229,15 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
                 if not parsed_hex:
                     raise ValueError(f"Invalid hex color for {key}: {raw_colors[key]}")
                 normalized["colors"][key] = parsed_hex
+
+    raw_class_config = payload.get("class_config", {})
+    if isinstance(raw_class_config, dict):
+        for field_id in CLASS_CONFIG_IDS:
+            if field_id in raw_class_config:
+                normalized["class_config"][field_id] = _validate_class_config_value(
+                    field_id,
+                    raw_class_config[field_id],
+                )
 
     if "compile_target" in payload:
         normalized["compile_target"] = _normalize_compile_target(
@@ -961,11 +1270,16 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
     ui_state = {
         "toggles": state.get("toggles", {}),
         "colors": state.get("colors", {}),
+        "class_config": _normalize_class_config_map(state.get("class_config", {})),
         "compile_target": state.get("compile_target", ""),
         "compile_recipe": state.get("compile_recipe", ""),
         "compile_use_internal_fallback": bool(
             state.get("compile_use_internal_fallback", True)
         ),
+        "compile_output_pdf": state.get("compile_output_pdf", ""),
+        "compile_output_pdf_expected": state.get("compile_output_pdf_expected", ""),
+        "compile_last_compile_at": state.get("compile_last_compile_at", ""),
+        "compile_last_success": state.get("compile_last_success"),
     }
     CONFIG_PATH.write_text(
         json.dumps(ui_state, indent=2, sort_keys=True) + "\n",
@@ -976,6 +1290,8 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
 # -------------------- File Outputs --------------------
 
 def _write_override_files(state: Dict[str, Any]) -> None:
+    state["class_config"] = _normalize_class_config_map(state.get("class_config", {}))
+    _refresh_derived_state(state)
     _persist_ui_state(state)
 
     toggle_lines = [
@@ -985,6 +1301,12 @@ def _write_override_files(state: Dict[str, Any]) -> None:
     for entry in TOGGLE_SCHEMA:
         value = "true" if state["toggles"][entry["id"]] else "false"
         toggle_lines.append(f"\\{entry['command']}{value}")
+    toggle_lines.append("")
+    toggle_lines.append("% Class-aware options for theme.sty and theorems.tex.")
+    for field_id in CLASS_CONFIG_IDS:
+        command = CLASS_CONFIG_COMMANDS[field_id]
+        value = state["class_config"][field_id]
+        toggle_lines.append(f"\\def\\{command}{{{value}}}")
     TOGGLE_OVERRIDE_PATH.write_text("\n".join(toggle_lines) + "\n", encoding="utf-8")
 
     color_lines = [
@@ -1058,6 +1380,119 @@ def _run_command(command: List[str], cwd: Path = ROOT_DIR) -> Tuple[bool, int, s
     return proc.returncode == 0, proc.returncode, output
 
 
+def _pick_fallback_pdf(ctx: CompileContext, expected_pdf_rel: str) -> str:
+    """Find the most recently modified PDF near expected output and compile cwd."""
+
+    candidate_dirs: List[Path] = [ctx.compile_cwd]
+    expected_abs, _ = _resolve_workspace_pdf(expected_pdf_rel)
+    candidate_dirs.append(expected_abs.parent)
+
+    seen_dirs: set[str] = set()
+    candidates: List[Path] = []
+    for directory in candidate_dirs:
+        try:
+            resolved_dir = directory.resolve()
+        except OSError:
+            continue
+        key = str(resolved_dir)
+        if key in seen_dirs:
+            continue
+        seen_dirs.add(key)
+        if not resolved_dir.exists() or not resolved_dir.is_dir():
+            continue
+        for pdf in resolved_dir.glob("*.pdf"):
+            try:
+                resolved_pdf = pdf.resolve()
+            except OSError:
+                continue
+            if _is_subpath(resolved_pdf, ROOT_DIR.resolve()):
+                candidates.append(resolved_pdf)
+
+    if not candidates:
+        return ""
+
+    def _mtime_or_zero(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    latest = max(candidates, key=_mtime_or_zero)
+    return latest.relative_to(ROOT_DIR).as_posix()
+
+
+def _check_output_freshness(
+    ctx: CompileContext,
+    pdf_rel: str,
+) -> Tuple[bool, str, List[str]]:
+    """Verify PDF exists and is not older than source target file."""
+
+    diagnostics: List[str] = []
+    pdf_abs, normalized_pdf_rel = _resolve_workspace_pdf(pdf_rel)
+    if not pdf_abs.exists():
+        diagnostics.append(f"Output PDF not found: {normalized_pdf_rel}")
+        return False, normalized_pdf_rel, diagnostics
+
+    try:
+        source_mtime = ctx.target_abs.stat().st_mtime
+    except OSError as err:
+        diagnostics.append(f"Cannot read source timestamp for {ctx.target_rel}: {err}")
+        return False, normalized_pdf_rel, diagnostics
+
+    try:
+        pdf_mtime = pdf_abs.stat().st_mtime
+    except OSError as err:
+        diagnostics.append(f"Cannot read PDF timestamp for {normalized_pdf_rel}: {err}")
+        return False, normalized_pdf_rel, diagnostics
+
+    diagnostics.append(
+        f"[source mtime] {ctx.target_rel}: {_iso8601_utc_from_epoch(source_mtime)}"
+    )
+    diagnostics.append(
+        f"[pdf mtime] {normalized_pdf_rel}: {_iso8601_utc_from_epoch(pdf_mtime)}"
+    )
+
+    if pdf_mtime + 1e-3 < source_mtime:
+        diagnostics.append("Stale preview risk: output PDF is older than source target.")
+        diagnostics.append("Tip: verify recipe output directory and re-run compile.")
+        return False, normalized_pdf_rel, diagnostics
+
+    diagnostics.append("Output freshness check passed.")
+    return True, normalized_pdf_rel, diagnostics
+
+
+def _finalize_compile_output(
+    ctx: CompileContext,
+    logs: List[str],
+    expected_pdf_rel: str,
+) -> Tuple[bool, str, str]:
+    """Apply fallback lookup and freshness validation for compile output."""
+
+    chosen_pdf_rel = expected_pdf_rel
+    expected_abs, expected_rel = _resolve_workspace_pdf(expected_pdf_rel)
+    if not expected_abs.exists():
+        fallback_rel = _pick_fallback_pdf(ctx, expected_rel)
+        if fallback_rel:
+            logs.append(
+                f"Expected PDF not found at {expected_rel}. Using fallback PDF: {fallback_rel}"
+            )
+            logs.append("")
+            chosen_pdf_rel = fallback_rel
+        else:
+            logs.append(f"Compile finished, but expected PDF was not found: {expected_rel}")
+            logs.append("")
+            return False, _finalize_logs(logs), expected_rel
+
+    logs.append("== output check ==")
+    freshness_ok, normalized_pdf_rel, diagnostics = _check_output_freshness(
+        ctx,
+        chosen_pdf_rel,
+    )
+    logs.extend(diagnostics)
+    logs.append("")
+    return freshness_ok, _finalize_logs(logs), normalized_pdf_rel
+
+
 # -------------------- Compile Preference Helpers --------------------
 
 def _extract_compile_preferences(normalized: Dict[str, Any]) -> Tuple[str, str, bool]:
@@ -1077,13 +1512,31 @@ def _apply_compile_preferences(
 ) -> None:
     """Mutate in-memory state for compile preferences and derived fields."""
 
+    changed = False
     if compile_target is not None:
         state["compile_target"] = compile_target
-        state["compile_output_pdf"] = _compile_output_pdf_relpath(compile_target)
+        changed = True
     if compile_recipe is not None:
         state["compile_recipe"] = compile_recipe
+        changed = True
     if use_internal_fallback is not None:
         state["compile_use_internal_fallback"] = use_internal_fallback
+        changed = True
+
+    if changed:
+        _refresh_derived_state(state)
+        state["compile_output_pdf"] = str(state.get("compile_output_pdf_expected", "main.pdf"))
+
+
+def _apply_compile_result(state: Dict[str, Any], success: bool, pdf_path: str) -> None:
+    """Persist compile output metadata in in-memory state."""
+
+    _refresh_derived_state(state)
+    expected_output = str(state.get("compile_output_pdf_expected", "main.pdf"))
+    resolved_pdf_path = _safe_workspace_pdf_relpath(pdf_path)
+    state["compile_output_pdf"] = resolved_pdf_path or expected_output
+    state["compile_last_compile_at"] = _now_iso8601_utc()
+    state["compile_last_success"] = bool(success)
 
 
 # -------------------- Compile Pipelines --------------------
@@ -1105,7 +1558,9 @@ def _compile_tex_target_internal(ctx: CompileContext) -> Tuple[bool, str, str]:
         ]
         ok, code, out = _run_command(cmd, cwd=ctx.compile_cwd)
         _append_step_log(logs, "latexmk", ctx.compile_cwd, cmd, out, code)
-        return ok, _finalize_logs(logs), ctx.default_pdf_rel
+        if not ok:
+            return False, _finalize_logs(logs), ctx.default_pdf_rel
+        return _finalize_compile_output(ctx, logs, ctx.default_pdf_rel)
 
     logs.append("latexmk not found; using fallback compile pipeline.")
     logs.append("")
@@ -1156,23 +1611,7 @@ def _compile_tex_target_internal(ctx: CompileContext) -> Tuple[bool, str, str]:
         if not ok:
             return False, _finalize_logs(logs), ctx.default_pdf_rel
 
-    expected_pdf_rel = ctx.default_pdf_rel
-    success = ctx.default_pdf_abs.exists()
-    if not success:
-        fallback_pdfs = sorted(ctx.compile_cwd.glob("*.pdf"))
-        if fallback_pdfs:
-            fallback = fallback_pdfs[-1]
-            expected_pdf_rel = fallback.relative_to(ROOT_DIR).as_posix()
-            success = True
-            logs.append(
-                f"Expected {ctx.docstem}.pdf was not found. Using fallback PDF: {expected_pdf_rel}"
-            )
-        else:
-            logs.append(
-                f"Compile ended without errors, but {ctx.docstem}.pdf was not found."
-            )
-
-    return success, _finalize_logs(logs), expected_pdf_rel
+    return _finalize_compile_output(ctx, logs, ctx.default_pdf_rel)
 
 
 def _compile_tex_target_recipe(ctx: CompileContext, recipe_id: str) -> Tuple[bool, str, str]:
@@ -1183,11 +1622,7 @@ def _compile_tex_target_recipe(ctx: CompileContext, recipe_id: str) -> Tuple[boo
     recipes = catalog.get("recipes", [])
     tools = catalog.get("tools", {})
 
-    recipe: Optional[Dict[str, Any]] = None
-    for item in recipes:
-        if str(item.get("id", "")) == recipe_id:
-            recipe = item
-            break
+    recipe = _recipe_entry_by_id(recipe_id, recipes)
     if recipe is None:
         logs.append(f"Unknown compile recipe: {recipe_id}")
         logs.append("Tip: choose an available recipe or enable internal fallback pipeline.")
@@ -1243,19 +1678,7 @@ def _compile_tex_target_recipe(ctx: CompileContext, recipe_id: str) -> Tuple[boo
             return False, _finalize_logs(logs), _resolve_pdf_path_for_outdir(ctx, outdir)
 
     expected_pdf_rel = _resolve_pdf_path_for_outdir(ctx, outdir)
-    expected_pdf_abs = (ROOT_DIR / expected_pdf_rel).resolve()
-    if expected_pdf_abs.exists():
-        return True, _finalize_logs(logs), expected_pdf_rel
-
-    fallback_pdfs = sorted(ctx.compile_cwd.glob("*.pdf"))
-    if fallback_pdfs:
-        fallback = fallback_pdfs[-1]
-        fallback_rel = fallback.relative_to(ROOT_DIR).as_posix()
-        logs.append(f"Expected PDF not found at {expected_pdf_rel}. Using fallback PDF: {fallback_rel}")
-        return True, _finalize_logs(logs), fallback_rel
-
-    logs.append(f"Compile finished, but expected PDF was not found: {expected_pdf_rel}")
-    return False, _finalize_logs(logs), expected_pdf_rel
+    return _finalize_compile_output(ctx, logs, expected_pdf_rel)
 
 
 def _compile_tex_target(
@@ -1284,6 +1707,6 @@ def _build_response_state() -> Dict[str, Any]:
         "schema": {
             "toggles": TOGGLE_SCHEMA,
             "groups": COLOR_GROUPS,
+            "class_config": CLASS_CONFIG_SCHEMA,
         },
     }
-

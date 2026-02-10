@@ -14,6 +14,7 @@ try:
     from tools.theme_designer_core import (
         STATE_LOCK,
         _apply_compile_preferences,
+        _apply_compile_result,
         _build_response_state,
         _compile_tex_target,
         _extract_compile_preferences,
@@ -30,6 +31,7 @@ except ModuleNotFoundError:
     from theme_designer_core import (
         STATE_LOCK,
         _apply_compile_preferences,
+        _apply_compile_result,
         _build_response_state,
         _compile_tex_target,
         _extract_compile_preferences,
@@ -201,6 +203,8 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                         selected_recipe,
                         use_internal,
                     )
+                    _apply_compile_result(current, success, pdf_path)
+                    _persist_ui_state(current)
 
                 self._send_json(
                     200,
@@ -211,6 +215,16 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                         "compile_recipe": selected_recipe,
                         "compile_use_internal_fallback": use_internal,
                         "pdf_path": pdf_path,
+                        "compile_output_pdf_expected": current.get("compile_output_pdf_expected", ""),
+                        "compile_last_compile_at": current.get("compile_last_compile_at", ""),
+                        "compile_last_success": current.get("compile_last_success"),
+                        "class_config": current.get("class_config", {}),
+                        "detected_document_class": current.get("detected_document_class", ""),
+                        "detected_document_class_has_chapter": current.get(
+                            "detected_document_class_has_chapter",
+                            False,
+                        ),
+                        "effective_theme_class": current.get("effective_theme_class", "article"),
                     },
                 )
             except ValueError as err:

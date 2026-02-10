@@ -14,6 +14,98 @@
 \@ifundefined{ifEnablePageTheme}{\newif\ifEnablePageTheme\EnablePageThemetrue}{}
 \@ifundefined{ifEnableEnhancedEnvStyle}{\newif\ifEnableEnhancedEnvStyle\EnableEnhancedEnvStyletrue}{}
 \@ifundefined{ifEnableBlockShadow}{\newif\ifEnableBlockShadow\EnableBlockShadowtrue}{}
+
+% Class-aware defaults (can be overridden by theme.overrides.tex).
+\@ifundefined{ThemeClassMode}{\def\ThemeClassMode{auto}}{}
+\@ifundefined{ThemeHeadingChapterMode}{\def\ThemeHeadingChapterMode{auto}}{}
+\@ifundefined{ThemePageHeaderMode}{\def\ThemePageHeaderMode{auto}}{}
+\@ifundefined{ThemeTheoremNumberingPolicy}{\def\ThemeTheoremNumberingPolicy{auto}}{}
+
+\newif\ifThemeHasChapter
+\@ifundefined{chapter}{\ThemeHasChapterfalse}{\ThemeHasChaptertrue}
+
+\newif\ifThemeBookClass
+\ThemeBookClassfalse
+\def\theme@mode@book{book}
+\def\theme@mode@article{article}
+\def\theme@mode@auto{auto}
+\ifx\ThemeClassMode\theme@mode@book
+    \ThemeBookClasstrue
+\else
+    \ifx\ThemeClassMode\theme@mode@article
+        \ThemeBookClassfalse
+    \else
+        \ifThemeHasChapter
+            \ThemeBookClasstrue
+        \else
+            \ThemeBookClassfalse
+        \fi
+    \fi
+\fi
+
+\newif\ifThemeUseChapterHeading
+\ThemeUseChapterHeadingfalse
+\def\theme@heading@on{on}
+\def\theme@heading@off{off}
+\ifx\ThemeHeadingChapterMode\theme@heading@off
+    \ThemeUseChapterHeadingfalse
+\else
+    \ifx\ThemeHeadingChapterMode\theme@heading@on
+        \ifThemeHasChapter\ThemeUseChapterHeadingtrue\fi
+    \else
+        \ifThemeBookClass
+            \ifThemeHasChapter\ThemeUseChapterHeadingtrue\fi
+        \fi
+    \fi
+\fi
+
+\newif\ifThemeUseSectionHeaderMark
+\ThemeUseSectionHeaderMarkfalse
+\def\theme@header@chapter{chapter}
+\def\theme@header@section{section}
+\ifx\ThemePageHeaderMode\theme@header@section
+    \ThemeUseSectionHeaderMarktrue
+\else
+    \ifx\ThemePageHeaderMode\theme@header@chapter
+        \ifThemeHasChapter\ThemeUseSectionHeaderMarkfalse\else\ThemeUseSectionHeaderMarktrue\fi
+    \else
+        \ifThemeBookClass
+            \ifThemeHasChapter\ThemeUseSectionHeaderMarkfalse\else\ThemeUseSectionHeaderMarktrue\fi
+        \else
+            \ThemeUseSectionHeaderMarktrue
+        \fi
+    \fi
+\fi
+
+\def\ThemeResolvedTheoremNumbering{section}
+\def\theme@number@chapter{chapter}
+\def\theme@number@section{section}
+\def\theme@number@none{none}
+\ifx\ThemeTheoremNumberingPolicy\theme@number@none
+    \def\ThemeResolvedTheoremNumbering{none}
+\else
+    \ifx\ThemeTheoremNumberingPolicy\theme@number@section
+        \def\ThemeResolvedTheoremNumbering{section}
+    \else
+        \ifx\ThemeTheoremNumberingPolicy\theme@number@chapter
+            \ifThemeHasChapter
+                \def\ThemeResolvedTheoremNumbering{chapter}
+            \else
+                \def\ThemeResolvedTheoremNumbering{section}
+            \fi
+        \else
+            \ifThemeBookClass
+                \ifThemeHasChapter
+                    \def\ThemeResolvedTheoremNumbering{chapter}
+                \else
+                    \def\ThemeResolvedTheoremNumbering{section}
+                \fi
+            \else
+                \def\ThemeResolvedTheoremNumbering{section}
+            \fi
+        \fi
+    \fi
+\fi
 \makeatother
 
 % -------------------- Document Theme Tokens --------------------
@@ -89,13 +181,15 @@
 
 % -------------------- Document Theme --------------------
 \ifEnableHeadingTheme
-\titleformat{\chapter}[display]
-    {\normalfont\huge\bfseries\color{theme-chapter}}
-    {\filleft\Large\color{theme-chapter}Chapter \thechapter}
-    {0.6ex}
-    {\titlerule\vspace{0.8ex}\filright}
-    [\vspace{0.6ex}\titlerule]
-\titlespacing*{\chapter}{0pt}{0pt}{18pt}
+\ifThemeUseChapterHeading
+    \titleformat{\chapter}[display]
+        {\normalfont\huge\bfseries\color{theme-chapter}}
+        {\filleft\Large\color{theme-chapter}Chapter \thechapter}
+        {0.6ex}
+        {\titlerule\vspace{0.8ex}\filright}
+        [\vspace{0.6ex}\titlerule]
+    \titlespacing*{\chapter}{0pt}{0pt}{18pt}
+\fi
 
 \titleformat{\section}
     {\normalfont\Large\bfseries\color{theme-section}}
@@ -115,11 +209,13 @@
 \ifEnableTOCTheme
 \renewcommand{\cfttoctitlefont}{\hfill\Huge\bfseries\color{theme-toc-title}}
 \renewcommand{\cftaftertoctitle}{\hfill}
-\renewcommand{\cftchapfont}{\bfseries\color{theme-toc-chapter}}
-\renewcommand{\cftchappagefont}{\bfseries\color{theme-toc-chapter}}
+\ifThemeHasChapter
+    \renewcommand{\cftchapfont}{\bfseries\color{theme-toc-chapter}}
+    \renewcommand{\cftchappagefont}{\bfseries\color{theme-toc-chapter}}
+    \setlength{\cftbeforechapskip}{4pt}
+\fi
 \renewcommand{\cftsecfont}{\color{theme-toc-section}}
 \renewcommand{\cftsecpagefont}{\color{theme-toc-section}}
-\setlength{\cftbeforechapskip}{4pt}
 \setlength{\cftbeforesecskip}{1pt}
 \renewcommand{\cftdotsep}{1.6}
 \fi
@@ -127,14 +223,23 @@
 \ifEnablePageTheme
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\nouppercase{\leftmark}}
+\ifThemeUseSectionHeaderMark
+    \renewcommand{\sectionmark}[1]{\markright{\thesection\ #1}}
+    \fancyhead[L]{\nouppercase{\rightmark}}
+\else
+    \fancyhead[L]{\nouppercase{\leftmark}}
+\fi
 \fancyhead[R]{\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{theme-header-rule}\leaders\hrule height \headrulewidth\hfill}}
 \fancypagestyle{plain}{
     \fancyhf{}
-    \fancyhead[L]{\nouppercase{\leftmark}}
+    \ifThemeUseSectionHeaderMark
+        \fancyhead[L]{\nouppercase{\rightmark}}
+    \else
+        \fancyhead[L]{\nouppercase{\leftmark}}
+    \fi
     \fancyhead[R]{\thepage}
     \renewcommand{\headrulewidth}{0.4pt}
     \renewcommand{\footrulewidth}{0pt}
