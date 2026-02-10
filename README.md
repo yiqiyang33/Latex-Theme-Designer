@@ -29,6 +29,12 @@ xelatex main.tex
 - Optional local Theme Designer UI for tuning styles and compiling.
   - Supports compile target selection and VSCode recipe-based compile mode.
 
+## Planned Next
+
+- Preset color themes for theorem/callout blocks (current scheme will be `default`).
+- Preset style themes for heading and TOC (current scheme will be `default`).
+- Body text size control in Theme Designer UI (likely slider-based).
+
 ## Theme Designer
 
 Use the local UI tool:

@@ -34,6 +34,18 @@ Default URL: `http://127.0.0.1:8765`
   - compile log includes per-step command and exit code
 - Preview current target PDF in the same UI page.
 
+## Planned Improvements
+
+- Block color preset themes
+  - add named palette options (current palette becomes `default`)
+  - allow one-click switch while still permitting manual color edits
+- Header/TOC preset themes
+  - add named presets for heading + TOC visual combinations
+  - keep current behavior as `default`
+- Body font size control
+  - add UI control (prefer slider) for base body font size
+  - write override setting to file and apply on compile
+
 ## What it edits
 
 - `theme.colors.tex`

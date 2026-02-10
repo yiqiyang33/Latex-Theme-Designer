@@ -1,155 +1,82 @@
 # Theme Designer TODO (Active Plan)
 
-This file tracks remaining work only.
-Completed phase P1 (compile target selector) has been removed from active TODO.
+This file tracks pending work only.
+Completed phases have been removed.
 
 ---
 
-## Phase 0 (Now): Stability Hotfixes
+## Phase 1: Block Preset Themes
 
-Goal: remove known runtime risks before larger feature work.
+Goal: provide fixed, reusable color combinations for theorem/callout blocks.
 
 ### Tasks
 
-- [x] Fix compile API tuple consistency in no-TeX-engine path.
-  - `_compile_tex_target` must always return `(success, output, pdf_path)`.
-- [x] Add regression check for "no latexmk/xelatex/pdflatex" branch.
-  - Verify `/api/compile` responds with clear error instead of server exception.
-- [x] Add pre-work helper for JSONC parsing of `.vscode/settings.json`.
-  - Must tolerate comments and trailing commas used by VSCode settings.
+- [ ] Add block preset model in backend.
+  - Include `default` preset matching current colors.
+  - Keep current manual color overrides as highest priority.
+- [ ] Add preset selector in UI.
+  - Show preset name and description.
+  - Add `Apply Preset` action.
+- [ ] Persist selected block preset in `theme.ui.json`.
+- [ ] Generate explicit color overrides to `theme.colors.tex` after preset apply.
+- [ ] Add tests for preset apply + persist + reload consistency.
 
 ### Acceptance Criteria
 
-- [x] Missing TeX engines no longer cause tuple-unpack/runtime errors.
-- [x] Compile endpoint returns actionable error message when tools are missing.
-- [x] JSONC settings can be parsed into internal data model safely.
+- [ ] User can switch block theme to `default` or other named presets in one click.
+- [ ] Preset change updates all related block tokens deterministically.
+- [ ] Reloading UI preserves selected preset and resulting colors.
 
 ---
 
-## Phase 1 (Done): Recipe System (VSCode-aligned)
+## Phase 2: Header and TOC Preset Themes
 
-Goal: compile behavior selectable in UI, compatible with `.vscode/settings.json`.
+Goal: provide fixed style bundles for heading and TOC visuals.
 
 ### Tasks
 
-- [x] Parse `.vscode/settings.json`:
-  - `latex-workshop.latex.tools`
-  - `latex-workshop.latex.recipes`
-- [x] Build internal tool/recipe model.
-  - Keep `%DOCFILE%` and `%OUTDIR%` substitution support.
-  - Add safe fallback when tokens are missing.
-- [x] Add UI controls:
-  - recipe selector
-  - "use internal fallback pipeline" option
-- [x] Persist selected recipe in `theme.ui.json`.
-- [x] Implement recipe executor:
-  - run tools in sequence
-  - stop on first failure
-  - aggregate logs with step headers
-- [x] Keep current robust binary resolution and PATH injection.
-- [x] Fallback rules:
-  - if selected recipe fails due missing command, show explicit message and suggest fallback recipe.
+- [ ] Add heading/TOC preset model in backend.
+  - Include `default` preset matching current behavior.
+- [ ] Define preset token mapping for:
+  - chapter/section/subsection heading colors
+  - TOC title/chapter/section colors
+  - header rule style tokens (if needed)
+- [ ] Add preset selector in UI with live preview impact.
+- [ ] Persist selected header/TOC preset in `theme.ui.json`.
+- [ ] Add tests for preset mapping and state roundtrip.
 
 ### Acceptance Criteria
 
-- [x] UI lists recipes from `.vscode/settings.json`.
-- [x] Choosing `xelatex -> bibtex -> xelatex*2` runs exactly that sequence.
-- [x] Logs show per-tool command and exit code.
-- [x] Missing tool errors are explicit and actionable.
+- [ ] User can switch heading/TOC style bundle from UI.
+- [ ] Existing `default` output remains backward-compatible.
+- [ ] Preset switch is reflected in generated override files and compiled PDF.
 
 ---
 
-## Phase 1.5: Codebase Split and Cleanup
+## Phase 3: Body Font Size UI Control
 
-Goal: split `tools/theme_designer.py` into clear modules without behavior changes.
+Goal: support direct body text size tuning from Theme Designer.
 
 ### Tasks
 
-- [x] Split backend/core logic into dedicated module.
-- [x] Split embedded UI HTML into dedicated module.
-- [x] Split HTTP server/entry logic into dedicated module.
-- [x] Keep `tools/theme_designer.py` as compatibility entrypoint.
-- [x] Update tests/imports to keep regression coverage green after split.
-- [x] Add section-level comments/docstrings in new modules for navigation.
+- [ ] Add backend config key for base body font size.
+  - Define valid range (example: 9pt to 14pt) and step.
+  - Define default matching current template behavior.
+- [ ] Add UI control (slider preferred) with numeric display.
+- [ ] Write font size override to `theme.overrides.tex`.
+- [ ] Apply override in `main.tex`/`theme.sty` compatibility-safe way.
+- [ ] Add tests for range validation and override file generation.
 
 ### Acceptance Criteria
 
-- [x] `python3 tools/theme_designer.py --help` works as before.
-- [x] Existing tests pass without functional regressions.
-- [x] API endpoints and UI behavior remain unchanged.
-
----
-
-## Phase 2 (Done): Output and Preview Robustness
-
-Goal: make compile/output behavior reliable across recipes and targets.
-
-### Tasks
-
-- [x] Track expected output PDF path per recipe/target.
-  - Handle `%OUTDIR%`.
-  - Handle target basename changes.
-- [x] Add UI output indicator:
-  - current output PDF path
-  - last compile timestamp
-- [x] Add backend check for "PDF exists and newer than source".
-- [x] Improve `Refresh PDF Preview` to follow dynamic PDF path.
-- [x] Add stale-preview diagnostics in compile log.
-
-### Acceptance Criteria
-
-- [x] PDF preview always points to the correct output file for current recipe+target.
-- [x] No stale preview after compile.
-- [x] UI clearly reports where latest PDF was read from.
-
----
-
-## Phase 3 (Done): `book` / `article` Adaptation
-
-Goal: make theme behavior class-aware and configurable.
-
-### Tasks
-
-- [x] Detect document class from selected target (`\\documentclass{...}`).
-- [x] Add class mode in UI:
-  - Auto (detect)
-  - Force book
-  - Force article
-- [x] Extend theme configuration model with class-aware keys:
-  - heading rules (`chapter` only for book)
-  - page style differences
-  - theorem numbering policy options
-- [x] Ensure article mode works without chapter styling assumptions.
-- [x] Add compatibility layer in `theme.sty`:
-  - guard chapter-specific formatting when class has no `\\chapter`.
-- [x] Add compile smoke tests:
-  - one minimal `book` target
-  - one minimal `article` target
-
-### Acceptance Criteria
-
-- [x] `article` target compiles cleanly with UI-selected settings.
-- [x] `book` target behavior stays backward-compatible.
-- [x] Heading/TOC/page styles do not reference unavailable sectioning commands.
-
----
-
-## Documentation and UX (Cross-cutting)
-
-- [x] Update `tools/README-theme-designer.md` for the completed phase.
-- [x] Add a compact troubleshooting section:
-  - missing TeX binaries
-  - missing recipe/tool
-  - stale PDF preview
-- [x] Add inline help text in UI for each new control.
-- [x] Keep `README.md` and tool README in sync for compile workflow description.
+- [ ] User can drag slider and compile to see body font size changes.
+- [ ] Value is persisted and restored after reload.
+- [ ] Out-of-range values are rejected with clear error.
 
 ---
 
 ## Suggested Execution Order
 
-- [x] P0 stability hotfixes
-- [x] P1 recipe support from VSCode settings
-- [x] P1.5 codebase split and cleanup
-- [x] P2 output/preview robustness
-- [x] P3 book/article adaptation
+- [ ] P1 block preset themes
+- [ ] P2 header/TOC preset themes
+- [ ] P3 body font size UI control
