@@ -13,6 +13,7 @@ Default URL: `http://127.0.0.1:8765`
 ## Current Capabilities
 
 - Adjust theme colors for document headers and theorem/callout blocks.
+- Apply named block color preset themes (`default`, `midnight`, `meadow`, `ember`) in one click.
 - Toggle feature switches:
   - heading theme
   - TOC theme
@@ -36,9 +37,6 @@ Default URL: `http://127.0.0.1:8765`
 
 ## Planned Improvements
 
-- Block color preset themes
-  - add named palette options (current palette becomes `default`)
-  - allow one-click switch while still permitting manual color edits
 - Header/TOC preset themes
   - add named presets for heading + TOC visual combinations
   - keep current behavior as `default`

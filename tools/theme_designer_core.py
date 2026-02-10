@@ -294,6 +294,180 @@ BASE_COLORS: Dict[str, Tuple[int, int, int]] = {
     "royalblue": (65, 105, 225),
 }
 
+BLOCK_COLOR_TOKENS: List[str] = [
+    token for token in COLOR_ORDER if not token.startswith("theme-")
+]
+
+BLOCK_PRESET_DEFINITIONS: List[Dict[str, Any]] = [
+    {
+        "id": "default",
+        "label": "Default",
+        "description": "Current built-in theorem/callout palette from theme.sty.",
+    },
+    {
+        "id": "midnight",
+        "label": "Midnight",
+        "description": "Cool, high-contrast palette for theorem and callout blocks.",
+        "colors": {
+            "definition-body-bg": "#EAF2FF",
+            "definition-title-bg": "#C8DAFF",
+            "definition-title-fg": "#0F2A5F",
+            "definition-accent": "#2952A3",
+            "theorem-body-bg": "#E6F9FF",
+            "theorem-title-bg": "#B8EBF7",
+            "theorem-title-fg": "#0D4A5A",
+            "theorem-accent": "#1B7286",
+            "lemma-body-bg": "#F5ECFF",
+            "lemma-title-bg": "#DEC8F8",
+            "lemma-title-fg": "#45226E",
+            "lemma-accent": "#6A3CA0",
+            "corollary-body-bg": "#FFF4E5",
+            "corollary-title-bg": "#F9D7A8",
+            "corollary-title-fg": "#6B3D00",
+            "corollary-accent": "#A65A00",
+            "proposition-body-bg": "#F7F8E8",
+            "proposition-title-bg": "#E6E9B5",
+            "proposition-title-fg": "#5C5E1A",
+            "proposition-accent": "#8A8D2B",
+            "claim-body-bg": "#FFF1F3",
+            "claim-title-bg": "#F8CDD5",
+            "claim-title-fg": "#612532",
+            "claim-accent": "#9A4155",
+            "fact-body-bg": "#F1F0F8",
+            "fact-title-bg": "#D5D1EB",
+            "fact-title-fg": "#2D234A",
+            "fact-accent": "#5A4E88",
+            "assumption-body-bg": "#FFF8E8",
+            "assumption-title-bg": "#F2E2B5",
+            "assumption-title-fg": "#5E4A14",
+            "assumption-accent": "#927320",
+            "note-bg": "#EEF2FF",
+            "note-title-bg": "#CFD7FF",
+            "note-title-fg": "#1B2562",
+            "note-accent": "#3342A8",
+            "note-frame": "#B8C3FF",
+            "example-bg": "#E8FAFA",
+            "example-label-fg": "#0F6E70",
+            "example-accent": "#19989B",
+            "remark-bg": "#F0F4FF",
+            "remark-label-fg": "#233B88",
+            "remark-inline-fg": "#2B4AB0",
+            "remark-accent": "#3D56C2",
+            "assump-bg": "#FFF9E9",
+            "assump-label-fg": "#6B5B1F",
+            "assump-accent": "#A0801A",
+        },
+    },
+    {
+        "id": "meadow",
+        "label": "Meadow",
+        "description": "Soft green-blue palette with calm earth-tone accents.",
+        "colors": {
+            "definition-body-bg": "#ECF8F1",
+            "definition-title-bg": "#CDECDC",
+            "definition-title-fg": "#1E4A34",
+            "definition-accent": "#2F7A55",
+            "theorem-body-bg": "#ECF7F9",
+            "theorem-title-bg": "#CBE9F0",
+            "theorem-title-fg": "#174452",
+            "theorem-accent": "#2B7084",
+            "lemma-body-bg": "#F2F0FA",
+            "lemma-title-bg": "#DCCFF3",
+            "lemma-title-fg": "#3F2D66",
+            "lemma-accent": "#6945A6",
+            "corollary-body-bg": "#FFF6E9",
+            "corollary-title-bg": "#F8DBB3",
+            "corollary-title-fg": "#6A4210",
+            "corollary-accent": "#A0631C",
+            "proposition-body-bg": "#F6F7E9",
+            "proposition-title-bg": "#E2E7BD",
+            "proposition-title-fg": "#4B5421",
+            "proposition-accent": "#748233",
+            "claim-body-bg": "#FFF1F0",
+            "claim-title-bg": "#F9D3CF",
+            "claim-title-fg": "#6A2F2A",
+            "claim-accent": "#A14C43",
+            "fact-body-bg": "#F3F2FA",
+            "fact-title-bg": "#DCD6F0",
+            "fact-title-fg": "#342A59",
+            "fact-accent": "#5B4B8C",
+            "assumption-body-bg": "#FFF9EA",
+            "assumption-title-bg": "#F4E5BF",
+            "assumption-title-fg": "#64531B",
+            "assumption-accent": "#9A7A29",
+            "note-bg": "#EEF8F5",
+            "note-title-bg": "#D4ECE4",
+            "note-title-fg": "#1F4A3D",
+            "note-accent": "#2F7C64",
+            "note-frame": "#B8DDD1",
+            "example-bg": "#EBFAF6",
+            "example-label-fg": "#1F6D5F",
+            "example-accent": "#2D9E8A",
+            "remark-bg": "#EEF4FB",
+            "remark-label-fg": "#294A78",
+            "remark-inline-fg": "#2F5A90",
+            "remark-accent": "#3E6FB0",
+            "assump-bg": "#F9FCEB",
+            "assump-label-fg": "#5E6827",
+            "assump-accent": "#8B9A33",
+        },
+    },
+    {
+        "id": "ember",
+        "label": "Ember",
+        "description": "Warm sunset palette with rose, amber, and plum contrast.",
+        "colors": {
+            "definition-body-bg": "#FFF3EE",
+            "definition-title-bg": "#F7D4C7",
+            "definition-title-fg": "#5F2D1F",
+            "definition-accent": "#9A4B33",
+            "theorem-body-bg": "#FFF7EC",
+            "theorem-title-bg": "#F8DEB9",
+            "theorem-title-fg": "#664110",
+            "theorem-accent": "#A56A1E",
+            "lemma-body-bg": "#F9F0FF",
+            "lemma-title-bg": "#E7D2F6",
+            "lemma-title-fg": "#4F2D67",
+            "lemma-accent": "#7B49A2",
+            "corollary-body-bg": "#FFF1F4",
+            "corollary-title-bg": "#F8CFD8",
+            "corollary-title-fg": "#652536",
+            "corollary-accent": "#A0455C",
+            "proposition-body-bg": "#FDF5E9",
+            "proposition-title-bg": "#F0DDBD",
+            "proposition-title-fg": "#5F481F",
+            "proposition-accent": "#967034",
+            "claim-body-bg": "#FFF0EB",
+            "claim-title-bg": "#F8CEC0",
+            "claim-title-fg": "#6A2C1D",
+            "claim-accent": "#A44C33",
+            "fact-body-bg": "#F2F3FD",
+            "fact-title-bg": "#D8DCF7",
+            "fact-title-fg": "#2C356D",
+            "fact-accent": "#4657B5",
+            "assumption-body-bg": "#FFF8EF",
+            "assumption-title-bg": "#F5E3C6",
+            "assumption-title-fg": "#6A4C20",
+            "assumption-accent": "#A7782D",
+            "note-bg": "#F8F2FF",
+            "note-title-bg": "#E4D7F9",
+            "note-title-fg": "#3F2A66",
+            "note-accent": "#6243A3",
+            "note-frame": "#CDBBEA",
+            "example-bg": "#FFF9EF",
+            "example-label-fg": "#7A4B13",
+            "example-accent": "#B4711A",
+            "remark-bg": "#FFF2F1",
+            "remark-label-fg": "#7A3030",
+            "remark-inline-fg": "#A04242",
+            "remark-accent": "#C55A50",
+            "assump-bg": "#FFF8E9",
+            "assump-label-fg": "#6C5A20",
+            "assump-accent": "#A58625",
+        },
+    },
+]
+
 
 def _read_text(path: Path) -> str:
     if not path.exists():
@@ -738,6 +912,112 @@ def _parse_hex_color(raw: str) -> Optional[str]:
     return None
 
 
+def _build_block_preset_catalog(theme_defaults: Dict[str, str]) -> List[Dict[str, Any]]:
+    catalog: List[Dict[str, Any]] = []
+    for preset in BLOCK_PRESET_DEFINITIONS:
+        preset_id = str(preset.get("id", "")).strip()
+        if not preset_id:
+            continue
+        token_map: Dict[str, str] = {
+            token: _parse_hex_color(str(theme_defaults.get(token, "#808080"))) or "#808080"
+            for token in BLOCK_COLOR_TOKENS
+        }
+        raw_colors = preset.get("colors", {})
+        if isinstance(raw_colors, dict):
+            for token in BLOCK_COLOR_TOKENS:
+                if token not in raw_colors:
+                    continue
+                parsed = _parse_hex_color(str(raw_colors[token]))
+                if parsed:
+                    token_map[token] = parsed
+        catalog.append(
+            {
+                "id": preset_id,
+                "label": str(preset.get("label", preset_id)),
+                "description": str(preset.get("description", "")),
+                "tokens": token_map,
+            }
+        )
+    return catalog
+
+
+def _block_preset_meta(catalog: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    return [
+        {
+            "id": str(entry.get("id", "")),
+            "label": str(entry.get("label", entry.get("id", ""))),
+            "description": str(entry.get("description", "")),
+        }
+        for entry in catalog
+        if str(entry.get("id", "")).strip()
+    ]
+
+
+def _default_block_preset_id(block_presets: List[Dict[str, Any]]) -> str:
+    if not isinstance(block_presets, list):
+        return "default"
+    for item in block_presets:
+        if str(item.get("id", "")).strip() == "default":
+            return "default"
+    if block_presets:
+        return str(block_presets[0].get("id", "default"))
+    return "default"
+
+
+def _normalize_block_preset(raw_preset: Any, block_presets: List[Dict[str, Any]]) -> str:
+    if not isinstance(block_presets, list):
+        block_presets = []
+    valid_ids = {
+        str(item.get("id", "")).strip()
+        for item in block_presets
+        if str(item.get("id", "")).strip()
+    }
+    default_id = _default_block_preset_id(block_presets)
+    if not valid_ids:
+        return default_id
+    preset_id = str(raw_preset).strip() if raw_preset is not None else ""
+    if not preset_id:
+        return default_id
+    if preset_id in valid_ids:
+        return preset_id
+    raise ValueError(
+        f"Unknown block preset: {preset_id}. Expected one of: {', '.join(sorted(valid_ids))}"
+    )
+
+
+def _block_preset_tokens_by_id(
+    preset_id: str,
+    catalog: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    for item in catalog:
+        if str(item.get("id", "")).strip() != preset_id:
+            continue
+        raw_tokens = item.get("tokens", {})
+        if not isinstance(raw_tokens, dict):
+            break
+        parsed: Dict[str, str] = {}
+        for token in BLOCK_COLOR_TOKENS:
+            maybe = _parse_hex_color(str(raw_tokens.get(token, "")))
+            if maybe:
+                parsed[token] = maybe
+        if len(parsed) == len(BLOCK_COLOR_TOKENS):
+            return parsed
+    raise ValueError(f"Block preset token map not found for: {preset_id}")
+
+
+def _apply_block_preset(state: Dict[str, Any], preset_id: Any) -> None:
+    theme_defaults = _parse_theme_color_defaults()
+    catalog = _build_block_preset_catalog(theme_defaults)
+    block_presets = _block_preset_meta(catalog)
+    normalized_preset = _normalize_block_preset(preset_id, block_presets)
+    token_map = _block_preset_tokens_by_id(normalized_preset, catalog)
+    state.setdefault("colors", {})
+    for token, value in token_map.items():
+        state["colors"][token] = value
+    state["block_preset"] = normalized_preset
+    state["block_presets"] = block_presets
+
+
 def _is_subpath(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -1089,12 +1369,18 @@ def _parse_color_override_file(path: Path) -> Dict[str, str]:
 def _load_state() -> Dict[str, Any]:
     """Build runtime state from defaults + persisted UI state + override files."""
 
+    theme_defaults = _parse_theme_color_defaults()
+    block_preset_catalog = _build_block_preset_catalog(theme_defaults)
+    block_presets = _block_preset_meta(block_preset_catalog)
+    default_block_preset = _default_block_preset_id(block_presets)
     compile_targets = _list_candidate_tex_files()
     recipe_catalog = _load_vscode_recipe_catalog()
     compile_recipes = recipe_catalog.get("recipes", [])
     state = {
         "toggles": _parse_main_toggle_defaults(),
-        "colors": _parse_theme_color_defaults(),
+        "colors": dict(theme_defaults),
+        "block_preset": default_block_preset,
+        "block_presets": block_presets,
         "class_config": dict(CLASS_CONFIG_DEFAULTS),
         "compile_target": _default_compile_target(compile_targets),
         "compile_recipe": _default_compile_recipe(compile_recipes),
@@ -1123,6 +1409,14 @@ def _load_state() -> Dict[str, Any]:
                     parsed = _parse_hex_color(str(value))
                     if parsed:
                         state["colors"][key] = parsed
+            if "block_preset" in persisted:
+                try:
+                    state["block_preset"] = _normalize_block_preset(
+                        persisted.get("block_preset"),
+                        block_presets,
+                    )
+                except ValueError:
+                    state["block_preset"] = default_block_preset
             state["class_config"] = _normalize_class_config_map(
                 persisted.get("class_config", state["class_config"])
             )
@@ -1169,6 +1463,10 @@ def _load_state() -> Dict[str, Any]:
         state["toggles"].setdefault(key, True)
     for key in COLOR_ORDER:
         state["colors"].setdefault(key, "#808080")
+    state["block_preset"] = _normalize_block_preset(
+        state.get("block_preset"),
+        block_presets,
+    )
 
     state["compile_targets"] = compile_targets
     state["compile_recipes"] = compile_recipes
@@ -1198,6 +1496,11 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
     normalized = {
         "toggles": dict(base_state["toggles"]),
         "colors": dict(base_state["colors"]),
+        "block_preset": _normalize_block_preset(
+            base_state.get("block_preset"),
+            base_state.get("block_presets", []),
+        ),
+        "block_presets": list(base_state.get("block_presets", [])),
         "class_config": _normalize_class_config_map(base_state.get("class_config", {})),
         "compile_target": base_state.get("compile_target", ""),
         "compile_recipe": base_state.get("compile_recipe", ""),
@@ -1229,6 +1532,12 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
                 if not parsed_hex:
                     raise ValueError(f"Invalid hex color for {key}: {raw_colors[key]}")
                 normalized["colors"][key] = parsed_hex
+
+    if "block_preset" in payload:
+        normalized["block_preset"] = _normalize_block_preset(
+            payload.get("block_preset"),
+            base_state.get("block_presets", []),
+        )
 
     raw_class_config = payload.get("class_config", {})
     if isinstance(raw_class_config, dict):
@@ -1270,6 +1579,7 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
     ui_state = {
         "toggles": state.get("toggles", {}),
         "colors": state.get("colors", {}),
+        "block_preset": state.get("block_preset", "default"),
         "class_config": _normalize_class_config_map(state.get("class_config", {})),
         "compile_target": state.get("compile_target", ""),
         "compile_recipe": state.get("compile_recipe", ""),
@@ -1290,6 +1600,16 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
 # -------------------- File Outputs --------------------
 
 def _write_override_files(state: Dict[str, Any]) -> None:
+    block_presets = state.get("block_presets", [])
+    if not isinstance(block_presets, list) or not block_presets:
+        block_presets = _block_preset_meta(
+            _build_block_preset_catalog(_parse_theme_color_defaults())
+        )
+    state["block_presets"] = block_presets
+    state["block_preset"] = _normalize_block_preset(
+        state.get("block_preset"),
+        block_presets,
+    )
     state["class_config"] = _normalize_class_config_map(state.get("class_config", {}))
     _refresh_derived_state(state)
     _persist_ui_state(state)
@@ -1708,5 +2028,6 @@ def _build_response_state() -> Dict[str, Any]:
             "toggles": TOGGLE_SCHEMA,
             "groups": COLOR_GROUPS,
             "class_config": CLASS_CONFIG_SCHEMA,
+            "block_presets": state.get("block_presets", []),
         },
     }

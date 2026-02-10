@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 import unittest
@@ -264,6 +265,67 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("\\def\\ThemeClassMode{article}", text)
         self.assertIn("\\def\\ThemeTheoremNumberingPolicy{none}", text)
 
+    def test_apply_block_preset_updates_block_tokens_only(self) -> None:
+        state = td._load_state()
+        original_document_tokens = {
+            token: state["colors"][token]
+            for token in td.COLOR_ORDER
+            if token.startswith("theme-")
+        }
+
+        td._apply_block_preset(state, "midnight")
+        expected_block_colors = td._block_preset_tokens_by_id(
+            "midnight",
+            td._build_block_preset_catalog(td._parse_theme_color_defaults()),
+        )
+
+        self.assertEqual(state["block_preset"], "midnight")
+        for token, expected in expected_block_colors.items():
+            self.assertEqual(state["colors"][token], expected)
+        for token, expected in original_document_tokens.items():
+            self.assertEqual(state["colors"][token], expected)
+
+    def test_block_preset_persist_and_reload_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+
+                state = td._load_state()
+                td._apply_block_preset(state, "midnight")
+                td._write_override_files(state)
+
+                persisted = json.loads(cfg_path.read_text(encoding="utf-8"))
+                self.assertEqual(persisted.get("block_preset"), "midnight")
+
+                color_text = color_path.read_text(encoding="utf-8")
+                for token in ("definition-body-bg", "theorem-title-bg", "note-accent"):
+                    alias = "themeui" + re.sub(r"[^A-Za-z0-9]+", "", token)
+                    hex_value = state["colors"][token].lstrip("#")
+                    self.assertIn(
+                        f"\\definecolor{{{alias}}}{{HTML}}{{{hex_value}}}",
+                        color_text,
+                    )
+
+                reloaded = td._load_state()
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertEqual(reloaded["block_preset"], "midnight")
+        for token in td.BLOCK_COLOR_TOKENS:
+            self.assertEqual(reloaded["colors"][token], state["colors"][token])
+
     def test_normalize_payload_rejects_invalid_class_config(self) -> None:
         base_state = td._load_state()
         with self.assertRaisesRegex(ValueError, "theme_class_mode"):
@@ -271,6 +333,16 @@ class ThemeDesignerTests(unittest.TestCase):
                 {"class_config": {"theme_class_mode": "invalid-mode"}},
                 base_state,
             )
+
+    def test_normalize_payload_rejects_invalid_block_preset(self) -> None:
+        base_state = td._load_state()
+        with self.assertRaisesRegex(ValueError, "Unknown block preset"):
+            td._normalize_payload({"block_preset": "not-a-preset"}, base_state)
+
+    def test_block_presets_include_new_palettes(self) -> None:
+        state = td._load_state()
+        preset_ids = {entry.get("id") for entry in state.get("block_presets", [])}
+        self.assertTrue({"default", "midnight", "meadow", "ember"}.issubset(preset_ids))
 
     def test_compile_smoke_minimal_book_target(self) -> None:
         root = td.ROOT_DIR

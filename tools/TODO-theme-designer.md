@@ -5,30 +5,6 @@ Completed phases have been removed.
 
 ---
 
-## Phase 1: Block Preset Themes
-
-Goal: provide fixed, reusable color combinations for theorem/callout blocks.
-
-### Tasks
-
-- [ ] Add block preset model in backend.
-  - Include `default` preset matching current colors.
-  - Keep current manual color overrides as highest priority.
-- [ ] Add preset selector in UI.
-  - Show preset name and description.
-  - Add `Apply Preset` action.
-- [ ] Persist selected block preset in `theme.ui.json`.
-- [ ] Generate explicit color overrides to `theme.colors.tex` after preset apply.
-- [ ] Add tests for preset apply + persist + reload consistency.
-
-### Acceptance Criteria
-
-- [ ] User can switch block theme to `default` or other named presets in one click.
-- [ ] Preset change updates all related block tokens deterministically.
-- [ ] Reloading UI preserves selected preset and resulting colors.
-
----
-
 ## Phase 2: Header and TOC Preset Themes
 
 Goal: provide fixed style bundles for heading and TOC visuals.
@@ -77,6 +53,5 @@ Goal: support direct body text size tuning from Theme Designer.
 
 ## Suggested Execution Order
 
-- [ ] P1 block preset themes
 - [ ] P2 header/TOC preset themes
 - [ ] P3 body font size UI control

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 try:
     from tools.theme_designer_core import (
         STATE_LOCK,
+        _apply_block_preset,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -30,6 +31,7 @@ try:
 except ModuleNotFoundError:
     from theme_designer_core import (
         STATE_LOCK,
+        _apply_block_preset,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -170,6 +172,22 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(err)})
             except Exception as err:  # pragma: no cover
                 self._send_json(500, {"error": f"Failed to set compile config: {err}"})
+            return
+
+        if self.path == "/api/block-preset":
+            try:
+                payload = self._parse_json_body()
+                with STATE_LOCK:
+                    current = _load_state()
+                    selected = payload.get("block_preset", current.get("block_preset", "default"))
+                    _apply_block_preset(current, selected)
+                    _write_override_files(current)
+                    response = _build_response_state()
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_json(400, {"error": str(err)})
+            except Exception as err:  # pragma: no cover
+                self._send_json(500, {"error": f"Failed to apply block preset: {err}"})
             return
 
         if self.path == "/api/reset":
