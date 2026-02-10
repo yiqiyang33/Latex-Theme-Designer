@@ -1,0 +1,44 @@
+# macOS / editor
+.DS_Store
+.vscode/
+*.swp
+*~
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+*.nav
+*.snm
+*.vrb
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+*.idx
+*.ilg
+*.ind
+*.loa
+*.lol
+*.maf
+*.mtc*
+*.pyg
+*.thm
+_minted*
+
+# Typical local outputs in this repo
+main.pdf

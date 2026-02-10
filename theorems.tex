@@ -1,0 +1,235 @@
+% Theorem System
+% The following boxes are provided:
+%   Definition:     \defn 
+%   Theorem:        \thm 
+%   Lemma:          \lem
+%   Corollary:      \cor
+%   Proposition:    \prop   
+%   Claim:          \clm
+%   Fact:           \fact
+%   Proof:          \pf
+%   Example:        \ex
+%   Remark:         \rmk (sentence), \rmkb (block)
+% Suffix
+%   r:              Allow Theorem/Definition to be referenced, e.g. thmr
+%   p:              Add a short proof block for Lemma, Corollary, Proposition or Claim, e.g. lemp
+%                   For theorems, use \pf for proof blocks
+
+% Visual tokens and tcolorbox styles are provided by theme.sty.
+% If you want to tune colors globally, edit theme.sty instead of this file.
+
+% Definition
+\newtcbtheorem[number within=section]{mydefinition}{Definition}
+{
+    theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
+}{defn}
+
+
+\NewDocumentCommand{\defn}{mm+m}{
+    \begin{mydefinition}{#1}{#2}
+        #3
+    \end{mydefinition}
+}
+
+% Theorem
+\newtcbtheorem[use counter from=mydefinition]{mytheorem}{Theorem}
+{
+    theorem/variant={theorem-body-bg}{theorem-title-bg}{theorem-accent}{theorem-title-fg},
+}{thm}
+
+
+\NewDocumentCommand{\thm}{mm+m}{
+    \begin{mytheorem}{#1}{#2}
+        #3
+    \end{mytheorem}
+}
+
+% Lemma
+\newtcbtheorem[use counter from=mydefinition]{mylemma}{Lemma}
+{
+    theorem/variant={lemma-body-bg}{lemma-title-bg}{lemma-accent}{lemma-title-fg},
+}{lem}
+
+\NewDocumentCommand{\lem}{mm+m}{
+    \begin{mylemma}{#1}{#2}
+        #3
+    \end{mylemma}
+}
+
+
+
+\NewDocumentCommand{\lemp}{m+m+m}{
+    \begin{mylemma}{#1}{}
+        #2
+    \end{mylemma}
+
+    \begin{lempf}
+        #3
+    \end{lempf}
+}
+
+% Corollary
+\newtcbtheorem[use counter from=mydefinition]{mycorollary}{Corollary}
+{
+    theorem/variant={corollary-body-bg}{corollary-title-bg}{corollary-accent}{corollary-title-fg},
+}{cor}
+
+\NewDocumentCommand{\cor}{mm+m}{
+    \begin{mycorollary}{#1}{#2}
+        #3
+    \end{mycorollary}
+}
+
+
+
+\NewDocumentCommand{\corp}{m+m+m}{
+    \begin{mycorollary}{}{}
+        #1
+    \end{mycorollary}
+
+    \begin{corpf}
+        #2
+    \end{corpf}
+}
+
+% Proposition
+\newtcbtheorem[use counter from=mydefinition]{myproposition}{Proposition}
+{
+    theorem/variant={proposition-body-bg}{proposition-title-bg}{proposition-accent}{proposition-title-fg},
+}{prop}
+
+\NewDocumentCommand{\prop}{mm+m}{
+    \begin{myproposition}{#1}{#2}
+        #3
+    \end{myproposition}
+}
+
+
+
+
+% Claim
+\newtcbtheorem[use counter from=mydefinition]{myclaim}{Claim}
+{
+    theorem/variant={claim-body-bg}{claim-title-bg}{claim-accent}{claim-title-fg},
+}{clm}
+
+
+\NewDocumentCommand{\clm}{mm+m}{
+    \begin{myclaim*}{#1}{#2}
+        #3
+    \end{myclaim*}
+}
+
+
+
+
+
+
+% Fact
+\newtcbtheorem[use counter from=mydefinition]{myfact}{Fact}
+{
+    theorem/variant={fact-body-bg}{fact-title-bg}{fact-accent}{fact-title-fg},
+}{fact}
+
+\NewDocumentCommand{\fact}{mm+m}{
+    \begin{myfact}{#1}{#2}
+        #3
+    \end{myfact}
+}
+
+
+% Proof
+\NewDocumentCommand{\pf}{+m}{
+    \begin{proof}
+        [\noindent\textbf{Proof.}]
+        #1
+    \end{proof}
+}
+
+% Example
+\newenvironment{example}{%
+    \par
+    \vspace{5pt}
+	\begin{minipage}{\textwidth}
+			\noindent\textbf{\color{example-label-fg}Example.}
+			\tcolorbox[
+            callout/variant={example-bg}{example-accent},
+            callout/indented
+        ]
+}{%
+		\endtcolorbox
+	\end{minipage}
+    \vspace{5pt}
+}
+
+\NewDocumentCommand{\ex}{+m}{
+    \begin{example}
+        #1
+    \end{example}
+}
+
+
+% Remark
+\NewDocumentCommand{\rmk}{+m}{
+    {\it \color{remark-inline-fg}#1}
+}
+
+\newenvironment{remark}{
+    \par
+    \vspace{5pt}
+    \begin{minipage}{\textwidth}
+        {\par\noindent{\textbf{\color{remark-label-fg}Remark.}}}
+        \tcolorbox[
+            callout/variant={remark-bg}{remark-accent}
+        ]
+}{
+        \endtcolorbox
+    \end{minipage}
+    \vspace{5pt}
+}
+
+\NewDocumentCommand{\rmkb}{+m}{
+    \begin{remark}
+        #1
+    \end{remark}
+}
+
+% Assumption
+\newtcbtheorem[use counter from=mydefinition]{myassumption}{Assumption}
+{
+    theorem/variant={assumption-body-bg}{assumption-title-bg}{assumption-accent}{assumption-title-fg},
+}{assump}
+
+\NewDocumentCommand{\assumption}{mm+m}{
+    \begin{myassumption}{#1}{#2}
+        #3
+    \end{myassumption}
+}
+
+\newenvironment{assump}{
+	{\noindent{\it \textbf{\color{assump-label-fg}Assumption.}}}
+	\tcolorbox[
+        callout/variant={assump-bg}{assump-accent},
+        callout/indented
+    ]
+}{
+    \textcolor{assump-accent}{\hbox{}\nobreak\hfill$\blacksquare$}
+    \endtcolorbox
+}
+
+
+% Note
+\NewDocumentEnvironment{note}{o g +b}{
+    \IfNoValueTF{#1}{
+        \IfNoValueTF{#2}{
+            \begin{tcolorbox}[note/base]
+        }{
+            \begin{tcolorbox}[note/base,note/title={#2}]
+        }
+    }{
+        \begin{tcolorbox}[note/base,note/title={#1}]
+    }
+    #3
+}{
+    \end{tcolorbox}
+}
