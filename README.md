@@ -26,6 +26,7 @@ xelatex main.tex
 - Bibliography support with `biblatex` + `biber`.
 - Theorem/callout styling with switchable enhanced environment style.
 - Optional local Theme Designer UI for tuning styles and compiling.
+  - Supports compile target selection and VSCode recipe-based compile mode.
 
 ## Theme Designer
 

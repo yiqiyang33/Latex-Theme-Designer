@@ -55,11 +55,13 @@
     "theorem-title-bg": "#B8FFFF",
     "theorem-title-fg": "#004C4C"
   },
+  "compile_recipe": "vscode-1-xelatex",
   "compile_target": "main.tex",
+  "compile_use_internal_fallback": true,
   "toggles": {
     "enable_block_shadow": true,
     "enable_enhanced_env_style": true,
-    "enable_heading_theme": false,
+    "enable_heading_theme": true,
     "enable_page_theme": true,
     "enable_toc_theme": true
   }

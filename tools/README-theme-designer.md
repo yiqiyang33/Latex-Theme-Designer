@@ -22,8 +22,11 @@ Default URL: `http://127.0.0.1:8765`
 - Save overrides to files and reload state from disk.
 - Compile LaTeX from UI:
   - choose compile target `.tex` file from dropdown
-  - uses `latexmk` when available
-  - falls back to `xelatex/pdflatex (+ biber if available)` when `latexmk` is unavailable
+  - choose compile mode:
+    - internal fallback pipeline
+    - VSCode recipe from `.vscode/settings.json`
+  - recipe execution runs tool-by-tool and stops on first failure
+  - compile log includes per-step command and exit code
 - Preview current target PDF in the same UI page.
 
 ## What it edits
@@ -41,8 +44,18 @@ These files are loaded automatically by:
 
 ## Current Limitation
 
-- Compile pipeline is currently internal to the tool and not yet configurable from VSCode recipes.
 - Class-aware behavior (book vs article) is not yet exposed in UI.
+
+## Troubleshooting
+
+- Missing TeX binaries:
+  - If commands like `xelatex`/`latexmk` are not found, install TeX binaries or enable internal fallback mode.
+- Missing recipe/tool:
+  - Check `.vscode/settings.json` for `latex-workshop.latex.tools` and `latex-workshop.latex.recipes`.
+  - Use internal fallback pipeline if a recipe command is unavailable.
+- Stale PDF preview:
+  - Click `Refresh PDF Preview` after compile.
+  - Confirm the target and compile mode shown in the UI info line.
 
 ## Reset
 

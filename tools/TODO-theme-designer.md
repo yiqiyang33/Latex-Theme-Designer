@@ -1,70 +1,86 @@
-# Theme Designer TODO (Easy -> Hard)
+# Theme Designer TODO (Active Plan)
 
-This plan focuses on:
-
-1. UI-configurable compile recipes (aligned with `.vscode/settings.json`)
-2. UI button to choose compile target file
-3. Adaptation for both `book` and `article` projects
+This file tracks remaining work only.
+Completed phase P1 (compile target selector) has been removed from active TODO.
 
 ---
 
-## Phase 1 (Easy): Compile Target Selector
+## Phase 0 (Now): Stability Hotfixes
 
-Goal: choose which `.tex` file to compile directly from UI.
+Goal: remove known runtime risks before larger feature work.
 
 ### Tasks
 
-- [x] Add backend API to list candidate tex files.
-  - Rule: include project-root `.tex` files by default.
-  - Rule: ignore generated files and temporary directories.
-- [x] Add backend state key `compile_target` (default: `main.tex` if exists).
-- [x] Add UI dropdown + button near `Compile PDF`.
-- [x] Persist target to `theme.ui.json`.
-- [x] Update compile function to use selected target instead of fixed `main.tex`.
-- [x] Update PDF preview path logic for non-`main.pdf` outputs.
+- [x] Fix compile API tuple consistency in no-TeX-engine path.
+  - `_compile_tex_target` must always return `(success, output, pdf_path)`.
+- [x] Add regression check for "no latexmk/xelatex/pdflatex" branch.
+  - Verify `/api/compile` responds with clear error instead of server exception.
+- [x] Add pre-work helper for JSONC parsing of `.vscode/settings.json`.
+  - Must tolerate comments and trailing commas used by VSCode settings.
 
 ### Acceptance Criteria
 
-- [x] Switching target in UI changes actual compiled file.
-- [x] Reloading UI restores last selected target.
-- [x] Compile log clearly shows selected target file.
+- [x] Missing TeX engines no longer cause tuple-unpack/runtime errors.
+- [x] Compile endpoint returns actionable error message when tools are missing.
+- [x] JSONC settings can be parsed into internal data model safely.
 
 ---
 
-## Phase 2 (Medium): Recipe System (VSCode-aligned)
+## Phase 1 (Done): Recipe System (VSCode-aligned)
 
 Goal: compile behavior selectable in UI, compatible with `.vscode/settings.json`.
 
 ### Tasks
 
-- [ ] Parse `.vscode/settings.json`:
+- [x] Parse `.vscode/settings.json`:
   - `latex-workshop.latex.tools`
   - `latex-workshop.latex.recipes`
-- [ ] Build internal tool/recipe model.
+- [x] Build internal tool/recipe model.
   - Keep `%DOCFILE%` and `%OUTDIR%` substitution support.
   - Add safe fallback when tokens are missing.
-- [ ] Add UI controls:
+- [x] Add UI controls:
   - recipe selector
   - "use internal fallback pipeline" option
-- [ ] Persist selected recipe in `theme.ui.json`.
-- [ ] Implement recipe executor:
+- [x] Persist selected recipe in `theme.ui.json`.
+- [x] Implement recipe executor:
   - run tools in sequence
   - stop on first failure
   - aggregate logs with step headers
-- [ ] Keep current robust binary resolution and PATH injection.
-- [ ] Fallback rules:
+- [x] Keep current robust binary resolution and PATH injection.
+- [x] Fallback rules:
   - if selected recipe fails due missing command, show explicit message and suggest fallback recipe.
 
 ### Acceptance Criteria
 
-- [ ] UI lists recipes from `.vscode/settings.json`.
-- [ ] Choosing `xelatex -> bibtex -> xelatex*2` runs exactly that sequence.
-- [ ] Logs show per-tool command and exit code.
-- [ ] Missing tool errors are explicit and actionable.
+- [x] UI lists recipes from `.vscode/settings.json`.
+- [x] Choosing `xelatex -> bibtex -> xelatex*2` runs exactly that sequence.
+- [x] Logs show per-tool command and exit code.
+- [x] Missing tool errors are explicit and actionable.
 
 ---
 
-## Phase 3 (Medium-Hard): Output and Target Robustness
+## Phase 1.5: Codebase Split and Cleanup
+
+Goal: split `tools/theme_designer.py` into clear modules without behavior changes.
+
+### Tasks
+
+- [x] Split backend/core logic into dedicated module.
+- [x] Split embedded UI HTML into dedicated module.
+- [x] Split HTTP server/entry logic into dedicated module.
+- [x] Keep `tools/theme_designer.py` as compatibility entrypoint.
+- [x] Update tests/imports to keep regression coverage green after split.
+- [x] Add section-level comments/docstrings in new modules for navigation.
+
+### Acceptance Criteria
+
+- [x] `python3 tools/theme_designer.py --help` works as before.
+- [x] Existing tests pass without functional regressions.
+- [x] API endpoints and UI behavior remain unchanged.
+
+---
+
+## Phase 2: Output and Preview Robustness
 
 Goal: make compile/output behavior reliable across recipes and targets.
 
@@ -78,15 +94,17 @@ Goal: make compile/output behavior reliable across recipes and targets.
   - last compile timestamp
 - [ ] Add backend check for "PDF exists and newer than source".
 - [ ] Improve `Refresh PDF Preview` to follow dynamic PDF path.
+- [ ] Add stale-preview diagnostics in compile log.
 
 ### Acceptance Criteria
 
 - [ ] PDF preview always points to the correct output file for current recipe+target.
 - [ ] No stale preview after compile.
+- [ ] UI clearly reports where latest PDF was read from.
 
 ---
 
-## Phase 4 (Hard): `book` / `article` Adaptation
+## Phase 3: `book` / `article` Adaptation
 
 Goal: make theme behavior class-aware and configurable.
 
@@ -116,20 +134,22 @@ Goal: make theme behavior class-aware and configurable.
 
 ---
 
-## Documentation & UX (Cross-cutting)
+## Documentation and UX (Cross-cutting)
 
-- [ ] Update `tools/README-theme-designer.md` after each phase.
-- [ ] Add a compact "Troubleshooting" section:
+- [x] Update `tools/README-theme-designer.md` for the completed phase.
+- [x] Add a compact troubleshooting section:
   - missing TeX binaries
   - missing recipe/tool
   - stale PDF preview
-- [ ] Add inline help text in UI for each new control.
+- [x] Add inline help text in UI for each new control.
+- [x] Keep `README.md` and tool README in sync for compile workflow description.
 
 ---
 
 ## Suggested Execution Order
 
-- [ ] P1 compile target selector
-- [ ] P2 recipe support from VSCode settings
-- [ ] P3 output/preview robustness
-- [ ] P4 book/article adaptation
+- [x] P0 stability hotfixes
+- [x] P1 recipe support from VSCode settings
+- [x] P1.5 codebase split and cleanup
+- [ ] P2 output/preview robustness
+- [ ] P3 book/article adaptation
