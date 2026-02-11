@@ -39,7 +39,7 @@ Acceptance:
 
 ### P1-1 Decompose `theme_designer_core.py`
 
-- [ ] Split by bounded context (example):
+- [x] Split by bounded context (example):
   - [x] Phase 1: extracted split orchestration to `tools/core_split.py`, and kept compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 2: extracted compile orchestration to `tools/core_compile.py` (context/recipe/output-path/pipeline), and kept compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 3: extracted workspace/path guard helpers to `tools/core_paths.py`, and kept compatibility wrappers in `tools/theme_designer_core.py`.
@@ -52,14 +52,24 @@ Acceptance:
   - [x] Phase 10: extracted compile-target discovery/normalize helpers (`_list_candidate_tex_files`, `_default_compile_target`, `_normalize_compile_target`, `_compile_output_pdf_relpath`) to `tools/core_compile.py` with compatibility wrappers.
   - [x] Phase 11: extracted documentclass detection helpers (`_extract_documentclass_declaration`, `_resolve_subfiles_parent_tex`, `_extract_documentclass_name`, `_extract_documentclass_name_raw`, `_detect_target_documentclass`, `_has_documentclass`) to `tools/core_docclass.py` with compatibility wrappers.
   - [x] Phase 12: extracted compile-state mutation helpers (`_extract_compile_preferences`, `_apply_compile_preferences`, `_apply_compile_result`) to `tools/core_state.py` with compatibility wrappers.
+  - [x] Phase 13: extracted VSCode JSONC/settings/recipe-catalog parsing helpers (`_strip_jsonc_comments`, `_strip_json_trailing_commas`, `_parse_jsonc`, `_load_vscode_settings`, `_slugify`, `_load_vscode_recipe_catalog`) to `tools/core_vscode.py` with compatibility wrappers.
+  - [x] Phase 14: extracted compile output finalization helpers (`_pick_fallback_pdf`, `_check_output_freshness`, `_finalize_compile_output`) to `tools/core_compile.py` with compatibility wrappers.
+  - [x] Phase 15: extracted compile recipe helpers (`_default_compile_recipe`, `_normalize_compile_recipe`, `_recipe_name_by_id`) to `tools/core_compile.py` with compatibility wrappers.
+  - [x] Phase 16: extracted override parsing helpers (`_parse_main_toggle_defaults`, `_parse_toggle_override_file`, `_parse_class_override_file`, `_parse_body_font_size_override`, `_parse_color_override_file`) to `tools/core_state.py` with compatibility wrappers.
+  - [x] Phase 17: extracted runtime/IO helpers (`_read_text`, `_resolve_binary`, `_build_tex_env`, `_run_command`, `_iso8601_utc_from_epoch`, `_now_iso8601_utc`) to `tools/core_runtime.py` with compatibility wrappers.
+  - [x] Phase 18: extracted theme/color parsing helpers (`_bool_from_str`, `_hex_from_rgb`, `_blend_rgb`, `_parse_hex_color`, `_format_body_font_size`, `_parse_theme_color_defaults`) to `tools/core_theme.py` with compatibility wrappers.
+  - [x] Phase 19: extracted class target-switch coercion helper (`_coerce_class_mode_on_target_switch`) to `tools/core_state.py` with compatibility wrapper.
   - `core_state.py` (load/normalize/persist)
   - `core_compile.py` (compile context, recipe execution)
   - `core_docclass.py` (documentclass detection)
+  - `core_vscode.py` (VSCode settings/recipe parsing)
+  - `core_runtime.py` (runtime/io helpers)
+  - `core_theme.py` (theme/color parsing)
   - `core_split.py` (split orchestration)
   - `core_presets.py` (theme preset catalogs)
   - `core_starter.py` (starter template catalog/bootstrap)
   - `core_paths.py` (path/security helpers)
-- [ ] Keep compatibility facade (`theme_designer_core.py`) during migration.
+- [x] Keep compatibility facade (`theme_designer_core.py`) during migration.
 
 Acceptance:
 - All existing tests still pass.

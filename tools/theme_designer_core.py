@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Core state and compile logic for Theme Designer."""
+"""Core state and compile logic for the LaTeX Editing Toolkit UI."""
 
 from __future__ import annotations
 
-import json
-import math
 import os
 import re
 import shutil
 import subprocess
 import threading
-from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,8 +32,11 @@ try:
     from tools import core_docclass as _core_docclass
     from tools import core_paths as _core_paths
     from tools import core_presets as _core_presets
+    from tools import core_runtime as _core_runtime
     from tools import core_state as _core_state
     from tools import core_starter as _core_starter
+    from tools import core_theme as _core_theme
+    from tools import core_vscode as _core_vscode
     from tools import core_split as _core_split
 except ModuleNotFoundError:
     import tex_splitter as _tex_splitter
@@ -44,8 +44,11 @@ except ModuleNotFoundError:
     import core_docclass as _core_docclass
     import core_paths as _core_paths
     import core_presets as _core_presets
+    import core_runtime as _core_runtime
     import core_state as _core_state
     import core_starter as _core_starter
+    import core_theme as _core_theme
+    import core_vscode as _core_vscode
     import core_split as _core_split
 
 IGNORE_TEX_FILENAMES = {
@@ -585,235 +588,56 @@ HEADING_TOC_PRESET_DEFINITIONS: List[Dict[str, Any]] = [
 
 
 def _read_text(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8", errors="ignore")
+    return _core_runtime.read_text(path)
 
 
 # -------------------- VSCode JSONC Parsing --------------------
 
 def _strip_jsonc_comments(raw: str) -> str:
-    result: List[str] = []
-    in_string = False
-    escaped = False
-    index = 0
-    length = len(raw)
-
-    while index < length:
-        char = raw[index]
-
-        if in_string:
-            result.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-            continue
-
-        if char == "/" and index + 1 < length:
-            nxt = raw[index + 1]
-            if nxt == "/":
-                index += 2
-                while index < length and raw[index] not in "\r\n":
-                    index += 1
-                continue
-            if nxt == "*":
-                index += 2
-                while index + 1 < length and not (raw[index] == "*" and raw[index + 1] == "/"):
-                    index += 1
-                index = min(index + 2, length)
-                continue
-
-        result.append(char)
-        index += 1
-
-    return "".join(result)
+    return _core_vscode.strip_jsonc_comments(raw)
 
 
 def _strip_json_trailing_commas(raw: str) -> str:
-    result: List[str] = []
-    in_string = False
-    escaped = False
-    index = 0
-    length = len(raw)
-
-    while index < length:
-        char = raw[index]
-
-        if in_string:
-            result.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-            continue
-
-        if char == ",":
-            lookahead = index + 1
-            while lookahead < length and raw[lookahead] in " \t\r\n":
-                lookahead += 1
-            if lookahead < length and raw[lookahead] in "}]":
-                index += 1
-                continue
-
-        result.append(char)
-        index += 1
-
-    return "".join(result)
+    return _core_vscode.strip_json_trailing_commas(raw)
 
 
 def _parse_jsonc(raw: str) -> Dict[str, Any]:
-    """Parse VSCode-style JSONC into a dict."""
-
-    cleaned = _strip_json_trailing_commas(_strip_jsonc_comments(raw))
-    data = json.loads(cleaned)
-    if not isinstance(data, dict):
-        raise ValueError("JSONC content must be a top-level object.")
-    return data
+    return _core_vscode.parse_jsonc(raw)
 
 
 def _load_vscode_settings() -> Dict[str, Any]:
-    text = _read_text(VSCODE_SETTINGS_PATH)
-    if not text.strip():
-        return {}
-    try:
-        return _parse_jsonc(text)
-    except json.JSONDecodeError as err:
-        raise ValueError(f"Failed to parse {VSCODE_SETTINGS_PATH}: {err}") from err
+    return _core_vscode.load_vscode_settings(
+        vscode_settings_path=VSCODE_SETTINGS_PATH,
+        read_text_fn=_read_text,
+        parse_jsonc_fn=_parse_jsonc,
+    )
 
 
 def _slugify(raw: str) -> str:
-    lowered = raw.strip().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
-    return slug or "unnamed"
+    return _core_vscode.slugify(raw)
 
 
 def _load_vscode_recipe_catalog() -> Dict[str, Any]:
-    """Load latex-workshop tools/recipes from .vscode/settings.json."""
-
-    catalog: Dict[str, Any] = {
-        "tools": {},
-        "recipes": [],
-        "errors": [],
-    }
-    try:
-        settings = _load_vscode_settings()
-    except ValueError as err:
-        catalog["errors"].append(str(err))
-        return catalog
-
-    raw_tools = settings.get("latex-workshop.latex.tools", [])
-    if not isinstance(raw_tools, list):
-        catalog["errors"].append("latex-workshop.latex.tools must be a list.")
-        raw_tools = []
-
-    tools: Dict[str, Dict[str, Any]] = {}
-    for index, entry in enumerate(raw_tools):
-        if not isinstance(entry, dict):
-            catalog["errors"].append(f"Tool entry at index {index} is not an object.")
-            continue
-
-        name = str(entry.get("name", "")).strip()
-        command = str(entry.get("command", "")).strip()
-        raw_args = entry.get("args", [])
-        if not isinstance(raw_args, list):
-            catalog["errors"].append(f"Tool '{name or index}' args must be a list.")
-            continue
-
-        args = [str(item) for item in raw_args]
-        if not name:
-            catalog["errors"].append(f"Tool entry at index {index} is missing 'name'.")
-            continue
-        if not command:
-            catalog["errors"].append(f"Tool '{name}' is missing 'command'.")
-            continue
-
-        tools[name] = {
-            "name": name,
-            "command": command,
-            "args": args,
-        }
-
-    raw_recipes = settings.get("latex-workshop.latex.recipes", [])
-    if not isinstance(raw_recipes, list):
-        catalog["errors"].append("latex-workshop.latex.recipes must be a list.")
-        raw_recipes = []
-
-    recipes: List[Dict[str, Any]] = []
-    for index, entry in enumerate(raw_recipes):
-        if not isinstance(entry, dict):
-            catalog["errors"].append(f"Recipe entry at index {index} is not an object.")
-            continue
-
-        name = str(entry.get("name", "")).strip()
-        raw_tool_names = entry.get("tools", [])
-        if not isinstance(raw_tool_names, list):
-            catalog["errors"].append(f"Recipe '{name or index}' tools must be a list.")
-            continue
-
-        tool_names = [str(item).strip() for item in raw_tool_names if str(item).strip()]
-        if not name:
-            catalog["errors"].append(f"Recipe entry at index {index} is missing 'name'.")
-            continue
-        if not tool_names:
-            catalog["errors"].append(f"Recipe '{name}' has no tools.")
-            continue
-
-        recipe_id = f"vscode-{index + 1}-{_slugify(name)}"
-        recipes.append(
-            {
-                "id": recipe_id,
-                "name": name,
-                "tools": tool_names,
-            }
-        )
-
-    catalog["tools"] = tools
-    catalog["recipes"] = recipes
-    return catalog
+    return _core_vscode.load_vscode_recipe_catalog(
+        load_vscode_settings_fn=_load_vscode_settings,
+        slugify_fn=_slugify,
+    )
 
 
 def _default_compile_recipe(recipes: List[Dict[str, Any]]) -> str:
-    if not recipes:
-        return ""
-    return str(recipes[0].get("id", ""))
+    return _core_compile.default_compile_recipe(recipes)
 
 
 def _normalize_compile_recipe(raw_recipe: Any, recipes: List[Dict[str, Any]]) -> str:
-    if not recipes:
-        return ""
-    recipe_id = str(raw_recipe).strip() if raw_recipe is not None else ""
-    if not recipe_id:
-        return _default_compile_recipe(recipes)
-    valid_ids = {str(item.get("id", "")) for item in recipes}
-    if recipe_id in valid_ids:
-        return recipe_id
-    raise ValueError(f"Unknown compile recipe: {recipe_id}")
+    return _core_compile.normalize_compile_recipe(
+        raw_recipe,
+        recipes,
+        default_compile_recipe_fn=_default_compile_recipe,
+    )
 
 
 def _recipe_name_by_id(recipe_id: str, recipes: List[Dict[str, Any]]) -> str:
-    for recipe in recipes:
-        if str(recipe.get("id", "")) == recipe_id:
-            return str(recipe.get("name", recipe_id))
-    return ""
+    return _core_compile.recipe_name_by_id(recipe_id, recipes)
 
 
 def _resolve_compile_context(compile_target: str) -> CompileContext:
@@ -901,16 +725,11 @@ def _resolve_recipe_command(raw_command: str) -> str:
 # -------------------- Generic Value Parsing --------------------
 
 def _bool_from_str(raw: str) -> Optional[bool]:
-    lowered = raw.strip().lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    return None
+    return _core_theme.bool_from_str(raw)
 
 
 def _hex_from_rgb(rgb: Tuple[int, int, int]) -> str:
-    return "#{:02X}{:02X}{:02X}".format(*rgb)
+    return _core_theme.hex_from_rgb(rgb)
 
 
 def _blend_rgb(
@@ -918,24 +737,15 @@ def _blend_rgb(
     right: Tuple[int, int, int],
     left_weight: float,
 ) -> Tuple[int, int, int]:
-    lw = max(0.0, min(1.0, left_weight))
-    rw = 1.0 - lw
-    return (
-        int(round(left[0] * lw + right[0] * rw)),
-        int(round(left[1] * lw + right[1] * rw)),
-        int(round(left[2] * lw + right[2] * rw)),
-    )
+    return _core_theme.blend_rgb(left, right, left_weight)
 
 
 def _parse_hex_color(raw: str) -> Optional[str]:
-    value = raw.strip()
-    if re.fullmatch(r"#?[0-9A-Fa-f]{6}", value):
-        return "#" + value.lstrip("#").upper()
-    return None
+    return _core_theme.parse_hex_color(raw)
 
 
 def _format_body_font_size(value: float) -> str:
-    return f"{value:.1f}"
+    return _core_theme.format_body_font_size(value)
 
 
 def _parse_body_font_size_value(raw_value: Any) -> Optional[float]:
@@ -1161,22 +971,14 @@ def _coerce_class_mode_on_target_switch(
     previous_target: str,
     next_target: str,
 ) -> bool:
-    prev = str(previous_target or "").strip()
-    nxt = str(next_target or "").strip()
-    if not prev or not nxt or prev == nxt:
-        return False
-
-    class_config = _normalize_class_config_map(state.get("class_config", {}))
-    mode = class_config.get("theme_class_mode", "auto")
-    detected = _detect_target_documentclass(nxt)
-    if not detected:
-        return False
-
-    if _is_incompatible_forced_theme_class(mode, detected):
-        class_config["theme_class_mode"] = "auto"
-        state["class_config"] = class_config
-        return True
-    return False
+    return _core_state.coerce_class_mode_on_target_switch(
+        state,
+        previous_target,
+        next_target,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        detect_target_documentclass_fn=_detect_target_documentclass,
+        is_incompatible_forced_theme_class_fn=_is_incompatible_forced_theme_class,
+    )
 
 
 def _has_documentclass(tex_path: Path) -> bool:
@@ -1375,140 +1177,71 @@ def _split_compile_target(
 
 
 def _iso8601_utc_from_epoch(epoch_seconds: float) -> str:
-    dt = datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).replace(microsecond=0)
-    return dt.isoformat().replace("+00:00", "Z")
+    return _core_runtime.iso8601_utc_from_epoch(epoch_seconds)
 
 
 def _now_iso8601_utc() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return _core_runtime.now_iso8601_utc()
 
 
 # -------------------- Theme Defaults and Overrides --------------------
 
 def _parse_theme_color_defaults() -> Dict[str, str]:
-    theme_text = _read_text(THEME_STY_PATH)
-    colorlet_pairs = re.findall(r"\\colorlet\{([^}]+)\}\{([^}]+)\}", theme_text)
-    expr_map: Dict[str, str] = {}
-    for key, expr in colorlet_pairs:
-        if key in COLOR_SET:
-            expr_map[key] = expr.strip()
-
-    cache: Dict[str, Tuple[int, int, int]] = {}
-
-    def resolve_expr(expr: str, depth: int = 0) -> Tuple[int, int, int]:
-        expr = expr.strip()
-        if depth > 8:
-            return (128, 128, 128)
-
-        parsed_hex = _parse_hex_color(expr)
-        if parsed_hex:
-            h = parsed_hex.lstrip("#")
-            return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
-
-        lowered = expr.lower()
-        if lowered in BASE_COLORS:
-            return BASE_COLORS[lowered]
-
-        if expr in expr_map:
-            return resolve_token(expr, depth + 1)
-
-        if "!" in expr:
-            parts = [chunk.strip() for chunk in expr.split("!") if chunk.strip()]
-            if len(parts) >= 3 and len(parts) % 2 == 1:
-                mixed = resolve_expr(parts[0], depth + 1)
-                for idx in range(1, len(parts), 2):
-                    try:
-                        percent = float(parts[idx]) / 100.0
-                    except ValueError:
-                        return (128, 128, 128)
-                    right = resolve_expr(parts[idx + 1], depth + 1)
-                    mixed = _blend_rgb(mixed, right, percent)
-                return mixed
-
-        return (128, 128, 128)
-
-    def resolve_token(token: str, depth: int = 0) -> Tuple[int, int, int]:
-        if token in cache:
-            return cache[token]
-        expr = expr_map.get(token)
-        if expr is None:
-            rgb = (128, 128, 128)
-        else:
-            rgb = resolve_expr(expr, depth + 1)
-        cache[token] = rgb
-        return rgb
-
-    defaults: Dict[str, str] = {}
-    for token in COLOR_ORDER:
-        defaults[token] = _hex_from_rgb(resolve_token(token))
-    return defaults
+    return _core_theme.parse_theme_color_defaults(
+        theme_sty_path=THEME_STY_PATH,
+        read_text_fn=_read_text,
+        color_set=COLOR_SET,
+        color_order=COLOR_ORDER,
+        base_colors=BASE_COLORS,
+        parse_hex_color_fn=_parse_hex_color,
+        blend_rgb_fn=_blend_rgb,
+        hex_from_rgb_fn=_hex_from_rgb,
+    )
 
 
 def _parse_main_toggle_defaults() -> Dict[str, bool]:
-    text = _read_text(MAIN_TEX_PATH)
-    defaults: Dict[str, bool] = {}
-    for entry in TOGGLE_SCHEMA:
-        command = entry["command"]
-        matches = re.findall(rf"\\{command}(true|false)", text)
-        if matches:
-            parsed = _bool_from_str(matches[-1])
-            defaults[entry["id"]] = True if parsed is None else parsed
-        else:
-            defaults[entry["id"]] = True
-    return defaults
+    return _core_state.parse_main_toggle_defaults(
+        main_tex_path=MAIN_TEX_PATH,
+        read_text_fn=_read_text,
+        toggle_schema=TOGGLE_SCHEMA,
+        bool_from_str_fn=_bool_from_str,
+    )
 
 
 def _parse_toggle_override_file(path: Path) -> Dict[str, bool]:
-    text = _read_text(path)
-    found: Dict[str, bool] = {}
-    for entry in TOGGLE_SCHEMA:
-        command = entry["command"]
-        matches = re.findall(rf"\\{command}(true|false)", text)
-        if matches:
-            parsed = _bool_from_str(matches[-1])
-            if parsed is not None:
-                found[entry["id"]] = parsed
-    return found
+    return _core_state.parse_toggle_override_file(
+        path,
+        read_text_fn=_read_text,
+        toggle_schema=TOGGLE_SCHEMA,
+        bool_from_str_fn=_bool_from_str,
+    )
 
 
 def _parse_class_override_file(path: Path) -> Dict[str, str]:
-    text = _read_text(path)
-    parsed: Dict[str, str] = {}
-    for field_id in CLASS_CONFIG_IDS:
-        command = CLASS_CONFIG_COMMANDS[field_id]
-        matches = re.findall(rf"\\def\\{command}\{{([^}}]+)\}}", text)
-        if matches:
-            parsed[field_id] = _normalize_class_config_value(field_id, matches[-1])
-    return parsed
+    return _core_state.parse_class_override_file(
+        path,
+        read_text_fn=_read_text,
+        class_config_ids=CLASS_CONFIG_IDS,
+        class_config_commands=CLASS_CONFIG_COMMANDS,
+        normalize_class_config_value_fn=_normalize_class_config_value,
+    )
 
 
 def _parse_body_font_size_override(path: Path) -> Optional[float]:
-    text = _read_text(path)
-    matches = re.findall(r"\\def\\ThemeBodyFontSizePt\{([^}]+)\}", text)
-    if not matches:
-        return None
-    return _normalize_body_font_size_value(matches[-1])
+    return _core_state.parse_body_font_size_override(
+        path,
+        read_text_fn=_read_text,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+    )
 
 
 def _parse_color_override_file(path: Path) -> Dict[str, str]:
-    text = _read_text(path)
-    define_map: Dict[str, str] = {
-        name: "#" + value.upper()
-        for name, value in re.findall(
-            r"\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}", text
-        )
-    }
-    overrides: Dict[str, str] = {}
-    for token, mapped in re.findall(r"\\colorlet\{([^}]+)\}\{([^}]+)\}", text):
-        if token not in COLOR_SET:
-            continue
-        if mapped in define_map:
-            overrides[token] = define_map[mapped]
-            continue
-        parsed_hex = _parse_hex_color(mapped)
-        if parsed_hex:
-            overrides[token] = parsed_hex
-    return overrides
+    return _core_state.parse_color_override_file(
+        path,
+        read_text_fn=_read_text,
+        color_set=COLOR_SET,
+        parse_hex_color_fn=_parse_hex_color,
+    )
 
 
 # -------------------- State Load/Normalize/Persist --------------------
@@ -1628,157 +1361,50 @@ def _delete_override_files() -> None:
 # -------------------- Command Resolution and Execution --------------------
 
 def _resolve_binary(name: str) -> Optional[str]:
-    found = shutil.which(name)
-    if found:
-        return found
-
-    candidate_dirs = [
-        Path("/Library/TeX/texbin"),
-        Path("/usr/texbin"),
-        Path("/opt/homebrew/bin"),
-        Path("/usr/local/bin"),
-    ]
-    for directory in candidate_dirs:
-        candidate = directory / name
-        if candidate.exists() and candidate.is_file():
-            return str(candidate)
-    return None
+    return _core_runtime.resolve_binary(
+        name,
+        which_fn=shutil.which,
+    )
 
 
 def _build_tex_env() -> Dict[str, str]:
-    env = dict(os.environ)
-    existing = [item for item in env.get("PATH", "").split(os.pathsep) if item]
-    prepend = [
-        "/Library/TeX/texbin",
-        "/usr/texbin",
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-    ]
-    merged: List[str] = []
-    for path in prepend + existing:
-        if path not in merged:
-            merged.append(path)
-    env["PATH"] = os.pathsep.join(merged)
-
-    workspace = str(ROOT_DIR.resolve())
-    tex_inputs = [item for item in env.get("TEXINPUTS", "").split(os.pathsep) if item]
-    bib_inputs = [item for item in env.get("BIBINPUTS", "").split(os.pathsep) if item]
-    bst_inputs = [item for item in env.get("BSTINPUTS", "").split(os.pathsep) if item]
-
-    env["TEXINPUTS"] = os.pathsep.join([".", workspace] + tex_inputs) + os.pathsep
-    env["BIBINPUTS"] = os.pathsep.join([".", workspace] + bib_inputs) + os.pathsep
-    env["BSTINPUTS"] = os.pathsep.join([".", workspace] + bst_inputs) + os.pathsep
-    return env
+    return _core_runtime.build_tex_env(
+        root_dir=ROOT_DIR,
+        environ=dict(os.environ),
+    )
 
 
 def _run_command(command: List[str], cwd: Path = ROOT_DIR) -> Tuple[bool, int, str]:
-    try:
-        proc = subprocess.run(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            env=_build_tex_env(),
-            timeout=COMPILE_COMMAND_TIMEOUT_SEC,
-            shell=False,
-        )
-    except FileNotFoundError:
-        return False, 127, f"[missing] command not found: {command[0]}"
-    except subprocess.TimeoutExpired as err:
-        output_parts: List[str] = []
-        if err.output:
-            output_parts.append(str(err.output))
-        if err.stderr:
-            output_parts.append(str(err.stderr))
-        output_parts.append(
-            f"[timeout] command exceeded {COMPILE_COMMAND_TIMEOUT_SEC:.1f}s: "
-            + " ".join(command)
-        )
-        return False, COMPILE_TIMEOUT_EXIT_CODE, "\n".join(output_parts)
-
-    output = (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
-    return proc.returncode == 0, proc.returncode, output
+    return _core_runtime.run_command(
+        command,
+        cwd=cwd,
+        build_tex_env_fn=_build_tex_env,
+        timeout_sec=COMPILE_COMMAND_TIMEOUT_SEC,
+        timeout_exit_code=COMPILE_TIMEOUT_EXIT_CODE,
+        subprocess_run_fn=subprocess.run,
+    )
 
 
 def _pick_fallback_pdf(ctx: CompileContext, expected_pdf_rel: str) -> str:
-    """Find the most recently modified PDF near expected output and compile cwd."""
-
-    candidate_dirs: List[Path] = [ctx.compile_cwd]
-    expected_abs, _ = _resolve_workspace_pdf(expected_pdf_rel)
-    candidate_dirs.append(expected_abs.parent)
-
-    seen_dirs: set[str] = set()
-    candidates: List[Path] = []
-    for directory in candidate_dirs:
-        try:
-            resolved_dir = directory.resolve()
-        except OSError:
-            continue
-        key = str(resolved_dir)
-        if key in seen_dirs:
-            continue
-        seen_dirs.add(key)
-        if not resolved_dir.exists() or not resolved_dir.is_dir():
-            continue
-        for pdf in resolved_dir.glob("*.pdf"):
-            try:
-                resolved_pdf = pdf.resolve()
-            except OSError:
-                continue
-            if _is_subpath(resolved_pdf, ROOT_DIR.resolve()):
-                candidates.append(resolved_pdf)
-
-    if not candidates:
-        return ""
-
-    def _mtime_or_zero(path: Path) -> float:
-        try:
-            return path.stat().st_mtime
-        except OSError:
-            return 0.0
-
-    latest = max(candidates, key=_mtime_or_zero)
-    return latest.relative_to(ROOT_DIR).as_posix()
+    return _core_compile.pick_fallback_pdf(
+        ctx,
+        expected_pdf_rel,
+        resolve_workspace_pdf_fn=_resolve_workspace_pdf,
+        is_subpath_fn=_is_subpath,
+        root_dir=ROOT_DIR,
+    )
 
 
 def _check_output_freshness(
     ctx: CompileContext,
     pdf_rel: str,
 ) -> Tuple[bool, str, List[str]]:
-    """Verify PDF exists and is not older than source target file."""
-
-    diagnostics: List[str] = []
-    pdf_abs, normalized_pdf_rel = _resolve_workspace_pdf(pdf_rel)
-    if not pdf_abs.exists():
-        diagnostics.append(f"Output PDF not found: {normalized_pdf_rel}")
-        return False, normalized_pdf_rel, diagnostics
-
-    try:
-        source_mtime = ctx.target_abs.stat().st_mtime
-    except OSError as err:
-        diagnostics.append(f"Cannot read source timestamp for {ctx.target_rel}: {err}")
-        return False, normalized_pdf_rel, diagnostics
-
-    try:
-        pdf_mtime = pdf_abs.stat().st_mtime
-    except OSError as err:
-        diagnostics.append(f"Cannot read PDF timestamp for {normalized_pdf_rel}: {err}")
-        return False, normalized_pdf_rel, diagnostics
-
-    diagnostics.append(
-        f"[source mtime] {ctx.target_rel}: {_iso8601_utc_from_epoch(source_mtime)}"
+    return _core_compile.check_output_freshness(
+        ctx,
+        pdf_rel,
+        resolve_workspace_pdf_fn=_resolve_workspace_pdf,
+        iso8601_utc_from_epoch_fn=_iso8601_utc_from_epoch,
     )
-    diagnostics.append(
-        f"[pdf mtime] {normalized_pdf_rel}: {_iso8601_utc_from_epoch(pdf_mtime)}"
-    )
-
-    if pdf_mtime + 1e-3 < source_mtime:
-        diagnostics.append("Stale preview risk: output PDF is older than source target.")
-        diagnostics.append("Tip: verify recipe output directory and re-run compile.")
-        return False, normalized_pdf_rel, diagnostics
-
-    diagnostics.append("Output freshness check passed.")
-    return True, normalized_pdf_rel, diagnostics
 
 
 def _finalize_compile_output(
@@ -1786,31 +1412,15 @@ def _finalize_compile_output(
     logs: List[str],
     expected_pdf_rel: str,
 ) -> Tuple[bool, str, str]:
-    """Apply fallback lookup and freshness validation for compile output."""
-
-    chosen_pdf_rel = expected_pdf_rel
-    expected_abs, expected_rel = _resolve_workspace_pdf(expected_pdf_rel)
-    if not expected_abs.exists():
-        fallback_rel = _pick_fallback_pdf(ctx, expected_rel)
-        if fallback_rel:
-            logs.append(
-                f"Expected PDF not found at {expected_rel}. Using fallback PDF: {fallback_rel}"
-            )
-            logs.append("")
-            chosen_pdf_rel = fallback_rel
-        else:
-            logs.append(f"Compile finished, but expected PDF was not found: {expected_rel}")
-            logs.append("")
-            return False, _finalize_logs(logs), expected_rel
-
-    logs.append("== output check ==")
-    freshness_ok, normalized_pdf_rel, diagnostics = _check_output_freshness(
+    return _core_compile.finalize_compile_output(
         ctx,
-        chosen_pdf_rel,
+        logs,
+        expected_pdf_rel,
+        resolve_workspace_pdf_fn=_resolve_workspace_pdf,
+        pick_fallback_pdf_fn=_pick_fallback_pdf,
+        check_output_freshness_fn=_check_output_freshness,
+        finalize_logs_fn=_finalize_logs,
     )
-    logs.extend(diagnostics)
-    logs.append("")
-    return freshness_ok, _finalize_logs(logs), normalized_pdf_rel
 
 
 # -------------------- Compile Preference Helpers --------------------

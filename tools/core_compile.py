@@ -124,6 +124,36 @@ def compile_output_pdf_relpath(compile_target: str) -> str:
     return Path(compile_target).with_suffix(".pdf").as_posix()
 
 
+def default_compile_recipe(recipes: List[Dict[str, Any]]) -> str:
+    if not recipes:
+        return ""
+    return str(recipes[0].get("id", ""))
+
+
+def normalize_compile_recipe(
+    raw_recipe: Any,
+    recipes: List[Dict[str, Any]],
+    *,
+    default_compile_recipe_fn: Callable[[List[Dict[str, Any]]], str],
+) -> str:
+    if not recipes:
+        return ""
+    recipe_id = str(raw_recipe).strip() if raw_recipe is not None else ""
+    if not recipe_id:
+        return default_compile_recipe_fn(recipes)
+    valid_ids = {str(item.get("id", "")) for item in recipes}
+    if recipe_id in valid_ids:
+        return recipe_id
+    raise ValueError(f"Unknown compile recipe: {recipe_id}")
+
+
+def recipe_name_by_id(recipe_id: str, recipes: List[Dict[str, Any]]) -> str:
+    for recipe in recipes:
+        if str(recipe.get("id", "")) == recipe_id:
+            return str(recipe.get("name", recipe_id))
+    return ""
+
+
 def append_step_log(
     logs: List[str],
     label: str,
@@ -283,6 +313,134 @@ def resolve_recipe_command(
         return command
     resolved = resolve_binary_fn(command)
     return resolved or command
+
+
+def pick_fallback_pdf(
+    ctx: Any,
+    expected_pdf_rel: str,
+    *,
+    resolve_workspace_pdf_fn: Callable[[str], tuple[Path, str]],
+    is_subpath_fn: Callable[[Path, Path], bool],
+    root_dir: Path,
+) -> str:
+    """Find the most recently modified PDF near expected output and compile cwd."""
+
+    candidate_dirs: List[Path] = [ctx.compile_cwd]
+    expected_abs, _ = resolve_workspace_pdf_fn(expected_pdf_rel)
+    candidate_dirs.append(expected_abs.parent)
+
+    seen_dirs: set[str] = set()
+    candidates: List[Path] = []
+    for directory in candidate_dirs:
+        try:
+            resolved_dir = directory.resolve()
+        except OSError:
+            continue
+        key = str(resolved_dir)
+        if key in seen_dirs:
+            continue
+        seen_dirs.add(key)
+        if not resolved_dir.exists() or not resolved_dir.is_dir():
+            continue
+        for pdf in resolved_dir.glob("*.pdf"):
+            try:
+                resolved_pdf = pdf.resolve()
+            except OSError:
+                continue
+            if is_subpath_fn(resolved_pdf, root_dir.resolve()):
+                candidates.append(resolved_pdf)
+
+    if not candidates:
+        return ""
+
+    def _mtime_or_zero(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    latest = max(candidates, key=_mtime_or_zero)
+    return latest.relative_to(root_dir).as_posix()
+
+
+def check_output_freshness(
+    ctx: Any,
+    pdf_rel: str,
+    *,
+    resolve_workspace_pdf_fn: Callable[[str], tuple[Path, str]],
+    iso8601_utc_from_epoch_fn: Callable[[float], str],
+) -> Tuple[bool, str, List[str]]:
+    """Verify PDF exists and is not older than source target file."""
+
+    diagnostics: List[str] = []
+    pdf_abs, normalized_pdf_rel = resolve_workspace_pdf_fn(pdf_rel)
+    if not pdf_abs.exists():
+        diagnostics.append(f"Output PDF not found: {normalized_pdf_rel}")
+        return False, normalized_pdf_rel, diagnostics
+
+    try:
+        source_mtime = ctx.target_abs.stat().st_mtime
+    except OSError as err:
+        diagnostics.append(f"Cannot read source timestamp for {ctx.target_rel}: {err}")
+        return False, normalized_pdf_rel, diagnostics
+
+    try:
+        pdf_mtime = pdf_abs.stat().st_mtime
+    except OSError as err:
+        diagnostics.append(f"Cannot read PDF timestamp for {normalized_pdf_rel}: {err}")
+        return False, normalized_pdf_rel, diagnostics
+
+    diagnostics.append(
+        f"[source mtime] {ctx.target_rel}: {iso8601_utc_from_epoch_fn(source_mtime)}"
+    )
+    diagnostics.append(
+        f"[pdf mtime] {normalized_pdf_rel}: {iso8601_utc_from_epoch_fn(pdf_mtime)}"
+    )
+
+    if pdf_mtime + 1e-3 < source_mtime:
+        diagnostics.append("Stale preview risk: output PDF is older than source target.")
+        diagnostics.append("Tip: verify recipe output directory and re-run compile.")
+        return False, normalized_pdf_rel, diagnostics
+
+    diagnostics.append("Output freshness check passed.")
+    return True, normalized_pdf_rel, diagnostics
+
+
+def finalize_compile_output(
+    ctx: Any,
+    logs: List[str],
+    expected_pdf_rel: str,
+    *,
+    resolve_workspace_pdf_fn: Callable[[str], tuple[Path, str]],
+    pick_fallback_pdf_fn: Callable[[Any, str], str],
+    check_output_freshness_fn: Callable[[Any, str], Tuple[bool, str, List[str]]],
+    finalize_logs_fn: Callable[[List[str]], str],
+) -> Tuple[bool, str, str]:
+    """Apply fallback lookup and freshness validation for compile output."""
+
+    chosen_pdf_rel = expected_pdf_rel
+    expected_abs, expected_rel = resolve_workspace_pdf_fn(expected_pdf_rel)
+    if not expected_abs.exists():
+        fallback_rel = pick_fallback_pdf_fn(ctx, expected_rel)
+        if fallback_rel:
+            logs.append(
+                f"Expected PDF not found at {expected_rel}. Using fallback PDF: {fallback_rel}"
+            )
+            logs.append("")
+            chosen_pdf_rel = fallback_rel
+        else:
+            logs.append(f"Compile finished, but expected PDF was not found: {expected_rel}")
+            logs.append("")
+            return False, finalize_logs_fn(logs), expected_rel
+
+    logs.append("== output check ==")
+    freshness_ok, normalized_pdf_rel, diagnostics = check_output_freshness_fn(
+        ctx,
+        chosen_pdf_rel,
+    )
+    logs.extend(diagnostics)
+    logs.append("")
+    return freshness_ok, finalize_logs_fn(logs), normalized_pdf_rel
 
 
 def compile_tex_target_internal(

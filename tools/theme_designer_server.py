@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTTP server layer for Theme Designer."""
+"""HTTP server layer for the LaTeX Editing Toolkit UI."""
 
 from __future__ import annotations
 
@@ -226,7 +226,7 @@ def _api_error_payload(error: str, code: str, hint: str = "") -> Dict[str, str]:
 
 
 class ThemeDesignerHandler(BaseHTTPRequestHandler):
-    """Serve the Theme Designer UI and backend JSON endpoints."""
+    """Serve the toolkit UI and backend JSON endpoints."""
 
     def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -772,7 +772,7 @@ def _lifecycle_shutdown_watchdog(
     while not stop_event.wait(interval):
         if controller.should_shutdown():
             print(
-                "No active Theme Designer sessions after idle grace; shutting down server."
+                "No active toolkit sessions after idle grace; shutting down server."
             )
             server.shutdown()
             return
@@ -786,7 +786,7 @@ def run_server(
 ) -> None:
     resolved_lifecycle = lifecycle_config or _default_lifecycle_config()
     server, url = _resolve_server(host, port, resolved_lifecycle)
-    print(f"Theme designer running at {url}")
+    print(f"LaTeX toolkit UI running at {url}")
     print(
         "Lifecycle mode: "
         f"{resolved_lifecycle.mode} "
@@ -822,7 +822,9 @@ def run_server(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run local UI for theme tuning.")
+    parser = argparse.ArgumentParser(
+        description="Run local toolkit UI for LaTeX theming, splitting, and compile workflow."
+    )
     parser.add_argument(
         "--host",
         default=DEFAULT_HOST,
@@ -884,7 +886,7 @@ def main() -> None:
             lifecycle_config=lifecycle_config,
         )
     except OSError as err:
-        raise SystemExit(f"Failed to start Theme Designer: {err}") from err
+        raise SystemExit(f"Failed to start LaTeX toolkit UI: {err}") from err
 
 
 if __name__ == "__main__":

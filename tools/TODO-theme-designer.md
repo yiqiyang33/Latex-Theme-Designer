@@ -5,7 +5,7 @@ This plan is reset around `subfiles` as the primary standalone compile strategy.
 Core goals:
 
 1. Every split unit compiles independently via `subfiles`.
-2. Split workflow is integrated into Theme Designer UI.
+2. Split workflow is integrated into Toolkit UI.
 3. Product positioning shifts from "Theme Designer" to a broader LaTeX editing toolkit.
 
 ## Hotfix (Urgent): UI Selector Interactivity Regression
@@ -121,7 +121,7 @@ Goal: compile pipeline handles section targets and root targets consistently.
 
 ---
 
-## P3 (Must): Theme Designer UI Integration
+## P3 (Must): Toolkit UI Integration
 
 Goal: user can split and compile subfiles directly from UI.
 
@@ -146,7 +146,7 @@ Goal: user can split and compile subfiles directly from UI.
 
 ### Acceptance Criteria
 
-- [x] User can split + select one subfile + compile to PDF without leaving Theme Designer UI.
+- [x] User can split + select one subfile + compile to PDF without leaving Toolkit UI.
 
 ---
 
@@ -181,19 +181,19 @@ Goal: reflect toolkit scope beyond theme color tuning.
 
 ### Tasks
 
-- [ ] Finalize naming:
+- [x] Finalize naming:
   - repo title
   - UI title
   - CLI naming/aliases
-- [ ] Update docs:
+- [x] Update docs:
   - `README.md`
   - `tools/README-theme-designer.md`
   - migration notes from old naming
-- [ ] Keep backward-compatible entrypoint aliases during transition window.
+- [x] Keep backward-compatible entrypoint aliases during transition window.
 
 ### Acceptance Criteria
 
-- [ ] First-time users can quickly understand the project covers theming + structure/splitting + compile workflow.
+- [x] First-time users can quickly understand the project covers theming + structure/splitting + compile workflow.
 
 ---
 
@@ -204,4 +204,4 @@ Goal: reflect toolkit scope beyond theme color tuning.
 - [x] P2 compile pipeline support
 - [x] P3 UI integration
 - [x] P4 safety/idempotency hardening
-- [ ] P5 naming/docs refresh
+- [x] P5 naming/docs refresh

@@ -1,4 +1,4 @@
-"""Theme Designer UI loader."""
+"""LaTeX Editing Toolkit UI loader."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def _load_html_page(path: Path = UI_HTML_PATH) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except OSError as err:
-        raise RuntimeError(f"Failed to load Theme Designer HTML from {path}: {err}") from err
+        raise RuntimeError(f"Failed to load toolkit HTML from {path}: {err}") from err
 
 
 HTML_PAGE = _load_html_page()

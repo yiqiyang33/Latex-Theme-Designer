@@ -1,6 +1,6 @@
-# LaTeX Theme Forge
+# LaTeX Editing Toolkit
 
-Open-source LaTeX template for customizing note/book layout styles.
+Open-source LaTeX toolkit for theme tuning, project splitting, and compile workflow orchestration.
 
 ## Run
 
@@ -28,7 +28,7 @@ pytest -q tools/tests
 ## Feature Overview
 
 - Centralized theme layout (`theme.sty`) for document + theorem styles.
-- Local Theme Designer UI for color/toggle/class/compile tuning.
+- Local toolkit UI for color/toggle/class/compile tuning.
 - One-click split workflow (`tools/tex_splitter.py`) for modular `Sections/` authoring.
 - Compile integration with internal fallback pipeline and VSCode recipe mode.
 
@@ -36,17 +36,23 @@ Canonical capability list lives in:
 
 - `tools/README-theme-designer.md#current-capabilities`
 
-## Theme Designer
+## Toolkit UI
 
 Use the local UI tool:
 
 ```bash
-python3 tools/theme_designer.py --open-browser
+python3 tools/latex_toolkit.py --open-browser
 ```
 
 See full tool documentation in:
 
 - `tools/README-theme-designer.md`
+
+Compatibility alias (still supported during transition):
+
+```bash
+python3 tools/theme_designer.py --open-browser
+```
 
 ## TeX Splitter
 
@@ -114,3 +120,9 @@ rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 See:
 
 - `tools/TODO-theme-designer.md`
+
+## Naming Migration
+
+- New primary name: `LaTeX Editing Toolkit`.
+- New preferred UI entrypoint: `tools/latex_toolkit.py`.
+- Legacy alias is retained: `tools/theme_designer.py`.

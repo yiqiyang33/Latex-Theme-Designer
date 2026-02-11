@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Compatibility entrypoint for Theme Designer.
+"""Compatibility entrypoint for legacy Theme Designer naming.
 
-Core logic lives in `tools/theme_designer_core.py`.
-HTTP server/CLI lives in `tools/theme_designer_server.py`.
+Canonical entrypoint: `tools/latex_toolkit.py`.
 """
 
 from __future__ import annotations
@@ -10,21 +9,14 @@ from __future__ import annotations
 import importlib
 
 try:
-    _core = importlib.import_module("tools.theme_designer_core")
-    _server = importlib.import_module("tools.theme_designer_server")
+    _toolkit = importlib.import_module("tools.latex_toolkit")
 except ModuleNotFoundError:
-    _core = importlib.import_module("theme_designer_core")
-    _server = importlib.import_module("theme_designer_server")
+    _toolkit = importlib.import_module("latex_toolkit")
 
-# Re-export core symbols (including private helpers) to keep compatibility.
-for _name, _value in vars(_core).items():
+# Re-export toolkit symbols to keep full backwards compatibility.
+for _name, _value in vars(_toolkit).items():
     if not _name.startswith("__"):
         globals()[_name] = _value
 
-ThemeDesignerHandler = _server.ThemeDesignerHandler
-run_server = _server.run_server
-main = _server.main
-
-
 if __name__ == "__main__":
-    main()
+    _toolkit.main()

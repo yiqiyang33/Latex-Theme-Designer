@@ -1,2 +1,1 @@
-"""Tools package for Theme Designer and TeX splitter utilities."""
-
+"""Tools package for the LaTeX Editing Toolkit and TeX splitter utilities."""

@@ -1,11 +1,11 @@
-# Theme Designer UI
+# LaTeX Editing Toolkit UI
 
 Local web UI for tuning template colors and on/off switches.
 
 ## Run
 
 ```bash
-python3 tools/theme_designer.py --open-browser
+python3 tools/latex_toolkit.py --open-browser
 ```
 
 Default URL: `http://127.0.0.1:8765`
@@ -13,7 +13,13 @@ Default URL: `http://127.0.0.1:8765`
 Lifecycle example (auto-stop after last tab expires):
 
 ```bash
-python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-timeout-sec 45 --idle-grace-sec 20
+python3 tools/latex_toolkit.py --lifecycle-mode shutdown-on-last-tab --session-timeout-sec 45 --idle-grace-sec 20
+```
+
+Compatibility alias (still supported):
+
+```bash
+python3 tools/theme_designer.py --open-browser
 ```
 
 ## Documentation Policy
@@ -119,7 +125,7 @@ python3 tools/tex_splitter.py main.tex --dry-run
 - Rerun safety:
   - if root is already split with `\subfile{...}` entries, splitter returns no-op instead of injecting duplicates.
 
-- Theme Designer UI split flow:
+- Toolkit UI split flow:
   - use `Split + Subfiles Standalone` panel
   - choose source target, optional dry-run, then click `Split Current Target`
   - after success, use `Switch To First Subfile` for one-click compile-target switch
@@ -142,7 +148,7 @@ These files are loaded automatically by:
 - Chapter color appears unchanged:
   - `theme-chapter` only affects rendered chapter headings.
   - If target class is `article` (or override forces `ThemeClassMode=article`), chapter heading styling is inactive.
-  - When you switch compile target across incompatible classes, Theme Designer auto-resets forced `theme_class_mode` to `auto` to avoid stale mismatch.
+  - When you switch compile target across incompatible classes, Toolkit UI auto-resets forced `theme_class_mode` to `auto` to avoid stale mismatch.
   - Repro checklist for chapter color changes:
     - compile target is a chapter-capable file (for example `templates/book-minimal.tex`)
     - `theme_class_mode` is `auto` or `book`
@@ -187,3 +193,9 @@ rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 See detailed plan and checkboxes in:
 
 - `tools/TODO-theme-designer.md`
+
+## Naming Migration
+
+- New primary name: `LaTeX Editing Toolkit UI`.
+- New preferred UI entrypoint: `tools/latex_toolkit.py`.
+- Legacy alias is retained: `tools/theme_designer.py`.

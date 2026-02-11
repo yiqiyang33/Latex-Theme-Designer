@@ -12,6 +12,8 @@ import time
 import unittest
 from contextlib import redirect_stdout
 
+from tools import latex_toolkit as ltk
+from tools import theme_designer as td_entry
 from tools import theme_designer_core as td
 from tools import theme_designer_server as tds
 from tools import theme_designer_ui as tdu
@@ -24,8 +26,13 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertEqual(tdu.HTML_PAGE, raw)
 
     def test_theme_designer_ui_loader_reports_missing_asset(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "Failed to load Theme Designer HTML"):
+        with self.assertRaisesRegex(RuntimeError, "Failed to load toolkit HTML"):
             tdu._load_html_page(Path("/tmp/_theme_designer_ui_missing_asset.html"))
+
+    def test_theme_designer_entrypoint_is_legacy_alias(self) -> None:
+        self.assertIs(td_entry.run_server, ltk.run_server)
+        self.assertIs(td_entry.main, ltk.main)
+        self.assertIs(td_entry.ThemeDesignerHandler, ltk.ThemeDesignerHandler)
 
     def _embedded_ui_script(self) -> str:
         match = re.search(r"<script>(.*)</script>", tdu.HTML_PAGE, re.S)
@@ -1463,7 +1470,7 @@ class ThemeDesignerTests(unittest.TestCase):
 
         self.assertEqual(opened_urls, ["http://127.0.0.1:9921"])
         self.assertIn(
-            "Theme designer running at http://127.0.0.1:9921",
+            "LaTeX toolkit UI running at http://127.0.0.1:9921",
             captured_stdout.getvalue(),
         )
         self.assertTrue(fake_server.closed)
