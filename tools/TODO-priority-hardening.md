@@ -43,6 +43,11 @@ Acceptance:
   - [x] Phase 1: extracted split orchestration to `tools/core_split.py`, and kept compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 2: extracted compile orchestration to `tools/core_compile.py` (context/recipe/output-path/pipeline), and kept compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 3: extracted workspace/path guard helpers to `tools/core_paths.py`, and kept compatibility wrappers in `tools/theme_designer_core.py`.
+  - [x] Phase 4: extracted preset catalog/normalize/apply helpers to `tools/core_presets.py`, and kept compatibility wrappers in `tools/theme_designer_core.py`.
+  - [x] Phase 5: extracted state normalize/persist helpers (`body font`, `class config`, `payload normalize`, `ui-state persist`) to `tools/core_state.py`, with compatibility wrappers in `tools/theme_designer_core.py`.
+  - [x] Phase 6: extracted override file write/delete orchestration to `tools/core_state.py`, with compatibility wrappers in `tools/theme_designer_core.py`.
+  - [x] Phase 7: extracted state load orchestration to `tools/core_state.py` via `_load_state` facade delegation in `tools/theme_designer_core.py`.
+  - [x] Phase 8: extracted class-profile/derived-state helpers (`_is_chapter_capable_class`, `_effective_theme_class`, `_is_incompatible_forced_theme_class`, `_class_profile_for_state`, `_refresh_derived_state`) to `tools/core_state.py` with compatibility wrappers.
   - `core_state.py` (load/normalize/persist)
   - `core_compile.py` (compile context, recipe execution)
   - `core_split.py` (split orchestration)

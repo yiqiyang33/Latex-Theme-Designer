@@ -31,11 +31,15 @@ try:
     from tools import tex_splitter as _tex_splitter
     from tools import core_compile as _core_compile
     from tools import core_paths as _core_paths
+    from tools import core_presets as _core_presets
+    from tools import core_state as _core_state
     from tools import core_split as _core_split
 except ModuleNotFoundError:
     import tex_splitter as _tex_splitter
     import core_compile as _core_compile
     import core_paths as _core_paths
+    import core_presets as _core_presets
+    import core_state as _core_state
     import core_split as _core_split
 
 IGNORE_TEX_FILENAMES = {
@@ -929,262 +933,121 @@ def _format_body_font_size(value: float) -> str:
 
 
 def _parse_body_font_size_value(raw_value: Any) -> Optional[float]:
-    if isinstance(raw_value, bool):
-        return None
-    try:
-        parsed = float(raw_value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(parsed):
-        return None
-    return parsed
+    return _core_state.parse_body_font_size_value(raw_value)
 
 
 def _normalize_body_font_size_value(raw_value: Any) -> float:
-    parsed = _parse_body_font_size_value(raw_value)
-    if parsed is None:
-        return BODY_FONT_SIZE_DEFAULT
-    clamped = min(BODY_FONT_SIZE_MAX, max(BODY_FONT_SIZE_MIN, parsed))
-    snapped_steps = round((clamped - BODY_FONT_SIZE_MIN) / BODY_FONT_SIZE_STEP)
-    snapped = BODY_FONT_SIZE_MIN + snapped_steps * BODY_FONT_SIZE_STEP
-    bounded = min(BODY_FONT_SIZE_MAX, max(BODY_FONT_SIZE_MIN, snapped))
-    return round(bounded, 1)
+    return _core_state.normalize_body_font_size_value(
+        raw_value,
+        min_value=BODY_FONT_SIZE_MIN,
+        max_value=BODY_FONT_SIZE_MAX,
+        step=BODY_FONT_SIZE_STEP,
+        default_value=BODY_FONT_SIZE_DEFAULT,
+    )
 
 
 def _validate_body_font_size_value(raw_value: Any) -> float:
-    parsed = _parse_body_font_size_value(raw_value)
-    if parsed is None:
-        raise ValueError(
-            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. Expected a number."
-        )
-    if parsed < BODY_FONT_SIZE_MIN or parsed > BODY_FONT_SIZE_MAX:
-        raise ValueError(
-            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. "
-            f"Expected {BODY_FONT_SIZE_MIN:.1f} to {BODY_FONT_SIZE_MAX:.1f}."
-        )
-    normalized = _normalize_body_font_size_value(parsed)
-    if abs(normalized - parsed) > 1e-9:
-        raise ValueError(
-            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. "
-            f"Expected increments of {BODY_FONT_SIZE_STEP:.1f}."
-        )
-    return normalized
+    return _core_state.validate_body_font_size_value(
+        raw_value,
+        field_id=BODY_FONT_SIZE_ID,
+        min_value=BODY_FONT_SIZE_MIN,
+        max_value=BODY_FONT_SIZE_MAX,
+        step=BODY_FONT_SIZE_STEP,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+    )
 
 
 def _build_block_preset_catalog(theme_defaults: Dict[str, str]) -> List[Dict[str, Any]]:
-    catalog: List[Dict[str, Any]] = []
-    for preset in BLOCK_PRESET_DEFINITIONS:
-        preset_id = str(preset.get("id", "")).strip()
-        if not preset_id:
-            continue
-        token_map: Dict[str, str] = {
-            token: _parse_hex_color(str(theme_defaults.get(token, "#808080"))) or "#808080"
-            for token in BLOCK_COLOR_TOKENS
-        }
-        raw_colors = preset.get("colors", {})
-        if isinstance(raw_colors, dict):
-            for token in BLOCK_COLOR_TOKENS:
-                if token not in raw_colors:
-                    continue
-                parsed = _parse_hex_color(str(raw_colors[token]))
-                if parsed:
-                    token_map[token] = parsed
-        catalog.append(
-            {
-                "id": preset_id,
-                "label": str(preset.get("label", preset_id)),
-                "description": str(preset.get("description", "")),
-                "tokens": token_map,
-            }
-        )
-    return catalog
+    return _core_presets.build_block_preset_catalog(
+        theme_defaults,
+        block_preset_definitions=BLOCK_PRESET_DEFINITIONS,
+        block_color_tokens=BLOCK_COLOR_TOKENS,
+        parse_hex_color_fn=_parse_hex_color,
+    )
 
 
 def _block_preset_meta(catalog: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    return [
-        {
-            "id": str(entry.get("id", "")),
-            "label": str(entry.get("label", entry.get("id", ""))),
-            "description": str(entry.get("description", "")),
-        }
-        for entry in catalog
-        if str(entry.get("id", "")).strip()
-    ]
+    return _core_presets.preset_meta(catalog)
 
 
 def _default_block_preset_id(block_presets: List[Dict[str, Any]]) -> str:
-    if not isinstance(block_presets, list):
-        return "default"
-    for item in block_presets:
-        if str(item.get("id", "")).strip() == "default":
-            return "default"
-    if block_presets:
-        return str(block_presets[0].get("id", "default"))
-    return "default"
+    return _core_presets.default_preset_id(block_presets, default_id="default")
 
 
 def _normalize_block_preset(raw_preset: Any, block_presets: List[Dict[str, Any]]) -> str:
-    if not isinstance(block_presets, list):
-        block_presets = []
-    valid_ids = {
-        str(item.get("id", "")).strip()
-        for item in block_presets
-        if str(item.get("id", "")).strip()
-    }
-    default_id = _default_block_preset_id(block_presets)
-    if not valid_ids:
-        return default_id
-    preset_id = str(raw_preset).strip() if raw_preset is not None else ""
-    if not preset_id:
-        return default_id
-    if preset_id in valid_ids:
-        return preset_id
-    raise ValueError(
-        f"Unknown block preset: {preset_id}. Expected one of: {', '.join(sorted(valid_ids))}"
-    )
+    return _core_presets.normalize_block_preset(raw_preset, block_presets)
 
 
 def _block_preset_tokens_by_id(
     preset_id: str,
     catalog: List[Dict[str, Any]],
 ) -> Dict[str, str]:
-    for item in catalog:
-        if str(item.get("id", "")).strip() != preset_id:
-            continue
-        raw_tokens = item.get("tokens", {})
-        if not isinstance(raw_tokens, dict):
-            break
-        parsed: Dict[str, str] = {}
-        for token in BLOCK_COLOR_TOKENS:
-            maybe = _parse_hex_color(str(raw_tokens.get(token, "")))
-            if maybe:
-                parsed[token] = maybe
-        if len(parsed) == len(BLOCK_COLOR_TOKENS):
-            return parsed
-    raise ValueError(f"Block preset token map not found for: {preset_id}")
+    return _core_presets.block_preset_tokens_by_id(
+        preset_id,
+        catalog,
+        block_color_tokens=BLOCK_COLOR_TOKENS,
+        parse_hex_color_fn=_parse_hex_color,
+    )
 
 
 def _apply_block_preset(state: Dict[str, Any], preset_id: Any) -> None:
-    theme_defaults = _parse_theme_color_defaults()
-    catalog = _build_block_preset_catalog(theme_defaults)
-    block_presets = _block_preset_meta(catalog)
-    normalized_preset = _normalize_block_preset(preset_id, block_presets)
-    token_map = _block_preset_tokens_by_id(normalized_preset, catalog)
-    state.setdefault("colors", {})
-    for token, value in token_map.items():
-        state["colors"][token] = value
-    state["block_preset"] = normalized_preset
-    state["block_presets"] = block_presets
+    _core_presets.apply_block_preset(
+        state,
+        preset_id,
+        parse_theme_color_defaults_fn=_parse_theme_color_defaults,
+        build_block_preset_catalog_fn=_build_block_preset_catalog,
+        block_preset_meta_fn=_block_preset_meta,
+        normalize_block_preset_fn=_normalize_block_preset,
+        block_preset_tokens_by_id_fn=_block_preset_tokens_by_id,
+    )
 
 
 def _build_heading_toc_preset_catalog(theme_defaults: Dict[str, str]) -> List[Dict[str, Any]]:
-    catalog: List[Dict[str, Any]] = []
-    for preset in HEADING_TOC_PRESET_DEFINITIONS:
-        preset_id = str(preset.get("id", "")).strip()
-        if not preset_id:
-            continue
-        token_map: Dict[str, str] = {
-            token: _parse_hex_color(str(theme_defaults.get(token, "#808080"))) or "#808080"
-            for token in DOCUMENT_COLOR_TOKENS
-        }
-        raw_colors = preset.get("colors", {})
-        if isinstance(raw_colors, dict):
-            for token in DOCUMENT_COLOR_TOKENS:
-                if token not in raw_colors:
-                    continue
-                parsed = _parse_hex_color(str(raw_colors[token]))
-                if parsed:
-                    token_map[token] = parsed
-        catalog.append(
-            {
-                "id": preset_id,
-                "label": str(preset.get("label", preset_id)),
-                "description": str(preset.get("description", "")),
-                "tokens": token_map,
-            }
-        )
-    return catalog
+    return _core_presets.build_heading_toc_preset_catalog(
+        theme_defaults,
+        heading_toc_preset_definitions=HEADING_TOC_PRESET_DEFINITIONS,
+        document_color_tokens=DOCUMENT_COLOR_TOKENS,
+        parse_hex_color_fn=_parse_hex_color,
+    )
 
 
 def _heading_toc_preset_meta(catalog: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    return [
-        {
-            "id": str(entry.get("id", "")),
-            "label": str(entry.get("label", entry.get("id", ""))),
-            "description": str(entry.get("description", "")),
-        }
-        for entry in catalog
-        if str(entry.get("id", "")).strip()
-    ]
+    return _core_presets.preset_meta(catalog)
 
 
 def _default_heading_toc_preset_id(heading_toc_presets: List[Dict[str, Any]]) -> str:
-    if not isinstance(heading_toc_presets, list):
-        return "default"
-    for item in heading_toc_presets:
-        if str(item.get("id", "")).strip() == "default":
-            return "default"
-    if heading_toc_presets:
-        return str(heading_toc_presets[0].get("id", "default"))
-    return "default"
+    return _core_presets.default_preset_id(heading_toc_presets, default_id="default")
 
 
 def _normalize_heading_toc_preset(
     raw_preset: Any,
     heading_toc_presets: List[Dict[str, Any]],
 ) -> str:
-    if not isinstance(heading_toc_presets, list):
-        heading_toc_presets = []
-    valid_ids = {
-        str(item.get("id", "")).strip()
-        for item in heading_toc_presets
-        if str(item.get("id", "")).strip()
-    }
-    default_id = _default_heading_toc_preset_id(heading_toc_presets)
-    if not valid_ids:
-        return default_id
-    preset_id = str(raw_preset).strip() if raw_preset is not None else ""
-    if not preset_id:
-        return default_id
-    if preset_id in valid_ids:
-        return preset_id
-    raise ValueError(
-        "Unknown heading/TOC preset: "
-        f"{preset_id}. Expected one of: {', '.join(sorted(valid_ids))}"
-    )
+    return _core_presets.normalize_heading_toc_preset(raw_preset, heading_toc_presets)
 
 
 def _heading_toc_preset_tokens_by_id(
     preset_id: str,
     catalog: List[Dict[str, Any]],
 ) -> Dict[str, str]:
-    for item in catalog:
-        if str(item.get("id", "")).strip() != preset_id:
-            continue
-        raw_tokens = item.get("tokens", {})
-        if not isinstance(raw_tokens, dict):
-            break
-        parsed: Dict[str, str] = {}
-        for token in DOCUMENT_COLOR_TOKENS:
-            maybe = _parse_hex_color(str(raw_tokens.get(token, "")))
-            if maybe:
-                parsed[token] = maybe
-        if len(parsed) == len(DOCUMENT_COLOR_TOKENS):
-            return parsed
-    raise ValueError(f"Heading/TOC preset token map not found for: {preset_id}")
+    return _core_presets.heading_toc_preset_tokens_by_id(
+        preset_id,
+        catalog,
+        document_color_tokens=DOCUMENT_COLOR_TOKENS,
+        parse_hex_color_fn=_parse_hex_color,
+    )
 
 
 def _apply_heading_toc_preset(state: Dict[str, Any], preset_id: Any) -> None:
-    theme_defaults = _parse_theme_color_defaults()
-    catalog = _build_heading_toc_preset_catalog(theme_defaults)
-    heading_toc_presets = _heading_toc_preset_meta(catalog)
-    normalized_preset = _normalize_heading_toc_preset(preset_id, heading_toc_presets)
-    token_map = _heading_toc_preset_tokens_by_id(normalized_preset, catalog)
-    state.setdefault("colors", {})
-    for token, value in token_map.items():
-        state["colors"][token] = value
-    state["heading_toc_preset"] = normalized_preset
-    state["heading_toc_presets"] = heading_toc_presets
+    _core_presets.apply_heading_toc_preset(
+        state,
+        preset_id,
+        parse_theme_color_defaults_fn=_parse_theme_color_defaults,
+        build_heading_toc_preset_catalog_fn=_build_heading_toc_preset_catalog,
+        heading_toc_preset_meta_fn=_heading_toc_preset_meta,
+        normalize_heading_toc_preset_fn=_normalize_heading_toc_preset,
+        heading_toc_preset_tokens_by_id_fn=_heading_toc_preset_tokens_by_id,
+    )
 
 
 def _is_subpath(path: Path, parent: Path) -> bool:
@@ -1192,30 +1055,29 @@ def _is_subpath(path: Path, parent: Path) -> bool:
 
 
 def _normalize_class_config_value(field_id: str, raw_value: Any) -> str:
-    valid = CLASS_CONFIG_VALID_OPTIONS.get(field_id, set())
-    parsed = str(raw_value or "").strip().lower()
-    if parsed in valid:
-        return parsed
-    return CLASS_CONFIG_DEFAULTS[field_id]
+    return _core_state.normalize_class_config_value(
+        field_id,
+        raw_value,
+        class_config_valid_options=CLASS_CONFIG_VALID_OPTIONS,
+        class_config_defaults=CLASS_CONFIG_DEFAULTS,
+    )
 
 
 def _validate_class_config_value(field_id: str, raw_value: Any) -> str:
-    parsed = str(raw_value or "").strip().lower()
-    valid = CLASS_CONFIG_VALID_OPTIONS.get(field_id, set())
-    if parsed in valid:
-        return parsed
-    options = ", ".join(sorted(valid))
-    raise ValueError(f"Invalid value for {field_id}: {raw_value}. Expected one of: {options}")
+    return _core_state.validate_class_config_value(
+        field_id,
+        raw_value,
+        class_config_valid_options=CLASS_CONFIG_VALID_OPTIONS,
+    )
 
 
 def _normalize_class_config_map(raw_map: Dict[str, Any]) -> Dict[str, str]:
-    config = dict(CLASS_CONFIG_DEFAULTS)
-    if not isinstance(raw_map, dict):
-        return config
-    for field_id in CLASS_CONFIG_IDS:
-        if field_id in raw_map:
-            config[field_id] = _normalize_class_config_value(field_id, raw_map[field_id])
-    return config
+    return _core_state.normalize_class_config_map(
+        raw_map,
+        class_config_defaults=CLASS_CONFIG_DEFAULTS,
+        class_config_ids=CLASS_CONFIG_IDS,
+        normalize_class_config_value_fn=_normalize_class_config_value,
+    )
 
 
 def _extract_documentclass_declaration(tex_path: Path) -> Tuple[str, str]:
@@ -1285,12 +1147,10 @@ def _extract_documentclass_name_raw(tex_path: Path) -> str:
 
 
 def _is_chapter_capable_class(class_name: str) -> bool:
-    name = (class_name or "").strip().lower()
-    if not name:
-        return False
-    if name in CHAPTER_CLASS_NAMES:
-        return True
-    return name.endswith("book") or name.endswith("report")
+    return _core_state.is_chapter_capable_class(
+        class_name,
+        chapter_class_names=CHAPTER_CLASS_NAMES,
+    )
 
 
 def _detect_target_documentclass(compile_target: str) -> str:
@@ -1304,25 +1164,24 @@ def _detect_target_documentclass(compile_target: str) -> str:
 
 
 def _effective_theme_class(theme_class_mode: str, detected_document_class: str) -> str:
-    mode = _normalize_class_config_value("theme_class_mode", theme_class_mode)
-    if mode in {"book", "article"}:
-        return mode
-    if _is_chapter_capable_class(detected_document_class):
-        return "book"
-    return "article"
+    return _core_state.effective_theme_class(
+        theme_class_mode,
+        detected_document_class,
+        normalize_class_config_value_fn=_normalize_class_config_value,
+        is_chapter_capable_class_fn=_is_chapter_capable_class,
+    )
 
 
 def _is_incompatible_forced_theme_class(
     theme_class_mode: str,
     detected_document_class: str,
 ) -> bool:
-    mode = _normalize_class_config_value("theme_class_mode", theme_class_mode)
-    if mode not in {"book", "article"}:
-        return False
-    detected_has_chapter = _is_chapter_capable_class(detected_document_class)
-    if mode == "book":
-        return not detected_has_chapter
-    return detected_has_chapter
+    return _core_state.is_incompatible_forced_theme_class(
+        theme_class_mode,
+        detected_document_class,
+        normalize_class_config_value_fn=_normalize_class_config_value,
+        is_chapter_capable_class_fn=_is_chapter_capable_class,
+    )
 
 
 def _coerce_class_mode_on_target_switch(
@@ -1353,46 +1212,26 @@ def _has_documentclass(tex_path: Path) -> bool:
 
 
 def _class_profile_for_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    class_config = _normalize_class_config_map(state.get("class_config", {}))
-    detected = _detect_target_documentclass(str(state.get("compile_target", "")))
-    detected_has_chapter = _is_chapter_capable_class(detected)
-    effective = _effective_theme_class(
-        class_config.get("theme_class_mode", "auto"),
-        detected,
+    return _core_state.class_profile_for_state(
+        state,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        detect_target_documentclass_fn=_detect_target_documentclass,
+        is_chapter_capable_class_fn=_is_chapter_capable_class,
+        effective_theme_class_fn=_effective_theme_class,
     )
-    return {
-        "class_config": class_config,
-        "detected_document_class": detected or "(unknown)",
-        "detected_document_class_has_chapter": detected_has_chapter,
-        "effective_theme_class": effective,
-    }
 
 
 def _refresh_derived_state(
     state: Dict[str, Any],
     recipe_catalog: Optional[Dict[str, Any]] = None,
 ) -> None:
-    compile_target_value = str(state.get("compile_target", ""))
-    compile_recipe_value = str(state.get("compile_recipe", ""))
-    use_internal_value = bool(state.get("compile_use_internal_fallback", True))
-    compile_recipes = state.get("compile_recipes", [])
-    if isinstance(compile_recipes, list):
-        state["compile_recipe_name"] = _recipe_name_by_id(
-            compile_recipe_value,
-            compile_recipes,
-        )
-    state["compile_output_pdf_expected"] = _expected_output_pdf_for_selection(
-        compile_target_value,
-        compile_recipe_value,
-        use_internal_value,
-        recipe_catalog=recipe_catalog,
+    _core_state.refresh_derived_state(
+        state,
+        recipe_catalog,
+        recipe_name_by_id_fn=_recipe_name_by_id,
+        expected_output_pdf_for_selection_fn=_expected_output_pdf_for_selection,
+        class_profile_for_state_fn=_class_profile_for_state,
     )
-
-    profile = _class_profile_for_state(state)
-    state["class_config"] = profile["class_config"]
-    state["detected_document_class"] = profile["detected_document_class"]
-    state["detected_document_class_has_chapter"] = profile["detected_document_class_has_chapter"]
-    state["effective_theme_class"] = profile["effective_theme_class"]
 
 
 # -------------------- Starter Template Bootstrap --------------------
@@ -1800,361 +1639,115 @@ def _parse_color_override_file(path: Path) -> Dict[str, str]:
 # -------------------- State Load/Normalize/Persist --------------------
 
 def _load_state() -> Dict[str, Any]:
-    """Build runtime state from defaults + persisted UI state + override files."""
-
-    theme_defaults = _parse_theme_color_defaults()
-    block_preset_catalog = _build_block_preset_catalog(theme_defaults)
-    block_presets = _block_preset_meta(block_preset_catalog)
-    default_block_preset = _default_block_preset_id(block_presets)
-    heading_toc_preset_catalog = _build_heading_toc_preset_catalog(theme_defaults)
-    heading_toc_presets = _heading_toc_preset_meta(heading_toc_preset_catalog)
-    default_heading_toc_preset = _default_heading_toc_preset_id(heading_toc_presets)
-    compile_targets = _list_candidate_tex_files()
-    recipe_catalog = _load_vscode_recipe_catalog()
-    compile_recipes = recipe_catalog.get("recipes", [])
-    state = {
-        "toggles": _parse_main_toggle_defaults(),
-        "colors": dict(theme_defaults),
-        "block_preset": default_block_preset,
-        "block_presets": block_presets,
-        "heading_toc_preset": default_heading_toc_preset,
-        "heading_toc_presets": heading_toc_presets,
-        BODY_FONT_SIZE_ID: BODY_FONT_SIZE_DEFAULT,
-        "class_config": dict(CLASS_CONFIG_DEFAULTS),
-        "compile_target": _default_compile_target(compile_targets),
-        "compile_recipe": _default_compile_recipe(compile_recipes),
-        "compile_use_internal_fallback": True,
-        "compile_output_pdf": "",
-        "compile_output_pdf_expected": "",
-        "compile_last_compile_at": "",
-        "compile_last_success": None,
-    }
-    persisted_output_pdf = ""
-    persisted_output_pdf_expected = ""
-    persisted_last_compile_at = ""
-    persisted_last_success: Optional[bool] = None
-    persisted_compile_target_raw = ""
-    compile_target_recovered = False
-
-    if CONFIG_PATH.exists():
-        try:
-            persisted = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            persisted = {}
-        if isinstance(persisted, dict):
-            for key, value in persisted.get("toggles", {}).items():
-                if key in state["toggles"]:
-                    state["toggles"][key] = bool(value)
-            for key, value in persisted.get("colors", {}).items():
-                if key in state["colors"]:
-                    parsed = _parse_hex_color(str(value))
-                    if parsed:
-                        state["colors"][key] = parsed
-            if "block_preset" in persisted:
-                try:
-                    state["block_preset"] = _normalize_block_preset(
-                        persisted.get("block_preset"),
-                        block_presets,
-                    )
-                except ValueError:
-                    state["block_preset"] = default_block_preset
-            if "heading_toc_preset" in persisted:
-                try:
-                    state["heading_toc_preset"] = _normalize_heading_toc_preset(
-                        persisted.get("heading_toc_preset"),
-                        heading_toc_presets,
-                    )
-                except ValueError:
-                    state["heading_toc_preset"] = default_heading_toc_preset
-            if BODY_FONT_SIZE_ID in persisted:
-                state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
-                    persisted.get(BODY_FONT_SIZE_ID)
-                )
-            state["class_config"] = _normalize_class_config_map(
-                persisted.get("class_config", state["class_config"])
-            )
-            if "compile_target" in persisted:
-                persisted_compile_target_raw = str(persisted.get("compile_target", ""))
-                try:
-                    state["compile_target"] = _normalize_compile_target(
-                        persisted.get("compile_target"),
-                        compile_targets,
-                    )
-                except ValueError:
-                    state["compile_target"] = _default_compile_target(compile_targets)
-                    compile_target_recovered = True
-            if "compile_recipe" in persisted:
-                try:
-                    state["compile_recipe"] = _normalize_compile_recipe(
-                        persisted.get("compile_recipe"),
-                        compile_recipes,
-                    )
-                except ValueError:
-                    state["compile_recipe"] = _default_compile_recipe(compile_recipes)
-            if "compile_use_internal_fallback" in persisted:
-                raw_mode = persisted.get("compile_use_internal_fallback")
-                if isinstance(raw_mode, bool):
-                    state["compile_use_internal_fallback"] = raw_mode
-                elif isinstance(raw_mode, str):
-                    parsed = _bool_from_str(raw_mode)
-                    if parsed is not None:
-                        state["compile_use_internal_fallback"] = parsed
-            if isinstance(persisted.get("compile_output_pdf"), str):
-                persisted_output_pdf = persisted.get("compile_output_pdf", "")
-            if isinstance(persisted.get("compile_output_pdf_expected"), str):
-                persisted_output_pdf_expected = persisted.get("compile_output_pdf_expected", "")
-            if isinstance(persisted.get("compile_last_compile_at"), str):
-                persisted_last_compile_at = persisted.get("compile_last_compile_at", "")
-            if isinstance(persisted.get("compile_last_success"), bool):
-                persisted_last_success = persisted.get("compile_last_success")
-
-    if TOGGLE_OVERRIDE_PATH.exists():
-        state["toggles"].update(_parse_toggle_override_file(TOGGLE_OVERRIDE_PATH))
-        state["class_config"].update(_parse_class_override_file(TOGGLE_OVERRIDE_PATH))
-        parsed_body_font_size = _parse_body_font_size_override(TOGGLE_OVERRIDE_PATH)
-        if parsed_body_font_size is not None:
-            state[BODY_FONT_SIZE_ID] = parsed_body_font_size
-    if COLOR_OVERRIDE_PATH.exists():
-        state["colors"].update(_parse_color_override_file(COLOR_OVERRIDE_PATH))
-
-    for key in TOGGLE_IDS:
-        state["toggles"].setdefault(key, True)
-    for key in COLOR_ORDER:
-        state["colors"].setdefault(key, "#808080")
-    state["block_preset"] = _normalize_block_preset(
-        state.get("block_preset"),
-        block_presets,
+    return _core_state.load_state(
+        parse_theme_color_defaults_fn=_parse_theme_color_defaults,
+        build_block_preset_catalog_fn=_build_block_preset_catalog,
+        block_preset_meta_fn=_block_preset_meta,
+        default_block_preset_id_fn=_default_block_preset_id,
+        build_heading_toc_preset_catalog_fn=_build_heading_toc_preset_catalog,
+        heading_toc_preset_meta_fn=_heading_toc_preset_meta,
+        default_heading_toc_preset_id_fn=_default_heading_toc_preset_id,
+        list_candidate_tex_files_fn=_list_candidate_tex_files,
+        load_vscode_recipe_catalog_fn=_load_vscode_recipe_catalog,
+        parse_main_toggle_defaults_fn=_parse_main_toggle_defaults,
+        body_font_size_id=BODY_FONT_SIZE_ID,
+        body_font_size_default=BODY_FONT_SIZE_DEFAULT,
+        class_config_defaults=CLASS_CONFIG_DEFAULTS,
+        default_compile_target_fn=_default_compile_target,
+        default_compile_recipe_fn=_default_compile_recipe,
+        config_path=CONFIG_PATH,
+        parse_hex_color_fn=_parse_hex_color,
+        normalize_block_preset_fn=_normalize_block_preset,
+        normalize_heading_toc_preset_fn=_normalize_heading_toc_preset,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        normalize_compile_target_fn=_normalize_compile_target,
+        normalize_compile_recipe_fn=_normalize_compile_recipe,
+        bool_from_str_fn=_bool_from_str,
+        toggle_override_path=TOGGLE_OVERRIDE_PATH,
+        parse_toggle_override_file_fn=_parse_toggle_override_file,
+        parse_class_override_file_fn=_parse_class_override_file,
+        parse_body_font_size_override_fn=_parse_body_font_size_override,
+        color_override_path=COLOR_OVERRIDE_PATH,
+        parse_color_override_file_fn=_parse_color_override_file,
+        toggle_ids=TOGGLE_IDS,
+        color_order=COLOR_ORDER,
+        class_config_ids=CLASS_CONFIG_IDS,
+        normalize_class_config_value_fn=_normalize_class_config_value,
+        coerce_class_mode_on_target_switch_fn=_coerce_class_mode_on_target_switch,
+        refresh_derived_state_fn=_refresh_derived_state,
+        safe_workspace_pdf_relpath_fn=_safe_workspace_pdf_relpath,
     )
-    state["heading_toc_preset"] = _normalize_heading_toc_preset(
-        state.get("heading_toc_preset"),
-        heading_toc_presets,
-    )
-    state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
-        state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
-    )
-
-    state["compile_targets"] = compile_targets
-    state["compile_recipes"] = compile_recipes
-    state["compile_recipe_errors"] = recipe_catalog.get("errors", [])
-    for field_id in CLASS_CONFIG_IDS:
-        state["class_config"][field_id] = _normalize_class_config_value(
-            field_id,
-            state["class_config"].get(field_id, CLASS_CONFIG_DEFAULTS[field_id]),
-        )
-    if compile_target_recovered:
-        _coerce_class_mode_on_target_switch(
-            state,
-            persisted_compile_target_raw,
-            str(state.get("compile_target", "")),
-        )
-
-    _refresh_derived_state(state, recipe_catalog=recipe_catalog)
-    expected_output_pdf = str(state.get("compile_output_pdf_expected", "main.pdf"))
-    state["compile_output_pdf"] = expected_output_pdf
-    maybe_persisted_output = _safe_workspace_pdf_relpath(persisted_output_pdf)
-    maybe_persisted_expected = _safe_workspace_pdf_relpath(persisted_output_pdf_expected)
-    if maybe_persisted_output and maybe_persisted_expected == expected_output_pdf:
-        state["compile_output_pdf"] = maybe_persisted_output
-    state["compile_last_compile_at"] = persisted_last_compile_at
-    state["compile_last_success"] = persisted_last_success
-
-    return state
 
 
 def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and normalize API payload using current state as baseline."""
-
-    normalized = {
-        "toggles": dict(base_state["toggles"]),
-        "colors": dict(base_state["colors"]),
-        "block_preset": _normalize_block_preset(
-            base_state.get("block_preset"),
-            base_state.get("block_presets", []),
-        ),
-        "block_presets": list(base_state.get("block_presets", [])),
-        "heading_toc_preset": _normalize_heading_toc_preset(
-            base_state.get("heading_toc_preset"),
-            base_state.get("heading_toc_presets", []),
-        ),
-        "heading_toc_presets": list(base_state.get("heading_toc_presets", [])),
-        BODY_FONT_SIZE_ID: _normalize_body_font_size_value(
-            base_state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
-        ),
-        "class_config": _normalize_class_config_map(base_state.get("class_config", {})),
-        "compile_target": base_state.get("compile_target", ""),
-        "compile_recipe": base_state.get("compile_recipe", ""),
-        "compile_use_internal_fallback": bool(
-            base_state.get("compile_use_internal_fallback", True)
-        ),
-    }
-
-    raw_toggles = payload.get("toggles", {})
-    if isinstance(raw_toggles, dict):
-        for key in TOGGLE_IDS:
-            if key in raw_toggles:
-                value = raw_toggles[key]
-                if isinstance(value, bool):
-                    normalized["toggles"][key] = value
-                elif isinstance(value, str):
-                    parsed = _bool_from_str(value)
-                    if parsed is None:
-                        raise ValueError(f"Invalid boolean value for {key}: {value}")
-                    normalized["toggles"][key] = parsed
-                else:
-                    raise ValueError(f"Invalid boolean type for {key}")
-
-    raw_colors = payload.get("colors", {})
-    if isinstance(raw_colors, dict):
-        for key in COLOR_ORDER:
-            if key in raw_colors:
-                parsed_hex = _parse_hex_color(str(raw_colors[key]))
-                if not parsed_hex:
-                    raise ValueError(f"Invalid hex color for {key}: {raw_colors[key]}")
-                normalized["colors"][key] = parsed_hex
-
-    if "block_preset" in payload:
-        normalized["block_preset"] = _normalize_block_preset(
-            payload.get("block_preset"),
-            base_state.get("block_presets", []),
-        )
-    if "heading_toc_preset" in payload:
-        normalized["heading_toc_preset"] = _normalize_heading_toc_preset(
-            payload.get("heading_toc_preset"),
-            base_state.get("heading_toc_presets", []),
-        )
-    if BODY_FONT_SIZE_ID in payload:
-        normalized[BODY_FONT_SIZE_ID] = _validate_body_font_size_value(
-            payload.get(BODY_FONT_SIZE_ID)
-        )
-
-    raw_class_config = payload.get("class_config", {})
-    if isinstance(raw_class_config, dict):
-        for field_id in CLASS_CONFIG_IDS:
-            if field_id in raw_class_config:
-                normalized["class_config"][field_id] = _validate_class_config_value(
-                    field_id,
-                    raw_class_config[field_id],
-                )
-
-    if "compile_target" in payload:
-        normalized["compile_target"] = _normalize_compile_target(
-            payload.get("compile_target"),
-            base_state.get("compile_targets", _list_candidate_tex_files()),
-        )
-    if "compile_recipe" in payload:
-        normalized["compile_recipe"] = _normalize_compile_recipe(
-            payload.get("compile_recipe"),
-            base_state.get("compile_recipes", []),
-        )
-    if "compile_use_internal_fallback" in payload:
-        raw_mode = payload.get("compile_use_internal_fallback")
-        if isinstance(raw_mode, bool):
-            normalized["compile_use_internal_fallback"] = raw_mode
-        elif isinstance(raw_mode, str):
-            parsed = _bool_from_str(raw_mode)
-            if parsed is None:
-                raise ValueError(
-                    f"Invalid boolean value for compile_use_internal_fallback: {raw_mode}"
-                )
-            normalized["compile_use_internal_fallback"] = parsed
-        else:
-            raise ValueError("Invalid boolean type for compile_use_internal_fallback")
-
-    return normalized
+    return _core_state.normalize_payload(
+        payload,
+        base_state,
+        toggle_ids=TOGGLE_IDS,
+        color_order=COLOR_ORDER,
+        class_config_ids=CLASS_CONFIG_IDS,
+        body_font_size_id=BODY_FONT_SIZE_ID,
+        body_font_size_default=BODY_FONT_SIZE_DEFAULT,
+        normalize_block_preset_fn=_normalize_block_preset,
+        normalize_heading_toc_preset_fn=_normalize_heading_toc_preset,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+        validate_body_font_size_value_fn=_validate_body_font_size_value,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        validate_class_config_value_fn=_validate_class_config_value,
+        bool_from_str_fn=_bool_from_str,
+        parse_hex_color_fn=_parse_hex_color,
+        normalize_compile_target_fn=_normalize_compile_target,
+        list_candidate_tex_files_fn=_list_candidate_tex_files,
+        normalize_compile_recipe_fn=_normalize_compile_recipe,
+    )
 
 
 def _persist_ui_state(state: Dict[str, Any]) -> None:
-    ui_state = {
-        "toggles": state.get("toggles", {}),
-        "colors": state.get("colors", {}),
-        "block_preset": state.get("block_preset", "default"),
-        "heading_toc_preset": state.get("heading_toc_preset", "default"),
-        BODY_FONT_SIZE_ID: _normalize_body_font_size_value(
-            state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
-        ),
-        "class_config": _normalize_class_config_map(state.get("class_config", {})),
-        "compile_target": state.get("compile_target", ""),
-        "compile_recipe": state.get("compile_recipe", ""),
-        "compile_use_internal_fallback": bool(
-            state.get("compile_use_internal_fallback", True)
-        ),
-        "compile_output_pdf": state.get("compile_output_pdf", ""),
-        "compile_output_pdf_expected": state.get("compile_output_pdf_expected", ""),
-        "compile_last_compile_at": state.get("compile_last_compile_at", ""),
-        "compile_last_success": state.get("compile_last_success"),
-    }
-    CONFIG_PATH.write_text(
-        json.dumps(ui_state, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    _core_state.persist_ui_state(
+        state,
+        config_path=CONFIG_PATH,
+        body_font_size_id=BODY_FONT_SIZE_ID,
+        body_font_size_default=BODY_FONT_SIZE_DEFAULT,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+        normalize_class_config_map_fn=_normalize_class_config_map,
     )
 
 
 # -------------------- File Outputs --------------------
 
 def _write_override_files(state: Dict[str, Any]) -> None:
-    block_presets = state.get("block_presets", [])
-    if not isinstance(block_presets, list) or not block_presets:
-        block_presets = _block_preset_meta(
-            _build_block_preset_catalog(_parse_theme_color_defaults())
-        )
-    state["block_presets"] = block_presets
-    state["block_preset"] = _normalize_block_preset(
-        state.get("block_preset"),
-        block_presets,
+    _core_state.write_override_files(
+        state,
+        body_font_size_id=BODY_FONT_SIZE_ID,
+        body_font_size_default=BODY_FONT_SIZE_DEFAULT,
+        parse_theme_color_defaults_fn=_parse_theme_color_defaults,
+        block_preset_meta_fn=_block_preset_meta,
+        build_block_preset_catalog_fn=_build_block_preset_catalog,
+        normalize_block_preset_fn=_normalize_block_preset,
+        heading_toc_preset_meta_fn=_heading_toc_preset_meta,
+        build_heading_toc_preset_catalog_fn=_build_heading_toc_preset_catalog,
+        normalize_heading_toc_preset_fn=_normalize_heading_toc_preset,
+        normalize_body_font_size_value_fn=_normalize_body_font_size_value,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        refresh_derived_state_fn=_refresh_derived_state,
+        persist_ui_state_fn=_persist_ui_state,
+        format_body_font_size_fn=_format_body_font_size,
+        toggle_schema=TOGGLE_SCHEMA,
+        toggle_override_path=TOGGLE_OVERRIDE_PATH,
+        class_config_ids=CLASS_CONFIG_IDS,
+        class_config_commands=CLASS_CONFIG_COMMANDS,
+        color_order=COLOR_ORDER,
+        color_override_path=COLOR_OVERRIDE_PATH,
     )
-    heading_toc_presets = state.get("heading_toc_presets", [])
-    if not isinstance(heading_toc_presets, list) or not heading_toc_presets:
-        heading_toc_presets = _heading_toc_preset_meta(
-            _build_heading_toc_preset_catalog(_parse_theme_color_defaults())
-        )
-    state["heading_toc_presets"] = heading_toc_presets
-    state["heading_toc_preset"] = _normalize_heading_toc_preset(
-        state.get("heading_toc_preset"),
-        heading_toc_presets,
-    )
-    state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
-        state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
-    )
-    state["class_config"] = _normalize_class_config_map(state.get("class_config", {}))
-    _refresh_derived_state(state)
-    _persist_ui_state(state)
-
-    toggle_lines = [
-        "% Auto-generated by tools/theme_designer.py",
-        "% Delete this file to return to defaults in main.tex.",
-    ]
-    for entry in TOGGLE_SCHEMA:
-        value = "true" if state["toggles"][entry["id"]] else "false"
-        toggle_lines.append(f"\\{entry['command']}{value}")
-    toggle_lines.append("")
-    toggle_lines.append("% Class-aware options for theme.sty and theorems.tex.")
-    for field_id in CLASS_CONFIG_IDS:
-        command = CLASS_CONFIG_COMMANDS[field_id]
-        value = state["class_config"][field_id]
-        toggle_lines.append(f"\\def\\{command}{{{value}}}")
-    toggle_lines.append("")
-    toggle_lines.append("% Base body font size in pt.")
-    toggle_lines.append(
-        f"\\def\\ThemeBodyFontSizePt{{{_format_body_font_size(state[BODY_FONT_SIZE_ID])}}}"
-    )
-    TOGGLE_OVERRIDE_PATH.write_text("\n".join(toggle_lines) + "\n", encoding="utf-8")
-
-    color_lines = [
-        "% Auto-generated by tools/theme_designer.py",
-        "% Delete this file to return to defaults in theme.sty.",
-    ]
-    for token in COLOR_ORDER:
-        alias = "themeui" + re.sub(r"[^A-Za-z0-9]+", "", token)
-        hex_value = state["colors"][token].lstrip("#").upper()
-        color_lines.append(f"\\definecolor{{{alias}}}{{HTML}}{{{hex_value}}}")
-        color_lines.append(f"\\colorlet{{{token}}}{{{alias}}}")
-    COLOR_OVERRIDE_PATH.write_text("\n".join(color_lines) + "\n", encoding="utf-8")
 
 
 def _delete_override_files() -> None:
-    for path in (CONFIG_PATH, TOGGLE_OVERRIDE_PATH, COLOR_OVERRIDE_PATH):
-        if path.exists():
-            path.unlink()
+    _core_state.delete_override_files(
+        config_path=CONFIG_PATH,
+        toggle_override_path=TOGGLE_OVERRIDE_PATH,
+        color_override_path=COLOR_OVERRIDE_PATH,
+    )
 
 
 # -------------------- Command Resolution and Execution --------------------
