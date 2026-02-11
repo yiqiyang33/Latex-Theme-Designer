@@ -1,57 +1,116 @@
 # Theme Designer TODO (Active Plan)
 
 This file tracks pending work only.
-Completed phases have been removed.
+Completed phases have been removed from this file.
 
 ---
 
-## Phase 2: Header and TOC Preset Themes
+## Phase 4: Multi-Instance Startup (Auto Host/Port)
 
-Goal: provide fixed style bundles for heading and TOC visuals.
+Goal: allow multiple Theme Designer instances to run without manual port conflict handling.
 
 ### Tasks
 
-- [x] Add heading/TOC preset model in backend.
-  - Include `default` preset matching current behavior.
-- [x] Define preset token mapping for:
-  - chapter/section/subsection heading colors
-  - TOC title/chapter/section colors
-  - header rule style tokens (if needed)
-- [x] Add preset selector in UI with live preview impact.
-- [x] Persist selected header/TOC preset in `theme.ui.json`.
-- [x] Add tests for preset mapping and state roundtrip.
+- [ ] Add startup mode that auto-selects available bind endpoint.
+  - `--port 0` should bind an OS-assigned free port.
+  - Keep explicit `--host/--port` override behavior.
+- [ ] Print resolved URL to terminal in all startup modes.
+- [ ] Ensure `--open-browser` opens the resolved URL (not hardcoded default).
+- [ ] Add collision fallback behavior when explicit port is occupied.
+  - Clear error by default.
+  - Optional `--port auto` fallback to next free port.
+- [ ] Add tests for endpoint resolution and occupied-port scenarios.
 
 ### Acceptance Criteria
 
-- [x] User can switch heading/TOC style bundle from UI.
-- [x] Existing `default` output remains backward-compatible.
-- [x] Preset switch is reflected in generated override files and compiled PDF.
+- [ ] Running two instances concurrently requires no manual port editing.
+- [ ] Startup logs always show the exact URL that is actually bound.
+- [ ] Browser auto-open targets the bound URL correctly.
 
 ---
 
-## Phase 3: Body Font Size UI Control
+## Phase 5: Lifecycle and Session Shutdown Behavior
 
-Goal: support direct body text size tuning from Theme Designer.
+Goal: improve server/browser lifecycle behavior around Ctrl+C and tab close.
 
 ### Tasks
 
-- [x] Add backend config key for base body font size.
-  - Define valid range (example: 9pt to 14pt) and step.
-  - Define default matching current template behavior.
-- [x] Add UI control (slider preferred) with numeric display.
-- [x] Write font size override to `theme.overrides.tex`.
-- [x] Apply override in `main.tex`/`theme.sty` compatibility-safe way.
-- [x] Add tests for range validation and override file generation.
+- [ ] Define lifecycle mode options and defaults.
+  - `manual`: current behavior.
+  - `shutdown-on-last-tab`: stop server when no active UI session.
+- [ ] Add lightweight heartbeat/session tracking endpoint.
+  - UI sends periodic heartbeat while page is open.
+  - Server expires inactive sessions by timeout.
+- [ ] Add optional auto-shutdown when last active session expires.
+  - Configurable idle grace period.
+- [ ] Define Ctrl+C behavior contract.
+  - Server shutdown is guaranteed.
+  - Browser auto-close is best-effort only (browser security constraints).
+- [ ] Document platform limitations and fallback behavior explicitly.
+- [ ] Add tests for session timeout and shutdown trigger conditions.
 
 ### Acceptance Criteria
 
-- [x] User can drag slider and compile to see body font size changes.
-- [x] Value is persisted and restored after reload.
-- [x] Out-of-range values are rejected with clear error.
+- [ ] In `shutdown-on-last-tab` mode, server exits after all sessions expire.
+- [ ] Ctrl+C always terminates server cleanly without orphan processes.
+- [ ] Lifecycle behavior is explicit and predictable from CLI options.
+
+---
+
+## Phase 6: Template Bootstrap (One-Click `main.tex` Creation)
+
+Goal: initialize usable project files when no compile target exists.
+
+### Tasks
+
+- [ ] Add minimal starter templates under `templates/`.
+  - At least `book-minimal.tex` and `article-minimal.tex`.
+- [ ] Add backend/template registry for listing available starter templates.
+- [ ] Add UI action to generate `main.tex` from selected starter template.
+  - Default selection: `book-minimal`.
+- [ ] Add safety behavior when target file already exists.
+  - Require explicit overwrite confirmation.
+- [ ] After generation, refresh compile target list and select generated file.
+- [ ] Add tests for generation success, overwrite protection, and refresh behavior.
+
+### Acceptance Criteria
+
+- [ ] If no `main.tex` exists, user can create one from UI in one action.
+- [ ] Generated file compiles with existing default pipeline.
+- [ ] Existing files are not overwritten silently.
+
+---
+
+## Phase 7: Multi-Template Architecture Plan
+
+Goal: support different template families with their own Theme Designer schema and defaults.
+
+### Tasks
+
+- [ ] Define template profile spec (data model).
+  - Example: colors/toggles/class-config/body-font-size availability.
+  - Compile defaults and supported environment tokens.
+- [ ] Define project-level profile selection file.
+  - Proposed file: `theme.project.json`.
+  - Includes selected template profile ID and version.
+- [ ] Add profile loader and capability negotiation in backend schema API.
+- [ ] Plan migration/compatibility strategy for existing projects.
+  - Default profile should match current behavior.
+- [ ] Draft extension mechanism for future custom template packs.
+  - Local folder convention and metadata schema.
+- [ ] Document phased rollout to avoid breaking current users.
+
+### Acceptance Criteria
+
+- [ ] Backend can expose profile-specific schema without hardcoded single-template assumptions.
+- [ ] Existing single-template projects continue working unchanged.
+- [ ] Profile-selection and migration behavior are documented with examples.
 
 ---
 
 ## Suggested Execution Order
 
-- [x] P2 header/TOC preset themes
-- [x] P3 body font size UI control
+- [ ] P4 multi-instance startup (auto host/port)
+- [ ] P5 lifecycle/session shutdown behavior
+- [ ] P6 template bootstrap generation
+- [ ] P7 multi-template architecture

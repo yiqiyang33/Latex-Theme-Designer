@@ -34,7 +34,10 @@ xelatex main.tex
 
 ## Planned Next
 
-- Additional typography controls beyond base body font size.
+- Multi-instance startup support (auto host/port, conflict-safe launches).
+- Lifecycle controls for server shutdown by session activity.
+- One-click starter `main.tex` generation from built-in templates.
+- Profile-based multi-template Theme Designer architecture.
 
 ## Theme Designer
 

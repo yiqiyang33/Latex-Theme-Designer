@@ -39,7 +39,18 @@ Default URL: `http://127.0.0.1:8765`
 
 ## Planned Improvements
 
-- Additional typography controls beyond base body font size
+- Multi-instance startup support
+  - auto-resolve host/port for concurrent runs
+  - improved startup URL reporting/open behavior
+- Lifecycle/session controls
+  - optional server shutdown when last browser session closes
+  - explicit Ctrl+C behavior and platform constraints
+- Starter template bootstrap
+  - one-click `main.tex` generation from built-in templates
+  - safe overwrite rules
+- Multi-template profile architecture
+  - profile-driven schema and defaults
+  - compatibility strategy for existing projects
 
 ## What it edits
 
