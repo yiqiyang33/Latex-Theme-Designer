@@ -61,9 +61,9 @@ Acceptance:
 
 ### P1-2 Externalize UI assets
 
-- [ ] Move HTML/CSS/JS from giant string to versioned files (`tools/ui/`).
-- [ ] Load UI file from server with explicit UTF-8 handling.
-- [ ] Keep JS syntax check in tests.
+- [x] Move HTML/CSS/JS from giant string to versioned files (`tools/ui/`).
+- [x] Load UI file from server with explicit UTF-8 handling.
+- [x] Keep JS syntax check in tests.
 
 Acceptance:
 - UI behavior unchanged; script syntax test remains green.
@@ -92,17 +92,17 @@ Acceptance:
 
 ### P3-1 CI pipeline
 
-- [ ] Add CI workflow to run tests on clean environment.
-- [ ] Include JS syntax check and splitter/theme tests.
+- [x] Add CI workflow to run tests on clean environment.
+- [x] Include JS syntax check and splitter/theme tests.
 
 Acceptance:
 - PR-level automatic regression signal exists.
 
 ### P3-2 README dedup + single source of truth
 
-- [ ] Reduce overlap between root README and `tools/README-theme-designer.md`.
-- [ ] Keep capability list generated from one place (or strict update checklist).
-- [ ] Add “known limitations” section (e.g., split source constraints).
+- [x] Reduce overlap between root README and `tools/README-theme-designer.md`.
+- [x] Keep capability list generated from one place (or strict update checklist).
+- [x] Add “known limitations” section (e.g., split source constraints).
 
 Acceptance:
 - Docs drift risk is reduced; onboarding path is clear.

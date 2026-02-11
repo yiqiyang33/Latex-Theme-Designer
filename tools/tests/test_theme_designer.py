@@ -19,6 +19,14 @@ from tools import tex_splitter as ts
 
 
 class ThemeDesignerTests(unittest.TestCase):
+    def test_theme_designer_ui_loaded_from_external_html_asset(self) -> None:
+        raw = tdu.UI_HTML_PATH.read_text(encoding="utf-8")
+        self.assertEqual(tdu.HTML_PAGE, raw)
+
+    def test_theme_designer_ui_loader_reports_missing_asset(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "Failed to load Theme Designer HTML"):
+            tdu._load_html_page(Path("/tmp/_theme_designer_ui_missing_asset.html"))
+
     def _embedded_ui_script(self) -> str:
         match = re.search(r"<script>(.*)</script>", tdu.HTML_PAGE, re.S)
         self.assertIsNotNone(match, "Embedded HTML page is missing <script> block.")

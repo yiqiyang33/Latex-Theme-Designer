@@ -16,6 +16,15 @@ Lifecycle example (auto-stop after last tab expires):
 python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-timeout-sec 45 --idle-grace-sec 20
 ```
 
+## Documentation Policy
+
+- The canonical feature list is `Current Capabilities` in this file.
+- Root `README.md` keeps only short project-level highlights and links here.
+- When a feature changes, update this file first, then verify:
+  - `Current Capabilities`
+  - `Known Limitations`
+  - related tests under `tools/tests/`
+
 ## Current Capabilities
 
 - Adjust theme colors for document headers and theorem/callout blocks.
@@ -57,6 +66,12 @@ python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-
   - UI sends heartbeat while page is open
 - Standalone compile strategy is locked as `Split + subfiles standalone`.
 - Existing wrapper-based standalone generation is retained as a legacy fallback during migration.
+
+## Known Limitations
+
+- Split source must be a root-like target; selecting a subfile unit (`\documentclass{subfiles}`) is rejected.
+- Legacy wrapper standalone mode is transitional and kept only as compatibility fallback.
+- Server shutdown can be fully controlled by the server itself, but force-closing browser tabs/windows is not guaranteed by browsers.
 
 ## Planned Improvements
 
