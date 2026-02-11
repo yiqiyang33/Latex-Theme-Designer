@@ -72,9 +72,9 @@ Acceptance:
 
 ### P2-1 API error consistency
 
-- [ ] Replace broad `except Exception` paths where avoidable with typed errors.
-- [ ] Standardize JSON error payload fields (`error`, `code`, `hint`).
-- [ ] Add endpoint-level tests for bad payloads/path traversal/invalid target.
+- [x] Replace broad `except Exception` paths where avoidable with typed errors.
+- [x] Standardize JSON error payload fields (`error`, `code`, `hint`).
+- [x] Add endpoint-level tests for bad payloads/path traversal/invalid target.
 
 Acceptance:
 - API failures are deterministic and actionable.

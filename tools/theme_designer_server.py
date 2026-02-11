@@ -76,6 +76,7 @@ DEFAULT_SESSION_TIMEOUT_SEC = 45.0
 DEFAULT_IDLE_GRACE_SEC = 20.0
 DEFAULT_MONITOR_INTERVAL_SEC = 1.0
 SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+RECOVERABLE_SERVER_ERROR_TYPES = (OSError, RuntimeError)
 
 
 @dataclass(frozen=True)
@@ -214,6 +215,16 @@ def _split_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return response
 
 
+def _api_error_payload(error: str, code: str, hint: str = "") -> Dict[str, str]:
+    payload: Dict[str, str] = {
+        "error": str(error),
+        "code": code,
+    }
+    if hint:
+        payload["hint"] = hint
+    return payload
+
+
 class ThemeDesignerHandler(BaseHTTPRequestHandler):
     """Serve the Theme Designer UI and backend JSON endpoints."""
 
@@ -244,6 +255,9 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
             raise ValueError("JSON body must be an object.")
         return data
 
+    def _send_api_error(self, status_code: int, error: str, code: str, hint: str = "") -> None:
+        self._send_json(status_code, _api_error_payload(error, code, hint))
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
@@ -267,18 +281,33 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     requested_pdf = state.get("compile_output_pdf", "main.pdf")
                 pdf_abs, pdf_rel = _resolve_workspace_pdf(requested_pdf)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check query/path value and ensure it is a workspace-relative PDF.",
+                )
                 return
 
             if not pdf_abs.exists():
-                self._send_json(404, {"error": f"{pdf_rel} not found. Compile first."})
+                self._send_api_error(
+                    404,
+                    f"{pdf_rel} not found. Compile first.",
+                    code="not_found",
+                    hint="Run /api/compile first to generate preview PDF.",
+                )
                 return
 
             body = pdf_abs.read_bytes()
             self._send_bytes(200, body, "application/pdf")
             return
 
-        self._send_json(404, {"error": f"Unknown path: {self.path}"})
+        self._send_api_error(
+            404,
+            f"Unknown path: {self.path}",
+            code="not_found",
+            hint="Use '/' or one of the /api/* endpoints.",
+        )
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path == "/api/session-heartbeat":
@@ -303,9 +332,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     },
                 )
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to record heartbeat: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Provide optional session_id as [A-Za-z0-9_-]{1,128}.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to record heartbeat: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for lifecycle/state details.",
+                )
             return
 
         if self.path == "/api/save":
@@ -318,9 +357,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     response = _build_response_state()
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover - defensive path
-                self._send_json(500, {"error": f"Failed to save: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check payload fields and value formats before saving.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to save: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for file IO/state persistence failures.",
+                )
             return
 
         if self.path == "/api/target":
@@ -339,9 +388,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     response = _build_response_state()
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to set compile target: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Provide compile_target from state.compile_targets.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to set compile target: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for state persistence failures.",
+                )
             return
 
         if self.path == "/api/compile-config":
@@ -362,9 +421,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     response = _build_response_state()
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to set compile config: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Provide valid compile_recipe and compile_use_internal_fallback values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to set compile config: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for state persistence failures.",
+                )
             return
 
         if self.path == "/api/template-bootstrap":
@@ -384,9 +453,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 response["overwrote_existing"] = overwritten
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to bootstrap starter template: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check template_id/output_target/overwrite values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to bootstrap starter template: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for template file creation failures.",
+                )
             return
 
         if self.path == "/api/split-preview":
@@ -396,9 +475,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 response = _split_response_payload(payload)
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to preview split: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check compile_target/standalone_mode/sections_dir values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to preview split: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for split/IO failures.",
+                )
             return
 
         if self.path == "/api/split":
@@ -407,9 +496,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 response = _split_response_payload(payload)
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to split target: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check compile_target/standalone_mode/sections_dir values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to split target: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for split/IO failures.",
+                )
             return
 
         if self.path == "/api/block-preset":
@@ -423,9 +522,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     response = _build_response_state()
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to apply block preset: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Provide block_preset from schema.block_presets.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to apply block preset: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for override write failures.",
+                )
             return
 
         if self.path == "/api/heading-toc-preset":
@@ -442,9 +551,19 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     response = _build_response_state()
                 self._send_json(200, response)
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to apply heading/TOC preset: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Provide heading_toc_preset from schema.heading_toc_presets.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to apply heading/TOC preset: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for override write failures.",
+                )
             return
 
         if self.path == "/api/reset":
@@ -453,8 +572,13 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     _delete_override_files()
                     response = _build_response_state()
                 self._send_json(200, response)
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Failed to reset: {err}"})
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to reset: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for override cleanup failures.",
+                )
             return
 
         if self.path == "/api/compile":
@@ -503,12 +627,27 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     },
                 )
             except ValueError as err:
-                self._send_json(400, {"error": str(err)})
-            except Exception as err:  # pragma: no cover
-                self._send_json(500, {"error": f"Compile failed: {err}"})
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check compile_target/compile_recipe/fallback fields.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Compile failed: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for compile state/IO failures.",
+                )
             return
 
-        self._send_json(404, {"error": f"Unknown path: {self.path}"})
+        self._send_api_error(
+            404,
+            f"Unknown path: {self.path}",
+            code="not_found",
+            hint="Use one of the supported /api/* POST endpoints.",
+        )
 
 
 def _parse_port_arg(raw: str) -> int | str:

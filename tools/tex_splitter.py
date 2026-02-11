@@ -314,7 +314,7 @@ def _write_text_transaction(write_map: List[Tuple[Path, str]]) -> None:
             temp_path = temp_paths[path]
             os.replace(temp_path, path)
             applied_paths.append(path)
-    except Exception:
+    except (OSError, UnicodeError, ValueError):
         for temp_path in temp_paths.values():
             if temp_path.exists():
                 temp_path.unlink()

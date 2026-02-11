@@ -655,6 +655,38 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertFalse(planned_unit.exists())
         self.assertEqual(len(backup_candidates), 0)
 
+    def test_server_split_response_rejects_invalid_dry_run_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "dry_run must be a boolean"):
+            tds._split_response_payload({"dry_run": 1})
+
+    def test_server_split_response_rejects_unknown_compile_target(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown compile target"):
+            tds._split_response_payload(
+                {
+                    "compile_target": "tools/tests/_tmp_missing_target_for_split.tex",
+                    "dry_run": True,
+                }
+            )
+
+    def test_server_split_response_rejects_outside_workspace_target(self) -> None:
+        with self.assertRaisesRegex(ValueError, "outside workspace"):
+            tds._split_response_payload(
+                {
+                    "compile_target": "../../outside.tex",
+                    "dry_run": True,
+                }
+            )
+
+    def test_server_api_error_payload_has_standard_fields(self) -> None:
+        payload = tds._api_error_payload(
+            "Invalid payload.",
+            "bad_request",
+            "Check request field types.",
+        )
+        self.assertEqual(payload.get("error"), "Invalid payload.")
+        self.assertEqual(payload.get("code"), "bad_request")
+        self.assertEqual(payload.get("hint"), "Check request field types.")
+
     def test_compile_fails_when_pdf_is_older_than_source(self) -> None:
         root = td.ROOT_DIR
         target_rel = "tools/tests/_tmp_stale_target.tex"
