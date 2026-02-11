@@ -11,21 +11,21 @@ Goal: provide fixed style bundles for heading and TOC visuals.
 
 ### Tasks
 
-- [ ] Add heading/TOC preset model in backend.
+- [x] Add heading/TOC preset model in backend.
   - Include `default` preset matching current behavior.
-- [ ] Define preset token mapping for:
+- [x] Define preset token mapping for:
   - chapter/section/subsection heading colors
   - TOC title/chapter/section colors
   - header rule style tokens (if needed)
-- [ ] Add preset selector in UI with live preview impact.
-- [ ] Persist selected header/TOC preset in `theme.ui.json`.
-- [ ] Add tests for preset mapping and state roundtrip.
+- [x] Add preset selector in UI with live preview impact.
+- [x] Persist selected header/TOC preset in `theme.ui.json`.
+- [x] Add tests for preset mapping and state roundtrip.
 
 ### Acceptance Criteria
 
-- [ ] User can switch heading/TOC style bundle from UI.
-- [ ] Existing `default` output remains backward-compatible.
-- [ ] Preset switch is reflected in generated override files and compiled PDF.
+- [x] User can switch heading/TOC style bundle from UI.
+- [x] Existing `default` output remains backward-compatible.
+- [x] Preset switch is reflected in generated override files and compiled PDF.
 
 ---
 
@@ -53,5 +53,5 @@ Goal: support direct body text size tuning from Theme Designer.
 
 ## Suggested Execution Order
 
-- [ ] P2 header/TOC preset themes
+- [x] P2 header/TOC preset themes
 - [ ] P3 body font size UI control

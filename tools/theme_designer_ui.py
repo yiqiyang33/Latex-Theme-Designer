@@ -283,6 +283,12 @@ HTML_PAGE = """<!doctype html>
         <button id="applyBlockPresetBtn">Apply Preset</button>
       </div>
       <p id="blockPresetDesc" class="hint"></p>
+      <h2>Heading/TOC Presets</h2>
+      <div class="preset-controls">
+        <select id="headingTocPresetSelect"></select>
+        <button id="applyHeadingTocPresetBtn">Apply Preset</button>
+      </div>
+      <p id="headingTocPresetDesc" class="hint"></p>
       <h2>Colors</h2>
       <div id="groupBox"></div>
     </section>
@@ -376,6 +382,23 @@ HTML_PAGE = """<!doctype html>
     function blockPresetValue() {
       const options = blockPresetOptions();
       if (model.state.block_preset) return model.state.block_preset;
+      return options.length > 0 ? options[0].id : "default";
+    }
+
+    function headingTocPresetOptions() {
+      return model.schema.heading_toc_presets || [];
+    }
+
+    function headingTocPresetInfoById(id) {
+      for (const item of headingTocPresetOptions()) {
+        if (item.id === id) return item;
+      }
+      return null;
+    }
+
+    function headingTocPresetValue() {
+      const options = headingTocPresetOptions();
+      if (model.state.heading_toc_preset) return model.state.heading_toc_preset;
       return options.length > 0 ? options[0].id : "default";
     }
 
@@ -542,6 +565,36 @@ HTML_PAGE = """<!doctype html>
       };
     }
 
+    function renderHeadingTocPresetSelector() {
+      const select = document.getElementById("headingTocPresetSelect");
+      const desc = document.getElementById("headingTocPresetDesc");
+      const options = headingTocPresetOptions();
+      select.innerHTML = "";
+
+      for (const item of options) {
+        const node = document.createElement("option");
+        node.value = item.id;
+        node.textContent = item.label || item.id;
+        select.appendChild(node);
+      }
+
+      const selected = headingTocPresetValue();
+      if (options.length > 0) {
+        select.value = selected;
+      }
+      model.state.heading_toc_preset = selected;
+      const info = headingTocPresetInfoById(selected);
+      desc.textContent = info && info.description ? info.description : "No preset description.";
+
+      select.onchange = () => {
+        model.state.heading_toc_preset = select.value;
+        const selectedInfo = headingTocPresetInfoById(select.value);
+        desc.textContent = selectedInfo && selectedInfo.description
+          ? selectedInfo.description
+          : "No preset description.";
+      };
+    }
+
     function renderToggles() {
       const box = document.getElementById("toggleBox");
       box.innerHTML = "";
@@ -694,6 +747,7 @@ HTML_PAGE = """<!doctype html>
         const result = await postJson("/api/save", model.state);
         model = result;
         renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -712,6 +766,7 @@ HTML_PAGE = """<!doctype html>
       try {
         model = await postJson("/api/block-preset", { block_preset: selected });
         renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -724,6 +779,26 @@ HTML_PAGE = """<!doctype html>
       }
     }
 
+    async function applyHeadingTocPreset() {
+      const select = document.getElementById("headingTocPresetSelect");
+      const selected = select.value || model.state.heading_toc_preset;
+      setStatus(`Applying heading/TOC preset: ${selected}...`);
+      try {
+        model = await postJson("/api/heading-toc-preset", { heading_toc_preset: selected });
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderCompileTargetSelector();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        setStatus(`Applied heading/TOC preset: ${model.state.heading_toc_preset}`, "ok");
+      } catch (err) {
+        setStatus(err.message, "err");
+      }
+    }
+
     async function applyCompileTarget() {
       const select = document.getElementById("targetSelect");
       const selected = select.value;
@@ -731,6 +806,7 @@ HTML_PAGE = """<!doctype html>
       try {
         model = await postJson("/api/target", { compile_target: selected });
         renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -752,6 +828,7 @@ HTML_PAGE = """<!doctype html>
           compile_use_internal_fallback: useInternal
         });
         renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderPreview();
@@ -768,6 +845,7 @@ HTML_PAGE = """<!doctype html>
       try {
         model = await postJson("/api/reset", {});
         renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -850,6 +928,7 @@ HTML_PAGE = """<!doctype html>
       setStatus("Loading...");
       model = await getState();
       renderBlockPresetSelector();
+      renderHeadingTocPresetSelector();
       renderCompileTargetSelector();
       renderCompileRecipeSelector();
       renderClassConfig();
@@ -862,6 +941,7 @@ HTML_PAGE = """<!doctype html>
       document.getElementById("applyTargetBtn").addEventListener("click", applyCompileTarget);
       document.getElementById("applyRecipeBtn").addEventListener("click", applyCompileRecipe);
       document.getElementById("applyBlockPresetBtn").addEventListener("click", applyBlockPreset);
+      document.getElementById("applyHeadingTocPresetBtn").addEventListener("click", applyHeadingTocPreset);
       document.getElementById("saveBtn").addEventListener("click", saveOverrides);
       document.getElementById("resetBtn").addEventListener("click", resetOverrides);
       document.getElementById("compileBtn").addEventListener("click", compilePdf);

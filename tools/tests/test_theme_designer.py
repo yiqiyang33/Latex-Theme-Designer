@@ -326,6 +326,67 @@ class ThemeDesignerTests(unittest.TestCase):
         for token in td.BLOCK_COLOR_TOKENS:
             self.assertEqual(reloaded["colors"][token], state["colors"][token])
 
+    def test_apply_heading_toc_preset_updates_document_tokens_only(self) -> None:
+        state = td._load_state()
+        original_block_tokens = {
+            token: state["colors"][token]
+            for token in td.COLOR_ORDER
+            if not token.startswith("theme-")
+        }
+
+        td._apply_heading_toc_preset(state, "inkstone")
+        expected_document_colors = td._heading_toc_preset_tokens_by_id(
+            "inkstone",
+            td._build_heading_toc_preset_catalog(td._parse_theme_color_defaults()),
+        )
+
+        self.assertEqual(state["heading_toc_preset"], "inkstone")
+        for token, expected in expected_document_colors.items():
+            self.assertEqual(state["colors"][token], expected)
+        for token, expected in original_block_tokens.items():
+            self.assertEqual(state["colors"][token], expected)
+
+    def test_heading_toc_preset_persist_and_reload_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+
+                state = td._load_state()
+                td._apply_heading_toc_preset(state, "sunset")
+                td._write_override_files(state)
+
+                persisted = json.loads(cfg_path.read_text(encoding="utf-8"))
+                self.assertEqual(persisted.get("heading_toc_preset"), "sunset")
+
+                color_text = color_path.read_text(encoding="utf-8")
+                for token in ("theme-chapter", "theme-toc-section", "theme-header-rule"):
+                    alias = "themeui" + re.sub(r"[^A-Za-z0-9]+", "", token)
+                    hex_value = state["colors"][token].lstrip("#")
+                    self.assertIn(
+                        f"\\definecolor{{{alias}}}{{HTML}}{{{hex_value}}}",
+                        color_text,
+                    )
+
+                reloaded = td._load_state()
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertEqual(reloaded["heading_toc_preset"], "sunset")
+        for token in td.DOCUMENT_COLOR_TOKENS:
+            self.assertEqual(reloaded["colors"][token], state["colors"][token])
+
     def test_normalize_payload_rejects_invalid_class_config(self) -> None:
         base_state = td._load_state()
         with self.assertRaisesRegex(ValueError, "theme_class_mode"):
@@ -339,10 +400,20 @@ class ThemeDesignerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown block preset"):
             td._normalize_payload({"block_preset": "not-a-preset"}, base_state)
 
+    def test_normalize_payload_rejects_invalid_heading_toc_preset(self) -> None:
+        base_state = td._load_state()
+        with self.assertRaisesRegex(ValueError, "Unknown heading/TOC preset"):
+            td._normalize_payload({"heading_toc_preset": "not-a-preset"}, base_state)
+
     def test_block_presets_include_new_palettes(self) -> None:
         state = td._load_state()
         preset_ids = {entry.get("id") for entry in state.get("block_presets", [])}
         self.assertTrue({"default", "midnight", "meadow", "ember"}.issubset(preset_ids))
+
+    def test_heading_toc_presets_include_new_styles(self) -> None:
+        state = td._load_state()
+        preset_ids = {entry.get("id") for entry in state.get("heading_toc_presets", [])}
+        self.assertTrue({"default", "inkstone", "aurora", "sunset"}.issubset(preset_ids))
 
     def test_compile_smoke_minimal_book_target(self) -> None:
         root = td.ROOT_DIR

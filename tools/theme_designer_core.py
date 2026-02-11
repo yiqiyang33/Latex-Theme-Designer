@@ -298,6 +298,10 @@ BLOCK_COLOR_TOKENS: List[str] = [
     token for token in COLOR_ORDER if not token.startswith("theme-")
 ]
 
+DOCUMENT_COLOR_TOKENS: List[str] = [
+    token for token in COLOR_ORDER if token.startswith("theme-")
+]
+
 BLOCK_PRESET_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "id": "default",
@@ -464,6 +468,56 @@ BLOCK_PRESET_DEFINITIONS: List[Dict[str, Any]] = [
             "assump-bg": "#FFF8E9",
             "assump-label-fg": "#6C5A20",
             "assump-accent": "#A58625",
+        },
+    },
+]
+
+HEADING_TOC_PRESET_DEFINITIONS: List[Dict[str, Any]] = [
+    {
+        "id": "default",
+        "label": "Default",
+        "description": "Current built-in heading/TOC palette from theme.sty.",
+    },
+    {
+        "id": "inkstone",
+        "label": "Inkstone",
+        "description": "Deep indigo heading palette with restrained TOC contrast.",
+        "colors": {
+            "theme-chapter": "#1F2A44",
+            "theme-section": "#273B66",
+            "theme-subsection": "#35589A",
+            "theme-toc-title": "#1E2D53",
+            "theme-toc-chapter": "#243A6A",
+            "theme-toc-section": "#4465A8",
+            "theme-header-rule": "#1B2948",
+        },
+    },
+    {
+        "id": "aurora",
+        "label": "Aurora",
+        "description": "Cool teal-forward scheme for modern notes and reports.",
+        "colors": {
+            "theme-chapter": "#0E5A61",
+            "theme-section": "#12727E",
+            "theme-subsection": "#2F94A3",
+            "theme-toc-title": "#0F6169",
+            "theme-toc-chapter": "#107681",
+            "theme-toc-section": "#2C8D99",
+            "theme-header-rule": "#0D4A50",
+        },
+    },
+    {
+        "id": "sunset",
+        "label": "Sunset",
+        "description": "Warm rust and amber hierarchy for chapter and TOC headings.",
+        "colors": {
+            "theme-chapter": "#8A2E3B",
+            "theme-section": "#A3422E",
+            "theme-subsection": "#C26C2A",
+            "theme-toc-title": "#7A2A36",
+            "theme-toc-chapter": "#954137",
+            "theme-toc-section": "#B66232",
+            "theme-header-rule": "#6F2D33",
         },
     },
 ]
@@ -1018,6 +1072,116 @@ def _apply_block_preset(state: Dict[str, Any], preset_id: Any) -> None:
     state["block_presets"] = block_presets
 
 
+def _build_heading_toc_preset_catalog(theme_defaults: Dict[str, str]) -> List[Dict[str, Any]]:
+    catalog: List[Dict[str, Any]] = []
+    for preset in HEADING_TOC_PRESET_DEFINITIONS:
+        preset_id = str(preset.get("id", "")).strip()
+        if not preset_id:
+            continue
+        token_map: Dict[str, str] = {
+            token: _parse_hex_color(str(theme_defaults.get(token, "#808080"))) or "#808080"
+            for token in DOCUMENT_COLOR_TOKENS
+        }
+        raw_colors = preset.get("colors", {})
+        if isinstance(raw_colors, dict):
+            for token in DOCUMENT_COLOR_TOKENS:
+                if token not in raw_colors:
+                    continue
+                parsed = _parse_hex_color(str(raw_colors[token]))
+                if parsed:
+                    token_map[token] = parsed
+        catalog.append(
+            {
+                "id": preset_id,
+                "label": str(preset.get("label", preset_id)),
+                "description": str(preset.get("description", "")),
+                "tokens": token_map,
+            }
+        )
+    return catalog
+
+
+def _heading_toc_preset_meta(catalog: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    return [
+        {
+            "id": str(entry.get("id", "")),
+            "label": str(entry.get("label", entry.get("id", ""))),
+            "description": str(entry.get("description", "")),
+        }
+        for entry in catalog
+        if str(entry.get("id", "")).strip()
+    ]
+
+
+def _default_heading_toc_preset_id(heading_toc_presets: List[Dict[str, Any]]) -> str:
+    if not isinstance(heading_toc_presets, list):
+        return "default"
+    for item in heading_toc_presets:
+        if str(item.get("id", "")).strip() == "default":
+            return "default"
+    if heading_toc_presets:
+        return str(heading_toc_presets[0].get("id", "default"))
+    return "default"
+
+
+def _normalize_heading_toc_preset(
+    raw_preset: Any,
+    heading_toc_presets: List[Dict[str, Any]],
+) -> str:
+    if not isinstance(heading_toc_presets, list):
+        heading_toc_presets = []
+    valid_ids = {
+        str(item.get("id", "")).strip()
+        for item in heading_toc_presets
+        if str(item.get("id", "")).strip()
+    }
+    default_id = _default_heading_toc_preset_id(heading_toc_presets)
+    if not valid_ids:
+        return default_id
+    preset_id = str(raw_preset).strip() if raw_preset is not None else ""
+    if not preset_id:
+        return default_id
+    if preset_id in valid_ids:
+        return preset_id
+    raise ValueError(
+        "Unknown heading/TOC preset: "
+        f"{preset_id}. Expected one of: {', '.join(sorted(valid_ids))}"
+    )
+
+
+def _heading_toc_preset_tokens_by_id(
+    preset_id: str,
+    catalog: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    for item in catalog:
+        if str(item.get("id", "")).strip() != preset_id:
+            continue
+        raw_tokens = item.get("tokens", {})
+        if not isinstance(raw_tokens, dict):
+            break
+        parsed: Dict[str, str] = {}
+        for token in DOCUMENT_COLOR_TOKENS:
+            maybe = _parse_hex_color(str(raw_tokens.get(token, "")))
+            if maybe:
+                parsed[token] = maybe
+        if len(parsed) == len(DOCUMENT_COLOR_TOKENS):
+            return parsed
+    raise ValueError(f"Heading/TOC preset token map not found for: {preset_id}")
+
+
+def _apply_heading_toc_preset(state: Dict[str, Any], preset_id: Any) -> None:
+    theme_defaults = _parse_theme_color_defaults()
+    catalog = _build_heading_toc_preset_catalog(theme_defaults)
+    heading_toc_presets = _heading_toc_preset_meta(catalog)
+    normalized_preset = _normalize_heading_toc_preset(preset_id, heading_toc_presets)
+    token_map = _heading_toc_preset_tokens_by_id(normalized_preset, catalog)
+    state.setdefault("colors", {})
+    for token, value in token_map.items():
+        state["colors"][token] = value
+    state["heading_toc_preset"] = normalized_preset
+    state["heading_toc_presets"] = heading_toc_presets
+
+
 def _is_subpath(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -1373,6 +1537,9 @@ def _load_state() -> Dict[str, Any]:
     block_preset_catalog = _build_block_preset_catalog(theme_defaults)
     block_presets = _block_preset_meta(block_preset_catalog)
     default_block_preset = _default_block_preset_id(block_presets)
+    heading_toc_preset_catalog = _build_heading_toc_preset_catalog(theme_defaults)
+    heading_toc_presets = _heading_toc_preset_meta(heading_toc_preset_catalog)
+    default_heading_toc_preset = _default_heading_toc_preset_id(heading_toc_presets)
     compile_targets = _list_candidate_tex_files()
     recipe_catalog = _load_vscode_recipe_catalog()
     compile_recipes = recipe_catalog.get("recipes", [])
@@ -1381,6 +1548,8 @@ def _load_state() -> Dict[str, Any]:
         "colors": dict(theme_defaults),
         "block_preset": default_block_preset,
         "block_presets": block_presets,
+        "heading_toc_preset": default_heading_toc_preset,
+        "heading_toc_presets": heading_toc_presets,
         "class_config": dict(CLASS_CONFIG_DEFAULTS),
         "compile_target": _default_compile_target(compile_targets),
         "compile_recipe": _default_compile_recipe(compile_recipes),
@@ -1417,6 +1586,14 @@ def _load_state() -> Dict[str, Any]:
                     )
                 except ValueError:
                     state["block_preset"] = default_block_preset
+            if "heading_toc_preset" in persisted:
+                try:
+                    state["heading_toc_preset"] = _normalize_heading_toc_preset(
+                        persisted.get("heading_toc_preset"),
+                        heading_toc_presets,
+                    )
+                except ValueError:
+                    state["heading_toc_preset"] = default_heading_toc_preset
             state["class_config"] = _normalize_class_config_map(
                 persisted.get("class_config", state["class_config"])
             )
@@ -1467,6 +1644,10 @@ def _load_state() -> Dict[str, Any]:
         state.get("block_preset"),
         block_presets,
     )
+    state["heading_toc_preset"] = _normalize_heading_toc_preset(
+        state.get("heading_toc_preset"),
+        heading_toc_presets,
+    )
 
     state["compile_targets"] = compile_targets
     state["compile_recipes"] = compile_recipes
@@ -1501,6 +1682,11 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
             base_state.get("block_presets", []),
         ),
         "block_presets": list(base_state.get("block_presets", [])),
+        "heading_toc_preset": _normalize_heading_toc_preset(
+            base_state.get("heading_toc_preset"),
+            base_state.get("heading_toc_presets", []),
+        ),
+        "heading_toc_presets": list(base_state.get("heading_toc_presets", [])),
         "class_config": _normalize_class_config_map(base_state.get("class_config", {})),
         "compile_target": base_state.get("compile_target", ""),
         "compile_recipe": base_state.get("compile_recipe", ""),
@@ -1537,6 +1723,11 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
         normalized["block_preset"] = _normalize_block_preset(
             payload.get("block_preset"),
             base_state.get("block_presets", []),
+        )
+    if "heading_toc_preset" in payload:
+        normalized["heading_toc_preset"] = _normalize_heading_toc_preset(
+            payload.get("heading_toc_preset"),
+            base_state.get("heading_toc_presets", []),
         )
 
     raw_class_config = payload.get("class_config", {})
@@ -1580,6 +1771,7 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
         "toggles": state.get("toggles", {}),
         "colors": state.get("colors", {}),
         "block_preset": state.get("block_preset", "default"),
+        "heading_toc_preset": state.get("heading_toc_preset", "default"),
         "class_config": _normalize_class_config_map(state.get("class_config", {})),
         "compile_target": state.get("compile_target", ""),
         "compile_recipe": state.get("compile_recipe", ""),
@@ -1609,6 +1801,16 @@ def _write_override_files(state: Dict[str, Any]) -> None:
     state["block_preset"] = _normalize_block_preset(
         state.get("block_preset"),
         block_presets,
+    )
+    heading_toc_presets = state.get("heading_toc_presets", [])
+    if not isinstance(heading_toc_presets, list) or not heading_toc_presets:
+        heading_toc_presets = _heading_toc_preset_meta(
+            _build_heading_toc_preset_catalog(_parse_theme_color_defaults())
+        )
+    state["heading_toc_presets"] = heading_toc_presets
+    state["heading_toc_preset"] = _normalize_heading_toc_preset(
+        state.get("heading_toc_preset"),
+        heading_toc_presets,
     )
     state["class_config"] = _normalize_class_config_map(state.get("class_config", {}))
     _refresh_derived_state(state)
@@ -2029,5 +2231,6 @@ def _build_response_state() -> Dict[str, Any]:
             "groups": COLOR_GROUPS,
             "class_config": CLASS_CONFIG_SCHEMA,
             "block_presets": state.get("block_presets", []),
+            "heading_toc_presets": state.get("heading_toc_presets", []),
         },
     }

@@ -14,6 +14,7 @@ try:
     from tools.theme_designer_core import (
         STATE_LOCK,
         _apply_block_preset,
+        _apply_heading_toc_preset,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -32,6 +33,7 @@ except ModuleNotFoundError:
     from theme_designer_core import (
         STATE_LOCK,
         _apply_block_preset,
+        _apply_heading_toc_preset,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -188,6 +190,25 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(err)})
             except Exception as err:  # pragma: no cover
                 self._send_json(500, {"error": f"Failed to apply block preset: {err}"})
+            return
+
+        if self.path == "/api/heading-toc-preset":
+            try:
+                payload = self._parse_json_body()
+                with STATE_LOCK:
+                    current = _load_state()
+                    selected = payload.get(
+                        "heading_toc_preset",
+                        current.get("heading_toc_preset", "default"),
+                    )
+                    _apply_heading_toc_preset(current, selected)
+                    _write_override_files(current)
+                    response = _build_response_state()
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_json(400, {"error": str(err)})
+            except Exception as err:  # pragma: no cover
+                self._send_json(500, {"error": f"Failed to apply heading/TOC preset: {err}"})
             return
 
         if self.path == "/api/reset":

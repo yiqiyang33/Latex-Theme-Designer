@@ -24,6 +24,7 @@ xelatex main.tex
 - Structured template with centralized theme system (`theme.sty`).
 - Color and visual toggle customization through override files.
 - Block preset themes for theorem/callout colors (`default`, `midnight`, `meadow`, `ember`), with one-click apply in Theme Designer.
+- Heading/TOC preset themes (`default`, `inkstone`, `aurora`, `sunset`) with one-click apply in Theme Designer.
 - Class-aware theme behavior (`book` / `article`) with auto-detect and override controls.
 - Bibliography support with `biblatex` + `biber`.
 - Theorem/callout styling with switchable enhanced environment style.
@@ -32,7 +33,6 @@ xelatex main.tex
 
 ## Planned Next
 
-- Preset style themes for heading and TOC (current scheme will be `default`).
 - Body text size control in Theme Designer UI (likely slider-based).
 
 ## Theme Designer
