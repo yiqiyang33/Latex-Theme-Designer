@@ -209,6 +209,72 @@ def refresh_derived_state(
     state["effective_theme_class"] = profile["effective_theme_class"]
 
 
+def extract_compile_preferences(normalized: Dict[str, Any]) -> tuple[str, str, bool]:
+    """Read compile target/recipe/mode from normalized state payload."""
+    selected = str(normalized.get("compile_target", ""))
+    selected_recipe = str(normalized.get("compile_recipe", ""))
+    use_internal = bool(normalized.get("compile_use_internal_fallback", True))
+    return selected, selected_recipe, use_internal
+
+
+def apply_compile_preferences(
+    state: Dict[str, Any],
+    compile_target: Optional[str] = None,
+    compile_recipe: Optional[str] = None,
+    use_internal_fallback: Optional[bool] = None,
+    *,
+    normalize_class_config_map_fn: Callable[[Dict[str, Any]], Dict[str, str]],
+    coerce_class_mode_on_target_switch_fn: Callable[[Dict[str, Any], str, str], bool],
+    refresh_derived_state_fn: Callable[[Dict[str, Any]], None],
+) -> None:
+    """Mutate in-memory state for compile preferences and derived fields."""
+
+    changed = False
+    previous_target = str(state.get("compile_target", ""))
+    target_changed = False
+    if compile_target is not None:
+        state["compile_target"] = compile_target
+        target_changed = str(compile_target) != previous_target
+        changed = True
+    if compile_recipe is not None:
+        state["compile_recipe"] = compile_recipe
+        changed = True
+    if use_internal_fallback is not None:
+        state["compile_use_internal_fallback"] = use_internal_fallback
+        changed = True
+
+    if changed:
+        if target_changed:
+            class_config = normalize_class_config_map_fn(state.get("class_config", {}))
+            state["class_config"] = class_config
+            coerce_class_mode_on_target_switch_fn(
+                state,
+                previous_target,
+                str(state.get("compile_target", "")),
+            )
+        refresh_derived_state_fn(state)
+        state["compile_output_pdf"] = str(state.get("compile_output_pdf_expected", "main.pdf"))
+
+
+def apply_compile_result(
+    state: Dict[str, Any],
+    success: bool,
+    pdf_path: str,
+    *,
+    refresh_derived_state_fn: Callable[[Dict[str, Any]], None],
+    safe_workspace_pdf_relpath_fn: Callable[[Any], str],
+    now_iso8601_utc_fn: Callable[[], str],
+) -> None:
+    """Persist compile output metadata in in-memory state."""
+
+    refresh_derived_state_fn(state)
+    expected_output = str(state.get("compile_output_pdf_expected", "main.pdf"))
+    resolved_pdf_path = safe_workspace_pdf_relpath_fn(pdf_path)
+    state["compile_output_pdf"] = resolved_pdf_path or expected_output
+    state["compile_last_compile_at"] = now_iso8601_utc_fn()
+    state["compile_last_success"] = bool(success)
+
+
 def normalize_payload(
     payload: Dict[str, Any],
     base_state: Dict[str, Any],

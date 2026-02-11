@@ -32,6 +32,7 @@ COMPILE_TIMEOUT_EXIT_CODE = 124
 try:
     from tools import tex_splitter as _tex_splitter
     from tools import core_compile as _core_compile
+    from tools import core_docclass as _core_docclass
     from tools import core_paths as _core_paths
     from tools import core_presets as _core_presets
     from tools import core_state as _core_state
@@ -40,6 +41,7 @@ try:
 except ModuleNotFoundError:
     import tex_splitter as _tex_splitter
     import core_compile as _core_compile
+    import core_docclass as _core_docclass
     import core_paths as _core_paths
     import core_presets as _core_presets
     import core_state as _core_state
@@ -1085,69 +1087,37 @@ def _normalize_class_config_map(raw_map: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _extract_documentclass_declaration(tex_path: Path) -> Tuple[str, str]:
-    text = _read_text(tex_path)
-    match = DOCUMENTCLASS_PATTERN.search(text)
-    if not match:
-        return "", ""
-    raw_name = str(match.group("class") or "").strip()
-    if "," in raw_name:
-        raw_name = raw_name.split(",", 1)[0]
-    class_name = raw_name.strip().lower()
-    raw_options = str(match.group("options") or "").strip()
-    return class_name, raw_options
+    return _core_docclass.extract_documentclass_declaration(
+        tex_path,
+        read_text_fn=_read_text,
+        documentclass_pattern=DOCUMENTCLASS_PATTERN,
+    )
 
 
 def _resolve_subfiles_parent_tex(tex_path: Path, class_options: str) -> Optional[Path]:
-    raw = str(class_options or "").strip()
-    if not raw:
-        return None
-    root_hint = raw.split(",", 1)[0].strip()
-    if not root_hint:
-        return None
-
-    hinted_path = Path(root_hint.replace("\\", "/"))
-    if not hinted_path.suffix:
-        hinted_path = hinted_path.with_suffix(".tex")
-    if hinted_path.is_absolute():
-        candidate = hinted_path.resolve()
-    else:
-        candidate = (tex_path.parent / hinted_path).resolve()
-    if not candidate.exists() or not candidate.is_file():
-        return None
-    if not _is_subpath(candidate, ROOT_DIR.resolve()):
-        return None
-    return candidate
+    return _core_docclass.resolve_subfiles_parent_tex(
+        tex_path,
+        class_options,
+        root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+    )
 
 
 def _extract_documentclass_name(tex_path: Path, _visited: Optional[set[Path]] = None) -> str:
-    visited: set[Path] = set(_visited or set())
-    try:
-        resolved_tex_path = tex_path.resolve()
-    except OSError:
-        resolved_tex_path = tex_path
-    if resolved_tex_path in visited:
-        return ""
-    visited.add(resolved_tex_path)
-
-    class_name, class_options = _extract_documentclass_declaration(resolved_tex_path)
-    if class_name != "subfiles":
-        return class_name
-    parent_tex = _resolve_subfiles_parent_tex(resolved_tex_path, class_options)
-    if parent_tex is None:
-        return class_name
-    resolved_parent = _extract_documentclass_name(parent_tex, visited)
-    return resolved_parent or class_name
+    return _core_docclass.extract_documentclass_name(
+        tex_path,
+        extract_documentclass_declaration_fn=_extract_documentclass_declaration,
+        resolve_subfiles_parent_tex_fn=_resolve_subfiles_parent_tex,
+        _visited=_visited,
+    )
 
 
 def _extract_documentclass_name_raw(tex_path: Path) -> str:
-    text = _read_text(tex_path)
-    match = DOCUMENTCLASS_PATTERN.search(text)
-    if not match:
-        return ""
-    raw_name = str(match.group("class") or "").strip()
-    if "," in raw_name:
-        raw_name = raw_name.split(",", 1)[0]
-    return raw_name.strip().lower()
+    return _core_docclass.extract_documentclass_name_raw(
+        tex_path,
+        read_text_fn=_read_text,
+        documentclass_pattern=DOCUMENTCLASS_PATTERN,
+    )
 
 
 def _is_chapter_capable_class(class_name: str) -> bool:
@@ -1158,13 +1128,11 @@ def _is_chapter_capable_class(class_name: str) -> bool:
 
 
 def _detect_target_documentclass(compile_target: str) -> str:
-    if not compile_target:
-        return ""
-    try:
-        target_abs = _resolve_compile_context(compile_target).target_abs
-    except ValueError:
-        return ""
-    return _extract_documentclass_name(target_abs)
+    return _core_docclass.detect_target_documentclass(
+        compile_target,
+        resolve_compile_context_fn=_resolve_compile_context,
+        extract_documentclass_name_fn=_extract_documentclass_name,
+    )
 
 
 def _effective_theme_class(theme_class_mode: str, detected_document_class: str) -> str:
@@ -1212,7 +1180,10 @@ def _coerce_class_mode_on_target_switch(
 
 
 def _has_documentclass(tex_path: Path) -> bool:
-    return bool(_extract_documentclass_name_raw(tex_path))
+    return _core_docclass.has_documentclass(
+        tex_path,
+        extract_documentclass_name_raw_fn=_extract_documentclass_name_raw,
+    )
 
 
 def _class_profile_for_state(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -1845,12 +1816,7 @@ def _finalize_compile_output(
 # -------------------- Compile Preference Helpers --------------------
 
 def _extract_compile_preferences(normalized: Dict[str, Any]) -> Tuple[str, str, bool]:
-    """Read compile target/recipe/mode from normalized state payload."""
-
-    selected = str(normalized.get("compile_target", ""))
-    selected_recipe = str(normalized.get("compile_recipe", ""))
-    use_internal = bool(normalized.get("compile_use_internal_fallback", True))
-    return selected, selected_recipe, use_internal
+    return _core_state.extract_compile_preferences(normalized)
 
 
 def _apply_compile_preferences(
@@ -1859,42 +1825,26 @@ def _apply_compile_preferences(
     compile_recipe: Optional[str] = None,
     use_internal_fallback: Optional[bool] = None,
 ) -> None:
-    """Mutate in-memory state for compile preferences and derived fields."""
-
-    changed = False
-    previous_target = str(state.get("compile_target", ""))
-    target_changed = False
-    if compile_target is not None:
-        state["compile_target"] = compile_target
-        target_changed = str(compile_target) != previous_target
-        changed = True
-    if compile_recipe is not None:
-        state["compile_recipe"] = compile_recipe
-        changed = True
-    if use_internal_fallback is not None:
-        state["compile_use_internal_fallback"] = use_internal_fallback
-        changed = True
-
-    if changed:
-        if target_changed:
-            _coerce_class_mode_on_target_switch(
-                state,
-                previous_target,
-                str(state.get("compile_target", "")),
-            )
-        _refresh_derived_state(state)
-        state["compile_output_pdf"] = str(state.get("compile_output_pdf_expected", "main.pdf"))
+    _core_state.apply_compile_preferences(
+        state,
+        compile_target=compile_target,
+        compile_recipe=compile_recipe,
+        use_internal_fallback=use_internal_fallback,
+        normalize_class_config_map_fn=_normalize_class_config_map,
+        coerce_class_mode_on_target_switch_fn=_coerce_class_mode_on_target_switch,
+        refresh_derived_state_fn=_refresh_derived_state,
+    )
 
 
 def _apply_compile_result(state: Dict[str, Any], success: bool, pdf_path: str) -> None:
-    """Persist compile output metadata in in-memory state."""
-
-    _refresh_derived_state(state)
-    expected_output = str(state.get("compile_output_pdf_expected", "main.pdf"))
-    resolved_pdf_path = _safe_workspace_pdf_relpath(pdf_path)
-    state["compile_output_pdf"] = resolved_pdf_path or expected_output
-    state["compile_last_compile_at"] = _now_iso8601_utc()
-    state["compile_last_success"] = bool(success)
+    _core_state.apply_compile_result(
+        state,
+        success,
+        pdf_path,
+        refresh_derived_state_fn=_refresh_derived_state,
+        safe_workspace_pdf_relpath_fn=_safe_workspace_pdf_relpath,
+        now_iso8601_utc_fn=_now_iso8601_utc,
+    )
 
 
 def _bootstrap_starter_template(

@@ -50,8 +50,11 @@ Acceptance:
   - [x] Phase 8: extracted class-profile/derived-state helpers (`_is_chapter_capable_class`, `_effective_theme_class`, `_is_incompatible_forced_theme_class`, `_class_profile_for_state`, `_refresh_derived_state`) to `tools/core_state.py` with compatibility wrappers.
   - [x] Phase 9: extracted starter-template catalog/generate/bootstrap helpers to `tools/core_starter.py` with compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 10: extracted compile-target discovery/normalize helpers (`_list_candidate_tex_files`, `_default_compile_target`, `_normalize_compile_target`, `_compile_output_pdf_relpath`) to `tools/core_compile.py` with compatibility wrappers.
+  - [x] Phase 11: extracted documentclass detection helpers (`_extract_documentclass_declaration`, `_resolve_subfiles_parent_tex`, `_extract_documentclass_name`, `_extract_documentclass_name_raw`, `_detect_target_documentclass`, `_has_documentclass`) to `tools/core_docclass.py` with compatibility wrappers.
+  - [x] Phase 12: extracted compile-state mutation helpers (`_extract_compile_preferences`, `_apply_compile_preferences`, `_apply_compile_result`) to `tools/core_state.py` with compatibility wrappers.
   - `core_state.py` (load/normalize/persist)
   - `core_compile.py` (compile context, recipe execution)
+  - `core_docclass.py` (documentclass detection)
   - `core_split.py` (split orchestration)
   - `core_presets.py` (theme preset catalogs)
   - `core_starter.py` (starter template catalog/bootstrap)
