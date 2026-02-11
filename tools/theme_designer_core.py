@@ -26,6 +26,8 @@ TEMPLATE_DIR = ROOT_DIR / "templates"
 SPLIT_STANDALONE_MODE_SUBFILES = "subfiles"
 SPLIT_DEFAULT_SECTIONS_DIR = "Sections"
 SPLIT_ALLOWED_MODES = {SPLIT_STANDALONE_MODE_SUBFILES}
+COMPILE_COMMAND_TIMEOUT_SEC = 120.0
+COMPILE_TIMEOUT_EXIT_CODE = 124
 
 try:
     from tools import tex_splitter as _tex_splitter
@@ -1804,9 +1806,22 @@ def _run_command(command: List[str], cwd: Path = ROOT_DIR) -> Tuple[bool, int, s
             capture_output=True,
             text=True,
             env=_build_tex_env(),
+            timeout=COMPILE_COMMAND_TIMEOUT_SEC,
+            shell=False,
         )
     except FileNotFoundError:
         return False, 127, f"[missing] command not found: {command[0]}"
+    except subprocess.TimeoutExpired as err:
+        output_parts: List[str] = []
+        if err.output:
+            output_parts.append(str(err.output))
+        if err.stderr:
+            output_parts.append(str(err.stderr))
+        output_parts.append(
+            f"[timeout] command exceeded {COMPILE_COMMAND_TIMEOUT_SEC:.1f}s: "
+            + " ".join(command)
+        )
+        return False, COMPILE_TIMEOUT_EXIT_CODE, "\n".join(output_parts)
 
     output = (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
     return proc.returncode == 0, proc.returncode, output

@@ -128,6 +128,67 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("No TeX engine found", output)
         self.assertEqual(pdf_path, "main.pdf")
 
+    def test_run_command_uses_timeout_and_shell_disabled(self) -> None:
+        captured: dict[str, object] = {}
+        original_subprocess_run = td.subprocess.run
+        try:
+            def fake_run(command, **kwargs):
+                captured["command"] = list(command)
+                captured["kwargs"] = dict(kwargs)
+                return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+            td.subprocess.run = fake_run
+            success, code, output = td._run_command(["xelatex", "main.tex"])
+        finally:
+            td.subprocess.run = original_subprocess_run
+
+        self.assertTrue(success)
+        self.assertEqual(code, 0)
+        self.assertEqual(output, "ok")
+        kwargs = captured.get("kwargs", {})
+        self.assertEqual(kwargs.get("timeout"), td.COMPILE_COMMAND_TIMEOUT_SEC)
+        self.assertIs(kwargs.get("shell"), False)
+
+    def test_run_command_timeout_returns_bounded_failure(self) -> None:
+        original_subprocess_run = td.subprocess.run
+        try:
+            def fake_run(command, **kwargs):
+                raise subprocess.TimeoutExpired(
+                    cmd=command,
+                    timeout=kwargs.get("timeout"),
+                    output="partial stdout",
+                    stderr="partial stderr",
+                )
+
+            td.subprocess.run = fake_run
+            success, code, output = td._run_command(["xelatex", "main.tex"])
+        finally:
+            td.subprocess.run = original_subprocess_run
+
+        self.assertFalse(success)
+        self.assertEqual(code, td.COMPILE_TIMEOUT_EXIT_CODE)
+        self.assertIn("[timeout]", output)
+        self.assertIn(f"{td.COMPILE_COMMAND_TIMEOUT_SEC:.1f}s", output)
+        self.assertIn("xelatex main.tex", output)
+        self.assertIn("partial stdout", output)
+        self.assertIn("partial stderr", output)
+
+    def test_append_step_log_includes_cwd_command_and_exit_code(self) -> None:
+        logs: list[str] = []
+        td._append_step_log(
+            logs,
+            "tex pass 1",
+            td.ROOT_DIR,
+            ["xelatex", "main.tex"],
+            "",
+            2,
+        )
+        joined = "\n".join(logs)
+        self.assertIn("== tex pass 1 ==", joined)
+        self.assertIn("[cwd]", joined)
+        self.assertIn("$ xelatex main.tex", joined)
+        self.assertIn("[exit code: 2]", joined)
+
     def test_parse_jsonc_supports_comments_and_trailing_commas(self) -> None:
         sample = """
         {

@@ -81,9 +81,9 @@ Acceptance:
 
 ### P2-2 Command execution safeguards
 
-- [ ] Add explicit command timeout policy for compile subprocesses.
-- [ ] Ensure logs always include command + cwd + exit code.
-- [ ] Preserve no-shell execution invariant.
+- [x] Add explicit command timeout policy for compile subprocesses.
+- [x] Ensure logs always include command + cwd + exit code.
+- [x] Preserve no-shell execution invariant.
 
 Acceptance:
 - Hanging/slow compile tasks are bounded and diagnosable.
