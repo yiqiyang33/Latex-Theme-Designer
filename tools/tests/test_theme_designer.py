@@ -541,6 +541,18 @@ class ThemeDesignerTests(unittest.TestCase):
         with self.assertRaises(argparse.ArgumentTypeError):
             tds._parse_port_arg("invalid")
 
+    def test_server_parse_lifecycle_mode_arg_validation(self) -> None:
+        self.assertEqual(
+            tds._parse_lifecycle_mode_arg("manual"),
+            tds.LIFECYCLE_MODE_MANUAL,
+        )
+        self.assertEqual(
+            tds._parse_lifecycle_mode_arg("shutdown-on-last-tab"),
+            tds.LIFECYCLE_MODE_SHUTDOWN_ON_LAST_TAB,
+        )
+        with self.assertRaises(argparse.ArgumentTypeError):
+            tds._parse_lifecycle_mode_arg("invalid")
+
     def test_server_resolve_server_port_zero_returns_bound_endpoint(self) -> None:
         server, url = tds._resolve_server("127.0.0.1", 0)
         try:
@@ -589,10 +601,49 @@ class ThemeDesignerTests(unittest.TestCase):
         finally:
             sock.close()
 
+    def test_lifecycle_controller_manual_mode_never_auto_shutdown(self) -> None:
+        controller = tds.LifecycleController(
+            tds.LifecycleConfig(
+                mode=tds.LIFECYCLE_MODE_MANUAL,
+                session_timeout_sec=1.0,
+                idle_grace_sec=1.0,
+                monitor_interval_sec=0.1,
+            )
+        )
+        controller.heartbeat("session-a", now_monotonic=10.0)
+        self.assertFalse(controller.should_shutdown(now_monotonic=100.0))
+
+    def test_lifecycle_controller_shutdown_on_last_tab_after_grace(self) -> None:
+        controller = tds.LifecycleController(
+            tds.LifecycleConfig(
+                mode=tds.LIFECYCLE_MODE_SHUTDOWN_ON_LAST_TAB,
+                session_timeout_sec=2.0,
+                idle_grace_sec=3.0,
+                monitor_interval_sec=0.1,
+            )
+        )
+        controller.heartbeat("session-a", now_monotonic=1.0)
+
+        self.assertFalse(controller.should_shutdown(now_monotonic=2.0))
+        # First check after expiry only starts grace countdown.
+        self.assertFalse(controller.should_shutdown(now_monotonic=3.1))
+        self.assertFalse(controller.should_shutdown(now_monotonic=5.9))
+        self.assertTrue(controller.should_shutdown(now_monotonic=6.2))
+
+    def test_normalize_session_id_validation(self) -> None:
+        generated = tds._normalize_session_id("")
+        self.assertTrue(isinstance(generated, str) and len(generated) > 0)
+        self.assertEqual(tds._normalize_session_id("Session_01-abc"), "Session_01-abc")
+        with self.assertRaisesRegex(ValueError, "session_id"):
+            tds._normalize_session_id("not valid")
+
     def test_run_server_open_browser_uses_resolved_url(self) -> None:
         class FakeServer:
             def __init__(self) -> None:
                 self.closed = False
+                self.lifecycle_controller = tds.LifecycleController(
+                    tds.LifecycleConfig(mode=tds.LIFECYCLE_MODE_MANUAL)
+                )
 
             def serve_forever(self) -> None:
                 raise KeyboardInterrupt
@@ -606,7 +657,7 @@ class ThemeDesignerTests(unittest.TestCase):
         original_resolve_server = tds._resolve_server
         original_browser_open = tds.webbrowser.open
         try:
-            tds._resolve_server = lambda host, port: (
+            tds._resolve_server = lambda host, port, lifecycle_config=None: (
                 fake_server,
                 "http://127.0.0.1:9921",
             )

@@ -5,34 +5,6 @@ Completed phases have been removed from this file.
 
 ---
 
-## Phase 5: Lifecycle and Session Shutdown Behavior
-
-Goal: improve server/browser lifecycle behavior around Ctrl+C and tab close.
-
-### Tasks
-
-- [ ] Define lifecycle mode options and defaults.
-  - `manual`: current behavior.
-  - `shutdown-on-last-tab`: stop server when no active UI session.
-- [ ] Add lightweight heartbeat/session tracking endpoint.
-  - UI sends periodic heartbeat while page is open.
-  - Server expires inactive sessions by timeout.
-- [ ] Add optional auto-shutdown when last active session expires.
-  - Configurable idle grace period.
-- [ ] Define Ctrl+C behavior contract.
-  - Server shutdown is guaranteed.
-  - Browser auto-close is best-effort only (browser security constraints).
-- [ ] Document platform limitations and fallback behavior explicitly.
-- [ ] Add tests for session timeout and shutdown trigger conditions.
-
-### Acceptance Criteria
-
-- [ ] In `shutdown-on-last-tab` mode, server exits after all sessions expire.
-- [ ] Ctrl+C always terminates server cleanly without orphan processes.
-- [ ] Lifecycle behavior is explicit and predictable from CLI options.
-
----
-
 ## Phase 6: Template Bootstrap (One-Click `main.tex` Creation)
 
 Goal: initialize usable project files when no compile target exists.
@@ -86,6 +58,5 @@ Goal: support different template families with their own Theme Designer schema a
 
 ## Suggested Execution Order
 
-- [ ] P5 lifecycle/session shutdown behavior
 - [ ] P6 template bootstrap generation
 - [ ] P7 multi-template architecture

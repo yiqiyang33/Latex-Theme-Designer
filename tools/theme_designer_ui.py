@@ -355,6 +355,9 @@ HTML_PAGE = """<!doctype html>
   </div>
   <script>
     let model = null;
+    let sessionId = null;
+    let heartbeatTimer = null;
+    const HEARTBEAT_INTERVAL_MS = 15000;
 
     // ---------- Model Helpers ----------
     function setStatus(text, kind = "") {
@@ -798,6 +801,41 @@ HTML_PAGE = """<!doctype html>
       return data;
     }
 
+    function createSessionId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    async function sendHeartbeat() {
+      if (!sessionId) sessionId = createSessionId();
+      try {
+        const result = await postJson("/api/session-heartbeat", { session_id: sessionId });
+        if (result && typeof result.session_id === "string" && result.session_id.length > 0) {
+          sessionId = result.session_id;
+        }
+      } catch (_) {
+        // Heartbeat failures should not block local editing workflow.
+      }
+    }
+
+    function startHeartbeat() {
+      if (heartbeatTimer !== null) {
+        clearInterval(heartbeatTimer);
+      }
+      void sendHeartbeat();
+      heartbeatTimer = window.setInterval(() => {
+        void sendHeartbeat();
+      }, HEARTBEAT_INTERVAL_MS);
+      window.addEventListener("beforeunload", () => {
+        if (heartbeatTimer !== null) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
+      }, { once: true });
+    }
+
     function refreshPdf() {
       const path = currentPdfPath();
       document.getElementById("pdfFrame").src = `/api/pdf?path=${encodeURIComponent(path)}&ts=${Date.now()}`;
@@ -1008,6 +1046,7 @@ HTML_PAGE = """<!doctype html>
       renderPreview();
       setStatus("Ready");
       refreshPdf();
+      startHeartbeat();
 
       document.getElementById("applyTargetBtn").addEventListener("click", applyCompileTarget);
       document.getElementById("applyRecipeBtn").addEventListener("click", applyCompileRecipe);

@@ -35,10 +35,13 @@ xelatex main.tex
   - `--port 0` for OS-assigned free port
   - `--port auto` to fallback to next free port when default is occupied
   - startup logs and `--open-browser` use the resolved bound URL
+- Lifecycle/session controls for local UI server:
+  - `--lifecycle-mode manual` (default) or `--lifecycle-mode shutdown-on-last-tab`
+  - heartbeat-based active tab tracking with session timeout and idle grace
+  - predictable Ctrl+C shutdown; browser tab close is best-effort only
 
 ## Planned Next
 
-- Lifecycle controls for server shutdown by session activity.
 - One-click starter `main.tex` generation from built-in templates.
 - Profile-based multi-template Theme Designer architecture.
 

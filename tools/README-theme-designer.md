@@ -10,6 +10,12 @@ python3 tools/theme_designer.py --open-browser
 
 Default URL: `http://127.0.0.1:8765`
 
+Lifecycle example (auto-stop after last tab expires):
+
+```bash
+python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-timeout-sec 45 --idle-grace-sec 20
+```
+
 ## Current Capabilities
 
 - Adjust theme colors for document headers and theorem/callout blocks.
@@ -40,12 +46,13 @@ Default URL: `http://127.0.0.1:8765`
   - `--port 0` binds an OS-assigned free port
   - `--port auto` retries on the next free port if default/start port is occupied
   - startup URL reporting and `--open-browser` always use the resolved bound URL
+- Lifecycle/session controls:
+  - `manual` mode (default): stop with Ctrl+C
+  - `shutdown-on-last-tab` mode: auto-stop after all heartbeat sessions expire + idle grace
+  - UI sends heartbeat while page is open
 
 ## Planned Improvements
 
-- Lifecycle/session controls
-  - optional server shutdown when last browser session closes
-  - explicit Ctrl+C behavior and platform constraints
 - Starter template bootstrap
   - one-click `main.tex` generation from built-in templates
   - safe overwrite rules
@@ -76,6 +83,9 @@ These files are loaded automatically by:
 - Stale PDF preview:
   - Click `Refresh PDF Preview` after compile.
   - Confirm the target and compile mode shown in the UI info line.
+- Browser close behavior:
+  - Server can always stop itself.
+  - Force-closing browser tabs/windows from the server is not guaranteed due browser security constraints.
 
 ## Reset
 
