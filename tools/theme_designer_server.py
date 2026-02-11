@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -275,9 +276,76 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": f"Unknown path: {self.path}"})
 
 
-def run_server(host: str, port: int, open_browser: bool) -> None:
-    server = ThreadingHTTPServer((host, port), ThemeDesignerHandler)
-    url = f"http://{host}:{port}"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
+AUTO_PORT_START = DEFAULT_PORT
+PORT_AUTO = "auto"
+
+
+def _parse_port_arg(raw: str) -> int | str:
+    value = raw.strip().lower()
+    if value == PORT_AUTO:
+        return PORT_AUTO
+
+    try:
+        parsed = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(
+            "Port must be an integer in [0, 65535] or 'auto'."
+        ) from err
+
+    if parsed < 0 or parsed > 65535:
+        raise argparse.ArgumentTypeError(
+            "Port must be an integer in [0, 65535] or 'auto'."
+        )
+    return parsed
+
+
+def _is_address_in_use(err: OSError) -> bool:
+    return err.errno == errno.EADDRINUSE or "Address already in use" in str(err)
+
+
+def _format_bound_url(host: str, port: int) -> str:
+    render_host = host
+    if ":" in host and not host.startswith("["):
+        render_host = f"[{host}]"
+    return f"http://{render_host}:{port}"
+
+
+def _bind_with_auto_port(host: str, start_port: int) -> ThreadingHTTPServer:
+    for candidate in range(max(0, start_port), 65536):
+        try:
+            return ThreadingHTTPServer((host, candidate), ThemeDesignerHandler)
+        except OSError as err:
+            if _is_address_in_use(err):
+                continue
+            raise
+    raise OSError(f"No available port found on host {host} from {start_port} to 65535.")
+
+
+def _resolve_server(host: str, port: int | str) -> tuple[ThreadingHTTPServer, str]:
+    if isinstance(port, str):
+        if port.strip().lower() != PORT_AUTO:
+            raise ValueError(f"Unsupported port mode: {port}")
+        server = _bind_with_auto_port(host, AUTO_PORT_START)
+    else:
+        try:
+            server = ThreadingHTTPServer((host, port), ThemeDesignerHandler)
+        except OSError as err:
+            if port != 0 and _is_address_in_use(err):
+                raise OSError(
+                    f"Port {port} on {host} is already in use. "
+                    "Retry with '--port auto' or '--port 0'."
+                ) from err
+            raise
+
+    bound_host = str(server.server_address[0])
+    bound_port = int(server.server_address[1])
+    return server, _format_bound_url(bound_host, bound_port)
+
+
+def run_server(host: str, port: int | str, open_browser: bool) -> None:
+    server, url = _resolve_server(host, port)
     print(f"Theme designer running at {url}")
     print("Press Ctrl+C to stop.")
     if open_browser:
@@ -292,12 +360,27 @@ def run_server(host: str, port: int, open_browser: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run local UI for theme tuning.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8765, help="Port to bind (default: 8765)")
+    parser.add_argument(
+        "--host",
+        default=DEFAULT_HOST,
+        help=f"Host to bind (default: {DEFAULT_HOST})",
+    )
+    parser.add_argument(
+        "--port",
+        type=_parse_port_arg,
+        default=DEFAULT_PORT,
+        help=(
+            f"Port to bind (default: {DEFAULT_PORT}). "
+            "Use 0 for OS-assigned free port, or 'auto' to fallback to next free port."
+        ),
+    )
     parser.add_argument(
         "--open-browser",
         action="store_true",
         help="Open default browser automatically after startup.",
     )
     args = parser.parse_args()
-    run_server(args.host, args.port, args.open_browser)
+    try:
+        run_server(args.host, args.port, args.open_browser)
+    except OSError as err:
+        raise SystemExit(f"Failed to start Theme Designer: {err}") from err

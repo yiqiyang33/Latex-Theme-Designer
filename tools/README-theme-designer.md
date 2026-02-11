@@ -36,12 +36,13 @@ Default URL: `http://127.0.0.1:8765`
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
 - Preview current target PDF in the same UI page.
+- Multi-instance-safe startup:
+  - `--port 0` binds an OS-assigned free port
+  - `--port auto` retries on the next free port if default/start port is occupied
+  - startup URL reporting and `--open-browser` always use the resolved bound URL
 
 ## Planned Improvements
 
-- Multi-instance startup support
-  - auto-resolve host/port for concurrent runs
-  - improved startup URL reporting/open behavior
 - Lifecycle/session controls
   - optional server shutdown when last browser session closes
   - explicit Ctrl+C behavior and platform constraints

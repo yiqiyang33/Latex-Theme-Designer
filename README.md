@@ -31,10 +31,13 @@ xelatex main.tex
 - Theorem/callout styling with switchable enhanced environment style.
 - Optional local Theme Designer UI for tuning styles and compiling.
   - Supports compile target selection and VSCode recipe-based compile mode.
+- Multi-instance-safe Theme Designer startup:
+  - `--port 0` for OS-assigned free port
+  - `--port auto` to fallback to next free port when default is occupied
+  - startup logs and `--open-browser` use the resolved bound URL
 
 ## Planned Next
 
-- Multi-instance startup support (auto host/port, conflict-safe launches).
 - Lifecycle controls for server shutdown by session activity.
 - One-click starter `main.tex` generation from built-in templates.
 - Profile-based multi-template Theme Designer architecture.

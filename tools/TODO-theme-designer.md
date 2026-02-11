@@ -5,30 +5,6 @@ Completed phases have been removed from this file.
 
 ---
 
-## Phase 4: Multi-Instance Startup (Auto Host/Port)
-
-Goal: allow multiple Theme Designer instances to run without manual port conflict handling.
-
-### Tasks
-
-- [ ] Add startup mode that auto-selects available bind endpoint.
-  - `--port 0` should bind an OS-assigned free port.
-  - Keep explicit `--host/--port` override behavior.
-- [ ] Print resolved URL to terminal in all startup modes.
-- [ ] Ensure `--open-browser` opens the resolved URL (not hardcoded default).
-- [ ] Add collision fallback behavior when explicit port is occupied.
-  - Clear error by default.
-  - Optional `--port auto` fallback to next free port.
-- [ ] Add tests for endpoint resolution and occupied-port scenarios.
-
-### Acceptance Criteria
-
-- [ ] Running two instances concurrently requires no manual port editing.
-- [ ] Startup logs always show the exact URL that is actually bound.
-- [ ] Browser auto-open targets the bound URL correctly.
-
----
-
 ## Phase 5: Lifecycle and Session Shutdown Behavior
 
 Goal: improve server/browser lifecycle behavior around Ctrl+C and tab close.
@@ -110,7 +86,6 @@ Goal: support different template families with their own Theme Designer schema a
 
 ## Suggested Execution Order
 
-- [ ] P4 multi-instance startup (auto host/port)
 - [ ] P5 lifecycle/session shutdown behavior
 - [ ] P6 template bootstrap generation
 - [ ] P7 multi-template architecture

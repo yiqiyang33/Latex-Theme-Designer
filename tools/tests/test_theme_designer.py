@@ -1,12 +1,17 @@
+import argparse
+import io
 import json
 import os
 from pathlib import Path
 import re
+import socket
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 
 from tools import theme_designer_core as td
+from tools import theme_designer_server as tds
 
 
 class ThemeDesignerTests(unittest.TestCase):
@@ -528,6 +533,96 @@ class ThemeDesignerTests(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertEqual(pdf_rel, "tools/tests/_tmp_smoke_article.pdf")
+
+    def test_server_parse_port_arg_supports_auto_and_integer(self) -> None:
+        self.assertEqual(tds._parse_port_arg("auto"), "auto")
+        self.assertEqual(tds._parse_port_arg("0"), 0)
+        self.assertEqual(tds._parse_port_arg("8765"), 8765)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            tds._parse_port_arg("invalid")
+
+    def test_server_resolve_server_port_zero_returns_bound_endpoint(self) -> None:
+        server, url = tds._resolve_server("127.0.0.1", 0)
+        try:
+            bound_port = int(server.server_address[1])
+        finally:
+            server.server_close()
+
+        self.assertGreater(bound_port, 0)
+        self.assertEqual(url, f"http://127.0.0.1:{bound_port}")
+
+    def test_server_port_auto_falls_back_when_start_port_occupied(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        occupied_port = int(sock.getsockname()[1])
+
+        original_auto_start = tds.AUTO_PORT_START
+        try:
+            tds.AUTO_PORT_START = occupied_port
+            server, _ = tds._resolve_server("127.0.0.1", "auto")
+            try:
+                bound_port = int(server.server_address[1])
+            finally:
+                server.server_close()
+        finally:
+            tds.AUTO_PORT_START = original_auto_start
+            sock.close()
+
+        self.assertNotEqual(bound_port, occupied_port)
+        self.assertGreater(bound_port, occupied_port)
+
+    def test_server_explicit_port_collision_reports_clear_error(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        occupied_port = int(sock.getsockname()[1])
+
+        try:
+            with self.assertRaisesRegex(
+                OSError,
+                r"--port auto.*--port 0",
+            ):
+                tds._resolve_server("127.0.0.1", occupied_port)
+        finally:
+            sock.close()
+
+    def test_run_server_open_browser_uses_resolved_url(self) -> None:
+        class FakeServer:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def serve_forever(self) -> None:
+                raise KeyboardInterrupt
+
+            def server_close(self) -> None:
+                self.closed = True
+
+        fake_server = FakeServer()
+        opened_urls = []
+        captured_stdout = io.StringIO()
+        original_resolve_server = tds._resolve_server
+        original_browser_open = tds.webbrowser.open
+        try:
+            tds._resolve_server = lambda host, port: (
+                fake_server,
+                "http://127.0.0.1:9921",
+            )
+            tds.webbrowser.open = lambda url: opened_urls.append(url)
+            with redirect_stdout(captured_stdout):
+                tds.run_server("127.0.0.1", "auto", open_browser=True)
+        finally:
+            tds._resolve_server = original_resolve_server
+            tds.webbrowser.open = original_browser_open
+
+        self.assertEqual(opened_urls, ["http://127.0.0.1:9921"])
+        self.assertIn(
+            "Theme designer running at http://127.0.0.1:9921",
+            captured_stdout.getvalue(),
+        )
+        self.assertTrue(fake_server.closed)
 
 
 if __name__ == "__main__":
