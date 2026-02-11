@@ -62,6 +62,26 @@ python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-
   - profile-driven schema and defaults
   - compatibility strategy for existing projects
 
+## Companion CLI: TeX Splitter
+
+Use the splitter to modularize a long root `.tex` file:
+
+```bash
+python3 tools/tex_splitter.py main.tex
+```
+
+- Detects `\documentclass{...}` and picks split anchor automatically:
+  - book/report-like classes split by top-level `\chapter{...}`
+  - article-like classes split by top-level `\section{...}`
+- Keeps preamble in root, rewrites body with `\input{Sections/...}` entries.
+- Writes ordered unit files to `Sections/` (for example `01-overview.tex`).
+- Saves a backup before rewrite (`main.tex.bak`, then `.bak.1`, ...).
+- Optional include mode:
+
+```bash
+python3 tools/tex_splitter.py main.tex --use-include
+```
+
 ## What it edits
 
 - `theme.colors.tex`

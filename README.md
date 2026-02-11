@@ -41,6 +41,10 @@ xelatex main.tex
   - `--lifecycle-mode manual` (default) or `--lifecycle-mode shutdown-on-last-tab`
   - heartbeat-based active tab tracking with session timeout and idle grace
   - predictable Ctrl+C shutdown; browser tab close is best-effort only
+- One-click root `.tex` splitter CLI (`tools/tex_splitter.py`):
+  - class-aware split (`chapter` for book/report-like, `section` for article-like)
+  - rewrites root body to `\input{...}` entries
+  - auto backup before rewrite (`.bak`, `.bak.1`, ...)
 
 ## Planned Next
 
@@ -57,6 +61,20 @@ python3 tools/theme_designer.py --open-browser
 See full tool documentation in:
 
 - `tools/README-theme-designer.md`
+
+## TeX Splitter
+
+Split a monolithic root `.tex` into modular files in `Sections/`:
+
+```bash
+python3 tools/tex_splitter.py main.tex
+```
+
+Use `\include{...}` instead of `\input{...}` in rewritten root body:
+
+```bash
+python3 tools/tex_splitter.py main.tex --use-include
+```
 
 ## What it edits
 
