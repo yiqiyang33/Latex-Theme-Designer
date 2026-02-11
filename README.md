@@ -19,6 +19,12 @@ xelatex main.tex
 xelatex main.tex
 ```
 
+Run tests:
+
+```bash
+pytest -q tools/tests
+```
+
 ## Current Capabilities
 
 - Structured template with centralized theme system (`theme.sty`).
@@ -72,6 +78,8 @@ Split a monolithic root `.tex` into modular files in `Sections/`:
 ```bash
 python3 tools/tex_splitter.py main.tex
 ```
+
+Note: split source must be a root `.tex` target. Subfile units (`\documentclass{subfiles}`) are rejected.
 
 In legacy-wrapper mode, use `\include{...}` instead of `\input{...}`:
 

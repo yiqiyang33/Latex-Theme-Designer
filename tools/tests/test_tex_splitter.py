@@ -162,6 +162,38 @@ class TexSplitterTests(unittest.TestCase):
             ):
                 ts.split_tex_file(root, root.parent / "Sections", use_include=True)
 
+    def test_split_rejects_subfiles_unit_target_to_prevent_recursive_sections(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-overview}\n"
+            "\\end{document}\n"
+        )
+        unit_text = (
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Overview}\n"
+            "Alpha.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            unit = Path(tmp_dir) / "Sections" / "01-overview.tex"
+            unit.parent.mkdir(parents=True, exist_ok=True)
+            root.write_text(root_text, encoding="utf-8")
+            unit.write_text(unit_text, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"documentclass\{subfiles\}.*parent root \.tex file",
+            ):
+                ts.split_tex_file(unit, unit.parent / "Sections")
+
+            self.assertEqual(unit.read_text(encoding="utf-8"), unit_text)
+            self.assertFalse((unit.parent / "Sections").exists())
+            self.assertFalse((unit.parent / "01-overview.tex.bak").exists())
+
     def test_split_dry_run_reports_plan_without_writing(self) -> None:
         original_text = (
             "\\documentclass{article}\n"

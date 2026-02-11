@@ -90,6 +90,10 @@ def _extract_document_class(tex_text: str) -> str:
     return class_name
 
 
+def _is_subfiles_unit_class(class_name: str) -> bool:
+    return str(class_name or "").strip().lower() == "subfiles"
+
+
 def _is_chapter_capable_class(class_name: str) -> bool:
     normalized = str(class_name or "").strip().lower()
     if not normalized:
@@ -409,6 +413,11 @@ def split_tex_file(
 
     tex_text = root_path.read_text(encoding="utf-8")
     document_class = _extract_document_class(tex_text)
+    if _is_subfiles_unit_class(document_class):
+        raise ValueError(
+            "Selected file uses \\documentclass{subfiles} and is a standalone unit. "
+            "Please split the parent root .tex file instead."
+        )
     split_command = _split_command_for_document_class(document_class)
 
     body_start, body_end = _find_document_body_bounds(tex_text)

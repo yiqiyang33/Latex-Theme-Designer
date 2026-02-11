@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+"""Compile orchestration helpers extracted from theme_designer_core."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+
+def resolve_compile_context(
+    compile_target: str,
+    *,
+    root_dir: Path,
+    is_subpath: Callable[[Path, Path], bool],
+    compile_context_factory: Callable[..., Any],
+) -> Any:
+    """Resolve and validate the selected compile target."""
+
+    if not compile_target:
+        raise ValueError("No compile target selected.")
+
+    target_abs = (root_dir / compile_target).resolve()
+    if not target_abs.exists():
+        raise ValueError(f"Compile target does not exist: {compile_target}")
+    if not target_abs.is_file():
+        raise ValueError(f"Compile target is not a file: {compile_target}")
+    if not is_subpath(target_abs, root_dir.resolve()):
+        raise ValueError(f"Compile target is outside workspace: {compile_target}")
+
+    compile_cwd = target_abs.parent
+    docfile = target_abs.name
+    docstem = target_abs.stem
+    default_pdf_abs = compile_cwd / f"{docstem}.pdf"
+    default_pdf_rel = default_pdf_abs.relative_to(root_dir).as_posix()
+    return compile_context_factory(
+        target_rel=compile_target,
+        target_abs=target_abs,
+        compile_cwd=compile_cwd,
+        docfile=docfile,
+        docstem=docstem,
+        default_pdf_abs=default_pdf_abs,
+        default_pdf_rel=default_pdf_rel,
+    )
+
+
+def append_step_log(
+    logs: List[str],
+    label: str,
+    cwd: Path,
+    command: List[str],
+    output: str,
+    code: int,
+) -> None:
+    logs.append(f"== {label} ==")
+    logs.append(f"[cwd] {cwd}")
+    logs.append("$ " + " ".join(command))
+    if output.strip():
+        lines = output.splitlines()
+        logs.extend(lines[-140:])
+    else:
+        logs.append("(no output)")
+    logs.append(f"[exit code: {code}]")
+    logs.append("")
+
+
+def finalize_logs(logs: List[str]) -> str:
+    joined = "\n".join(logs)
+    return "\n".join(joined.splitlines()[-260:]) if joined else "(no compiler output)"
+
+
+def replace_recipe_tokens(value: str, ctx: Any, outdir: str) -> str:
+    """Replace recipe placeholders with concrete values for one compile run."""
+
+    token_map = {
+        "%DOCFILE%": ctx.docfile,
+        "%DOC%": ctx.docstem,
+        "%DOCFILEEXT%": ".tex",
+        "%OUTDIR%": outdir,
+    }
+    resolved = value
+    for token, replacement in token_map.items():
+        resolved = resolved.replace(token, replacement)
+    unresolved_tokens = re.findall(r"%[A-Z0-9_]+%", resolved)
+    for token in unresolved_tokens:
+        fallback = "."
+        if "DOC" in token:
+            fallback = ctx.docfile
+        resolved = resolved.replace(token, fallback)
+    return resolved
+
+
+def extract_recipe_outdir(args: List[str]) -> Optional[str]:
+    for idx, arg in enumerate(args):
+        if arg.startswith("-outdir="):
+            return arg.split("=", 1)[1].strip() or None
+        if arg.startswith("-output-directory="):
+            return arg.split("=", 1)[1].strip() or None
+        if arg in {"-outdir", "-output-directory"} and idx + 1 < len(args):
+            value = args[idx + 1].strip()
+            if value:
+                return value
+    return None
+
+
+def resolve_pdf_path_for_outdir(
+    ctx: Any,
+    outdir: str,
+    *,
+    root_dir: Path,
+    is_subpath: Callable[[Path, Path], bool],
+) -> str:
+    cleaned = (outdir or "").strip()
+    if not cleaned or cleaned == ".":
+        return ctx.default_pdf_rel
+
+    outdir_path = Path(cleaned)
+    if outdir_path.is_absolute():
+        resolved_dir = outdir_path.resolve()
+    else:
+        resolved_dir = (ctx.compile_cwd / outdir_path).resolve()
+
+    if not is_subpath(resolved_dir, root_dir.resolve()):
+        return ctx.default_pdf_rel
+    return (resolved_dir / f"{ctx.docstem}.pdf").relative_to(root_dir).as_posix()
+
+
+def recipe_entry_by_id(
+    recipe_id: str,
+    recipes: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    for recipe in recipes:
+        if str(recipe.get("id", "")) == recipe_id:
+            return recipe
+    return None
+
+
+def recipe_outdir_for_context(
+    ctx: Any,
+    recipe_id: str,
+    catalog: Dict[str, Any],
+) -> str:
+    """Resolve final %OUTDIR% value for one target+recipe pair."""
+
+    recipes = catalog.get("recipes", [])
+    recipe = recipe_entry_by_id(recipe_id, recipes)
+    if recipe is None:
+        return "."
+
+    tools = catalog.get("tools", {})
+    outdir = "."
+    for tool_name in recipe.get("tools", []):
+        tool = tools.get(tool_name)
+        if not isinstance(tool, dict):
+            continue
+        raw_args = tool.get("args", [])
+        args = [replace_recipe_tokens(str(arg), ctx, outdir) for arg in raw_args]
+        detected = extract_recipe_outdir(args)
+        if detected:
+            outdir = detected
+    return outdir
+
+
+def expected_output_pdf_for_selection(
+    compile_target: str,
+    compile_recipe: str,
+    use_internal_fallback: bool,
+    *,
+    resolve_compile_context_fn: Callable[[str], Any],
+    compile_output_pdf_relpath_fn: Callable[[str], str],
+    load_vscode_recipe_catalog_fn: Callable[[], Dict[str, Any]],
+    recipe_outdir_for_context_fn: Callable[[Any, str, Dict[str, Any]], str],
+    resolve_pdf_path_for_outdir_fn: Callable[[Any, str], str],
+    recipe_catalog: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Predict output PDF path for the selected compile configuration."""
+
+    if not compile_target:
+        return "main.pdf"
+
+    try:
+        ctx = resolve_compile_context_fn(compile_target)
+    except ValueError:
+        return compile_output_pdf_relpath_fn(compile_target)
+
+    if use_internal_fallback:
+        return ctx.default_pdf_rel
+
+    catalog = recipe_catalog if recipe_catalog is not None else load_vscode_recipe_catalog_fn()
+    outdir = recipe_outdir_for_context_fn(ctx, compile_recipe, catalog)
+    return resolve_pdf_path_for_outdir_fn(ctx, outdir)
+
+
+def resolve_recipe_command(
+    raw_command: str,
+    *,
+    resolve_binary_fn: Callable[[str], Optional[str]],
+) -> str:
+    command = raw_command.strip()
+    if not command:
+        return ""
+    if "/" in command or "\\" in command:
+        return command
+    resolved = resolve_binary_fn(command)
+    return resolved or command
+
+
+def compile_tex_target_internal(
+    ctx: Any,
+    *,
+    resolve_binary_fn: Callable[[str], Optional[str]],
+    run_command_fn: Callable[[List[str], Path], Tuple[bool, int, str]],
+    append_step_log_fn: Callable[[List[str], str, Path, List[str], str, int], None],
+    finalize_logs_fn: Callable[[List[str]], str],
+    finalize_compile_output_fn: Callable[[Any, List[str], str], Tuple[bool, str, str]],
+) -> Tuple[bool, str, str]:
+    """Compile using the built-in pipeline (latexmk or xelatex/pdflatex fallback)."""
+
+    logs: List[str] = []
+
+    latexmk_bin = resolve_binary_fn("latexmk")
+    if latexmk_bin:
+        cmd = [
+            latexmk_bin,
+            "-g",
+            "-xelatex",
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            ctx.docfile,
+        ]
+        ok, code, out = run_command_fn(cmd, cwd=ctx.compile_cwd)
+        append_step_log_fn(logs, "latexmk", ctx.compile_cwd, cmd, out, code)
+        if not ok:
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+        return finalize_compile_output_fn(ctx, logs, ctx.default_pdf_rel)
+
+    logs.append("latexmk not found; using fallback compile pipeline.")
+    logs.append("")
+
+    tex_engine = resolve_binary_fn("xelatex") or resolve_binary_fn("pdflatex")
+    if not tex_engine:
+        logs.append(
+            "No TeX engine found. Install TeX tools, or ensure commands are available in PATH."
+        )
+        return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+    first_pass_cmd = [
+        tex_engine,
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        ctx.docfile,
+    ]
+    ok, code, out = run_command_fn(first_pass_cmd, cwd=ctx.compile_cwd)
+    append_step_log_fn(logs, "tex pass 1", ctx.compile_cwd, first_pass_cmd, out, code)
+    if not ok:
+        return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+    biber_bin = resolve_binary_fn("biber")
+    has_bcf = (ctx.compile_cwd / f"{ctx.docstem}.bcf").exists()
+    rerun_count = 1
+    if has_bcf and biber_bin:
+        biber_cmd = [biber_bin, ctx.docstem]
+        bok, bcode, bout = run_command_fn(biber_cmd, cwd=ctx.compile_cwd)
+        append_step_log_fn(logs, "biber", ctx.compile_cwd, biber_cmd, bout, bcode)
+        if not bok:
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+        rerun_count = 2
+    elif has_bcf and not biber_bin:
+        logs.append(
+            "biber not found; bibliography may be stale if your document has citations."
+        )
+        logs.append("")
+
+    for idx in range(rerun_count):
+        pass_cmd = [
+            tex_engine,
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            ctx.docfile,
+        ]
+        ok, code, out = run_command_fn(pass_cmd, cwd=ctx.compile_cwd)
+        append_step_log_fn(logs, f"tex pass {idx + 2}", ctx.compile_cwd, pass_cmd, out, code)
+        if not ok:
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+    return finalize_compile_output_fn(ctx, logs, ctx.default_pdf_rel)
+
+
+def compile_tex_target_recipe(
+    ctx: Any,
+    recipe_id: str,
+    *,
+    load_vscode_recipe_catalog_fn: Callable[[], Dict[str, Any]],
+    recipe_entry_by_id_fn: Callable[[str, List[Dict[str, Any]]], Optional[Dict[str, Any]]],
+    resolve_recipe_command_fn: Callable[[str], str],
+    replace_recipe_tokens_fn: Callable[[str, Any, str], str],
+    extract_recipe_outdir_fn: Callable[[List[str]], Optional[str]],
+    run_command_fn: Callable[[List[str], Path], Tuple[bool, int, str]],
+    append_step_log_fn: Callable[[List[str], str, Path, List[str], str, int], None],
+    finalize_logs_fn: Callable[[List[str]], str],
+    resolve_binary_fn: Callable[[str], Optional[str]],
+    resolve_pdf_path_for_outdir_fn: Callable[[Any, str], str],
+    finalize_compile_output_fn: Callable[[Any, List[str], str], Tuple[bool, str, str]],
+) -> Tuple[bool, str, str]:
+    """Compile by executing one VSCode recipe tool-by-tool."""
+
+    logs: List[str] = []
+    catalog = load_vscode_recipe_catalog_fn()
+    recipes = catalog.get("recipes", [])
+    tools = catalog.get("tools", {})
+
+    recipe = recipe_entry_by_id_fn(recipe_id, recipes)
+    if recipe is None:
+        logs.append(f"Unknown compile recipe: {recipe_id}")
+        logs.append("Tip: choose an available recipe or enable internal fallback pipeline.")
+        return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+    logs.append(f"[recipe] {recipe.get('name', recipe_id)}")
+    logs.append("")
+
+    outdir = "."
+    for step_idx, tool_name in enumerate(recipe.get("tools", []), start=1):
+        tool = tools.get(tool_name)
+        if not isinstance(tool, dict):
+            logs.append(f"Missing tool definition: '{tool_name}'")
+            logs.append(
+                "Tip: check .vscode/settings.json or enable internal fallback pipeline."
+            )
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+        raw_command = str(tool.get("command", "")).strip()
+        if not raw_command:
+            logs.append(f"Tool '{tool_name}' has empty command.")
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+        command = resolve_recipe_command_fn(replace_recipe_tokens_fn(raw_command, ctx, outdir))
+        if not command:
+            logs.append(f"Tool '{tool_name}' resolved to empty command.")
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+        if Path(command).name == command and not resolve_binary_fn(command):
+            logs.append(f"Missing command for tool '{tool_name}': {command}")
+            logs.append(
+                "Tip: install the command or enable internal fallback pipeline."
+            )
+            return False, finalize_logs_fn(logs), ctx.default_pdf_rel
+
+        raw_args = tool.get("args", [])
+        args = [replace_recipe_tokens_fn(str(arg), ctx, outdir) for arg in raw_args]
+        detected_outdir = extract_recipe_outdir_fn(args)
+        if detected_outdir:
+            outdir = detected_outdir
+
+        cmd = [command] + args
+        ok, code, out = run_command_fn(cmd, cwd=ctx.compile_cwd)
+        append_step_log_fn(
+            logs,
+            f"recipe step {step_idx}: {tool_name}",
+            ctx.compile_cwd,
+            cmd,
+            out,
+            code,
+        )
+        if not ok:
+            return False, finalize_logs_fn(logs), resolve_pdf_path_for_outdir_fn(ctx, outdir)
+
+    expected_pdf_rel = resolve_pdf_path_for_outdir_fn(ctx, outdir)
+    return finalize_compile_output_fn(ctx, logs, expected_pdf_rel)
+
+
+def compile_tex_target(
+    compile_target: str,
+    compile_recipe: str,
+    use_internal_fallback: bool,
+    *,
+    resolve_compile_context_fn: Callable[[str], Any],
+    compile_tex_target_internal_fn: Callable[[Any], Tuple[bool, str, str]],
+    compile_tex_target_recipe_fn: Callable[[Any, str], Tuple[bool, str, str]],
+) -> Tuple[bool, str, str]:
+    """Unified compile entrypoint for internal mode and recipe mode."""
+
+    try:
+        ctx = resolve_compile_context_fn(compile_target)
+    except ValueError as err:
+        return False, str(err), ""
+
+    if use_internal_fallback:
+        return compile_tex_target_internal_fn(ctx)
+    return compile_tex_target_recipe_fn(ctx, compile_recipe)
+

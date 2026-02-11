@@ -541,6 +541,43 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertFalse(planned_unit.exists())
         self.assertEqual(len(backup_candidates), 0)
 
+    def test_split_compile_target_rejects_subfiles_unit_source(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_core_subfile_guard"
+        source_rel = "tools/tests/_tmp_split_core_subfile_guard/Sections/01-overview.tex"
+        root_abs = root / "tools/tests/_tmp_split_core_subfile_guard/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        root_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-overview}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        source_text = (
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Overview}\n"
+            "Alpha.\n"
+            "\\end{document}\n"
+        )
+        source_abs.write_text(source_text, encoding="utf-8")
+        nested_sections_abs = source_abs.parent / "Sections"
+
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                r"Split source 'tools/tests/_tmp_split_core_subfile_guard/Sections/01-overview\.tex' is a subfile unit",
+            ):
+                td._split_compile_target(source_rel)
+            self.assertEqual(source_abs.read_text(encoding="utf-8"), source_text)
+            self.assertFalse(nested_sections_abs.exists())
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
     def test_server_split_response_refreshes_targets_and_exposes_split_payload(self) -> None:
         root = td.ROOT_DIR
         base_dir = root / "tools/tests/_tmp_split_server"

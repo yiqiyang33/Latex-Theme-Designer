@@ -29,8 +29,14 @@ SPLIT_ALLOWED_MODES = {SPLIT_STANDALONE_MODE_SUBFILES}
 
 try:
     from tools import tex_splitter as _tex_splitter
+    from tools import core_compile as _core_compile
+    from tools import core_paths as _core_paths
+    from tools import core_split as _core_split
 except ModuleNotFoundError:
     import tex_splitter as _tex_splitter
+    import core_compile as _core_compile
+    import core_paths as _core_paths
+    import core_split as _core_split
 
 IGNORE_TEX_FILENAMES = {
     "theme.colors.tex",
@@ -801,32 +807,11 @@ def _recipe_name_by_id(recipe_id: str, recipes: List[Dict[str, Any]]) -> str:
 
 
 def _resolve_compile_context(compile_target: str) -> CompileContext:
-    """Resolve and validate the selected compile target."""
-
-    if not compile_target:
-        raise ValueError("No compile target selected.")
-
-    target_abs = (ROOT_DIR / compile_target).resolve()
-    if not target_abs.exists():
-        raise ValueError(f"Compile target does not exist: {compile_target}")
-    if not target_abs.is_file():
-        raise ValueError(f"Compile target is not a file: {compile_target}")
-    if not _is_subpath(target_abs, ROOT_DIR.resolve()):
-        raise ValueError(f"Compile target is outside workspace: {compile_target}")
-
-    compile_cwd = target_abs.parent
-    docfile = target_abs.name
-    docstem = target_abs.stem
-    default_pdf_abs = compile_cwd / f"{docstem}.pdf"
-    default_pdf_rel = default_pdf_abs.relative_to(ROOT_DIR).as_posix()
-    return CompileContext(
-        target_rel=compile_target,
-        target_abs=target_abs,
-        compile_cwd=compile_cwd,
-        docfile=docfile,
-        docstem=docstem,
-        default_pdf_abs=default_pdf_abs,
-        default_pdf_rel=default_pdf_rel,
+    return _core_compile.resolve_compile_context(
+        compile_target,
+        root_dir=ROOT_DIR,
+        is_subpath=_is_subpath,
+        compile_context_factory=CompileContext,
     )
 
 
@@ -838,81 +823,35 @@ def _append_step_log(
     output: str,
     code: int,
 ) -> None:
-    logs.append(f"== {label} ==")
-    logs.append(f"[cwd] {cwd}")
-    logs.append("$ " + " ".join(command))
-    if output.strip():
-        lines = output.splitlines()
-        logs.extend(lines[-140:])
-    else:
-        logs.append("(no output)")
-    logs.append(f"[exit code: {code}]")
-    logs.append("")
+    _core_compile.append_step_log(logs, label, cwd, command, output, code)
 
 
 def _finalize_logs(logs: List[str]) -> str:
-    joined = "\n".join(logs)
-    return "\n".join(joined.splitlines()[-260:]) if joined else "(no compiler output)"
+    return _core_compile.finalize_logs(logs)
 
 
 def _replace_recipe_tokens(value: str, ctx: CompileContext, outdir: str) -> str:
-    """Replace recipe placeholders with concrete values for one compile run."""
-
-    token_map = {
-        "%DOCFILE%": ctx.docfile,
-        "%DOC%": ctx.docstem,
-        "%DOCFILEEXT%": ".tex",
-        "%OUTDIR%": outdir,
-    }
-    resolved = value
-    for token, replacement in token_map.items():
-        resolved = resolved.replace(token, replacement)
-    unresolved_tokens = re.findall(r"%[A-Z0-9_]+%", resolved)
-    for token in unresolved_tokens:
-        fallback = "."
-        if "DOC" in token:
-            fallback = ctx.docfile
-        resolved = resolved.replace(token, fallback)
-    return resolved
+    return _core_compile.replace_recipe_tokens(value, ctx, outdir)
 
 
 def _extract_recipe_outdir(args: List[str]) -> Optional[str]:
-    for idx, arg in enumerate(args):
-        if arg.startswith("-outdir="):
-            return arg.split("=", 1)[1].strip() or None
-        if arg.startswith("-output-directory="):
-            return arg.split("=", 1)[1].strip() or None
-        if arg in {"-outdir", "-output-directory"} and idx + 1 < len(args):
-            value = args[idx + 1].strip()
-            if value:
-                return value
-    return None
+    return _core_compile.extract_recipe_outdir(args)
 
 
 def _resolve_pdf_path_for_outdir(ctx: CompileContext, outdir: str) -> str:
-    cleaned = (outdir or "").strip()
-    if not cleaned or cleaned == ".":
-        return ctx.default_pdf_rel
-
-    outdir_path = Path(cleaned)
-    if outdir_path.is_absolute():
-        resolved_dir = outdir_path.resolve()
-    else:
-        resolved_dir = (ctx.compile_cwd / outdir_path).resolve()
-
-    if not _is_subpath(resolved_dir, ROOT_DIR.resolve()):
-        return ctx.default_pdf_rel
-    return (resolved_dir / f"{ctx.docstem}.pdf").relative_to(ROOT_DIR).as_posix()
+    return _core_compile.resolve_pdf_path_for_outdir(
+        ctx,
+        outdir,
+        root_dir=ROOT_DIR,
+        is_subpath=_is_subpath,
+    )
 
 
 def _recipe_entry_by_id(
     recipe_id: str,
     recipes: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    for recipe in recipes:
-        if str(recipe.get("id", "")) == recipe_id:
-            return recipe
-    return None
+    return _core_compile.recipe_entry_by_id(recipe_id, recipes)
 
 
 def _recipe_outdir_for_context(
@@ -920,25 +859,7 @@ def _recipe_outdir_for_context(
     recipe_id: str,
     catalog: Dict[str, Any],
 ) -> str:
-    """Resolve final %OUTDIR% value for one target+recipe pair."""
-
-    recipes = catalog.get("recipes", [])
-    recipe = _recipe_entry_by_id(recipe_id, recipes)
-    if recipe is None:
-        return "."
-
-    tools = catalog.get("tools", {})
-    outdir = "."
-    for tool_name in recipe.get("tools", []):
-        tool = tools.get(tool_name)
-        if not isinstance(tool, dict):
-            continue
-        raw_args = tool.get("args", [])
-        args = [_replace_recipe_tokens(str(arg), ctx, outdir) for arg in raw_args]
-        detected = _extract_recipe_outdir(args)
-        if detected:
-            outdir = detected
-    return outdir
+    return _core_compile.recipe_outdir_for_context(ctx, recipe_id, catalog)
 
 
 def _expected_output_pdf_for_selection(
@@ -947,32 +868,24 @@ def _expected_output_pdf_for_selection(
     use_internal_fallback: bool,
     recipe_catalog: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Predict output PDF path for the selected compile configuration."""
-
-    if not compile_target:
-        return "main.pdf"
-
-    try:
-        ctx = _resolve_compile_context(compile_target)
-    except ValueError:
-        return _compile_output_pdf_relpath(compile_target)
-
-    if use_internal_fallback:
-        return ctx.default_pdf_rel
-
-    catalog = recipe_catalog if recipe_catalog is not None else _load_vscode_recipe_catalog()
-    outdir = _recipe_outdir_for_context(ctx, compile_recipe, catalog)
-    return _resolve_pdf_path_for_outdir(ctx, outdir)
+    return _core_compile.expected_output_pdf_for_selection(
+        compile_target,
+        compile_recipe,
+        use_internal_fallback,
+        resolve_compile_context_fn=_resolve_compile_context,
+        compile_output_pdf_relpath_fn=_compile_output_pdf_relpath,
+        load_vscode_recipe_catalog_fn=_load_vscode_recipe_catalog,
+        recipe_outdir_for_context_fn=_recipe_outdir_for_context,
+        resolve_pdf_path_for_outdir_fn=_resolve_pdf_path_for_outdir,
+        recipe_catalog=recipe_catalog,
+    )
 
 
 def _resolve_recipe_command(raw_command: str) -> str:
-    command = raw_command.strip()
-    if not command:
-        return ""
-    if "/" in command or "\\" in command:
-        return command
-    resolved = _resolve_binary(command)
-    return resolved or command
+    return _core_compile.resolve_recipe_command(
+        raw_command,
+        resolve_binary_fn=_resolve_binary,
+    )
 
 
 # -------------------- Generic Value Parsing --------------------
@@ -1275,11 +1188,7 @@ def _apply_heading_toc_preset(state: Dict[str, Any], preset_id: Any) -> None:
 
 
 def _is_subpath(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-        return True
-    except ValueError:
-        return False
+    return _core_paths.is_subpath(path, parent)
 
 
 def _normalize_class_config_value(field_id: str, raw_value: Any) -> str:
@@ -1678,57 +1587,53 @@ def _resolve_workspace_pdf(rel_path: str) -> Tuple[Path, str]:
     raw = (rel_path or "").strip()
     if not raw:
         raw = "main.pdf"
-
-    path_obj = Path(raw)
-    if path_obj.is_absolute():
+    if Path(raw).is_absolute():
         raise ValueError("PDF path must be workspace-relative.")
-    if path_obj.suffix.lower() != ".pdf":
-        raise ValueError("PDF path must end with .pdf.")
-
-    resolved = (ROOT_DIR / path_obj).resolve()
-    if not _is_subpath(resolved, ROOT_DIR.resolve()):
-        raise ValueError("PDF path is outside workspace.")
-
-    return resolved, resolved.relative_to(ROOT_DIR).as_posix()
+    return _core_paths.resolve_workspace_pdf(
+        raw,
+        root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+    )
 
 
 def _safe_workspace_pdf_relpath(raw_path: Any) -> str:
-    """Best-effort normalize of workspace-relative PDF path."""
-
-    try:
-        _, rel = _resolve_workspace_pdf(str(raw_path))
-        return rel
-    except (TypeError, ValueError):
-        return ""
+    return _core_paths.safe_workspace_pdf_relpath(
+        raw_path,
+        resolve_workspace_pdf_fn=_resolve_workspace_pdf,
+    )
 
 
 def _safe_workspace_relpath(path: Optional[Path]) -> str:
-    if path is None:
-        return ""
-    try:
-        resolved = path.resolve()
-    except OSError:
-        resolved = path
-    if _is_subpath(resolved, ROOT_DIR.resolve()):
-        return resolved.relative_to(ROOT_DIR).as_posix()
-    return resolved.as_posix()
+    return _core_paths.safe_workspace_relpath(
+        path,
+        root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+    )
 
 
 def _normalize_split_mode(raw_mode: Any) -> str:
-    parsed = str(raw_mode or SPLIT_STANDALONE_MODE_SUBFILES).strip().lower()
-    if not parsed:
-        parsed = SPLIT_STANDALONE_MODE_SUBFILES
-    if parsed in SPLIT_ALLOWED_MODES:
-        return parsed
-    options = ", ".join(sorted(SPLIT_ALLOWED_MODES))
-    raise ValueError(f"Unsupported split standalone mode: {raw_mode}. Expected: {options}")
+    return _core_split.normalize_split_mode(
+        raw_mode,
+        default_mode=SPLIT_STANDALONE_MODE_SUBFILES,
+        allowed_modes=SPLIT_ALLOWED_MODES,
+    )
 
 
 def _normalize_split_sections_dir(raw_dir: Any) -> str:
-    parsed = str(raw_dir or "").strip()
-    if not parsed:
-        return SPLIT_DEFAULT_SECTIONS_DIR
-    return parsed
+    return _core_split.normalize_split_sections_dir(
+        raw_dir,
+        default_sections_dir=SPLIT_DEFAULT_SECTIONS_DIR,
+    )
+
+
+def _validate_split_source_target(target_rel: str, target_abs: Path) -> None:
+    _core_split.validate_split_source_target(
+        target_rel,
+        target_abs,
+        extract_documentclass_declaration=_extract_documentclass_declaration,
+        resolve_subfiles_parent_tex=_resolve_subfiles_parent_tex,
+        safe_workspace_relpath=_safe_workspace_relpath,
+    )
 
 
 def _split_compile_target(
@@ -1739,58 +1644,20 @@ def _split_compile_target(
 ) -> Dict[str, Any]:
     """Split one compile target and return UI-facing operation summary."""
 
-    mode = _normalize_split_mode(standalone_mode)
-    section_dir_value = _normalize_split_sections_dir(sections_dir)
-    ctx = _resolve_compile_context(compile_target)
-    result = _tex_splitter.split_tex_file(
-        ctx.target_abs,
-        Path(section_dir_value),
-        standalone_mode=mode,
+    return _core_split.split_compile_target(
+        compile_target,
+        standalone_mode=standalone_mode,
+        sections_dir=sections_dir,
         dry_run=bool(dry_run),
+        default_mode=SPLIT_STANDALONE_MODE_SUBFILES,
+        allowed_modes=SPLIT_ALLOWED_MODES,
+        default_sections_dir=SPLIT_DEFAULT_SECTIONS_DIR,
+        resolve_compile_context=_resolve_compile_context,
+        extract_documentclass_declaration=_extract_documentclass_declaration,
+        resolve_subfiles_parent_tex=_resolve_subfiles_parent_tex,
+        safe_workspace_relpath=_safe_workspace_relpath,
+        splitter=_tex_splitter,
     )
-
-    generated_targets = [
-        _safe_workspace_relpath(unit.path)
-        for unit in result.units
-    ]
-    updated_files: List[str] = []
-    if not result.already_split:
-        updated_files = [
-            _safe_workspace_relpath(result.root_path),
-            *generated_targets,
-        ]
-    warnings: List[str] = []
-    if result.already_split:
-        warnings.append(
-            "Target already appears split with \\subfile entries; no rewrite was applied."
-        )
-    if result.dry_run:
-        warnings.append("Dry-run mode enabled; no files were written.")
-    if result.standalone_wrappers:
-        warnings.append(
-            "Legacy wrapper files were generated. "
-            "Subfiles mode should normally not produce wrappers."
-        )
-
-    return {
-        "standalone_mode": mode,
-        "source_target": _safe_workspace_relpath(result.root_path),
-        "sections_dir": _safe_workspace_relpath(result.sections_dir),
-        "backup_path": _safe_workspace_relpath(result.backup_path),
-        "split_command": result.split_command,
-        "document_class": result.document_class,
-        "subfiles_package_injected": bool(result.subfiles_package_injected),
-        "dry_run": bool(result.dry_run),
-        "already_split": bool(result.already_split),
-        "generated_subfile_targets": generated_targets,
-        "updated_files": updated_files,
-        "warnings": warnings,
-        "standalone_wrappers": [
-            _safe_workspace_relpath(path)
-            for path in result.standalone_wrappers
-        ],
-        "suggested_compile_target": generated_targets[0] if generated_targets else "",
-    }
 
 
 def _iso8601_utc_from_epoch(epoch_seconds: float) -> str:
@@ -2545,143 +2412,32 @@ def _bootstrap_starter_template(
 # -------------------- Compile Pipelines --------------------
 
 def _compile_tex_target_internal(ctx: CompileContext) -> Tuple[bool, str, str]:
-    """Compile using the built-in pipeline (latexmk or xelatex/pdflatex fallback)."""
-
-    logs: List[str] = []
-
-    latexmk_bin = _resolve_binary("latexmk")
-    if latexmk_bin:
-        cmd = [
-            latexmk_bin,
-            "-g",
-            "-xelatex",
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            ctx.docfile,
-        ]
-        ok, code, out = _run_command(cmd, cwd=ctx.compile_cwd)
-        _append_step_log(logs, "latexmk", ctx.compile_cwd, cmd, out, code)
-        if not ok:
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-        return _finalize_compile_output(ctx, logs, ctx.default_pdf_rel)
-
-    logs.append("latexmk not found; using fallback compile pipeline.")
-    logs.append("")
-
-    tex_engine = _resolve_binary("xelatex") or _resolve_binary("pdflatex")
-    if not tex_engine:
-        logs.append(
-            "No TeX engine found. Install TeX tools, or ensure commands are available in PATH."
-        )
-        return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-    first_pass_cmd = [
-        tex_engine,
-        "-interaction=nonstopmode",
-        "-halt-on-error",
-        ctx.docfile,
-    ]
-    ok, code, out = _run_command(first_pass_cmd, cwd=ctx.compile_cwd)
-    _append_step_log(logs, "tex pass 1", ctx.compile_cwd, first_pass_cmd, out, code)
-    if not ok:
-        return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-    biber_bin = _resolve_binary("biber")
-    has_bcf = (ctx.compile_cwd / f"{ctx.docstem}.bcf").exists()
-    rerun_count = 1
-    if has_bcf and biber_bin:
-        biber_cmd = [biber_bin, ctx.docstem]
-        bok, bcode, bout = _run_command(biber_cmd, cwd=ctx.compile_cwd)
-        _append_step_log(logs, "biber", ctx.compile_cwd, biber_cmd, bout, bcode)
-        if not bok:
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-        rerun_count = 2
-    elif has_bcf and not biber_bin:
-        logs.append(
-            "biber not found; bibliography may be stale if your document has citations."
-        )
-        logs.append("")
-
-    for idx in range(rerun_count):
-        pass_cmd = [
-            tex_engine,
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            ctx.docfile,
-        ]
-        ok, code, out = _run_command(pass_cmd, cwd=ctx.compile_cwd)
-        _append_step_log(logs, f"tex pass {idx + 2}", ctx.compile_cwd, pass_cmd, out, code)
-        if not ok:
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-    return _finalize_compile_output(ctx, logs, ctx.default_pdf_rel)
+    return _core_compile.compile_tex_target_internal(
+        ctx,
+        resolve_binary_fn=_resolve_binary,
+        run_command_fn=_run_command,
+        append_step_log_fn=_append_step_log,
+        finalize_logs_fn=_finalize_logs,
+        finalize_compile_output_fn=_finalize_compile_output,
+    )
 
 
 def _compile_tex_target_recipe(ctx: CompileContext, recipe_id: str) -> Tuple[bool, str, str]:
-    """Compile by executing one VSCode recipe tool-by-tool."""
-
-    logs: List[str] = []
-    catalog = _load_vscode_recipe_catalog()
-    recipes = catalog.get("recipes", [])
-    tools = catalog.get("tools", {})
-
-    recipe = _recipe_entry_by_id(recipe_id, recipes)
-    if recipe is None:
-        logs.append(f"Unknown compile recipe: {recipe_id}")
-        logs.append("Tip: choose an available recipe or enable internal fallback pipeline.")
-        return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-    logs.append(f"[recipe] {recipe.get('name', recipe_id)}")
-    logs.append("")
-
-    outdir = "."
-    for step_idx, tool_name in enumerate(recipe.get("tools", []), start=1):
-        tool = tools.get(tool_name)
-        if not isinstance(tool, dict):
-            logs.append(f"Missing tool definition: '{tool_name}'")
-            logs.append(
-                "Tip: check .vscode/settings.json or enable internal fallback pipeline."
-            )
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-        raw_command = str(tool.get("command", "")).strip()
-        if not raw_command:
-            logs.append(f"Tool '{tool_name}' has empty command.")
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-        command = _resolve_recipe_command(_replace_recipe_tokens(raw_command, ctx, outdir))
-        if not command:
-            logs.append(f"Tool '{tool_name}' resolved to empty command.")
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-        if Path(command).name == command and not _resolve_binary(command):
-            logs.append(f"Missing command for tool '{tool_name}': {command}")
-            logs.append(
-                "Tip: install the command or enable internal fallback pipeline."
-            )
-            return False, _finalize_logs(logs), ctx.default_pdf_rel
-
-        raw_args = tool.get("args", [])
-        args = [_replace_recipe_tokens(str(arg), ctx, outdir) for arg in raw_args]
-        detected_outdir = _extract_recipe_outdir(args)
-        if detected_outdir:
-            outdir = detected_outdir
-
-        cmd = [command] + args
-        ok, code, out = _run_command(cmd, cwd=ctx.compile_cwd)
-        _append_step_log(
-            logs,
-            f"recipe step {step_idx}: {tool_name}",
-            ctx.compile_cwd,
-            cmd,
-            out,
-            code,
-        )
-        if not ok:
-            return False, _finalize_logs(logs), _resolve_pdf_path_for_outdir(ctx, outdir)
-
-    expected_pdf_rel = _resolve_pdf_path_for_outdir(ctx, outdir)
-    return _finalize_compile_output(ctx, logs, expected_pdf_rel)
+    return _core_compile.compile_tex_target_recipe(
+        ctx,
+        recipe_id,
+        load_vscode_recipe_catalog_fn=_load_vscode_recipe_catalog,
+        recipe_entry_by_id_fn=_recipe_entry_by_id,
+        resolve_recipe_command_fn=_resolve_recipe_command,
+        replace_recipe_tokens_fn=_replace_recipe_tokens,
+        extract_recipe_outdir_fn=_extract_recipe_outdir,
+        run_command_fn=_run_command,
+        append_step_log_fn=_append_step_log,
+        finalize_logs_fn=_finalize_logs,
+        resolve_binary_fn=_resolve_binary,
+        resolve_pdf_path_for_outdir_fn=_resolve_pdf_path_for_outdir,
+        finalize_compile_output_fn=_finalize_compile_output,
+    )
 
 
 def _compile_tex_target(
@@ -2689,16 +2445,14 @@ def _compile_tex_target(
     compile_recipe: str = "",
     use_internal_fallback: bool = True,
 ) -> Tuple[bool, str, str]:
-    """Unified compile entrypoint for internal mode and recipe mode."""
-
-    try:
-        ctx = _resolve_compile_context(compile_target)
-    except ValueError as err:
-        return False, str(err), ""
-
-    if use_internal_fallback:
-        return _compile_tex_target_internal(ctx)
-    return _compile_tex_target_recipe(ctx, compile_recipe)
+    return _core_compile.compile_tex_target(
+        compile_target,
+        compile_recipe,
+        use_internal_fallback,
+        resolve_compile_context_fn=_resolve_compile_context,
+        compile_tex_target_internal_fn=_compile_tex_target_internal,
+        compile_tex_target_recipe_fn=_compile_tex_target_recipe,
+    )
 
 
 # -------------------- API Response Builder --------------------

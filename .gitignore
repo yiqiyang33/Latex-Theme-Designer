@@ -3,6 +3,10 @@
 .vscode/
 *.swp
 *~
+__pycache__/
+.pytest_cache
+*.py[cod]
+*.pyd
 
 # LaTeX build artifacts
 *.aux
