@@ -21,6 +21,7 @@ try:
         STATE_LOCK,
         _apply_block_preset,
         _apply_heading_toc_preset,
+        _bootstrap_starter_template,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -40,6 +41,7 @@ except ModuleNotFoundError:
         STATE_LOCK,
         _apply_block_preset,
         _apply_heading_toc_preset,
+        _bootstrap_starter_template,
         _apply_compile_preferences,
         _apply_compile_result,
         _build_response_state,
@@ -330,6 +332,40 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(err)})
             except Exception as err:  # pragma: no cover
                 self._send_json(500, {"error": f"Failed to set compile config: {err}"})
+            return
+
+        if self.path == "/api/template-bootstrap":
+            try:
+                payload = self._parse_json_body()
+                template_id = payload.get("template_id")
+                output_target = payload.get("output_target", "main.tex")
+                overwrite_raw = payload.get("overwrite", False)
+                if isinstance(overwrite_raw, bool):
+                    overwrite = overwrite_raw
+                elif isinstance(overwrite_raw, str):
+                    lowered = overwrite_raw.strip().lower()
+                    if lowered in {"true", "1", "yes", "on"}:
+                        overwrite = True
+                    elif lowered in {"false", "0", "no", "off", ""}:
+                        overwrite = False
+                    else:
+                        raise ValueError("overwrite must be a boolean.")
+                else:
+                    raise ValueError("overwrite must be a boolean.")
+
+                with STATE_LOCK:
+                    response, generated_target, overwritten = _bootstrap_starter_template(
+                        template_id,
+                        output_target=output_target,
+                        overwrite=overwrite,
+                    )
+                response["generated_target"] = generated_target
+                response["overwrote_existing"] = overwritten
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_json(400, {"error": str(err)})
+            except Exception as err:  # pragma: no cover
+                self._send_json(500, {"error": f"Failed to bootstrap starter template: {err}"})
             return
 
         if self.path == "/api/block-preset":

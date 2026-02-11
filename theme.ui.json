@@ -63,12 +63,12 @@
     "theorem-title-bg": "#F8DEB9",
     "theorem-title-fg": "#664110"
   },
-  "compile_last_compile_at": "2026-02-11T00:14:26Z",
+  "compile_last_compile_at": "2026-02-11T01:13:03Z",
   "compile_last_success": true,
-  "compile_output_pdf": "main.pdf",
-  "compile_output_pdf_expected": "main.pdf",
+  "compile_output_pdf": "book.pdf",
+  "compile_output_pdf_expected": "book.pdf",
   "compile_recipe": "vscode-1-xelatex",
-  "compile_target": "main.tex",
+  "compile_target": "book.tex",
   "compile_use_internal_fallback": true,
   "heading_toc_preset": "sunset",
   "toggles": {

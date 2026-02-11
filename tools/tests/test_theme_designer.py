@@ -468,6 +468,97 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("body_font_size", schema)
         self.assertEqual(schema["body_font_size"]["id"], "body_font_size_pt")
 
+    def test_response_schema_contains_starter_templates(self) -> None:
+        payload = td._build_response_state()
+        schema = payload.get("schema", {})
+        starter_templates = schema.get("starter_templates", [])
+        starter_ids = {entry.get("id") for entry in starter_templates}
+        self.assertTrue({"book-minimal", "article-minimal"}.issubset(starter_ids))
+        self.assertEqual(schema.get("starter_default_template"), "book-minimal")
+
+    def test_generate_starter_template_supports_custom_output_name(self) -> None:
+        root = td.ROOT_DIR
+        target_base = "tools/tests/_tmp_bootstrap_custom_name"
+        target_rel = f"{target_base}.tex"
+        target_abs = root / target_rel
+        if target_abs.exists():
+            target_abs.unlink()
+
+        try:
+            generated_target, overwritten = td._generate_starter_template_file(
+                "book-minimal",
+                target_base,
+                overwrite=False,
+            )
+            self.assertEqual(generated_target, target_rel)
+            self.assertFalse(overwritten)
+            self.assertTrue(target_abs.exists())
+            text = target_abs.read_text(encoding="utf-8")
+        finally:
+            if target_abs.exists():
+                target_abs.unlink()
+
+        self.assertIn("\\documentclass[oneside]{book}", text)
+        self.assertIn("\\usepackage{xparse}", text)
+        self.assertIn("\\usepackage{amsmath, amsthm, amssymb, amsfonts}", text)
+
+    def test_generate_starter_template_requires_explicit_overwrite(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_bootstrap_overwrite.tex"
+        target_abs = root / target_rel
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text("existing\n", encoding="utf-8")
+
+        try:
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                td._generate_starter_template_file(
+                    "article-minimal",
+                    target_rel,
+                    overwrite=False,
+                )
+
+            generated_target, overwritten = td._generate_starter_template_file(
+                "article-minimal",
+                target_rel,
+                overwrite=True,
+            )
+            self.assertEqual(generated_target, target_rel)
+            self.assertTrue(overwritten)
+            text = target_abs.read_text(encoding="utf-8")
+        finally:
+            if target_abs.exists():
+                target_abs.unlink()
+
+        self.assertIn("\\documentclass[oneside]{article}", text)
+
+    def test_bootstrap_starter_template_refreshes_and_selects_generated_target(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_bootstrap_refresh.tex"
+        target_abs = root / target_rel
+        if target_abs.exists():
+            target_abs.unlink()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_config = Path(tmp_dir) / "theme.ui.json"
+            original_config = td.CONFIG_PATH
+            try:
+                td.CONFIG_PATH = tmp_config
+                response, generated_target, overwritten = td._bootstrap_starter_template(
+                    "article-minimal",
+                    target_rel,
+                    overwrite=False,
+                )
+            finally:
+                td.CONFIG_PATH = original_config
+                if target_abs.exists():
+                    target_abs.unlink()
+
+        self.assertEqual(generated_target, target_rel)
+        self.assertFalse(overwritten)
+        state = response.get("state", {})
+        self.assertIn(target_rel, state.get("compile_targets", []))
+        self.assertEqual(state.get("compile_target"), target_rel)
+
     def test_compile_smoke_minimal_book_target(self) -> None:
         root = td.ROOT_DIR
         target_rel = "tools/tests/_tmp_smoke_book.tex"

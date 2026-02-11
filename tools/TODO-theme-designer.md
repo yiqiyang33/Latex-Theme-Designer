@@ -5,27 +5,28 @@ Completed phases have been removed from this file.
 
 ---
 
-## Phase 6: Template Bootstrap (One-Click `main.tex` Creation)
+## Phase 6: Template Bootstrap (One-Click Starter `.tex` Creation)
 
 Goal: initialize usable project files when no compile target exists.
 
 ### Tasks
 
-- [ ] Add minimal starter templates under `templates/`.
+- [x] Add minimal starter templates under `templates/`.
   - At least `book-minimal.tex` and `article-minimal.tex`.
-- [ ] Add backend/template registry for listing available starter templates.
-- [ ] Add UI action to generate `main.tex` from selected starter template.
+- [x] Add backend/template registry for listing available starter templates.
+- [x] Add UI action to generate a starter `.tex` target from selected template.
   - Default selection: `book-minimal`.
-- [ ] Add safety behavior when target file already exists.
+- [x] Add custom output filename support for generated target.
+- [x] Add safety behavior when target file already exists.
   - Require explicit overwrite confirmation.
-- [ ] After generation, refresh compile target list and select generated file.
-- [ ] Add tests for generation success, overwrite protection, and refresh behavior.
+- [x] After generation, refresh compile target list and select generated file.
+- [x] Add tests for generation success, overwrite protection, and refresh behavior.
 
 ### Acceptance Criteria
 
-- [ ] If no `main.tex` exists, user can create one from UI in one action.
-- [ ] Generated file compiles with existing default pipeline.
-- [ ] Existing files are not overwritten silently.
+- [x] If no `main.tex` exists, user can create one from UI in one action.
+- [x] Generated file compiles with existing default pipeline.
+- [x] Existing files are not overwritten silently.
 
 ---
 
@@ -58,5 +59,5 @@ Goal: support different template families with their own Theme Designer schema a
 
 ## Suggested Execution Order
 
-- [ ] P6 template bootstrap generation
+- [x] P6 template bootstrap generation
 - [ ] P7 multi-template architecture

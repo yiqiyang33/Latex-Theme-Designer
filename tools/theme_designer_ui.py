@@ -127,6 +127,41 @@ HTML_PAGE = """<!doctype html>
       color: #334155;
     }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .bootstrap-row {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .bootstrap-row label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .bootstrap-row select,
+    .bootstrap-row input[type="text"] {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 9px;
+      font-size: 13px;
+      background: #fff;
+      color: #1f2937;
+      width: 100%;
+    }
+    .bootstrap-overwrite {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px 80px;
+      font-size: 13px;
+      color: #334155;
+    }
+    .bootstrap-overwrite input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+    }
     .compile-target {
       display: grid;
       grid-template-columns: 72px 1fr auto;
@@ -314,6 +349,24 @@ HTML_PAGE = """<!doctype html>
       <div id="groupBox"></div>
     </section>
     <section class="panel">
+      <h2>Starter Template</h2>
+      <div class="bootstrap-row">
+        <label for="starterTemplateSelect">Template</label>
+        <select id="starterTemplateSelect"></select>
+      </div>
+      <div class="bootstrap-row">
+        <label for="starterOutputTarget">Output</label>
+        <input id="starterOutputTarget" type="text" placeholder="main.tex">
+      </div>
+      <div class="bootstrap-overwrite">
+        <input id="starterOverwrite" type="checkbox">
+        <label for="starterOverwrite">Allow overwrite if target exists</label>
+      </div>
+      <p id="starterTemplateDesc" class="hint"></p>
+      <div class="actions">
+        <button id="generateTemplateBtn">Generate Starter File</button>
+      </div>
+
       <div class="compile-target">
         <label for="targetSelect">Compile</label>
         <select id="targetSelect"></select>
@@ -426,6 +479,30 @@ HTML_PAGE = """<!doctype html>
       return options.length > 0 ? options[0].id : "default";
     }
 
+    function starterTemplateOptions() {
+      return model.schema.starter_templates || [];
+    }
+
+    function starterTemplateInfoById(id) {
+      for (const item of starterTemplateOptions()) {
+        if (item.id === id) return item;
+      }
+      return null;
+    }
+
+    function starterTemplateValue() {
+      const options = starterTemplateOptions();
+      const preferred = model.schema.starter_default_template || "book-minimal";
+      for (const item of options) {
+        if (item.id === preferred) return preferred;
+      }
+      return options.length > 0 ? options[0].id : "";
+    }
+
+    function starterOutputDefault() {
+      return model.schema.starter_default_output_target || "main.tex";
+    }
+
     function bodyFontSizeSchema() {
       return model.schema.body_font_size || {
         id: "body_font_size_pt",
@@ -481,6 +558,40 @@ HTML_PAGE = """<!doctype html>
     }
 
     // ---------- Renderers ----------
+    function renderStarterTemplateControls() {
+      const select = document.getElementById("starterTemplateSelect");
+      const desc = document.getElementById("starterTemplateDesc");
+      const output = document.getElementById("starterOutputTarget");
+      const options = starterTemplateOptions();
+      const selected = starterTemplateValue();
+
+      select.innerHTML = "";
+      for (const item of options) {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = item.label || item.id;
+        select.appendChild(opt);
+      }
+
+      if (selected) {
+        select.value = selected;
+      }
+      const info = starterTemplateInfoById(select.value || selected);
+      desc.textContent = info && info.description
+        ? info.description
+        : "Generate a starter .tex file from templates/.";
+
+      if (!output.value) {
+        output.value = starterOutputDefault();
+      }
+      select.onchange = () => {
+        const selectedInfo = starterTemplateInfoById(select.value);
+        desc.textContent = selectedInfo && selectedInfo.description
+          ? selectedInfo.description
+          : "Generate a starter .tex file from templates/.";
+      };
+    }
+
     function renderCompileTargetSelector() {
       const select = document.getElementById("targetSelect");
       select.innerHTML = "";
@@ -843,11 +954,58 @@ HTML_PAGE = """<!doctype html>
     }
 
     // ---------- UI Actions ----------
+    async function generateStarterTemplate() {
+      const templateId = document.getElementById("starterTemplateSelect").value;
+      const outputTarget = document.getElementById("starterOutputTarget").value.trim();
+      const overwrite = document.getElementById("starterOverwrite").checked;
+      if (!templateId) {
+        setStatus("No starter template available.", "err");
+        return;
+      }
+      if (!outputTarget) {
+        setStatus("Output filename cannot be empty.", "err");
+        return;
+      }
+      if (overwrite) {
+        const ok = confirm(`Overwrite target file if it already exists?\n\n${outputTarget}`);
+        if (!ok) return;
+      }
+      setStatus(`Generating ${outputTarget} from ${templateId}...`);
+      try {
+        model = await postJson("/api/template-bootstrap", {
+          template_id: templateId,
+          output_target: outputTarget,
+          overwrite: overwrite
+        });
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        document.getElementById("starterOutputTarget").value = model.generated_target || outputTarget;
+        document.getElementById("starterOverwrite").checked = false;
+        refreshPdf();
+        if (model.overwrote_existing) {
+          setStatus(`Template generated and overwritten: ${model.generated_target}`, "ok");
+        } else {
+          setStatus(`Template generated: ${model.generated_target}`, "ok");
+        }
+      } catch (err) {
+        setStatus(err.message, "err");
+      }
+    }
+
     async function saveOverrides() {
       setStatus("Saving overrides...");
       try {
         const result = await postJson("/api/save", model.state);
         model = result;
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -868,6 +1026,7 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying block preset: ${selected}...`);
       try {
         model = await postJson("/api/block-preset", { block_preset: selected });
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -889,6 +1048,7 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying heading/TOC preset: ${selected}...`);
       try {
         model = await postJson("/api/heading-toc-preset", { heading_toc_preset: selected });
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -910,6 +1070,7 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying compile target: ${selected}`);
       try {
         model = await postJson("/api/target", { compile_target: selected });
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -933,6 +1094,7 @@ HTML_PAGE = """<!doctype html>
           compile_recipe: selectedRecipe,
           compile_use_internal_fallback: useInternal
         });
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -951,6 +1113,7 @@ HTML_PAGE = """<!doctype html>
       setStatus("Resetting...");
       try {
         model = await postJson("/api/reset", {});
+        renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
@@ -1035,6 +1198,7 @@ HTML_PAGE = """<!doctype html>
     async function init() {
       setStatus("Loading...");
       model = await getState();
+      renderStarterTemplateControls();
       renderBlockPresetSelector();
       renderHeadingTocPresetSelector();
       renderBodyFontSizeControl();
@@ -1048,6 +1212,7 @@ HTML_PAGE = """<!doctype html>
       refreshPdf();
       startHeartbeat();
 
+      document.getElementById("generateTemplateBtn").addEventListener("click", generateStarterTemplate);
       document.getElementById("applyTargetBtn").addEventListener("click", applyCompileTarget);
       document.getElementById("applyRecipeBtn").addEventListener("click", applyCompileRecipe);
       document.getElementById("applyBlockPresetBtn").addEventListener("click", applyBlockPreset);

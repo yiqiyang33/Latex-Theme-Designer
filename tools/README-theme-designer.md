@@ -42,6 +42,11 @@ python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
 - Preview current target PDF in the same UI page.
+- Starter template bootstrap from UI:
+  - choose built-in starter template (`book-minimal` / `article-minimal`)
+  - set custom output filename (not limited to `main.tex`)
+  - existing files require explicit overwrite confirmation
+  - generated file is auto-selected as compile target
 - Multi-instance-safe startup:
   - `--port 0` binds an OS-assigned free port
   - `--port auto` retries on the next free port if default/start port is occupied
@@ -53,9 +58,6 @@ python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-
 
 ## Planned Improvements
 
-- Starter template bootstrap
-  - one-click `main.tex` generation from built-in templates
-  - safe overwrite rules
 - Multi-template profile architecture
   - profile-driven schema and defaults
   - compatibility strategy for existing projects
