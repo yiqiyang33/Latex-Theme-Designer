@@ -1336,6 +1336,42 @@ def _effective_theme_class(theme_class_mode: str, detected_document_class: str) 
     return "article"
 
 
+def _is_incompatible_forced_theme_class(
+    theme_class_mode: str,
+    detected_document_class: str,
+) -> bool:
+    mode = _normalize_class_config_value("theme_class_mode", theme_class_mode)
+    if mode not in {"book", "article"}:
+        return False
+    detected_has_chapter = _is_chapter_capable_class(detected_document_class)
+    if mode == "book":
+        return not detected_has_chapter
+    return detected_has_chapter
+
+
+def _coerce_class_mode_on_target_switch(
+    state: Dict[str, Any],
+    previous_target: str,
+    next_target: str,
+) -> bool:
+    prev = str(previous_target or "").strip()
+    nxt = str(next_target or "").strip()
+    if not prev or not nxt or prev == nxt:
+        return False
+
+    class_config = _normalize_class_config_map(state.get("class_config", {}))
+    mode = class_config.get("theme_class_mode", "auto")
+    detected = _detect_target_documentclass(nxt)
+    if not detected:
+        return False
+
+    if _is_incompatible_forced_theme_class(mode, detected):
+        class_config["theme_class_mode"] = "auto"
+        state["class_config"] = class_config
+        return True
+    return False
+
+
 def _has_documentclass(tex_path: Path) -> bool:
     return bool(_extract_documentclass_name(tex_path))
 
@@ -1772,6 +1808,8 @@ def _load_state() -> Dict[str, Any]:
     persisted_output_pdf_expected = ""
     persisted_last_compile_at = ""
     persisted_last_success: Optional[bool] = None
+    persisted_compile_target_raw = ""
+    compile_target_recovered = False
 
     if CONFIG_PATH.exists():
         try:
@@ -1811,6 +1849,7 @@ def _load_state() -> Dict[str, Any]:
                 persisted.get("class_config", state["class_config"])
             )
             if "compile_target" in persisted:
+                persisted_compile_target_raw = str(persisted.get("compile_target", ""))
                 try:
                     state["compile_target"] = _normalize_compile_target(
                         persisted.get("compile_target"),
@@ -1818,6 +1857,7 @@ def _load_state() -> Dict[str, Any]:
                     )
                 except ValueError:
                     state["compile_target"] = _default_compile_target(compile_targets)
+                    compile_target_recovered = True
             if "compile_recipe" in persisted:
                 try:
                     state["compile_recipe"] = _normalize_compile_recipe(
@@ -1875,6 +1915,12 @@ def _load_state() -> Dict[str, Any]:
         state["class_config"][field_id] = _normalize_class_config_value(
             field_id,
             state["class_config"].get(field_id, CLASS_CONFIG_DEFAULTS[field_id]),
+        )
+    if compile_target_recovered:
+        _coerce_class_mode_on_target_switch(
+            state,
+            persisted_compile_target_raw,
+            str(state.get("compile_target", "")),
         )
 
     _refresh_derived_state(state, recipe_catalog=recipe_catalog)
@@ -2272,8 +2318,11 @@ def _apply_compile_preferences(
     """Mutate in-memory state for compile preferences and derived fields."""
 
     changed = False
+    previous_target = str(state.get("compile_target", ""))
+    target_changed = False
     if compile_target is not None:
         state["compile_target"] = compile_target
+        target_changed = str(compile_target) != previous_target
         changed = True
     if compile_recipe is not None:
         state["compile_recipe"] = compile_recipe
@@ -2283,6 +2332,12 @@ def _apply_compile_preferences(
         changed = True
 
     if changed:
+        if target_changed:
+            _coerce_class_mode_on_target_switch(
+                state,
+                previous_target,
+                str(state.get("compile_target", "")),
+            )
         _refresh_derived_state(state)
         state["compile_output_pdf"] = str(state.get("compile_output_pdf_expected", "main.pdf"))
 

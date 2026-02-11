@@ -243,6 +243,119 @@ class ThemeDesignerTests(unittest.TestCase):
             if article_abs.exists():
                 article_abs.unlink()
 
+    def test_refresh_derived_state_supports_forced_class_mode_mismatch(self) -> None:
+        root = td.ROOT_DIR
+        book_rel = "tools/tests/_tmp_class_forced_book.tex"
+        article_rel = "tools/tests/_tmp_class_forced_article.tex"
+        book_abs = root / book_rel
+        article_abs = root / article_rel
+        book_abs.parent.mkdir(parents=True, exist_ok=True)
+        book_abs.write_text(
+            "\\documentclass{book}\\begin{document}\\chapter{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+        article_abs.write_text(
+            "\\documentclass{article}\\begin{document}\\section{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            state = {
+                "compile_target": book_rel,
+                "compile_recipe": "",
+                "compile_use_internal_fallback": True,
+                "compile_recipes": [],
+                "class_config": {"theme_class_mode": "article"},
+            }
+            td._refresh_derived_state(state)
+            self.assertTrue(state["detected_document_class_has_chapter"])
+            self.assertEqual(state["effective_theme_class"], "article")
+
+            state["compile_target"] = article_rel
+            state["class_config"]["theme_class_mode"] = "book"
+            td._refresh_derived_state(state)
+            self.assertFalse(state["detected_document_class_has_chapter"])
+            self.assertEqual(state["effective_theme_class"], "book")
+        finally:
+            if book_abs.exists():
+                book_abs.unlink()
+            if article_abs.exists():
+                article_abs.unlink()
+
+    def test_apply_compile_preferences_resets_forced_class_on_target_switch(self) -> None:
+        root = td.ROOT_DIR
+        book_rel = "tools/tests/_tmp_class_switch_book.tex"
+        article_rel = "tools/tests/_tmp_class_switch_article.tex"
+        book_abs = root / book_rel
+        article_abs = root / article_rel
+        book_abs.parent.mkdir(parents=True, exist_ok=True)
+        book_abs.write_text(
+            "\\documentclass{book}\\begin{document}\\chapter{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+        article_abs.write_text(
+            "\\documentclass{article}\\begin{document}\\section{A}\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            state = {
+                "compile_target": article_rel,
+                "compile_recipe": "",
+                "compile_use_internal_fallback": True,
+                "compile_recipes": [],
+                "class_config": {"theme_class_mode": "article"},
+            }
+            td._refresh_derived_state(state)
+            td._apply_compile_preferences(state, compile_target=book_rel)
+            self.assertEqual(state["class_config"]["theme_class_mode"], "auto")
+            self.assertEqual(state["effective_theme_class"], "book")
+
+            state["class_config"]["theme_class_mode"] = "book"
+            td._apply_compile_preferences(state, compile_target=article_rel)
+            self.assertEqual(state["class_config"]["theme_class_mode"], "auto")
+            self.assertEqual(state["effective_theme_class"], "article")
+        finally:
+            if book_abs.exists():
+                book_abs.unlink()
+            if article_abs.exists():
+                article_abs.unlink()
+
+    def test_load_state_resets_forced_class_when_persisted_target_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            cfg_path.write_text(
+                json.dumps(
+                    {
+                        "compile_target": "tools/tests/_tmp_missing_target.tex",
+                        "class_config": {"theme_class_mode": "book"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+                state = td._load_state()
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertEqual(state["compile_target"], "main.tex")
+        self.assertEqual(state["class_config"]["theme_class_mode"], "auto")
+        self.assertEqual(state["effective_theme_class"], "article")
+
     def test_write_override_files_includes_class_config_macros(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

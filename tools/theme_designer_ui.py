@@ -287,6 +287,15 @@ HTML_PAGE = """<!doctype html>
       color: #324338;
     }
 
+    .row .token-note {
+      margin-left: 5px;
+      color: #9d2b23;
+      font-size: 11px;
+      font-weight: 760;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
     .row input[type="color"] {
       width: 38px;
       height: 30px;
@@ -310,6 +319,13 @@ HTML_PAGE = """<!doctype html>
     .row input.hex.invalid {
       border-color: #dc2626;
       background: #fff1f2;
+    }
+
+    .row input[disabled] {
+      cursor: not-allowed;
+      opacity: 0.55;
+      background: #eef3ec;
+      border-color: #c7d1c6;
     }
 
     select,
@@ -927,6 +943,26 @@ HTML_PAGE = """<!doctype html>
       return model.state.detected_document_class_has_chapter ? "book" : "article";
     }
 
+    function chapterStyleStatus() {
+      if (!toggleOn("enable_heading_theme")) {
+        return { active: false, message: "inactive (heading theme disabled)" };
+      }
+      if (!model.state.detected_document_class_has_chapter) {
+        return { active: false, message: "inactive (target class has no chapter)" };
+      }
+      const mode = classConfigValue("theme_heading_chapter_mode");
+      if (mode === "off") {
+        return { active: false, message: "inactive (chapter heading rule off)" };
+      }
+      if (mode === "on") {
+        return { active: true, message: "active (chapter heading rule on)" };
+      }
+      if (effectiveThemeClass() === "book") {
+        return { active: true, message: "active (auto + effective class book)" };
+      }
+      return { active: false, message: "inactive (auto + effective class article)" };
+    }
+
     function currentPdfPath() {
       return model.state.compile_output_pdf
         || model.state.compile_output_pdf_expected
@@ -953,7 +989,8 @@ HTML_PAGE = """<!doctype html>
     function renderTargetInfo() {
       const info = document.getElementById("targetInfo");
       const outputInfo = document.getElementById("outputInfo");
-      info.textContent = `target: ${model.state.compile_target || "(none)"} | mode: ${currentCompileLabel()} | class: ${model.state.detected_document_class || "(unknown)"} -> ${effectiveThemeClass()}`;
+      const chapterStatus = chapterStyleStatus();
+      info.textContent = `target: ${model.state.compile_target || "(none)"} | mode: ${currentCompileLabel()} | class: ${model.state.detected_document_class || "(unknown)"} -> ${effectiveThemeClass()} | chapter-style: ${chapterStatus.message}`;
       outputInfo.textContent = `current pdf: ${currentPdfPath()} | expected: ${currentExpectedPdfPath()} | last compile: ${formatCompileTimestamp(model.state.compile_last_compile_at)}`;
     }
 
@@ -1080,6 +1117,7 @@ HTML_PAGE = """<!doctype html>
           if (!model.state.class_config) model.state.class_config = {};
           model.state.class_config[field.id] = select.value;
           renderTargetInfo();
+          renderColorGroups();
           renderPreview();
         };
         row.appendChild(label);
@@ -1185,6 +1223,8 @@ HTML_PAGE = """<!doctype html>
         `;
         row.querySelector("input").addEventListener("change", (ev) => {
           model.state.toggles[item.id] = ev.target.checked;
+          renderTargetInfo();
+          renderColorGroups();
           renderPreview();
         });
         box.appendChild(row);
@@ -1215,6 +1255,7 @@ HTML_PAGE = """<!doctype html>
     function renderColorGroups() {
       const box = document.getElementById("groupBox");
       box.innerHTML = "";
+      const chapterStatus = chapterStyleStatus();
       for (const group of model.schema.groups) {
         const details = document.createElement("details");
         details.className = "group";
@@ -1226,15 +1267,29 @@ HTML_PAGE = """<!doctype html>
         const rows = document.createElement("div");
         rows.className = "rows";
         for (const item of group.items) {
+          const chapterTokenInactive = item.id === "theme-chapter" && !chapterStatus.active;
+          const tokenLabel = chapterTokenInactive
+            ? `${item.label} <span class="token-note">inactive</span>`
+            : item.label;
           const row = document.createElement("div");
           row.className = "row";
           row.innerHTML = `
-            <label>${item.label}</label>
+            <label>${tokenLabel}</label>
             <input type="color" value="${color(item.id)}">
             <input class="hex" value="${color(item.id)}">
           `;
+          if (chapterTokenInactive) {
+            row.querySelector("label").title =
+              `Chapter color currently has no visible effect: ${chapterStatus.message}.`;
+          }
           const inputColor = row.children[1];
           const inputHex = row.children[2];
+          if (chapterTokenInactive) {
+            inputColor.disabled = true;
+            inputHex.disabled = true;
+            inputColor.title = `Disabled: ${chapterStatus.message}.`;
+            inputHex.title = `Disabled: ${chapterStatus.message}.`;
+          }
           bindColorInputHandlers(inputColor, inputHex, item.id);
           rows.appendChild(row);
         }

@@ -77,6 +77,29 @@ These files are loaded automatically by:
 
 ## Troubleshooting
 
+- Chapter color appears unchanged:
+  - `theme-chapter` only affects rendered chapter headings.
+  - If target class is `article` (or override forces `ThemeClassMode=article`), chapter heading styling is inactive.
+  - When you switch compile target across incompatible classes, Theme Designer auto-resets forced `theme_class_mode` to `auto` to avoid stale mismatch.
+  - Repro checklist for chapter color changes:
+    - compile target is a chapter-capable file (for example `templates/book-minimal.tex`)
+    - `theme_class_mode` is `auto` or `book`
+    - `theme_heading_chapter_mode` is `auto` or `on`
+    - `enable_heading_theme` is `true`
+  - Quick sanity check (prints detected/effective class and chapter capability):
+
+```bash
+python3 - <<'PY'
+from tools import theme_designer_core as td
+state = td._load_state()
+print("compile_target =", state.get("compile_target"))
+print("detected_document_class =", state.get("detected_document_class"))
+print("detected_has_chapter =", state.get("detected_document_class_has_chapter"))
+print("theme_class_mode =", state.get("class_config", {}).get("theme_class_mode"))
+print("effective_theme_class =", state.get("effective_theme_class"))
+PY
+```
+
 - Missing TeX binaries:
   - If commands like `xelatex`/`latexmk` are not found, install TeX binaries or enable internal fallback mode.
 - Missing recipe/tool:
