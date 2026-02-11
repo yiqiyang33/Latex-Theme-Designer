@@ -8,402 +8,802 @@ HTML_PAGE = """<!doctype html>
   <title>Theme Designer</title>
   <style>
     :root {
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --line: #d8dee9;
-      --text: #1f2937;
-      --muted: #6b7280;
-      --accent: #0b5bd3;
+      --bg-0: #f2f4ed;
+      --bg-1: #f7f8f1;
+      --bg-2: #f8f2e9;
+      --panel: rgba(255, 255, 250, 0.86);
+      --panel-solid: #fffef9;
+      --line: #d7ddcf;
+      --line-strong: #b5c5b0;
+      --text: #1f2d25;
+      --muted: #5f6f65;
+      --accent: #0f766e;
+      --accent-strong: #0b5f58;
+      --accent-soft: #d7efe8;
+      --success: #157347;
+      --danger: #b42318;
+      --surface: #fafcf7;
+      --shadow: 0 18px 38px rgba(33, 54, 43, 0.12);
+      --shadow-soft: 0 10px 22px rgba(33, 54, 43, 0.08);
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-      color: var(--text);
-      background: linear-gradient(150deg, #eef3ff 0%, #f7fafc 40%, #f3f6fb 100%);
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(360px, 430px) 1fr;
-      gap: 14px;
-      padding: 14px;
       min-height: 100vh;
+      font-family: "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 8%, rgba(130, 180, 130, 0.2), transparent 38%),
+        radial-gradient(circle at 88% 10%, rgba(223, 173, 88, 0.2), transparent 32%),
+        linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 48%, var(--bg-2) 100%);
+      overflow-x: hidden;
     }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      width: 360px;
+      height: 360px;
+      border-radius: 999px;
+      filter: blur(26px);
+      opacity: 0.32;
+      z-index: 0;
+      pointer-events: none;
+      animation: drift 16s ease-in-out infinite;
+    }
+
+    body::before {
+      top: -120px;
+      left: -80px;
+      background: rgba(95, 172, 141, 0.6);
+    }
+
+    body::after {
+      right: -120px;
+      bottom: -150px;
+      background: rgba(233, 167, 93, 0.52);
+      animation-delay: 3s;
+    }
+
+    .layout {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(390px, 460px) 1fr;
+      gap: 18px;
+      padding: 18px;
+      min-height: 100vh;
+      align-items: start;
+    }
+
     .panel {
       background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: 0 10px 28px rgba(17, 24, 39, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.78);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(9px);
+      animation: rise-in 420ms ease both;
     }
-    h1 { margin: 0 0 8px; font-size: 24px; }
-    h2 { margin: 14px 0 8px; font-size: 18px; }
-    p.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; line-height: 1.4; }
-    .toggles { display: grid; gap: 8px; margin-bottom: 12px; }
+
+    .left-panel {
+      position: sticky;
+      top: 12px;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+      padding-right: 12px;
+    }
+
+    .right-panel {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .hero {
+      margin: 0 0 14px;
+      padding: 12px 13px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.76);
+      background:
+        linear-gradient(136deg, rgba(255, 255, 255, 0.94), rgba(236, 248, 242, 0.88));
+      box-shadow: var(--shadow-soft);
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 11px;
+      font-weight: 800;
+      color: #4d685c;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 30px;
+      line-height: 1.06;
+      letter-spacing: -0.02em;
+      font-weight: 850;
+    }
+
+    h2 {
+      margin: 0 0 9px;
+      font-size: 17px;
+      line-height: 1.2;
+      letter-spacing: 0.01em;
+      color: #22362b;
+    }
+
+    p.hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    p.hint.lead {
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid #d5e8d7;
+      background: #f6fbf5;
+      color: #325949;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .section-block {
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--panel-solid);
+      box-shadow: var(--shadow-soft);
+      animation: fade-up 460ms ease both;
+    }
+
+    .section-block:last-child {
+      margin-bottom: 0;
+    }
+
+    .left-panel .section-block:nth-of-type(2) { animation-delay: 30ms; }
+    .left-panel .section-block:nth-of-type(3) { animation-delay: 60ms; }
+    .left-panel .section-block:nth-of-type(4) { animation-delay: 90ms; }
+    .left-panel .section-block:nth-of-type(5) { animation-delay: 120ms; }
+    .right-panel .section-block:nth-of-type(1) { animation-delay: 30ms; }
+    .right-panel .section-block:nth-of-type(2) { animation-delay: 70ms; }
+    .right-panel .section-block:nth-of-type(3) { animation-delay: 110ms; }
+    .right-panel .section-block:nth-of-type(4) { animation-delay: 150ms; }
+    .right-panel .section-block:nth-of-type(5) { animation-delay: 190ms; }
+
+    .toggles {
+      display: grid;
+      gap: 8px;
+    }
+
     .toggle {
       display: grid;
       grid-template-columns: 18px 1fr;
-      gap: 8px;
+      gap: 9px;
       align-items: start;
-      padding: 8px;
+      padding: 9px;
       border: 1px solid var(--line);
-      border-radius: 9px;
-      background: #fafcff;
+      border-radius: 11px;
+      background: linear-gradient(125deg, #fcfefb, #f3f8f2);
+      transition: transform 180ms ease, box-shadow 180ms ease;
     }
-    .toggle label { font-weight: 600; display: block; font-size: 14px; }
-    .toggle span { font-size: 12px; color: var(--muted); }
+
+    .toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(35, 56, 44, 0.08);
+    }
+
+    .toggle label {
+      font-weight: 700;
+      display: block;
+      font-size: 13px;
+      margin-top: -1px;
+    }
+
+    .toggle span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
     details.group {
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 12px;
       margin-bottom: 8px;
       overflow: hidden;
-      background: #fcfdff;
+      background: #fcfdfa;
     }
+
+    details.group:last-child {
+      margin-bottom: 0;
+    }
+
     details.group > summary {
       cursor: pointer;
       list-style: none;
       padding: 9px 11px;
-      font-weight: 700;
-      font-size: 14px;
-      border-bottom: 1px solid #edf1f8;
+      font-weight: 750;
+      font-size: 13px;
+      background: #f3f8f1;
+      border-bottom: 1px solid transparent;
+      position: relative;
     }
-    details.group[open] > summary { background: #f5f8ff; }
-    .rows { display: grid; gap: 8px; padding: 10px; }
+
+    details.group > summary::after {
+      content: "▾";
+      position: absolute;
+      right: 11px;
+      top: 8px;
+      color: #4f6c61;
+      transition: transform 180ms ease;
+    }
+
+    details.group[open] > summary::after {
+      transform: rotate(-180deg);
+    }
+
+    details.group[open] > summary {
+      border-bottom-color: #e6eee3;
+      background: #edf5ea;
+    }
+
+    .rows {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+    }
+
     .row {
       display: grid;
-      grid-template-columns: minmax(110px, 1fr) auto auto;
+      grid-template-columns: minmax(122px, 1fr) auto auto;
       gap: 8px;
       align-items: center;
     }
-    .row label { font-size: 13px; color: #263041; }
+
+    .row label {
+      font-size: 12px;
+      font-weight: 620;
+      color: #324338;
+    }
+
     .row input[type="color"] {
-      width: 36px;
-      height: 28px;
+      width: 38px;
+      height: 30px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 1px;
       background: #fff;
+      cursor: pointer;
     }
+
     .row input.hex {
-      width: 104px;
+      width: 108px;
       border: 1px solid var(--line);
-      border-radius: 7px;
+      border-radius: 8px;
       padding: 5px 7px;
       font-size: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      color: #26382f;
     }
+
     .row input.hex.invalid {
       border-color: #dc2626;
       background: #fff1f2;
     }
+
+    select,
+    input[type="text"] {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 7px 9px;
+      font-size: 13px;
+      background: #ffffff;
+      color: #213329;
+      width: 100%;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    select:focus,
+    input[type="text"]:focus,
+    input[type="range"]:focus-visible,
+    button:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
+    }
+
     .preset-controls {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 8px;
       align-items: center;
-      margin: 0 0 8px;
+      margin: 0 0 7px;
     }
-    .preset-controls select {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 6px 9px;
-      font-size: 13px;
-      background: #fff;
-      color: #1f2937;
-    }
+
     .font-size-control {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 8px;
       align-items: center;
-      margin: 0 0 8px;
+      margin: 0 0 7px;
     }
+
     .font-size-control input[type="range"] {
       width: 100%;
+      accent-color: var(--accent);
     }
+
     .font-size-control code {
       min-width: 64px;
       text-align: right;
-      color: #334155;
+      color: #30443a;
+      font-weight: 700;
+      border: 1px solid #d8e2d4;
+      border-radius: 8px;
+      padding: 4px 7px;
+      background: #f6faf4;
     }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .actions button {
+      flex: 1 1 145px;
+    }
+
     .bootstrap-row {
       display: grid;
-      grid-template-columns: 72px 1fr;
+      grid-template-columns: 76px 1fr;
       gap: 8px;
       align-items: center;
       margin-bottom: 8px;
     }
-    .bootstrap-row label {
-      font-size: 13px;
-      font-weight: 700;
-      color: #334155;
-    }
-    .bootstrap-row select,
-    .bootstrap-row input[type="text"] {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 6px 9px;
-      font-size: 13px;
-      background: #fff;
-      color: #1f2937;
-      width: 100%;
-    }
-    .bootstrap-overwrite {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 8px 80px;
-      font-size: 13px;
-      color: #334155;
-    }
-    .bootstrap-overwrite input[type="checkbox"] {
-      width: 15px;
-      height: 15px;
-      margin: 0;
-    }
-    .compile-target {
-      display: grid;
-      grid-template-columns: 72px 1fr auto;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 10px;
-    }
+
+    .bootstrap-row label,
     .compile-target label {
-      font-size: 13px;
-      font-weight: 700;
-      color: #334155;
-    }
-    .compile-target select {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 6px 9px;
-      font-size: 13px;
-      background: #fff;
-      color: #1f2937;
-    }
-    .compile-target code {
       font-size: 12px;
-      color: #475569;
+      font-weight: 760;
+      color: #32473b;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
     }
+
+    .bootstrap-overwrite,
     .compile-options {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 0 0 10px 80px;
-      font-size: 13px;
-      color: #334155;
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: #364c40;
       flex-wrap: wrap;
     }
-    .compile-options input[type="checkbox"] {
-      width: 15px;
-      height: 15px;
+
+    .bootstrap-overwrite input[type="checkbox"],
+    .compile-options input[type="checkbox"],
+    .toggle input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
       margin: 0;
+      accent-color: var(--accent);
     }
+
+    .compile-target {
+      display: grid;
+      grid-template-columns: 76px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
     .compile-help {
-      margin: 0 0 8px;
-      color: #64748b;
+      margin: 0 0 9px;
+      color: #587067;
       font-size: 12px;
+      line-height: 1.45;
     }
+
+    #targetInfo,
+    #outputInfo {
+      display: block;
+      border: 1px solid #d6dfd2;
+      border-radius: 10px;
+      background: #f4f8f2;
+      padding: 6px 8px;
+      color: #33493f;
+      font-size: 11px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
     .compile-meta {
-      margin: 4px 0 0;
-      font-size: 12px;
-      color: #475569;
+      margin-top: 6px;
+      margin-bottom: 6px;
     }
+
     .class-config {
       display: grid;
       gap: 8px;
-      margin: 0 0 10px 80px;
+      margin: 0 0 10px;
     }
+
     .class-config-row {
       display: grid;
-      grid-template-columns: minmax(140px, 1fr) minmax(180px, 240px);
+      grid-template-columns: minmax(130px, 1fr) minmax(170px, 260px);
       gap: 8px;
       align-items: center;
     }
+
     .class-config-row label {
       font-size: 12px;
-      color: #334155;
-      font-weight: 600;
+      color: #33483d;
+      font-weight: 670;
     }
-    .class-config-row select {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 5px 8px;
-      font-size: 12px;
-      color: #1f2937;
-      background: #fff;
-    }
+
     button {
-      border: 1px solid #bfd3ff;
-      background: #eef4ff;
-      color: #0b3f96;
-      padding: 7px 11px;
-      border-radius: 8px;
-      font-weight: 700;
+      border: 1px solid #bcd5cc;
+      background: linear-gradient(145deg, #f4f9f6, #e8f3ee);
+      color: #215345;
+      padding: 8px 11px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 790;
+      letter-spacing: 0.01em;
       cursor: pointer;
+      transition: transform 170ms ease, box-shadow 170ms ease, filter 170ms ease;
+      box-shadow: 0 4px 10px rgba(46, 79, 63, 0.08);
     }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 7px 16px rgba(46, 79, 63, 0.13);
+    }
+
+    button:active {
+      transform: translateY(0);
+      filter: saturate(95%);
+    }
+
     button.primary {
-      border-color: #0b5bd3;
-      background: #0b5bd3;
-      color: white;
+      border-color: #0f766e;
+      background: linear-gradient(145deg, #0f766e, #0b5f58);
+      color: #ffffff;
     }
+
     button.warn {
-      border-color: #f3c4c4;
-      background: #fff2f2;
-      color: #9f1239;
+      border-color: #e6c5bf;
+      background: linear-gradient(145deg, #fff4f1, #feeceb);
+      color: #9d2b23;
     }
+
     .status {
       min-height: 24px;
       margin-top: 8px;
       font-size: 13px;
+      font-weight: 640;
       color: var(--muted);
+      padding: 7px 8px;
+      border: 1px dashed #ccd8c9;
+      border-radius: 10px;
+      background: #f7fbf5;
     }
-    .status.ok { color: #047857; }
-    .status.err { color: #b91c1c; }
+
+    .status.ok {
+      color: var(--success);
+      border-color: #b4dec5;
+      background: #f0faf4;
+    }
+
+    .status.err {
+      color: var(--danger);
+      border-color: #efc3be;
+      background: #fff5f4;
+    }
+
     .preview-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 10px;
     }
+
     .sample {
-      border-radius: 10px;
+      border-radius: 11px;
       overflow: hidden;
-      border: 1px solid #e5eaf4;
-      background: white;
+      border: 1px solid #dce5da;
+      background: #ffffff;
+      animation: rise-in 420ms ease both;
     }
+
     .sample .title {
-      font-weight: 700;
+      font-weight: 760;
       padding: 7px 10px;
-      font-size: 13px;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
     }
+
     .sample .body {
       padding: 10px;
       font-size: 13px;
-      line-height: 1.45;
+      line-height: 1.46;
       border-left-width: 5px;
       border-left-style: solid;
     }
+
     .doc-preview {
-      margin: 10px 0 14px;
-      padding: 10px;
-      border: 1px dashed #d6dce8;
-      border-radius: 10px;
-      background: #fbfdff;
+      margin: 0 0 10px;
+      padding: 12px;
+      border: 1px dashed #cfdacb;
+      border-radius: 11px;
+      background: #f9fdf7;
     }
-    .doc-preview .chapter { font-weight: 800; font-size: 19px; }
-    .doc-preview .section { font-weight: 700; font-size: 16px; margin-top: 5px; }
-    .doc-preview .subsection { font-weight: 700; font-size: 14px; margin-top: 3px; }
+
+    .doc-preview .chapter { font-weight: 820; font-size: 20px; }
+    .doc-preview .section { font-weight: 710; font-size: 16px; margin-top: 6px; }
+    .doc-preview .subsection { font-weight: 680; font-size: 14px; margin-top: 4px; }
+
     .pdf-wrap {
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      border: 1px solid #d5ded1;
+      border-radius: 11px;
       overflow: hidden;
-      margin-top: 8px;
-      background: #fff;
+      margin-top: 6px;
+      background: #ffffff;
+      box-shadow: inset 0 1px 0 #ffffff;
     }
-    iframe#pdfFrame { width: 100%; height: 430px; border: 0; }
+
+    iframe#pdfFrame {
+      width: 100%;
+      height: 460px;
+      border: 0;
+      background: #ffffff;
+    }
+
     pre.log {
-      margin: 8px 0 0;
+      margin: 0;
       padding: 10px;
-      border: 1px solid var(--line);
+      border: 1px solid #cad7cd;
       border-radius: 10px;
-      max-height: 260px;
+      max-height: 280px;
       overflow: auto;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: #202f28;
+      color: #d9e7dc;
       font-size: 12px;
-      line-height: 1.35;
+      line-height: 1.38;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
-    @media (max-width: 1080px) {
-      .layout { grid-template-columns: 1fr; }
-      iframe#pdfFrame { height: 360px; }
+
+    @keyframes rise-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.995);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(12px, -10px); }
+    }
+
+    @media (max-width: 1280px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .left-panel {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+      }
+
+      .right-panel {
+        padding-bottom: 20px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .layout {
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .panel {
+        padding: 12px;
+      }
+
+      .hero {
+        padding: 11px;
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      .compile-target,
+      .bootstrap-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .compile-target button,
+      .bootstrap-row button,
+      .actions button {
+        width: 100%;
+      }
+
+      .class-config-row {
+        grid-template-columns: 1fr;
+      }
+
+      .row {
+        grid-template-columns: 1fr auto auto;
+      }
+
+      iframe#pdfFrame {
+        height: 340px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="layout">
-    <section class="panel">
-      <h1>Theme Designer</h1>
-      <p class="hint">Adjust colors, feature switches, and class-aware options. Save writes <code>theme.colors.tex</code> and <code>theme.overrides.tex</code>.</p>
-      <h2>Feature Toggles</h2>
-      <div id="toggleBox" class="toggles"></div>
-      <h2>Block Presets</h2>
-      <div class="preset-controls">
-        <select id="blockPresetSelect"></select>
-        <button id="applyBlockPresetBtn">Apply Preset</button>
+    <section class="panel left-panel">
+      <header class="hero">
+        <p class="eyebrow">LaTeX Theme Forge</p>
+        <h1>Theme Designer</h1>
+        <p class="hint lead">Tune color tokens, feature switches, and class-aware behavior. Saving writes <code>theme.colors.tex</code> and <code>theme.overrides.tex</code>.</p>
+        <div class="badge-row">
+          <span class="badge">Local workflow</span>
+          <span class="badge">Instant preview</span>
+          <span class="badge">Class-aware theme</span>
+        </div>
+      </header>
+
+      <div class="section-block">
+        <h2>Feature Toggles</h2>
+        <div id="toggleBox" class="toggles"></div>
       </div>
-      <p id="blockPresetDesc" class="hint"></p>
-      <h2>Heading/TOC Presets</h2>
-      <div class="preset-controls">
-        <select id="headingTocPresetSelect"></select>
-        <button id="applyHeadingTocPresetBtn">Apply Preset</button>
+
+      <div class="section-block">
+        <h2>Block Presets</h2>
+        <div class="preset-controls">
+          <select id="blockPresetSelect"></select>
+          <button id="applyBlockPresetBtn">Apply Preset</button>
+        </div>
+        <p id="blockPresetDesc" class="hint"></p>
       </div>
-      <p id="headingTocPresetDesc" class="hint"></p>
-      <h2>Body Font Size</h2>
-      <div class="font-size-control">
-        <input id="bodyFontSizeSlider" type="range">
-        <code id="bodyFontSizeValue"></code>
+
+      <div class="section-block">
+        <h2>Heading/TOC Presets</h2>
+        <div class="preset-controls">
+          <select id="headingTocPresetSelect"></select>
+          <button id="applyHeadingTocPresetBtn">Apply Preset</button>
+        </div>
+        <p id="headingTocPresetDesc" class="hint"></p>
       </div>
-      <p id="bodyFontSizeHelp" class="hint"></p>
-      <h2>Colors</h2>
-      <div id="groupBox"></div>
+
+      <div class="section-block">
+        <h2>Body Font Size</h2>
+        <div class="font-size-control">
+          <input id="bodyFontSizeSlider" type="range">
+          <code id="bodyFontSizeValue"></code>
+        </div>
+        <p id="bodyFontSizeHelp" class="hint"></p>
+      </div>
+
+      <div class="section-block">
+        <h2>Color Tokens</h2>
+        <div id="groupBox"></div>
+      </div>
     </section>
-    <section class="panel">
-      <h2>Starter Template</h2>
-      <div class="bootstrap-row">
-        <label for="starterTemplateSelect">Template</label>
-        <select id="starterTemplateSelect"></select>
-      </div>
-      <div class="bootstrap-row">
-        <label for="starterOutputTarget">Output</label>
-        <input id="starterOutputTarget" type="text" placeholder="main.tex">
-      </div>
-      <div class="bootstrap-overwrite">
-        <input id="starterOverwrite" type="checkbox">
-        <label for="starterOverwrite">Allow overwrite if target exists</label>
-      </div>
-      <p id="starterTemplateDesc" class="hint"></p>
-      <div class="actions">
-        <button id="generateTemplateBtn">Generate Starter File</button>
+
+    <section class="panel right-panel">
+      <div class="section-block">
+        <h2>Starter Template</h2>
+        <div class="bootstrap-row">
+          <label for="starterTemplateSelect">Template</label>
+          <select id="starterTemplateSelect"></select>
+        </div>
+        <div class="bootstrap-row">
+          <label for="starterOutputTarget">Output</label>
+          <input id="starterOutputTarget" type="text" placeholder="main.tex">
+        </div>
+        <div class="bootstrap-overwrite">
+          <input id="starterOverwrite" type="checkbox">
+          <label for="starterOverwrite">Allow overwrite if target exists</label>
+        </div>
+        <p id="starterTemplateDesc" class="hint"></p>
+        <div class="actions">
+          <button id="generateTemplateBtn">Generate Starter File</button>
+        </div>
       </div>
 
-      <div class="compile-target">
-        <label for="targetSelect">Compile</label>
-        <select id="targetSelect"></select>
-        <button id="applyTargetBtn">Apply Target</button>
-      </div>
-      <div class="compile-target">
-        <label for="recipeSelect">Recipe</label>
-        <select id="recipeSelect"></select>
-        <button id="applyRecipeBtn">Apply Recipe</button>
-      </div>
-      <div class="compile-options">
-        <input id="useInternalFallback" type="checkbox">
-        <label for="useInternalFallback">Use internal fallback pipeline</label>
-      </div>
-      <div id="classConfigBox" class="class-config"></div>
-      <div id="compileHelp" class="compile-help">When fallback is enabled, recipe selection is ignored.</div>
-      <code id="targetInfo"></code>
-      <div class="compile-meta"><code id="outputInfo"></code></div>
-      <div class="actions">
-        <button id="saveBtn" class="primary">Save Overrides</button>
-        <button id="compileBtn">Compile PDF</button>
-        <button id="refreshPdfBtn">Refresh PDF Preview</button>
-        <button id="resetBtn" class="warn">Reset (Delete Overrides)</button>
-      </div>
-      <div id="status" class="status"></div>
-
-      <h2>Live Preview</h2>
-      <div id="docPreview" class="doc-preview"></div>
-      <div id="preview" class="preview-grid"></div>
-
-      <h2>PDF Preview</h2>
-      <div class="pdf-wrap">
-        <iframe id="pdfFrame" src="/api/pdf"></iframe>
+      <div class="section-block">
+        <h2>Compile Controls</h2>
+        <div class="compile-target">
+          <label for="targetSelect">Compile</label>
+          <select id="targetSelect"></select>
+          <button id="applyTargetBtn">Apply Target</button>
+        </div>
+        <div class="compile-target">
+          <label for="recipeSelect">Recipe</label>
+          <select id="recipeSelect"></select>
+          <button id="applyRecipeBtn">Apply Recipe</button>
+        </div>
+        <div class="compile-options">
+          <input id="useInternalFallback" type="checkbox">
+          <label for="useInternalFallback">Use internal fallback pipeline</label>
+        </div>
+        <div id="classConfigBox" class="class-config"></div>
+        <div id="compileHelp" class="compile-help">When fallback is enabled, recipe selection is ignored.</div>
+        <code id="targetInfo"></code>
+        <div class="compile-meta"><code id="outputInfo"></code></div>
+        <div class="actions">
+          <button id="saveBtn" class="primary">Save Overrides</button>
+          <button id="compileBtn">Compile PDF</button>
+          <button id="refreshPdfBtn">Refresh PDF Preview</button>
+          <button id="resetBtn" class="warn">Reset (Delete Overrides)</button>
+        </div>
+        <div id="status" class="status"></div>
       </div>
 
-      <h2>Compiler Log</h2>
-      <pre id="logBox" class="log">(click "Compile PDF" to run latexmk)</pre>
+      <div class="section-block">
+        <h2>Live Preview</h2>
+        <div id="docPreview" class="doc-preview"></div>
+        <div id="preview" class="preview-grid"></div>
+      </div>
+
+      <div class="section-block">
+        <h2>PDF Preview</h2>
+        <div class="pdf-wrap">
+          <iframe id="pdfFrame" src="/api/pdf"></iframe>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <h2>Compiler Log</h2>
+        <pre id="logBox" class="log">(click "Compile PDF" to run latexmk)</pre>
+      </div>
     </section>
   </div>
   <script>
