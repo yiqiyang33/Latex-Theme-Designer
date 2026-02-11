@@ -35,6 +35,7 @@ try:
     from tools import core_paths as _core_paths
     from tools import core_presets as _core_presets
     from tools import core_state as _core_state
+    from tools import core_starter as _core_starter
     from tools import core_split as _core_split
 except ModuleNotFoundError:
     import tex_splitter as _tex_splitter
@@ -42,6 +43,7 @@ except ModuleNotFoundError:
     import core_paths as _core_paths
     import core_presets as _core_presets
     import core_state as _core_state
+    import core_starter as _core_starter
     import core_split as _core_split
 
 IGNORE_TEX_FILENAMES = {
@@ -1239,89 +1241,41 @@ def _refresh_derived_state(
 # -------------------- Starter Template Bootstrap --------------------
 
 def _starter_template_catalog() -> Dict[str, Dict[str, Any]]:
-    catalog: Dict[str, Dict[str, Any]] = {}
-    for entry in STARTER_TEMPLATE_DEFINITIONS:
-        template_id = str(entry.get("id", "")).strip()
-        label = str(entry.get("label", "")).strip()
-        description = str(entry.get("description", "")).strip()
-        filename = str(entry.get("filename", "")).strip()
-        if not template_id or not filename:
-            continue
-        path = TEMPLATE_DIR / filename
-        if not path.exists() or not path.is_file():
-            continue
-        catalog[template_id] = {
-            "id": template_id,
-            "label": label or template_id,
-            "description": description,
-            "path": path,
-            "filename": filename,
-        }
-    return catalog
+    return _core_starter.starter_template_catalog(
+        template_definitions=STARTER_TEMPLATE_DEFINITIONS,
+        template_dir=TEMPLATE_DIR,
+    )
 
 
 def _starter_template_meta(catalog: Dict[str, Dict[str, Any]]) -> List[Dict[str, str]]:
-    items: List[Dict[str, str]] = []
-    for entry in STARTER_TEMPLATE_DEFINITIONS:
-        template_id = str(entry.get("id", "")).strip()
-        if not template_id:
-            continue
-        meta = catalog.get(template_id)
-        if not meta:
-            continue
-        items.append(
-            {
-                "id": template_id,
-                "label": str(meta.get("label", template_id)),
-                "description": str(meta.get("description", "")),
-            }
-        )
-    return items
+    return _core_starter.starter_template_meta(
+        catalog,
+        template_definitions=STARTER_TEMPLATE_DEFINITIONS,
+    )
 
 
 def _default_starter_template_id(starter_templates: List[Dict[str, str]]) -> str:
-    template_ids = {str(item.get("id", "")) for item in starter_templates}
-    if "book-minimal" in template_ids:
-        return "book-minimal"
-    return str(starter_templates[0].get("id", "")) if starter_templates else ""
+    return _core_starter.default_starter_template_id(starter_templates)
 
 
 def _normalize_starter_template(
     raw_template: Any,
     starter_templates: List[Dict[str, str]],
 ) -> str:
-    if not starter_templates:
-        raise ValueError("No starter templates available under templates/.")
-
-    selected = str(raw_template).strip() if raw_template is not None else ""
-    if not selected:
-        return _default_starter_template_id(starter_templates)
-
-    valid_ids = {str(item.get("id", "")) for item in starter_templates}
-    if selected in valid_ids:
-        return selected
-    raise ValueError(f"Unknown starter template: {selected}")
+    return _core_starter.normalize_starter_template(
+        raw_template,
+        starter_templates,
+        default_starter_template_id_fn=_default_starter_template_id,
+    )
 
 
 def _normalize_starter_output_target(raw_target: Any) -> str:
-    target = str(raw_target).strip() if raw_target is not None else ""
-    if not target:
-        target = STARTER_DEFAULT_OUTPUT_TARGET
-    target = target.replace("\\", "/")
-
-    target_path = Path(target)
-    if target_path.is_absolute():
-        raise ValueError("Output target must be workspace-relative.")
-    if target_path.suffix:
-        if target_path.suffix.lower() != ".tex":
-            raise ValueError("Output target must end with .tex.")
-    else:
-        target_path = target_path.with_suffix(".tex")
-
-    resolved = (ROOT_DIR / target_path).resolve()
-    if not _is_subpath(resolved, ROOT_DIR.resolve()):
-        raise ValueError("Output target is outside workspace.")
-    return resolved.relative_to(ROOT_DIR).as_posix()
+    return _core_starter.normalize_starter_output_target(
+        raw_target,
+        default_output_target=STARTER_DEFAULT_OUTPUT_TARGET,
+        root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+    )
 
 
 def _generate_starter_template_file(
@@ -1329,99 +1283,47 @@ def _generate_starter_template_file(
     output_target: Any = STARTER_DEFAULT_OUTPUT_TARGET,
     overwrite: bool = False,
 ) -> Tuple[str, bool]:
-    catalog = _starter_template_catalog()
-    starter_templates = _starter_template_meta(catalog)
-    selected = _normalize_starter_template(template_id, starter_templates)
-    normalized_target = _normalize_starter_output_target(output_target)
-    target_abs = (ROOT_DIR / normalized_target).resolve()
-
-    template_path = Path(str(catalog[selected]["path"]))
-    template_text = _read_text(template_path)
-    if not template_text.strip():
-        raise ValueError(f"Starter template is empty: {template_path.name}")
-
-    overwritten = False
-    if target_abs.exists():
-        if target_abs.is_dir():
-            raise ValueError(f"Output target is a directory: {normalized_target}")
-        if not overwrite:
-            raise ValueError(
-                f"Output target already exists: {normalized_target}. "
-                "Set overwrite=true to replace it."
-            )
-        overwritten = True
-
-    target_abs.parent.mkdir(parents=True, exist_ok=True)
-    target_abs.write_text(template_text, encoding="utf-8")
-    return normalized_target, overwritten
+    return _core_starter.generate_starter_template_file(
+        template_id,
+        output_target,
+        bool(overwrite),
+        template_definitions=STARTER_TEMPLATE_DEFINITIONS,
+        template_dir=TEMPLATE_DIR,
+        root_dir=ROOT_DIR,
+        default_output_target=STARTER_DEFAULT_OUTPUT_TARGET,
+        is_subpath_fn=_is_subpath,
+        read_text_fn=_read_text,
+    )
 
 
 # -------------------- Compile Target Discovery --------------------
 
 def _list_candidate_tex_files() -> List[str]:
-    root_candidates: List[str] = []
-    nested_candidates: List[str] = []
-
-    for tex_path in sorted(ROOT_DIR.glob("*.tex")):
-        if tex_path.name in IGNORE_TEX_FILENAMES:
-            continue
-        if _has_documentclass(tex_path):
-            root_candidates.append(tex_path.name)
-
-    for tex_path in sorted(ROOT_DIR.rglob("*.tex")):
-        if tex_path.parent == ROOT_DIR:
-            continue
-        if tex_path.name in IGNORE_TEX_FILENAMES:
-            continue
-        rel = tex_path.relative_to(ROOT_DIR)
-        if any(part in IGNORE_DIR_NAMES or part.startswith(".") for part in rel.parts[:-1]):
-            continue
-        if _has_documentclass(tex_path):
-            nested_candidates.append(rel.as_posix())
-
-    candidates = root_candidates + sorted(set(nested_candidates))
-    if not candidates and MAIN_TEX_PATH.exists():
-        candidates.append("main.tex")
-
-    return candidates
+    return _core_compile.list_candidate_tex_files(
+        root_dir=ROOT_DIR,
+        ignore_tex_filenames=IGNORE_TEX_FILENAMES,
+        ignore_dir_names=IGNORE_DIR_NAMES,
+        has_documentclass_fn=_has_documentclass,
+        main_tex_path=MAIN_TEX_PATH,
+    )
 
 
 def _default_compile_target(candidates: List[str]) -> str:
-    if "main.tex" in candidates:
-        return "main.tex"
-    return candidates[0] if candidates else ""
+    return _core_compile.default_compile_target(candidates)
 
 
 def _normalize_compile_target(raw_target: Any, candidates: List[str]) -> str:
-    if not candidates:
-        return ""
-
-    target = str(raw_target).strip() if raw_target is not None else ""
-    if not target:
-        return _default_compile_target(candidates)
-    if target in candidates:
-        return target
-
-    input_path = Path(target)
-    if input_path.is_absolute():
-        resolved = input_path.resolve()
-    else:
-        resolved = (ROOT_DIR / input_path).resolve()
-
-    if not _is_subpath(resolved, ROOT_DIR.resolve()):
-        raise ValueError(f"Compile target is outside workspace: {target}")
-
-    rel = resolved.relative_to(ROOT_DIR).as_posix()
-    if rel in candidates:
-        return rel
-
-    raise ValueError(f"Unknown compile target: {target}")
+    return _core_compile.normalize_compile_target(
+        raw_target,
+        candidates,
+        root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+        default_compile_target_fn=_default_compile_target,
+    )
 
 
 def _compile_output_pdf_relpath(compile_target: str) -> str:
-    if not compile_target:
-        return "main.pdf"
-    return Path(compile_target).with_suffix(".pdf").as_posix()
+    return _core_compile.compile_output_pdf_relpath(compile_target)
 
 
 def _resolve_workspace_pdf(rel_path: str) -> Tuple[Path, str]:
@@ -2000,21 +1902,17 @@ def _bootstrap_starter_template(
     output_target: Any = STARTER_DEFAULT_OUTPUT_TARGET,
     overwrite: bool = False,
 ) -> Tuple[Dict[str, Any], str, bool]:
-    generated_target, overwritten = _generate_starter_template_file(
+    return _core_starter.bootstrap_starter_template(
         template_id,
-        output_target=output_target,
-        overwrite=overwrite,
+        output_target,
+        bool(overwrite),
+        default_output_target=STARTER_DEFAULT_OUTPUT_TARGET,
+        generate_starter_template_file_fn=_generate_starter_template_file,
+        load_state_fn=_load_state,
+        apply_compile_preferences_fn=_apply_compile_preferences,
+        persist_ui_state_fn=_persist_ui_state,
+        build_response_state_fn=_build_response_state,
     )
-    state = _load_state()
-    compile_targets = state.get("compile_targets", [])
-    if generated_target not in compile_targets:
-        raise ValueError(
-            "Generated file is not discoverable as compile target. "
-            "Ensure it contains a valid \\documentclass declaration."
-        )
-    _apply_compile_preferences(state, compile_target=generated_target)
-    _persist_ui_state(state)
-    return _build_response_state(), generated_target, overwritten
 
 
 # -------------------- Compile Pipelines --------------------

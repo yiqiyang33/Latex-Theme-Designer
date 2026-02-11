@@ -44,6 +44,86 @@ def resolve_compile_context(
     )
 
 
+def list_candidate_tex_files(
+    *,
+    root_dir: Path,
+    ignore_tex_filenames: set[str],
+    ignore_dir_names: set[str],
+    has_documentclass_fn: Callable[[Path], bool],
+    main_tex_path: Path,
+) -> List[str]:
+    root_candidates: List[str] = []
+    nested_candidates: List[str] = []
+
+    for tex_path in sorted(root_dir.glob("*.tex")):
+        if tex_path.name in ignore_tex_filenames:
+            continue
+        if has_documentclass_fn(tex_path):
+            root_candidates.append(tex_path.name)
+
+    for tex_path in sorted(root_dir.rglob("*.tex")):
+        if tex_path.parent == root_dir:
+            continue
+        if tex_path.name in ignore_tex_filenames:
+            continue
+        rel = tex_path.relative_to(root_dir)
+        if any(part in ignore_dir_names or part.startswith(".") for part in rel.parts[:-1]):
+            continue
+        if has_documentclass_fn(tex_path):
+            nested_candidates.append(rel.as_posix())
+
+    candidates = root_candidates + sorted(set(nested_candidates))
+    if not candidates and main_tex_path.exists():
+        candidates.append("main.tex")
+
+    return candidates
+
+
+def default_compile_target(candidates: List[str]) -> str:
+    if "main.tex" in candidates:
+        return "main.tex"
+    return candidates[0] if candidates else ""
+
+
+def normalize_compile_target(
+    raw_target: Any,
+    candidates: List[str],
+    *,
+    root_dir: Path,
+    is_subpath_fn: Callable[[Path, Path], bool],
+    default_compile_target_fn: Callable[[List[str]], str],
+) -> str:
+    if not candidates:
+        return ""
+
+    target = str(raw_target).strip() if raw_target is not None else ""
+    if not target:
+        return default_compile_target_fn(candidates)
+    if target in candidates:
+        return target
+
+    input_path = Path(target)
+    if input_path.is_absolute():
+        resolved = input_path.resolve()
+    else:
+        resolved = (root_dir / input_path).resolve()
+
+    if not is_subpath_fn(resolved, root_dir.resolve()):
+        raise ValueError(f"Compile target is outside workspace: {target}")
+
+    rel = resolved.relative_to(root_dir).as_posix()
+    if rel in candidates:
+        return rel
+
+    raise ValueError(f"Unknown compile target: {target}")
+
+
+def compile_output_pdf_relpath(compile_target: str) -> str:
+    if not compile_target:
+        return "main.pdf"
+    return Path(compile_target).with_suffix(".pdf").as_posix()
+
+
 def append_step_log(
     logs: List[str],
     label: str,
@@ -387,4 +467,3 @@ def compile_tex_target(
     if use_internal_fallback:
         return compile_tex_target_internal_fn(ctx)
     return compile_tex_target_recipe_fn(ctx, compile_recipe)
-

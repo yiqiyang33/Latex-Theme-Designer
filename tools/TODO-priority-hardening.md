@@ -48,10 +48,13 @@ Acceptance:
   - [x] Phase 6: extracted override file write/delete orchestration to `tools/core_state.py`, with compatibility wrappers in `tools/theme_designer_core.py`.
   - [x] Phase 7: extracted state load orchestration to `tools/core_state.py` via `_load_state` facade delegation in `tools/theme_designer_core.py`.
   - [x] Phase 8: extracted class-profile/derived-state helpers (`_is_chapter_capable_class`, `_effective_theme_class`, `_is_incompatible_forced_theme_class`, `_class_profile_for_state`, `_refresh_derived_state`) to `tools/core_state.py` with compatibility wrappers.
+  - [x] Phase 9: extracted starter-template catalog/generate/bootstrap helpers to `tools/core_starter.py` with compatibility wrappers in `tools/theme_designer_core.py`.
+  - [x] Phase 10: extracted compile-target discovery/normalize helpers (`_list_candidate_tex_files`, `_default_compile_target`, `_normalize_compile_target`, `_compile_output_pdf_relpath`) to `tools/core_compile.py` with compatibility wrappers.
   - `core_state.py` (load/normalize/persist)
   - `core_compile.py` (compile context, recipe execution)
   - `core_split.py` (split orchestration)
   - `core_presets.py` (theme preset catalogs)
+  - `core_starter.py` (starter template catalog/bootstrap)
   - `core_paths.py` (path/security helpers)
 - [ ] Keep compatibility facade (`theme_designer_core.py`) during migration.
 
