@@ -4,7 +4,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
+import subprocess
 import tempfile
 import time
 import unittest
@@ -12,9 +14,108 @@ from contextlib import redirect_stdout
 
 from tools import theme_designer_core as td
 from tools import theme_designer_server as tds
+from tools import theme_designer_ui as tdu
+from tools import tex_splitter as ts
 
 
 class ThemeDesignerTests(unittest.TestCase):
+    def _embedded_ui_script(self) -> str:
+        match = re.search(r"<script>(.*)</script>", tdu.HTML_PAGE, re.S)
+        self.assertIsNotNone(match, "Embedded HTML page is missing <script> block.")
+        return match.group(1) if match else ""
+
+    def test_theme_designer_ui_embedded_script_has_valid_js_syntax(self) -> None:
+        node_bin = shutil.which("node")
+        if not node_bin:
+            self.skipTest("node is required for UI script syntax check")
+
+        script = self._embedded_ui_script()
+
+        with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as tmp:
+            tmp.write(script)
+            tmp_path = Path(tmp.name)
+
+        try:
+            run = subprocess.run(
+                [node_bin, "--check", str(tmp_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        if run.returncode != 0:
+            detail = (run.stderr or run.stdout).strip()
+            self.fail(f"Embedded UI script has invalid JS syntax: {detail}")
+
+    def test_ui_selector_state_sync_and_disable_guards_exist(self) -> None:
+        script = self._embedded_ui_script()
+        self.assertIn("const selectorState = {", script)
+        self.assertIn("function syncSelectorStateFromModel()", script)
+        self.assertIn("select.disabled = entries.length === 0;", script)
+        self.assertIn("applyBtn.disabled = recipes.length === 0;", script)
+        self.assertNotIn("fallback.checked || recipes.length === 0", script)
+
+    def test_split_response_refresh_keeps_template_and_recipe_catalogs(self) -> None:
+        baseline = td._build_response_state()
+        baseline_templates = [
+            str(item.get("id", ""))
+            for item in baseline.get("schema", {}).get("starter_templates", [])
+        ]
+        baseline_recipes = [
+            str(item.get("id", ""))
+            for item in baseline.get("state", {}).get("compile_recipes", [])
+        ]
+
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_selector_catalog_refresh"
+        source_rel = "tools/tests/_tmp_selector_catalog_refresh/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{One}\n"
+            "Alpha.\n"
+            "\\section{Two}\n"
+            "Beta.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            refreshed = tds._split_response_payload(
+                {
+                    "compile_target": source_rel,
+                    "standalone_mode": "subfiles",
+                    "dry_run": True,
+                }
+            )
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        refreshed_templates = [
+            str(item.get("id", ""))
+            for item in refreshed.get("schema", {}).get("starter_templates", [])
+        ]
+        refreshed_recipes = [
+            str(item.get("id", ""))
+            for item in refreshed.get("state", {}).get("compile_recipes", [])
+        ]
+
+        self.assertEqual(refreshed_templates, baseline_templates)
+        self.assertEqual(refreshed_recipes, baseline_recipes)
+        self.assertIn(source_rel, refreshed.get("state", {}).get("compile_targets", []))
+
+    def test_build_tex_env_includes_workspace_lookup_paths(self) -> None:
+        env = td._build_tex_env()
+        workspace = str(td.ROOT_DIR.resolve())
+        self.assertIn(workspace, env.get("TEXINPUTS", ""))
+        self.assertIn(workspace, env.get("BIBINPUTS", ""))
+        self.assertIn(workspace, env.get("BSTINPUTS", ""))
+
     def test_compile_returns_triplet_when_tex_binaries_missing(self) -> None:
         original = td._resolve_binary
         try:
@@ -166,6 +267,356 @@ class ThemeDesignerTests(unittest.TestCase):
             pdf_rel,
             "tools/tests/build/_tmp_outdir_target/_tmp_outdir_target.pdf",
         )
+
+    def test_candidate_targets_include_generated_subfiles_units(self) -> None:
+        root = td.ROOT_DIR
+        source_rel = "tools/tests/_tmp_subfiles_discovery.tex"
+        source_abs = root / source_rel
+        sections_abs = root / "tools/tests/_tmp_subfiles_discovery_sections"
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{Overview}\n"
+            "Alpha.\n"
+            "\\section{Methods}\n"
+            "Beta.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            split = ts.split_tex_file(source_abs, sections_abs)
+            candidates = td._list_candidate_tex_files()
+        finally:
+            for backup in source_abs.parent.glob(source_abs.name + ".bak*"):
+                if backup.exists():
+                    backup.unlink()
+            if source_abs.exists():
+                source_abs.unlink()
+            if sections_abs.exists():
+                shutil.rmtree(sections_abs)
+
+        self.assertIn(source_rel, candidates)
+        for unit in split.units:
+            self.assertIn(unit.path.relative_to(root).as_posix(), candidates)
+
+    def test_refresh_derived_state_detects_parent_class_for_subfiles_target(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_subfiles_class_detect"
+        root_rel = "tools/tests/_tmp_subfiles_class_detect/main.tex"
+        unit_rel = "tools/tests/_tmp_subfiles_class_detect/Sections/01-intro.tex"
+        root_abs = root / root_rel
+        unit_abs = root / unit_rel
+        unit_abs.parent.mkdir(parents=True, exist_ok=True)
+        root_abs.write_text(
+            "\\documentclass{book}\n"
+            "\\begin{document}\n"
+            "\\chapter{Intro}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        unit_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\chapter{Intro}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            state = {
+                "compile_target": unit_rel,
+                "compile_recipe": "",
+                "compile_use_internal_fallback": True,
+                "compile_recipes": [],
+                "class_config": {"theme_class_mode": "auto"},
+            }
+            td._refresh_derived_state(state)
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertEqual(state["detected_document_class"], "book")
+        self.assertTrue(state["detected_document_class_has_chapter"])
+        self.assertEqual(state["effective_theme_class"], "book")
+
+    def test_internal_compile_subfile_target_runs_in_section_dir_and_invokes_biber(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_subfiles_internal_compile"
+        target_rel = "tools/tests/_tmp_subfiles_internal_compile/Sections/01-unit.tex"
+        target_abs = root / target_rel
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Unit}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        (target_abs.parent / "01-unit.bcf").write_text("<bcf/>", encoding="utf-8")
+
+        calls = []
+        original_resolve_binary = td._resolve_binary
+        original_run_command = td._run_command
+        try:
+            td._resolve_binary = (
+                lambda name: (
+                    None
+                    if name == "latexmk"
+                    else (f"/usr/bin/{name}" if name in {"xelatex", "biber"} else None)
+                )
+            )
+
+            def fake_run(command, cwd=td.ROOT_DIR):
+                calls.append((list(command), Path(cwd)))
+                if Path(command[0]).name == "xelatex":
+                    (Path(cwd) / "01-unit.pdf").write_bytes(b"%PDF-1.4\n")
+                return True, 0, "ok"
+
+            td._run_command = fake_run
+            success, output, pdf_rel = td._compile_tex_target(target_rel)
+        finally:
+            td._resolve_binary = original_resolve_binary
+            td._run_command = original_run_command
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertTrue(success)
+        self.assertIn("biber", output)
+        self.assertEqual(
+            pdf_rel,
+            "tools/tests/_tmp_subfiles_internal_compile/Sections/01-unit.pdf",
+        )
+        self.assertTrue(all(cwd == target_abs.parent for _, cwd in calls))
+        self.assertTrue(
+            any(
+                Path(command[0]).name == "biber"
+                and len(command) >= 2
+                and command[1] == "01-unit"
+                for command, _ in calls
+            )
+        )
+
+    def test_recipe_compile_subfile_target_resolves_doc_tokens_and_outdir_pdf(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_subfiles_recipe_compile"
+        target_rel = "tools/tests/_tmp_subfiles_recipe_compile/Sections/01-unit.tex"
+        target_abs = root / target_rel
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Unit}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        calls = []
+        original_catalog = td._load_vscode_recipe_catalog
+        original_resolve_binary = td._resolve_binary
+        original_run_command = td._run_command
+        try:
+            td._load_vscode_recipe_catalog = lambda: {
+                "tools": {
+                    "latexmk": {
+                        "name": "latexmk",
+                        "command": "latexmk",
+                        "args": ["-outdir=build/%DOC%", "%DOCFILE%", "%DOC%"],
+                    }
+                },
+                "recipes": [
+                    {
+                        "id": "vscode-1-subfiles-outdir",
+                        "name": "latexmk-subfiles-outdir",
+                        "tools": ["latexmk"],
+                    }
+                ],
+                "errors": [],
+            }
+            td._resolve_binary = lambda name: f"/usr/bin/{name}" if name == "latexmk" else None
+
+            def fake_run(command, cwd=td.ROOT_DIR):
+                calls.append((list(command), Path(cwd)))
+                (Path(cwd) / "build" / "01-unit").mkdir(parents=True, exist_ok=True)
+                (Path(cwd) / "build" / "01-unit" / "01-unit.pdf").write_bytes(b"%PDF-1.4\n")
+                return True, 0, "ok"
+
+            td._run_command = fake_run
+            success, _, pdf_rel = td._compile_tex_target(
+                target_rel,
+                "vscode-1-subfiles-outdir",
+                use_internal_fallback=False,
+            )
+        finally:
+            td._load_vscode_recipe_catalog = original_catalog
+            td._resolve_binary = original_resolve_binary
+            td._run_command = original_run_command
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertTrue(success)
+        self.assertEqual(
+            pdf_rel,
+            "tools/tests/_tmp_subfiles_recipe_compile/Sections/build/01-unit/01-unit.pdf",
+        )
+        self.assertEqual(len(calls), 1)
+        command, cwd = calls[0]
+        self.assertEqual(cwd, target_abs.parent)
+        self.assertEqual(Path(command[0]).name, "latexmk")
+        self.assertIn("-outdir=build/01-unit", command)
+        self.assertIn("01-unit.tex", command)
+        self.assertIn("01-unit", command)
+
+    def test_split_compile_target_returns_summary_and_generates_subfile_targets(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_core"
+        source_rel = "tools/tests/_tmp_split_core/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{Overview}\n"
+            "Alpha.\n"
+            "\\section{Method}\n"
+            "Beta.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            result = td._split_compile_target(source_rel)
+            rewritten = source_abs.read_text(encoding="utf-8")
+        finally:
+            for backup in source_abs.parent.glob("main.tex.bak*"):
+                if backup.exists():
+                    backup.unlink()
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertEqual(result.get("standalone_mode"), "subfiles")
+        self.assertEqual(result.get("source_target"), source_rel)
+        self.assertTrue(result.get("backup_path", "").endswith(".bak"))
+        self.assertTrue(result.get("subfiles_package_injected"))
+        generated = result.get("generated_subfile_targets", [])
+        self.assertTrue(len(generated) >= 2)
+        self.assertIn("\\subfile{Sections/01-overview}", rewritten)
+
+    def test_split_compile_target_dry_run_does_not_write_files(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_core_dry_run"
+        source_rel = "tools/tests/_tmp_split_core_dry_run/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        original_text = (
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{Overview}\n"
+            "Alpha.\n"
+            "\\section{Method}\n"
+            "Beta.\n"
+            "\\end{document}\n"
+        )
+        source_abs.write_text(original_text, encoding="utf-8")
+        planned_unit = root / "tools/tests/_tmp_split_core_dry_run/Sections/01-overview.tex"
+
+        try:
+            result = td._split_compile_target(source_rel, dry_run=True)
+            rewritten = source_abs.read_text(encoding="utf-8")
+            backup_candidates = list(source_abs.parent.glob("main.tex.bak*"))
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertTrue(result.get("dry_run"))
+        self.assertFalse(result.get("already_split"))
+        self.assertTrue(result.get("backup_path", "").endswith(".bak"))
+        self.assertIn("Dry-run mode enabled", "\n".join(result.get("warnings", [])))
+        self.assertEqual(rewritten, original_text)
+        self.assertFalse(planned_unit.exists())
+        self.assertEqual(len(backup_candidates), 0)
+
+    def test_server_split_response_refreshes_targets_and_exposes_split_payload(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_server"
+        source_rel = "tools/tests/_tmp_split_server/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{A}\n"
+            "Alpha.\n"
+            "\\section{B}\n"
+            "Beta.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            response = tds._split_response_payload(
+                {
+                    "compile_target": source_rel,
+                    "standalone_mode": "subfiles",
+                }
+            )
+        finally:
+            for backup in source_abs.parent.glob("main.tex.bak*"):
+                if backup.exists():
+                    backup.unlink()
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertIn("state", response)
+        self.assertIn("split", response)
+        split = response["split"]
+        generated = split.get("generated_subfile_targets", [])
+        self.assertTrue(len(generated) >= 2)
+        self.assertIn(generated[0], response["state"].get("compile_targets", []))
+        self.assertEqual(split.get("suggested_compile_target"), generated[0])
+
+    def test_server_split_response_dry_run_string_bool_supported(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_server_dry_run"
+        source_rel = "tools/tests/_tmp_split_server_dry_run/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        original_text = (
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{A}\n"
+            "Alpha.\n"
+            "\\section{B}\n"
+            "Beta.\n"
+            "\\end{document}\n"
+        )
+        source_abs.write_text(original_text, encoding="utf-8")
+        planned_unit = root / "tools/tests/_tmp_split_server_dry_run/Sections/01-a.tex"
+
+        try:
+            response = tds._split_response_payload(
+                {
+                    "compile_target": source_rel,
+                    "standalone_mode": "subfiles",
+                    "dry_run": "true",
+                }
+            )
+            rewritten = source_abs.read_text(encoding="utf-8")
+            backup_candidates = list(source_abs.parent.glob("main.tex.bak*"))
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        split = response.get("split", {})
+        self.assertTrue(split.get("dry_run"))
+        self.assertEqual(rewritten, original_text)
+        self.assertFalse(planned_unit.exists())
+        self.assertEqual(len(backup_candidates), 0)
 
     def test_compile_fails_when_pdf_is_older_than_source(self) -> None:
         root = td.ROOT_DIR

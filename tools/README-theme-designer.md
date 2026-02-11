@@ -55,6 +55,8 @@ python3 tools/theme_designer.py --lifecycle-mode shutdown-on-last-tab --session-
   - `manual` mode (default): stop with Ctrl+C
   - `shutdown-on-last-tab` mode: auto-stop after all heartbeat sessions expire + idle grace
   - UI sends heartbeat while page is open
+- Standalone compile strategy is locked as `Split + subfiles standalone`.
+- Existing wrapper-based standalone generation is retained as a legacy fallback during migration.
 
 ## Planned Improvements
 
@@ -73,14 +75,39 @@ python3 tools/tex_splitter.py main.tex
 - Detects `\documentclass{...}` and picks split anchor automatically:
   - book/report-like classes split by top-level `\chapter{...}`
   - article-like classes split by top-level `\section{...}`
-- Keeps preamble in root, rewrites body with `\input{Sections/...}` entries.
+- Default mode keeps preamble in root, injects `\usepackage{subfiles}` when missing, and rewrites body with `\subfile{Sections/...}` entries.
+- Generated units are standalone-compilable (`\documentclass[<relative-root>]{subfiles}` + document wrapper).
 - Writes ordered unit files to `Sections/` (for example `01-overview.tex`).
 - Saves a backup before rewrite (`main.tex.bak`, then `.bak.1`, ...).
+- Strategy lock (P0): default standalone model is `subfiles` ("Split + subfiles standalone").
+- Compatibility policy:
+  - keep wrapper mode available as explicit legacy fallback during migration
+  - deprecate wrapper mode after subfiles output and UI flow are fully shipped
 - Optional include mode:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --use-include
+python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper --use-include
 ```
+
+- Optional legacy wrapper generation (fallback only; each unit gets a compile target under `Sections/_standalone/`):
+
+```bash
+python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
+```
+
+- Dry-run preview (no file writes):
+
+```bash
+python3 tools/tex_splitter.py main.tex --dry-run
+```
+
+- Rerun safety:
+  - if root is already split with `\subfile{...}` entries, splitter returns no-op instead of injecting duplicates.
+
+- Theme Designer UI split flow:
+  - use `Split + Subfiles Standalone` panel
+  - choose source target, optional dry-run, then click `Split Current Target`
+  - after success, use `Switch To First Subfile` for one-click compile-target switch
 
 ## What it edits
 

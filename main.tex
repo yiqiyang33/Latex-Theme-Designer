@@ -77,6 +77,7 @@
 
 % ------------------------------------------------------------------------------
 
+\usepackage{subfiles}
 \begin{document}
 \title{\textbf{
     \LARGE{\notetitle} \vspace*{10\baselineskip}}
@@ -93,104 +94,8 @@
 % ------------------------------------------------------------------------------
 
 
-\section{Overview}
-
-This file is a visual showcase for the current theme system.
-It demonstrates headings, theorem-like blocks, callout blocks, notes, and bibliography style.
-Reference example: \cite{Eg}.
-
-\begin{note}[How to use this file]
-Use this chapter as a style sandbox.
-Change colors and toggles in Theme Designer, then compile and compare block rendering quickly.
-\end{note}
-
-\subsection{Math Baseline}
-
-We first include a plain equation for baseline typography:
-\[
-    \sum_{i=1}^{n} i = \frac{n(n+1)}{2}, \qquad
-    \lcm(12, 18) = 36.
-\]
-
-\section{Theorem Family Blocks}
-
-\defn{Metric Space}{def:metric-space}{
-    A metric space is a pair $(X, d)$ where $d : X \times X \to \mathbb{R}_{\ge 0}$
-    satisfies non-negativity, identity of indiscernibles, symmetry, and triangle inequality.
-}
-
-\thm{Bound from triangle inequality}{thm:triangle-bound}{
-    For any $x,y,z \in X$ in a metric space $(X,d)$,
-    \[
-        d(x,z) \le d(x,y) + d(y,z).
-    \]
-}
-
-\pf{
-    This is one of the metric axioms, so no additional argument is needed.
-}
-
-\lem{Two-step upper bound}{lem:two-step}{
-    If $d(x,y)\le a$ and $d(y,z)\le b$, then $d(x,z)\le a+b$.
-}
-
-\cor{Specialized estimate}{cor:special}{
-    If $d(x,y)\le \varepsilon$ and $d(y,z)\le \varepsilon$, then $d(x,z)\le 2\varepsilon$.
-}
-
-\prop{Linearity of expectation}{prop:linearity}{
-    For integrable random variables $X,Y$ and scalars $\alpha,\beta$,
-    \[
-        \mathbb{E}[\alpha X + \beta Y] = \alpha \mathbb{E}[X] + \beta \mathbb{E}[Y].
-    \]
-}
-
-\clm{Simple monotonicity claim}{clm:mono}{
-    If $a \le b$ and $c \ge 0$, then $ac \le bc$.
-}
-
-\fact{Algebraic identity}{fact:identity}{
-    For real numbers $u,v$,
-    \[
-        u^2 - v^2 = (u-v)(u+v).
-    \]
-}
-
-\assumption{Smooth objective}{assump:smooth}{
-    The objective function $f$ is differentiable and its gradient is $L$-Lipschitz.
-}
-
-\section{Callout and Note Blocks}
-
-\begin{assump}
-Assume all vectors are in $\mathbb{R}^d$ and all norms are Euclidean norms unless noted otherwise.
-\end{assump}
-
-\ex{
-Consider gradient descent with step size $\eta \in (0, 1/L]$.
-Under smoothness, each step guarantees non-increasing objective value.
-}
-
-\rmk{
-Inline remark text is useful for short side comments inside a paragraph.
-}
-
-\rmkb{
-Block remark is better when you want a longer explanation separated from theorem flow.
-}
-
-\begin{note}[Checklist]
-\begin{itemize}
-    \item Verify heading colors and spacing.
-    \item Verify theorem title and body contrast.
-    \item Verify callout accent borders and optional block shadow.
-    \item Verify page header and TOC styling.
-\end{itemize}
-\end{note}
-
-\section{Conclusion}
-
-This showcase intentionally mixes all core environments so you can inspect theme changes in one compile.
-
-\printbibliography
+\subfile{Sections/01-overview}
+\subfile{Sections/02-theorem-family-blocks}
+\subfile{Sections/03-callout-and-note-blocks}
+\subfile{Sections/04-conclusion}
 \end{document}

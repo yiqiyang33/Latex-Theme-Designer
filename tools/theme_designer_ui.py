@@ -437,6 +437,27 @@ HTML_PAGE = """<!doctype html>
       margin-bottom: 8px;
     }
 
+    .split-controls {
+      display: grid;
+      grid-template-columns: 76px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .split-mode-tag {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #d6dfd2;
+      border-radius: 8px;
+      background: #f4f8f2;
+      padding: 4px 8px;
+      color: #33493f;
+      font-size: 12px;
+      font-weight: 700;
+      min-height: 34px;
+    }
+
     .compile-help {
       margin: 0 0 9px;
       color: #587067;
@@ -460,6 +481,31 @@ HTML_PAGE = """<!doctype html>
     .compile-meta {
       margin-top: 6px;
       margin-bottom: 6px;
+    }
+
+    .split-result {
+      margin-top: 8px;
+      border: 1px solid #d6dfd2;
+      border-radius: 10px;
+      background: #f4f8f2;
+      padding: 8px;
+      color: #33493f;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .split-result.ok {
+      border-color: #b4dec5;
+      background: #f0faf4;
+      color: var(--success);
+    }
+
+    .split-result.err {
+      border-color: #efc3be;
+      background: #fff5f4;
+      color: var(--danger);
     }
 
     .class-config {
@@ -676,12 +722,14 @@ HTML_PAGE = """<!doctype html>
       }
 
       .compile-target,
+      .split-controls,
       .bootstrap-row {
         grid-template-columns: 1fr;
         gap: 6px;
       }
 
       .compile-target button,
+      .split-controls button,
       .bootstrap-row button,
       .actions button {
         width: 100%;
@@ -775,6 +823,25 @@ HTML_PAGE = """<!doctype html>
       </div>
 
       <div class="section-block">
+        <h2>Split + Subfiles Standalone</h2>
+        <div class="split-controls">
+          <label for="splitSourceSelect">Source</label>
+          <select id="splitSourceSelect"></select>
+          <button id="splitBtn">Split Current Target</button>
+        </div>
+        <div class="split-controls">
+          <label>Mode</label>
+          <code id="splitModeTag" class="split-mode-tag">subfiles</code>
+          <button id="switchSplitTargetBtn">Switch To First Subfile</button>
+        </div>
+        <div class="compile-options">
+          <input id="splitDryRun" type="checkbox">
+          <label for="splitDryRun">Dry run (no file writes)</label>
+        </div>
+        <div id="splitResult" class="split-result">No split run yet.</div>
+      </div>
+
+      <div class="section-block">
         <h2>Compile Controls</h2>
         <div class="compile-target">
           <label for="targetSelect">Compile</label>
@@ -826,13 +893,35 @@ HTML_PAGE = """<!doctype html>
     let model = null;
     let sessionId = null;
     let heartbeatTimer = null;
+    let latestSplitResult = null;
+    const selectorState = {
+      starterTemplate: "",
+      splitSource: "",
+      compileTarget: "",
+      compileRecipe: ""
+    };
     const HEARTBEAT_INTERVAL_MS = 15000;
+    const SPLIT_MODE = "subfiles";
+    const DEBUG_SELECTOR_DIAGNOSTICS = false;
 
     // ---------- Model Helpers ----------
     function setStatus(text, kind = "") {
       const el = document.getElementById("status");
       el.textContent = text;
       el.className = "status " + kind;
+    }
+
+    function logRenderStage(stage) {
+      if (!DEBUG_SELECTOR_DIAGNOSTICS) return;
+      console.debug(`[render-stage] ${stage}`);
+    }
+
+    function logSelectorDiagnostics(stage, select, optionCount) {
+      if (!DEBUG_SELECTOR_DIAGNOSTICS || !select) return;
+      console.debug(
+        `[selector] stage=${stage} id=${select.id} value=${select.value || "(none)"} `
+          + `disabled=${select.disabled} options=${optionCount}`
+      );
     }
 
     function color(token) {
@@ -986,6 +1075,12 @@ HTML_PAGE = """<!doctype html>
       return recipeName ? `recipe: ${recipeName}` : "recipe: (none)";
     }
 
+    function splitSuggestedTarget() {
+      if (!latestSplitResult) return "";
+      if (latestSplitResult.dry_run) return "";
+      return latestSplitResult.suggested_compile_target || "";
+    }
+
     function renderTargetInfo() {
       const info = document.getElementById("targetInfo");
       const outputInfo = document.getElementById("outputInfo");
@@ -994,26 +1089,72 @@ HTML_PAGE = """<!doctype html>
       outputInfo.textContent = `current pdf: ${currentPdfPath()} | expected: ${currentExpectedPdfPath()} | last compile: ${formatCompileTimestamp(model.state.compile_last_compile_at)}`;
     }
 
+    function normalizeSelectableChoice(preferred, values) {
+      const candidate = typeof preferred === "string" ? preferred : "";
+      if (candidate && values.includes(candidate)) return candidate;
+      return values.length > 0 ? values[0] : "";
+    }
+
+    function renderSelectEntries(select, entries, preferredValue) {
+      select.innerHTML = "";
+      for (const entry of entries) {
+        const opt = document.createElement("option");
+        opt.value = entry.value;
+        opt.textContent = entry.label;
+        select.appendChild(opt);
+      }
+      const values = entries.map((entry) => entry.value);
+      const selected = normalizeSelectableChoice(preferredValue, values);
+      if (selected) {
+        select.value = selected;
+      }
+      // Selectors should only be disabled when option catalog is empty.
+      select.disabled = entries.length === 0;
+      logSelectorDiagnostics("renderSelectEntries", select, entries.length);
+      return selected;
+    }
+
+    function syncSelectorStateFromModel() {
+      const templates = starterTemplateOptions().map((item) => item.id);
+      selectorState.starterTemplate = normalizeSelectableChoice(
+        selectorState.starterTemplate || starterTemplateValue(),
+        templates
+      );
+
+      const targets = model.state.compile_targets || [];
+      selectorState.compileTarget = normalizeSelectableChoice(
+        selectorState.compileTarget || model.state.compile_target,
+        targets
+      );
+      selectorState.splitSource = normalizeSelectableChoice(
+        selectorState.splitSource || selectorState.compileTarget,
+        targets
+      );
+
+      const recipes = (model.state.compile_recipes || []).map((item) => item.id);
+      selectorState.compileRecipe = normalizeSelectableChoice(
+        selectorState.compileRecipe || model.state.compile_recipe,
+        recipes
+      );
+
+      model.state.compile_target = selectorState.compileTarget;
+      model.state.compile_recipe = selectorState.compileRecipe;
+    }
+
     // ---------- Renderers ----------
     function renderStarterTemplateControls() {
+      logRenderStage("renderStarterTemplateControls");
       const select = document.getElementById("starterTemplateSelect");
       const desc = document.getElementById("starterTemplateDesc");
       const output = document.getElementById("starterOutputTarget");
       const options = starterTemplateOptions();
-      const selected = starterTemplateValue();
-
-      select.innerHTML = "";
-      for (const item of options) {
-        const opt = document.createElement("option");
-        opt.value = item.id;
-        opt.textContent = item.label || item.id;
-        select.appendChild(opt);
-      }
-
-      if (selected) {
-        select.value = selected;
-      }
-      const info = starterTemplateInfoById(select.value || selected);
+      const selected = renderSelectEntries(
+        select,
+        options.map((item) => ({ value: item.id, label: item.label || item.id })),
+        selectorState.starterTemplate || starterTemplateValue()
+      );
+      selectorState.starterTemplate = selected;
+      const info = starterTemplateInfoById(selected || starterTemplateValue());
       desc.textContent = info && info.description
         ? info.description
         : "Generate a starter .tex file from templates/.";
@@ -1022,6 +1163,7 @@ HTML_PAGE = """<!doctype html>
         output.value = starterOutputDefault();
       }
       select.onchange = () => {
+        selectorState.starterTemplate = select.value;
         const selectedInfo = starterTemplateInfoById(select.value);
         desc.textContent = selectedInfo && selectedInfo.description
           ? selectedInfo.description
@@ -1030,58 +1172,111 @@ HTML_PAGE = """<!doctype html>
     }
 
     function renderCompileTargetSelector() {
+      logRenderStage("renderCompileTargetSelector");
       const select = document.getElementById("targetSelect");
-      select.innerHTML = "";
       const targets = model.state.compile_targets || [];
-      for (const target of targets) {
-        const opt = document.createElement("option");
-        opt.value = target;
-        opt.textContent = target;
-        select.appendChild(opt);
-      }
-      if (model.state.compile_target) {
-        select.value = model.state.compile_target;
-      }
+      const selected = renderSelectEntries(
+        select,
+        targets.map((target) => ({ value: target, label: target })),
+        selectorState.compileTarget || model.state.compile_target || ""
+      );
+      selectorState.compileTarget = selected;
+      model.state.compile_target = selected;
       select.onchange = () => {
+        selectorState.compileTarget = select.value;
         model.state.compile_target = select.value;
+        selectorState.splitSource = select.value || selectorState.splitSource;
+        renderSplitControls();
         renderTargetInfo();
       };
       renderTargetInfo();
     }
 
+    function renderSplitControls() {
+      logRenderStage("renderSplitControls");
+      const select = document.getElementById("splitSourceSelect");
+      const modeTag = document.getElementById("splitModeTag");
+      const switchBtn = document.getElementById("switchSplitTargetBtn");
+      const dryRun = document.getElementById("splitDryRun");
+      const targets = model.state.compile_targets || [];
+      const currentTarget = selectorState.splitSource || selectorState.compileTarget || model.state.compile_target || "";
+      const selected = renderSelectEntries(
+        select,
+        targets.map((target) => ({ value: target, label: target })),
+        currentTarget
+      );
+      selectorState.splitSource = selected;
+      select.onchange = () => {
+        selectorState.splitSource = select.value || selectorState.splitSource;
+      };
+      modeTag.textContent = SPLIT_MODE;
+      const suggested = splitSuggestedTarget();
+      switchBtn.disabled = !suggested;
+      if (!dryRun.dataset.bound) {
+        dryRun.checked = false;
+        dryRun.dataset.bound = "1";
+      }
+    }
+
+    function renderSplitResult() {
+      const box = document.getElementById("splitResult");
+      box.className = "split-result";
+      if (!latestSplitResult) {
+        box.textContent = "No split run yet.";
+        return;
+      }
+      const lines = [];
+      lines.push(`source: ${latestSplitResult.source_target || "(unknown)"}`);
+      lines.push(`mode: ${latestSplitResult.standalone_mode || SPLIT_MODE}`);
+      lines.push(`split-by: \\${latestSplitResult.split_command || "(unknown)"}`);
+      const dryRun = !!latestSplitResult.dry_run;
+      lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
+      lines.push(`already-split: ${latestSplitResult.already_split ? "yes" : "no"}`);
+      lines.push(`backup: ${latestSplitResult.backup_path || (dryRun ? "(not written)" : "(none)")}`);
+      const updated = latestSplitResult.updated_files || [];
+      lines.push(`updated files (${updated.length}):`);
+      if (updated.length > 0) {
+        for (const item of updated) lines.push(`- ${item}`);
+      } else {
+        lines.push("- (none)");
+      }
+      const warnings = latestSplitResult.warnings || [];
+      if (warnings.length > 0) {
+        lines.push("warnings:");
+        for (const item of warnings) lines.push(`- ${item}`);
+      }
+      box.textContent = lines.join("\\n");
+      box.classList.add("ok");
+    }
+
     function renderCompileRecipeSelector() {
+      logRenderStage("renderCompileRecipeSelector");
       const select = document.getElementById("recipeSelect");
       const fallback = document.getElementById("useInternalFallback");
       const applyBtn = document.getElementById("applyRecipeBtn");
       const help = document.getElementById("compileHelp");
-      select.innerHTML = "";
       const recipes = model.state.compile_recipes || [];
       const errors = model.state.compile_recipe_errors || [];
-
-      for (const recipe of recipes) {
-        const opt = document.createElement("option");
-        opt.value = recipe.id;
-        opt.textContent = recipe.name;
-        select.appendChild(opt);
-      }
-
-      if (model.state.compile_recipe) {
-        select.value = model.state.compile_recipe;
-      } else if (recipes.length > 0) {
-        model.state.compile_recipe = recipes[0].id;
-        select.value = model.state.compile_recipe;
-      }
+      const selected = renderSelectEntries(
+        select,
+        recipes.map((recipe) => ({ value: recipe.id, label: recipe.name })),
+        selectorState.compileRecipe || model.state.compile_recipe || ""
+      );
+      selectorState.compileRecipe = selected;
+      model.state.compile_recipe = selected;
 
       fallback.checked = !!model.state.compile_use_internal_fallback;
-      select.disabled = fallback.checked || recipes.length === 0;
-      applyBtn.disabled = recipes.length === 0 && !fallback.checked;
+      applyBtn.disabled = recipes.length === 0;
       fallback.onchange = () => {
         model.state.compile_use_internal_fallback = fallback.checked;
-        select.disabled = fallback.checked || recipes.length === 0;
-        applyBtn.disabled = recipes.length === 0 && !fallback.checked;
+        // Fallback mode should not lock recipe selection.
+        select.disabled = recipes.length === 0;
+        applyBtn.disabled = recipes.length === 0;
+        logSelectorDiagnostics("fallback.onchange", select, recipes.length);
         renderTargetInfo();
       };
       select.onchange = () => {
+        selectorState.compileRecipe = select.value;
         model.state.compile_recipe = select.value;
         renderTargetInfo();
       };
@@ -1432,11 +1627,14 @@ HTML_PAGE = """<!doctype html>
           output_target: outputTarget,
           overwrite: overwrite
         });
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderToggles();
@@ -1460,11 +1658,14 @@ HTML_PAGE = """<!doctype html>
       try {
         const result = await postJson("/api/save", model.state);
         model = result;
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderColorGroups();
@@ -1481,11 +1682,14 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying block preset: ${selected}...`);
       try {
         model = await postJson("/api/block-preset", { block_preset: selected });
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderToggles();
@@ -1503,11 +1707,14 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying heading/TOC preset: ${selected}...`);
       try {
         model = await postJson("/api/heading-toc-preset", { heading_toc_preset: selected });
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderToggles();
@@ -1525,11 +1732,14 @@ HTML_PAGE = """<!doctype html>
       setStatus(`Applying compile target: ${selected}`);
       try {
         model = await postJson("/api/target", { compile_target: selected });
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderPreview();
@@ -1549,10 +1759,13 @@ HTML_PAGE = """<!doctype html>
           compile_recipe: selectedRecipe,
           compile_use_internal_fallback: useInternal
         });
+        syncSelectorStateFromModel();
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderPreview();
@@ -1563,16 +1776,95 @@ HTML_PAGE = """<!doctype html>
       }
     }
 
-    async function resetOverrides() {
-      if (!confirm("Delete override files and reset to defaults?")) return;
-      setStatus("Resetting...");
+    async function splitCurrentTarget() {
+      const select = document.getElementById("splitSourceSelect");
+      const selected = (select.value || model.state.compile_target || "").trim();
+      const dryRun = document.getElementById("splitDryRun").checked;
+      if (!selected) {
+        setStatus("No split source target selected.", "err");
+        return;
+      }
+      setStatus(`Splitting ${selected} in ${SPLIT_MODE} mode${dryRun ? " (dry-run)" : ""}...`);
+      const btn = document.getElementById("splitBtn");
+      btn.disabled = true;
       try {
-        model = await postJson("/api/reset", {});
+        model = await postJson("/api/split", {
+          compile_target: selected,
+          standalone_mode: SPLIT_MODE,
+          dry_run: dryRun
+        });
+        syncSelectorStateFromModel();
+        latestSplitResult = model.split || null;
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
         renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        const generated = (latestSplitResult && latestSplitResult.generated_subfile_targets) || [];
+        if (dryRun) {
+          setStatus(`Split preview complete. Planned ${generated.length} subfile target(s).`, "ok");
+        } else if (generated.length > 0) {
+          setStatus(`Split complete. Generated ${generated.length} subfile target(s).`, "ok");
+        } else {
+          setStatus("Split complete.", "ok");
+        }
+      } catch (err) {
+        const box = document.getElementById("splitResult");
+        box.className = "split-result err";
+        box.textContent = err.message;
+        setStatus(err.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function switchToFirstSplitTarget() {
+      const target = splitSuggestedTarget();
+      if (!target) {
+        setStatus("No generated subfile target to switch to.", "err");
+        return;
+      }
+      setStatus(`Switching compile target to ${target}...`);
+      try {
+        model = await postJson("/api/target", { compile_target: target });
+        syncSelectorStateFromModel();
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderPreview();
+        refreshPdf();
+        setStatus(`Compile target set to ${target}`, "ok");
+      } catch (err) {
+        setStatus(err.message, "err");
+      }
+    }
+
+    async function resetOverrides() {
+      if (!confirm("Delete override files and reset to defaults?")) return;
+      setStatus("Resetting...");
+      try {
+        model = await postJson("/api/reset", {});
+        syncSelectorStateFromModel();
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderToggles();
@@ -1633,7 +1925,10 @@ HTML_PAGE = """<!doctype html>
         if (result.effective_theme_class !== undefined) {
           model.state.effective_theme_class = result.effective_theme_class;
         }
+        syncSelectorStateFromModel();
         renderCompileRecipeSelector();
+        renderSplitControls();
+        renderSplitResult();
         renderClassConfig();
         renderTargetInfo();
         renderPreview();
@@ -1653,11 +1948,14 @@ HTML_PAGE = """<!doctype html>
     async function init() {
       setStatus("Loading...");
       model = await getState();
+      syncSelectorStateFromModel();
       renderStarterTemplateControls();
       renderBlockPresetSelector();
       renderHeadingTocPresetSelector();
       renderBodyFontSizeControl();
       renderCompileTargetSelector();
+      renderSplitControls();
+      renderSplitResult();
       renderCompileRecipeSelector();
       renderClassConfig();
       renderToggles();
@@ -1674,6 +1972,8 @@ HTML_PAGE = """<!doctype html>
       document.getElementById("applyHeadingTocPresetBtn").addEventListener("click", applyHeadingTocPreset);
       document.getElementById("saveBtn").addEventListener("click", saveOverrides);
       document.getElementById("resetBtn").addEventListener("click", resetOverrides);
+      document.getElementById("splitBtn").addEventListener("click", splitCurrentTarget);
+      document.getElementById("switchSplitTargetBtn").addEventListener("click", switchToFirstSplitTarget);
       document.getElementById("compileBtn").addEventListener("click", compilePdf);
       document.getElementById("refreshPdfBtn").addEventListener("click", refreshPdf);
     }

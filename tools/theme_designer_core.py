@@ -23,6 +23,14 @@ MAIN_TEX_PATH = ROOT_DIR / "main.tex"
 THEME_STY_PATH = ROOT_DIR / "theme.sty"
 VSCODE_SETTINGS_PATH = ROOT_DIR / ".vscode" / "settings.json"
 TEMPLATE_DIR = ROOT_DIR / "templates"
+SPLIT_STANDALONE_MODE_SUBFILES = "subfiles"
+SPLIT_DEFAULT_SECTIONS_DIR = "Sections"
+SPLIT_ALLOWED_MODES = {SPLIT_STANDALONE_MODE_SUBFILES}
+
+try:
+    from tools import tex_splitter as _tex_splitter
+except ModuleNotFoundError:
+    import tex_splitter as _tex_splitter
 
 IGNORE_TEX_FILENAMES = {
     "theme.colors.tex",
@@ -163,6 +171,10 @@ CHAPTER_CLASS_NAMES = {
     "ctexrep",
     "bxjsbook",
 }
+DOCUMENTCLASS_PATTERN = re.compile(
+    r"\\documentclass(?:\[(?P<options>[^\]]*)\])?\{(?P<class>[^}]+)\}",
+    flags=re.IGNORECASE,
+)
 
 COLOR_GROUPS: List[Dict[str, Any]] = [
     {
@@ -1297,12 +1309,67 @@ def _normalize_class_config_map(raw_map: Dict[str, Any]) -> Dict[str, str]:
     return config
 
 
-def _extract_documentclass_name(tex_path: Path) -> str:
+def _extract_documentclass_declaration(tex_path: Path) -> Tuple[str, str]:
     text = _read_text(tex_path)
-    match = re.search(r"\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}", text)
+    match = DOCUMENTCLASS_PATTERN.search(text)
+    if not match:
+        return "", ""
+    raw_name = str(match.group("class") or "").strip()
+    if "," in raw_name:
+        raw_name = raw_name.split(",", 1)[0]
+    class_name = raw_name.strip().lower()
+    raw_options = str(match.group("options") or "").strip()
+    return class_name, raw_options
+
+
+def _resolve_subfiles_parent_tex(tex_path: Path, class_options: str) -> Optional[Path]:
+    raw = str(class_options or "").strip()
+    if not raw:
+        return None
+    root_hint = raw.split(",", 1)[0].strip()
+    if not root_hint:
+        return None
+
+    hinted_path = Path(root_hint.replace("\\", "/"))
+    if not hinted_path.suffix:
+        hinted_path = hinted_path.with_suffix(".tex")
+    if hinted_path.is_absolute():
+        candidate = hinted_path.resolve()
+    else:
+        candidate = (tex_path.parent / hinted_path).resolve()
+    if not candidate.exists() or not candidate.is_file():
+        return None
+    if not _is_subpath(candidate, ROOT_DIR.resolve()):
+        return None
+    return candidate
+
+
+def _extract_documentclass_name(tex_path: Path, _visited: Optional[set[Path]] = None) -> str:
+    visited: set[Path] = set(_visited or set())
+    try:
+        resolved_tex_path = tex_path.resolve()
+    except OSError:
+        resolved_tex_path = tex_path
+    if resolved_tex_path in visited:
+        return ""
+    visited.add(resolved_tex_path)
+
+    class_name, class_options = _extract_documentclass_declaration(resolved_tex_path)
+    if class_name != "subfiles":
+        return class_name
+    parent_tex = _resolve_subfiles_parent_tex(resolved_tex_path, class_options)
+    if parent_tex is None:
+        return class_name
+    resolved_parent = _extract_documentclass_name(parent_tex, visited)
+    return resolved_parent or class_name
+
+
+def _extract_documentclass_name_raw(tex_path: Path) -> str:
+    text = _read_text(tex_path)
+    match = DOCUMENTCLASS_PATTERN.search(text)
     if not match:
         return ""
-    raw_name = match.group(1).strip()
+    raw_name = str(match.group("class") or "").strip()
     if "," in raw_name:
         raw_name = raw_name.split(",", 1)[0]
     return raw_name.strip().lower()
@@ -1373,7 +1440,7 @@ def _coerce_class_mode_on_target_switch(
 
 
 def _has_documentclass(tex_path: Path) -> bool:
-    return bool(_extract_documentclass_name(tex_path))
+    return bool(_extract_documentclass_name_raw(tex_path))
 
 
 def _class_profile_for_state(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -1633,6 +1700,97 @@ def _safe_workspace_pdf_relpath(raw_path: Any) -> str:
         return rel
     except (TypeError, ValueError):
         return ""
+
+
+def _safe_workspace_relpath(path: Optional[Path]) -> str:
+    if path is None:
+        return ""
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    if _is_subpath(resolved, ROOT_DIR.resolve()):
+        return resolved.relative_to(ROOT_DIR).as_posix()
+    return resolved.as_posix()
+
+
+def _normalize_split_mode(raw_mode: Any) -> str:
+    parsed = str(raw_mode or SPLIT_STANDALONE_MODE_SUBFILES).strip().lower()
+    if not parsed:
+        parsed = SPLIT_STANDALONE_MODE_SUBFILES
+    if parsed in SPLIT_ALLOWED_MODES:
+        return parsed
+    options = ", ".join(sorted(SPLIT_ALLOWED_MODES))
+    raise ValueError(f"Unsupported split standalone mode: {raw_mode}. Expected: {options}")
+
+
+def _normalize_split_sections_dir(raw_dir: Any) -> str:
+    parsed = str(raw_dir or "").strip()
+    if not parsed:
+        return SPLIT_DEFAULT_SECTIONS_DIR
+    return parsed
+
+
+def _split_compile_target(
+    compile_target: str,
+    standalone_mode: Any = SPLIT_STANDALONE_MODE_SUBFILES,
+    sections_dir: Any = SPLIT_DEFAULT_SECTIONS_DIR,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Split one compile target and return UI-facing operation summary."""
+
+    mode = _normalize_split_mode(standalone_mode)
+    section_dir_value = _normalize_split_sections_dir(sections_dir)
+    ctx = _resolve_compile_context(compile_target)
+    result = _tex_splitter.split_tex_file(
+        ctx.target_abs,
+        Path(section_dir_value),
+        standalone_mode=mode,
+        dry_run=bool(dry_run),
+    )
+
+    generated_targets = [
+        _safe_workspace_relpath(unit.path)
+        for unit in result.units
+    ]
+    updated_files: List[str] = []
+    if not result.already_split:
+        updated_files = [
+            _safe_workspace_relpath(result.root_path),
+            *generated_targets,
+        ]
+    warnings: List[str] = []
+    if result.already_split:
+        warnings.append(
+            "Target already appears split with \\subfile entries; no rewrite was applied."
+        )
+    if result.dry_run:
+        warnings.append("Dry-run mode enabled; no files were written.")
+    if result.standalone_wrappers:
+        warnings.append(
+            "Legacy wrapper files were generated. "
+            "Subfiles mode should normally not produce wrappers."
+        )
+
+    return {
+        "standalone_mode": mode,
+        "source_target": _safe_workspace_relpath(result.root_path),
+        "sections_dir": _safe_workspace_relpath(result.sections_dir),
+        "backup_path": _safe_workspace_relpath(result.backup_path),
+        "split_command": result.split_command,
+        "document_class": result.document_class,
+        "subfiles_package_injected": bool(result.subfiles_package_injected),
+        "dry_run": bool(result.dry_run),
+        "already_split": bool(result.already_split),
+        "generated_subfile_targets": generated_targets,
+        "updated_files": updated_files,
+        "warnings": warnings,
+        "standalone_wrappers": [
+            _safe_workspace_relpath(path)
+            for path in result.standalone_wrappers
+        ],
+        "suggested_compile_target": generated_targets[0] if generated_targets else "",
+    }
 
 
 def _iso8601_utc_from_epoch(epoch_seconds: float) -> str:
@@ -2166,6 +2324,15 @@ def _build_tex_env() -> Dict[str, str]:
         if path not in merged:
             merged.append(path)
     env["PATH"] = os.pathsep.join(merged)
+
+    workspace = str(ROOT_DIR.resolve())
+    tex_inputs = [item for item in env.get("TEXINPUTS", "").split(os.pathsep) if item]
+    bib_inputs = [item for item in env.get("BIBINPUTS", "").split(os.pathsep) if item]
+    bst_inputs = [item for item in env.get("BSTINPUTS", "").split(os.pathsep) if item]
+
+    env["TEXINPUTS"] = os.pathsep.join([".", workspace] + tex_inputs) + os.pathsep
+    env["BIBINPUTS"] = os.pathsep.join([".", workspace] + bib_inputs) + os.pathsep
+    env["BSTINPUTS"] = os.pathsep.join([".", workspace] + bst_inputs) + os.pathsep
     return env
 
 

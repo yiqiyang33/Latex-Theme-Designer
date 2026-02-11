@@ -33,6 +33,7 @@ try:
         _normalize_payload,
         _persist_ui_state,
         _resolve_workspace_pdf,
+        _split_compile_target,
         _write_override_files,
     )
     from tools.theme_designer_ui import HTML_PAGE
@@ -53,6 +54,7 @@ except ModuleNotFoundError:
         _normalize_payload,
         _persist_ui_state,
         _resolve_workspace_pdf,
+        _split_compile_target,
         _write_override_files,
     )
     from theme_designer_ui import HTML_PAGE
@@ -179,6 +181,37 @@ def _normalize_session_id(raw: Any) -> str:
 
 def _default_lifecycle_config() -> LifecycleConfig:
     return LifecycleConfig()
+
+
+def _coerce_bool_value(raw: Any, field_name: str) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        lowered = raw.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off", ""}:
+            return False
+    raise ValueError(f"{field_name} must be a boolean.")
+
+
+def _split_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    dry_run = _coerce_bool_value(payload.get("dry_run", False), "dry_run")
+    with STATE_LOCK:
+        current = _load_state()
+        selected = _normalize_compile_target(
+            payload.get("compile_target", current.get("compile_target", "")),
+            current.get("compile_targets", []),
+        )
+        split_result = _split_compile_target(
+            selected,
+            standalone_mode=payload.get("standalone_mode", "subfiles"),
+            sections_dir=payload.get("sections_dir", "Sections"),
+            dry_run=dry_run,
+        )
+        response = _build_response_state()
+        response["split"] = split_result
+    return response
 
 
 class ThemeDesignerHandler(BaseHTTPRequestHandler):
@@ -339,19 +372,7 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 payload = self._parse_json_body()
                 template_id = payload.get("template_id")
                 output_target = payload.get("output_target", "main.tex")
-                overwrite_raw = payload.get("overwrite", False)
-                if isinstance(overwrite_raw, bool):
-                    overwrite = overwrite_raw
-                elif isinstance(overwrite_raw, str):
-                    lowered = overwrite_raw.strip().lower()
-                    if lowered in {"true", "1", "yes", "on"}:
-                        overwrite = True
-                    elif lowered in {"false", "0", "no", "off", ""}:
-                        overwrite = False
-                    else:
-                        raise ValueError("overwrite must be a boolean.")
-                else:
-                    raise ValueError("overwrite must be a boolean.")
+                overwrite = _coerce_bool_value(payload.get("overwrite", False), "overwrite")
 
                 with STATE_LOCK:
                     response, generated_target, overwritten = _bootstrap_starter_template(
@@ -366,6 +387,29 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(err)})
             except Exception as err:  # pragma: no cover
                 self._send_json(500, {"error": f"Failed to bootstrap starter template: {err}"})
+            return
+
+        if self.path == "/api/split-preview":
+            try:
+                payload = self._parse_json_body()
+                payload["dry_run"] = True
+                response = _split_response_payload(payload)
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_json(400, {"error": str(err)})
+            except Exception as err:  # pragma: no cover
+                self._send_json(500, {"error": f"Failed to preview split: {err}"})
+            return
+
+        if self.path == "/api/split":
+            try:
+                payload = self._parse_json_body()
+                response = _split_response_payload(payload)
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_json(400, {"error": str(err)})
+            except Exception as err:  # pragma: no cover
+                self._send_json(500, {"error": f"Failed to split target: {err}"})
             return
 
         if self.path == "/api/block-preset":
@@ -702,3 +746,7 @@ def main() -> None:
         )
     except OSError as err:
         raise SystemExit(f"Failed to start Theme Designer: {err}") from err
+
+
+if __name__ == "__main__":
+    main()

@@ -43,8 +43,11 @@ xelatex main.tex
   - predictable Ctrl+C shutdown; browser tab close is best-effort only
 - One-click root `.tex` splitter CLI (`tools/tex_splitter.py`):
   - class-aware split (`chapter` for book/report-like, `section` for article-like)
-  - rewrites root body to `\input{...}` entries
+  - default mode rewrites root body to `\subfile{...}` entries
+  - generated unit files are standalone-compilable via `subfiles`
   - auto backup before rewrite (`.bak`, `.bak.1`, ...)
+  - standalone direction is locked as `Split + subfiles standalone` (migration in progress)
+  - legacy wrapper compile targets remain available during transition (`--standalone-mode legacy-wrapper`)
 
 ## Planned Next
 
@@ -70,11 +73,32 @@ Split a monolithic root `.tex` into modular files in `Sections/`:
 python3 tools/tex_splitter.py main.tex
 ```
 
-Use `\include{...}` instead of `\input{...}` in rewritten root body:
+In legacy-wrapper mode, use `\include{...}` instead of `\input{...}`:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --use-include
+python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper --use-include
 ```
+
+Strategy lock (P0): default standalone model is `subfiles` ("Split + subfiles standalone").
+
+Current compatibility policy during migration:
+
+- keep wrapper-based standalone compile as an explicit legacy fallback
+- mark wrapper mode as transitional and deprecate it after subfiles mode is fully shipped
+
+Legacy fallback command (wrapper files under `Sections/_standalone/`):
+
+```bash
+python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
+```
+
+Preview split plan without writing files:
+
+```bash
+python3 tools/tex_splitter.py main.tex --dry-run
+```
+
+Rerunning splitter on an already-split subfiles root is handled as no-op (prevents duplicate `\subfile{...}` injection).
 
 ## What it edits
 
