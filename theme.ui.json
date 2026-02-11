@@ -1,5 +1,6 @@
 {
   "block_preset": "ember",
+  "body_font_size_pt": 11.0,
   "class_config": {
     "theme_class_mode": "article",
     "theme_heading_chapter_mode": "auto",
@@ -62,7 +63,7 @@
     "theorem-title-bg": "#F8DEB9",
     "theorem-title-fg": "#664110"
   },
-  "compile_last_compile_at": "2026-02-11T00:05:34Z",
+  "compile_last_compile_at": "2026-02-11T00:14:26Z",
   "compile_last_success": true,
   "compile_output_pdf": "main.pdf",
   "compile_output_pdf_expected": "main.pdf",

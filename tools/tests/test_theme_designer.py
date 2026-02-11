@@ -255,6 +255,7 @@ class ThemeDesignerTests(unittest.TestCase):
                 state = td._load_state()
                 state["class_config"]["theme_class_mode"] = "article"
                 state["class_config"]["theme_theorem_numbering_policy"] = "none"
+                state["body_font_size_pt"] = 11.5
                 td._write_override_files(state)
                 text = toggle_path.read_text(encoding="utf-8")
             finally:
@@ -264,6 +265,7 @@ class ThemeDesignerTests(unittest.TestCase):
 
         self.assertIn("\\def\\ThemeClassMode{article}", text)
         self.assertIn("\\def\\ThemeTheoremNumberingPolicy{none}", text)
+        self.assertIn("\\def\\ThemeBodyFontSizePt{11.5}", text)
 
     def test_apply_block_preset_updates_block_tokens_only(self) -> None:
         state = td._load_state()
@@ -405,6 +407,46 @@ class ThemeDesignerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown heading/TOC preset"):
             td._normalize_payload({"heading_toc_preset": "not-a-preset"}, base_state)
 
+    def test_normalize_payload_rejects_out_of_range_body_font_size(self) -> None:
+        base_state = td._load_state()
+        with self.assertRaisesRegex(ValueError, "body_font_size_pt"):
+            td._normalize_payload({"body_font_size_pt": 14.5}, base_state)
+
+    def test_normalize_payload_rejects_invalid_step_body_font_size(self) -> None:
+        base_state = td._load_state()
+        with self.assertRaisesRegex(ValueError, "increments"):
+            td._normalize_payload({"body_font_size_pt": 10.3}, base_state)
+
+    def test_body_font_size_override_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+
+                state = td._load_state()
+                state["body_font_size_pt"] = 12.0
+                td._write_override_files(state)
+
+                persisted = json.loads(cfg_path.read_text(encoding="utf-8"))
+                self.assertEqual(persisted.get("body_font_size_pt"), 12.0)
+
+                reloaded = td._load_state()
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertEqual(reloaded["body_font_size_pt"], 12.0)
+
     def test_block_presets_include_new_palettes(self) -> None:
         state = td._load_state()
         preset_ids = {entry.get("id") for entry in state.get("block_presets", [])}
@@ -414,6 +456,12 @@ class ThemeDesignerTests(unittest.TestCase):
         state = td._load_state()
         preset_ids = {entry.get("id") for entry in state.get("heading_toc_presets", [])}
         self.assertTrue({"default", "inkstone", "aurora", "sunset"}.issubset(preset_ids))
+
+    def test_response_schema_contains_body_font_size_config(self) -> None:
+        payload = td._build_response_state()
+        schema = payload.get("schema", {})
+        self.assertIn("body_font_size", schema)
+        self.assertEqual(schema["body_font_size"]["id"], "body_font_size_pt")
 
     def test_compile_smoke_minimal_book_target(self) -> None:
         root = td.ROOT_DIR

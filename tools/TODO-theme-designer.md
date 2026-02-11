@@ -35,23 +35,23 @@ Goal: support direct body text size tuning from Theme Designer.
 
 ### Tasks
 
-- [ ] Add backend config key for base body font size.
+- [x] Add backend config key for base body font size.
   - Define valid range (example: 9pt to 14pt) and step.
   - Define default matching current template behavior.
-- [ ] Add UI control (slider preferred) with numeric display.
-- [ ] Write font size override to `theme.overrides.tex`.
-- [ ] Apply override in `main.tex`/`theme.sty` compatibility-safe way.
-- [ ] Add tests for range validation and override file generation.
+- [x] Add UI control (slider preferred) with numeric display.
+- [x] Write font size override to `theme.overrides.tex`.
+- [x] Apply override in `main.tex`/`theme.sty` compatibility-safe way.
+- [x] Add tests for range validation and override file generation.
 
 ### Acceptance Criteria
 
-- [ ] User can drag slider and compile to see body font size changes.
-- [ ] Value is persisted and restored after reload.
-- [ ] Out-of-range values are rejected with clear error.
+- [x] User can drag slider and compile to see body font size changes.
+- [x] Value is persisted and restored after reload.
+- [x] Out-of-range values are rejected with clear error.
 
 ---
 
 ## Suggested Execution Order
 
 - [x] P2 header/TOC preset themes
-- [ ] P3 body font size UI control
+- [x] P3 body font size UI control

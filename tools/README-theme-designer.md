@@ -15,6 +15,7 @@ Default URL: `http://127.0.0.1:8765`
 - Adjust theme colors for document headers and theorem/callout blocks.
 - Apply named block color preset themes (`default`, `midnight`, `meadow`, `ember`) in one click.
 - Apply named heading/TOC preset themes (`default`, `inkstone`, `aurora`, `sunset`) in one click.
+- Adjust base body font size with slider control (`9.0pt` to `14.0pt`, step `0.5pt`).
 - Toggle feature switches:
   - heading theme
   - TOC theme
@@ -38,16 +39,14 @@ Default URL: `http://127.0.0.1:8765`
 
 ## Planned Improvements
 
-- Body font size control
-  - add UI control (prefer slider) for base body font size
-  - write override setting to file and apply on compile
+- Additional typography controls beyond base body font size
 
 ## What it edits
 
 - `theme.colors.tex`
   - Auto-generated color overrides.
 - `theme.overrides.tex`
-  - Auto-generated toggle and class-aware overrides.
+  - Auto-generated toggle, class-aware, and body-font-size overrides.
 - `theme.ui.json`
   - UI state cache.
 

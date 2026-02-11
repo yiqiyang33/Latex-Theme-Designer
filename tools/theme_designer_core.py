@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -275,6 +276,21 @@ CLASS_CONFIG_VALID_OPTIONS = {
     entry["id"]: {str(opt["value"]) for opt in entry["options"]}
     for entry in CLASS_CONFIG_SCHEMA
 }
+
+BODY_FONT_SIZE_CONFIG: Dict[str, Any] = {
+    "id": "body_font_size_pt",
+    "label": "Body Font Size",
+    "help": "Base body text font size applied at begin document.",
+    "min": 9.0,
+    "max": 14.0,
+    "step": 0.5,
+    "default": 10.0,
+}
+BODY_FONT_SIZE_ID = str(BODY_FONT_SIZE_CONFIG["id"])
+BODY_FONT_SIZE_MIN = float(BODY_FONT_SIZE_CONFIG["min"])
+BODY_FONT_SIZE_MAX = float(BODY_FONT_SIZE_CONFIG["max"])
+BODY_FONT_SIZE_STEP = float(BODY_FONT_SIZE_CONFIG["step"])
+BODY_FONT_SIZE_DEFAULT = float(BODY_FONT_SIZE_CONFIG["default"])
 
 BASE_COLORS: Dict[str, Tuple[int, int, int]] = {
     "white": (255, 255, 255),
@@ -966,6 +982,53 @@ def _parse_hex_color(raw: str) -> Optional[str]:
     return None
 
 
+def _format_body_font_size(value: float) -> str:
+    return f"{value:.1f}"
+
+
+def _parse_body_font_size_value(raw_value: Any) -> Optional[float]:
+    if isinstance(raw_value, bool):
+        return None
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _normalize_body_font_size_value(raw_value: Any) -> float:
+    parsed = _parse_body_font_size_value(raw_value)
+    if parsed is None:
+        return BODY_FONT_SIZE_DEFAULT
+    clamped = min(BODY_FONT_SIZE_MAX, max(BODY_FONT_SIZE_MIN, parsed))
+    snapped_steps = round((clamped - BODY_FONT_SIZE_MIN) / BODY_FONT_SIZE_STEP)
+    snapped = BODY_FONT_SIZE_MIN + snapped_steps * BODY_FONT_SIZE_STEP
+    bounded = min(BODY_FONT_SIZE_MAX, max(BODY_FONT_SIZE_MIN, snapped))
+    return round(bounded, 1)
+
+
+def _validate_body_font_size_value(raw_value: Any) -> float:
+    parsed = _parse_body_font_size_value(raw_value)
+    if parsed is None:
+        raise ValueError(
+            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. Expected a number."
+        )
+    if parsed < BODY_FONT_SIZE_MIN or parsed > BODY_FONT_SIZE_MAX:
+        raise ValueError(
+            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. "
+            f"Expected {BODY_FONT_SIZE_MIN:.1f} to {BODY_FONT_SIZE_MAX:.1f}."
+        )
+    normalized = _normalize_body_font_size_value(parsed)
+    if abs(normalized - parsed) > 1e-9:
+        raise ValueError(
+            f"Invalid value for {BODY_FONT_SIZE_ID}: {raw_value}. "
+            f"Expected increments of {BODY_FONT_SIZE_STEP:.1f}."
+        )
+    return normalized
+
+
 def _build_block_preset_catalog(theme_defaults: Dict[str, str]) -> List[Dict[str, Any]]:
     catalog: List[Dict[str, Any]] = []
     for preset in BLOCK_PRESET_DEFINITIONS:
@@ -1507,6 +1570,14 @@ def _parse_class_override_file(path: Path) -> Dict[str, str]:
     return parsed
 
 
+def _parse_body_font_size_override(path: Path) -> Optional[float]:
+    text = _read_text(path)
+    matches = re.findall(r"\\def\\ThemeBodyFontSizePt\{([^}]+)\}", text)
+    if not matches:
+        return None
+    return _normalize_body_font_size_value(matches[-1])
+
+
 def _parse_color_override_file(path: Path) -> Dict[str, str]:
     text = _read_text(path)
     define_map: Dict[str, str] = {
@@ -1550,6 +1621,7 @@ def _load_state() -> Dict[str, Any]:
         "block_presets": block_presets,
         "heading_toc_preset": default_heading_toc_preset,
         "heading_toc_presets": heading_toc_presets,
+        BODY_FONT_SIZE_ID: BODY_FONT_SIZE_DEFAULT,
         "class_config": dict(CLASS_CONFIG_DEFAULTS),
         "compile_target": _default_compile_target(compile_targets),
         "compile_recipe": _default_compile_recipe(compile_recipes),
@@ -1594,6 +1666,10 @@ def _load_state() -> Dict[str, Any]:
                     )
                 except ValueError:
                     state["heading_toc_preset"] = default_heading_toc_preset
+            if BODY_FONT_SIZE_ID in persisted:
+                state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
+                    persisted.get(BODY_FONT_SIZE_ID)
+                )
             state["class_config"] = _normalize_class_config_map(
                 persisted.get("class_config", state["class_config"])
             )
@@ -1633,6 +1709,9 @@ def _load_state() -> Dict[str, Any]:
     if TOGGLE_OVERRIDE_PATH.exists():
         state["toggles"].update(_parse_toggle_override_file(TOGGLE_OVERRIDE_PATH))
         state["class_config"].update(_parse_class_override_file(TOGGLE_OVERRIDE_PATH))
+        parsed_body_font_size = _parse_body_font_size_override(TOGGLE_OVERRIDE_PATH)
+        if parsed_body_font_size is not None:
+            state[BODY_FONT_SIZE_ID] = parsed_body_font_size
     if COLOR_OVERRIDE_PATH.exists():
         state["colors"].update(_parse_color_override_file(COLOR_OVERRIDE_PATH))
 
@@ -1647,6 +1726,9 @@ def _load_state() -> Dict[str, Any]:
     state["heading_toc_preset"] = _normalize_heading_toc_preset(
         state.get("heading_toc_preset"),
         heading_toc_presets,
+    )
+    state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
+        state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
     )
 
     state["compile_targets"] = compile_targets
@@ -1687,6 +1769,9 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
             base_state.get("heading_toc_presets", []),
         ),
         "heading_toc_presets": list(base_state.get("heading_toc_presets", [])),
+        BODY_FONT_SIZE_ID: _normalize_body_font_size_value(
+            base_state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
+        ),
         "class_config": _normalize_class_config_map(base_state.get("class_config", {})),
         "compile_target": base_state.get("compile_target", ""),
         "compile_recipe": base_state.get("compile_recipe", ""),
@@ -1728,6 +1813,10 @@ def _normalize_payload(payload: Dict[str, Any], base_state: Dict[str, Any]) -> D
         normalized["heading_toc_preset"] = _normalize_heading_toc_preset(
             payload.get("heading_toc_preset"),
             base_state.get("heading_toc_presets", []),
+        )
+    if BODY_FONT_SIZE_ID in payload:
+        normalized[BODY_FONT_SIZE_ID] = _validate_body_font_size_value(
+            payload.get(BODY_FONT_SIZE_ID)
         )
 
     raw_class_config = payload.get("class_config", {})
@@ -1772,6 +1861,9 @@ def _persist_ui_state(state: Dict[str, Any]) -> None:
         "colors": state.get("colors", {}),
         "block_preset": state.get("block_preset", "default"),
         "heading_toc_preset": state.get("heading_toc_preset", "default"),
+        BODY_FONT_SIZE_ID: _normalize_body_font_size_value(
+            state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
+        ),
         "class_config": _normalize_class_config_map(state.get("class_config", {})),
         "compile_target": state.get("compile_target", ""),
         "compile_recipe": state.get("compile_recipe", ""),
@@ -1812,6 +1904,9 @@ def _write_override_files(state: Dict[str, Any]) -> None:
         state.get("heading_toc_preset"),
         heading_toc_presets,
     )
+    state[BODY_FONT_SIZE_ID] = _normalize_body_font_size_value(
+        state.get(BODY_FONT_SIZE_ID, BODY_FONT_SIZE_DEFAULT)
+    )
     state["class_config"] = _normalize_class_config_map(state.get("class_config", {}))
     _refresh_derived_state(state)
     _persist_ui_state(state)
@@ -1829,6 +1924,11 @@ def _write_override_files(state: Dict[str, Any]) -> None:
         command = CLASS_CONFIG_COMMANDS[field_id]
         value = state["class_config"][field_id]
         toggle_lines.append(f"\\def\\{command}{{{value}}}")
+    toggle_lines.append("")
+    toggle_lines.append("% Base body font size in pt.")
+    toggle_lines.append(
+        f"\\def\\ThemeBodyFontSizePt{{{_format_body_font_size(state[BODY_FONT_SIZE_ID])}}}"
+    )
     TOGGLE_OVERRIDE_PATH.write_text("\n".join(toggle_lines) + "\n", encoding="utf-8")
 
     color_lines = [
@@ -2232,5 +2332,6 @@ def _build_response_state() -> Dict[str, Any]:
             "class_config": CLASS_CONFIG_SCHEMA,
             "block_presets": state.get("block_presets", []),
             "heading_toc_presets": state.get("heading_toc_presets", []),
+            "body_font_size": BODY_FONT_SIZE_CONFIG,
         },
     }

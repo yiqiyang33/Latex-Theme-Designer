@@ -20,6 +20,7 @@
 \@ifundefined{ThemeHeadingChapterMode}{\def\ThemeHeadingChapterMode{auto}}{}
 \@ifundefined{ThemePageHeaderMode}{\def\ThemePageHeaderMode{auto}}{}
 \@ifundefined{ThemeTheoremNumberingPolicy}{\def\ThemeTheoremNumberingPolicy{auto}}{}
+\@ifundefined{ThemeBodyFontSizePt}{\def\ThemeBodyFontSizePt{}}{}
 
 \newif\ifThemeHasChapter
 \@ifundefined{chapter}{\ThemeHasChapterfalse}{\ThemeHasChaptertrue}
@@ -106,6 +107,27 @@
         \fi
     \fi
 \fi
+
+\def\theme@empty{}
+\def\theme@bodyfontsize{}
+\def\theme@bodybaseline{}
+\ifx\ThemeBodyFontSizePt\theme@empty
+\else
+    \begingroup
+        \dimen@=\ThemeBodyFontSizePt pt\relax
+        \ifdim\dimen@>0pt
+            \dimen@ii=1.2\dimen@
+            \xdef\theme@bodyfontsize{\strip@pt\dimen@}
+            \xdef\theme@bodybaseline{\strip@pt\dimen@ii}
+        \fi
+    \endgroup
+\fi
+\AtBeginDocument{
+    \ifx\theme@bodyfontsize\theme@empty
+    \else
+        \fontsize{\theme@bodyfontsize pt}{\theme@bodybaseline pt}\selectfont
+    \fi
+}
 \makeatother
 
 % -------------------- Document Theme Tokens --------------------

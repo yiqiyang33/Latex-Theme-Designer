@@ -25,6 +25,7 @@ xelatex main.tex
 - Color and visual toggle customization through override files.
 - Block preset themes for theorem/callout colors (`default`, `midnight`, `meadow`, `ember`), with one-click apply in Theme Designer.
 - Heading/TOC preset themes (`default`, `inkstone`, `aurora`, `sunset`) with one-click apply in Theme Designer.
+- Body text size control in Theme Designer (`9.0pt` to `14.0pt`, step `0.5pt`).
 - Class-aware theme behavior (`book` / `article`) with auto-detect and override controls.
 - Bibliography support with `biblatex` + `biber`.
 - Theorem/callout styling with switchable enhanced environment style.
@@ -33,7 +34,7 @@ xelatex main.tex
 
 ## Planned Next
 
-- Body text size control in Theme Designer UI (likely slider-based).
+- Additional typography controls beyond base body font size.
 
 ## Theme Designer
 
@@ -52,7 +53,7 @@ See full tool documentation in:
 - `theme.colors.tex`
   - Color overrides.
 - `theme.overrides.tex`
-  - Feature toggle and class-aware overrides.
+  - Feature toggle, class-aware, and body-font-size overrides.
 - `theme.ui.json`
   - UI state cache.
 

@@ -111,6 +111,21 @@ HTML_PAGE = """<!doctype html>
       background: #fff;
       color: #1f2937;
     }
+    .font-size-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin: 0 0 8px;
+    }
+    .font-size-control input[type="range"] {
+      width: 100%;
+    }
+    .font-size-control code {
+      min-width: 64px;
+      text-align: right;
+      color: #334155;
+    }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .compile-target {
       display: grid;
@@ -289,6 +304,12 @@ HTML_PAGE = """<!doctype html>
         <button id="applyHeadingTocPresetBtn">Apply Preset</button>
       </div>
       <p id="headingTocPresetDesc" class="hint"></p>
+      <h2>Body Font Size</h2>
+      <div class="font-size-control">
+        <input id="bodyFontSizeSlider" type="range">
+        <code id="bodyFontSizeValue"></code>
+      </div>
+      <p id="bodyFontSizeHelp" class="hint"></p>
       <h2>Colors</h2>
       <div id="groupBox"></div>
     </section>
@@ -400,6 +421,24 @@ HTML_PAGE = """<!doctype html>
       const options = headingTocPresetOptions();
       if (model.state.heading_toc_preset) return model.state.heading_toc_preset;
       return options.length > 0 ? options[0].id : "default";
+    }
+
+    function bodyFontSizeSchema() {
+      return model.schema.body_font_size || {
+        id: "body_font_size_pt",
+        min: 9.0,
+        max: 14.0,
+        step: 0.5,
+        default: 10.0
+      };
+    }
+
+    function bodyFontSizeValue() {
+      const schema = bodyFontSizeSchema();
+      const fallback = Number(schema.default || 10.0);
+      const parsed = Number(model.state[schema.id]);
+      if (Number.isFinite(parsed)) return parsed;
+      return fallback;
     }
 
     function effectiveThemeClass() {
@@ -595,6 +634,28 @@ HTML_PAGE = """<!doctype html>
       };
     }
 
+    function renderBodyFontSizeControl() {
+      const schema = bodyFontSizeSchema();
+      const slider = document.getElementById("bodyFontSizeSlider");
+      const valueTag = document.getElementById("bodyFontSizeValue");
+      const help = document.getElementById("bodyFontSizeHelp");
+      const value = bodyFontSizeValue();
+
+      slider.min = String(schema.min ?? 9.0);
+      slider.max = String(schema.max ?? 14.0);
+      slider.step = String(schema.step ?? 0.5);
+      slider.value = String(value);
+      valueTag.textContent = `${value.toFixed(1)}pt`;
+      help.textContent = `${schema.help || "Body text size"} Range: ${Number(slider.min).toFixed(1)}-${Number(slider.max).toFixed(1)}pt, step ${Number(slider.step).toFixed(1)}pt.`;
+
+      slider.oninput = () => {
+        const parsed = Number(slider.value);
+        model.state[schema.id] = parsed;
+        valueTag.textContent = `${parsed.toFixed(1)}pt`;
+        renderPreview();
+      };
+    }
+
     function renderToggles() {
       const box = document.getElementById("toggleBox");
       box.innerHTML = "";
@@ -682,6 +743,8 @@ HTML_PAGE = """<!doctype html>
 
     function renderPreview() {
       const docPreview = document.getElementById("docPreview");
+      const bodyFontPt = bodyFontSizeValue();
+      docPreview.style.fontSize = `${bodyFontPt}pt`;
       if (effectiveThemeClass() === "book") {
         docPreview.innerHTML = `
           <div class="chapter" style="color:${color("theme-chapter")}">Chapter 1. Variational Inference</div>
@@ -714,6 +777,7 @@ HTML_PAGE = """<!doctype html>
         sampleCard("Example", color("example-bg"), color("example-label-fg"), color("example-bg"), color("example-accent")),
         sampleCard("Remark", color("remark-bg"), color("remark-label-fg"), color("remark-bg"), color("remark-accent"))
       ].join("");
+      document.getElementById("preview").style.fontSize = `${bodyFontPt}pt`;
     }
 
     // ---------- API Helpers ----------
@@ -748,6 +812,7 @@ HTML_PAGE = """<!doctype html>
         model = result;
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -767,6 +832,7 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/block-preset", { block_preset: selected });
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -787,6 +853,7 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/heading-toc-preset", { heading_toc_preset: selected });
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -807,6 +874,7 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/target", { compile_target: selected });
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -829,6 +897,7 @@ HTML_PAGE = """<!doctype html>
         });
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileRecipeSelector();
         renderClassConfig();
         renderPreview();
@@ -846,6 +915,7 @@ HTML_PAGE = """<!doctype html>
         model = await postJson("/api/reset", {});
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
         renderCompileTargetSelector();
         renderCompileRecipeSelector();
         renderClassConfig();
@@ -929,6 +999,7 @@ HTML_PAGE = """<!doctype html>
       model = await getState();
       renderBlockPresetSelector();
       renderHeadingTocPresetSelector();
+      renderBodyFontSizeControl();
       renderCompileTargetSelector();
       renderCompileRecipeSelector();
       renderClassConfig();
