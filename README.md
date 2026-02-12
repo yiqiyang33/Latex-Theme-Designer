@@ -44,6 +44,16 @@ Use the local UI tool:
 python3 tools/latex_toolkit.py --open-browser
 ```
 
+One-click launcher scripts:
+
+```bash
+./scripts/start-ui.sh
+```
+
+macOS Finder double-click:
+
+- `scripts/start-ui.command`
+
 See full tool documentation in:
 
 - `tools/README-theme-designer.md`
@@ -62,10 +72,24 @@ Split a monolithic root `.tex` into modular files in `Sections/`:
 python3 tools/tex_splitter.py main.tex
 ```
 
+Default naming mode is now slug-only (no numeric prefix), for example `Sections/overview.tex`.
+
 Preview split plan without writing files:
 
 ```bash
 python3 tools/tex_splitter.py main.tex --dry-run
+```
+
+Use legacy index-prefixed naming when needed:
+
+```bash
+python3 tools/tex_splitter.py main.tex --naming-mode numbered
+```
+
+Clean unreferenced existing section files discovered from current root `\subfile{...}` list:
+
+```bash
+python3 tools/tex_splitter.py main.tex --prune-unreferenced
 ```
 
 Optional legacy-wrapper fallback:
@@ -86,6 +110,11 @@ For full splitter details and migration notes, see `tools/README-theme-designer.
 - Recipe mode fails but internal mode works:
   - Check `.vscode/settings.json` tool/recipe definitions and command availability in `PATH`.
   - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
+- Re-running split after heading/title edits:
+  - Split uses `main.tex` as source of truth.
+  - Existing root `\subfile{...}` entries are used as incremental mapping hints by index.
+  - Title changes can auto-rename unit files to new slug names.
+  - Unreferenced old unit files are kept by default; pass `--prune-unreferenced` to delete them.
 
 ## What it edits
 

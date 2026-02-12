@@ -8,6 +8,16 @@ Local web UI for tuning template colors and on/off switches.
 python3 tools/latex_toolkit.py --open-browser
 ```
 
+One-click launcher script:
+
+```bash
+./scripts/start-ui.sh
+```
+
+macOS Finder double-click:
+
+- `scripts/start-ui.command`
+
 Default URL: `http://127.0.0.1:8765`
 
 Lifecycle example (auto-stop after last tab expires):
@@ -99,7 +109,8 @@ python3 tools/tex_splitter.py main.tex
   - article-like classes split by top-level `\section{...}`
 - Default mode keeps preamble in root, injects `\usepackage{subfiles}` when missing, and rewrites body with `\subfile{Sections/...}` entries.
 - Generated units are standalone-compilable (`\documentclass[<relative-root>]{subfiles}` + document wrapper).
-- Writes ordered unit files to `Sections/` (for example `01-overview.tex`).
+- Default naming mode writes slug unit files to `Sections/` (for example `overview.tex`).
+- Legacy compatibility naming is available via `--naming-mode numbered` (for example `01-overview.tex`).
 - Saves a backup before rewrite (`main.tex.bak`, then `.bak.1`, ...).
 - Strategy lock (P0): default standalone model is `subfiles` ("Split + subfiles standalone").
 - Compatibility policy:
@@ -123,8 +134,23 @@ python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
 python3 tools/tex_splitter.py main.tex --dry-run
 ```
 
+- Force legacy numbered filenames:
+
+```bash
+python3 tools/tex_splitter.py main.tex --naming-mode numbered
+```
+
+- Prune unreferenced existing units discovered from current root `\subfile{...}` list:
+
+```bash
+python3 tools/tex_splitter.py main.tex --prune-unreferenced
+```
+
 - Rerun safety:
-  - if root is already split with `\subfile{...}` entries, splitter returns no-op instead of injecting duplicates.
+  - `main.tex` remains split source of truth.
+  - existing root `\subfile{...}` list is used as index-based incremental mapping hint.
+  - heading/title changes can auto-rename generated unit filenames to updated slugs.
+  - unreferenced existing units are kept by default (explicit `--prune-unreferenced` to delete).
 
 - Toolkit UI split flow:
   - use `Split + Subfiles Standalone` panel

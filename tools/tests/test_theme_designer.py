@@ -34,6 +34,21 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIs(td_entry.main, ltk.main)
         self.assertIs(td_entry.ThemeDesignerHandler, ltk.ThemeDesignerHandler)
 
+    def test_launcher_scripts_exist_and_use_latex_toolkit_entrypoint(self) -> None:
+        root = td.ROOT_DIR
+        shell_script = root / "scripts/start-ui.sh"
+        command_script = root / "scripts/start-ui.command"
+
+        self.assertTrue(shell_script.exists())
+        self.assertTrue(command_script.exists())
+        self.assertTrue(os.access(shell_script, os.X_OK))
+        self.assertTrue(os.access(command_script, os.X_OK))
+
+        sh_text = shell_script.read_text(encoding="utf-8")
+        command_text = command_script.read_text(encoding="utf-8")
+        self.assertIn("tools/latex_toolkit.py --open-browser --port auto", sh_text)
+        self.assertIn("start-ui.sh", command_text)
+
     def _embedded_ui_script(self) -> str:
         match = re.search(r"<script>(.*)</script>", tdu.HTML_PAGE, re.S)
         self.assertIsNotNone(match, "Embedded HTML page is missing <script> block.")
@@ -648,7 +663,7 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertTrue(result.get("subfiles_package_injected"))
         generated = result.get("generated_subfile_targets", [])
         self.assertTrue(len(generated) >= 2)
-        self.assertIn("\\subfile{Sections/01-overview}", rewritten)
+        self.assertIn("\\subfile{Sections/overview}", rewritten)
 
     def test_split_compile_target_dry_run_does_not_write_files(self) -> None:
         root = td.ROOT_DIR
@@ -666,7 +681,7 @@ class ThemeDesignerTests(unittest.TestCase):
             "\\end{document}\n"
         )
         source_abs.write_text(original_text, encoding="utf-8")
-        planned_unit = root / "tools/tests/_tmp_split_core_dry_run/Sections/01-overview.tex"
+        planned_unit = root / "tools/tests/_tmp_split_core_dry_run/Sections/overview.tex"
 
         try:
             result = td._split_compile_target(source_rel, dry_run=True)
@@ -776,7 +791,7 @@ class ThemeDesignerTests(unittest.TestCase):
             "\\end{document}\n"
         )
         source_abs.write_text(original_text, encoding="utf-8")
-        planned_unit = root / "tools/tests/_tmp_split_server_dry_run/Sections/01-a.tex"
+        planned_unit = root / "tools/tests/_tmp_split_server_dry_run/Sections/a.tex"
 
         try:
             response = tds._split_response_payload(
@@ -797,6 +812,61 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertEqual(rewritten, original_text)
         self.assertFalse(planned_unit.exists())
         self.assertEqual(len(backup_candidates), 0)
+
+    def test_server_split_response_supports_numbered_naming_mode(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_split_server_numbered"
+        source_rel = "tools/tests/_tmp_split_server_numbered/main.tex"
+        source_abs = root / source_rel
+        source_abs.parent.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{A}\n"
+            "Alpha.\n"
+            "\\section{B}\n"
+            "Beta.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            response = tds._split_response_payload(
+                {
+                    "compile_target": source_rel,
+                    "standalone_mode": "subfiles",
+                    "naming_mode": "numbered",
+                    "dry_run": True,
+                }
+            )
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        split = response.get("split", {})
+        generated = split.get("generated_subfile_targets", [])
+        self.assertEqual(split.get("naming_mode"), "numbered")
+        self.assertTrue(any(path.endswith("/01-a.tex") for path in generated))
+
+    def test_server_split_response_rejects_invalid_naming_mode(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported split naming mode"):
+            tds._split_response_payload(
+                {
+                    "compile_target": "main.tex",
+                    "naming_mode": "bad-mode",
+                    "dry_run": True,
+                }
+            )
+
+    def test_server_split_response_rejects_invalid_prune_unreferenced_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "prune_unreferenced must be a boolean"):
+            tds._split_response_payload(
+                {
+                    "compile_target": "main.tex",
+                    "prune_unreferenced": 1,
+                    "dry_run": True,
+                }
+            )
 
     def test_server_split_response_rejects_invalid_dry_run_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "dry_run must be a boolean"):

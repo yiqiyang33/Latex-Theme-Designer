@@ -94,5 +94,9 @@
 % ------------------------------------------------------------------------------
 
 
-\subfile{Sections/test}
+\subfile{Sections/01-overview}
+\subfile{Sections/02-theorem-family-blocks}
+\subfile{Sections/03-callout-and-note-blocks}
+\subfile{Sections/04-conclusion}
+\section{test}
 \end{document}

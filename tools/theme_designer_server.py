@@ -208,6 +208,8 @@ def _split_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             selected,
             standalone_mode=payload.get("standalone_mode", "subfiles"),
             sections_dir=payload.get("sections_dir", "Sections"),
+            naming_mode=payload.get("naming_mode", "slug"),
+            prune_unreferenced=payload.get("prune_unreferenced", False),
             dry_run=dry_run,
         )
         response = _build_response_state()
@@ -479,7 +481,10 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     400,
                     str(err),
                     code="bad_request",
-                    hint="Check compile_target/standalone_mode/sections_dir values.",
+                    hint=(
+                        "Check compile_target/standalone_mode/sections_dir/"
+                        "naming_mode/prune_unreferenced values."
+                    ),
                 )
             except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
                 self._send_api_error(
@@ -500,7 +505,10 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     400,
                     str(err),
                     code="bad_request",
-                    hint="Check compile_target/standalone_mode/sections_dir values.",
+                    hint=(
+                        "Check compile_target/standalone_mode/sections_dir/"
+                        "naming_mode/prune_unreferenced values."
+                    ),
                 )
             except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
                 self._send_api_error(

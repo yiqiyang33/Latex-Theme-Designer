@@ -46,6 +46,13 @@ STANDALONE_MODES = {
     STANDALONE_MODE_LEGACY_WRAPPER,
 }
 
+NAMING_MODE_SLUG = "slug"
+NAMING_MODE_NUMBERED = "numbered"
+NAMING_MODES = {
+    NAMING_MODE_SLUG,
+    NAMING_MODE_NUMBERED,
+}
+
 
 @dataclass
 class SplitUnit:
@@ -68,11 +75,16 @@ class SplitResult:
     backup_path: Optional[Path]
     sections_dir: Path
     standalone_mode: str
+    naming_mode: str
     include_macro: str
     subfiles_package_injected: bool
     dry_run: bool
     already_split: bool
     units: List[SplitUnit]
+    renamed_units: List[Tuple[Path, Path]]
+    unchanged_units: List[Path]
+    unreferenced_existing_units: List[Path]
+    pruned_unreferenced_units: List[Path]
     standalone_dir: Optional[Path]
     standalone_wrappers: List[Path]
 
@@ -250,6 +262,13 @@ def _extract_existing_subfile_refs(body_text: str) -> List[str]:
     return refs
 
 
+def _strip_top_level_subfile_lines(body_text: str) -> str:
+    pattern = re.compile(
+        r"(?m)^[ \t]*\\subfile(?:[ \t]*\[[^\]\n]*\])?[ \t]*\{[^}\n]+\}[ \t]*\n?"
+    )
+    return pattern.sub("", body_text)
+
+
 def _path_from_tex_reference(base_dir: Path, reference: str) -> Path:
     ref_path = Path(reference.strip().replace("\\", "/"))
     if not ref_path.suffix:
@@ -288,19 +307,34 @@ def _build_units_from_existing_subfiles(root_path: Path, refs: List[str]) -> Lis
     return units
 
 
-def _write_text_transaction(write_map: List[Tuple[Path, str]]) -> None:
+def _write_text_transaction(
+    write_map: List[Tuple[Path, str]],
+    *,
+    delete_paths: Optional[List[Path]] = None,
+) -> None:
     if not write_map:
-        return
+        if not delete_paths:
+            return
+
+    write_targets = [path for path, _ in write_map]
+    write_target_set = set(write_targets)
+    pending_deletes = [
+        path
+        for path in (delete_paths or [])
+        if path not in write_target_set
+    ]
+    touched_paths = list(write_targets) + pending_deletes
 
     original_texts: Dict[Path, Optional[str]] = {}
-    for path, _ in write_map:
+    for path in touched_paths:
         if path.exists() and path.is_file():
             original_texts[path] = path.read_text(encoding="utf-8")
         else:
             original_texts[path] = None
 
     temp_paths: Dict[Path, Path] = {}
-    applied_paths: List[Path] = []
+    applied_writes: List[Path] = []
+    deleted_paths: List[Path] = []
     try:
         for path, text in write_map:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -313,12 +347,17 @@ def _write_text_transaction(write_map: List[Tuple[Path, str]]) -> None:
         for path, _ in write_map:
             temp_path = temp_paths[path]
             os.replace(temp_path, path)
-            applied_paths.append(path)
+            applied_writes.append(path)
+        for path in pending_deletes:
+            if path.exists():
+                path.unlink()
+                deleted_paths.append(path)
     except (OSError, UnicodeError, ValueError):
         for temp_path in temp_paths.values():
             if temp_path.exists():
                 temp_path.unlink()
-        for path in reversed(applied_paths):
+        rollback_order = list(reversed(applied_writes)) + list(reversed(deleted_paths))
+        for path in rollback_order:
             original = original_texts.get(path)
             if original is None:
                 if path.exists():
@@ -336,6 +375,22 @@ def _normalize_standalone_mode(mode: str) -> str:
         "Unsupported standalone mode. "
         f"Expected one of: {', '.join(sorted(STANDALONE_MODES))}."
     )
+
+
+def _normalize_naming_mode(mode: str) -> str:
+    normalized = str(mode or "").strip().lower()
+    if normalized in NAMING_MODES:
+        return normalized
+    raise ValueError(
+        "Unsupported naming mode. "
+        f"Expected one of: {', '.join(sorted(NAMING_MODES))}."
+    )
+
+
+def _unit_filename_for_mode(index: int, width: int, slug: str, naming_mode: str) -> str:
+    if naming_mode == NAMING_MODE_NUMBERED:
+        return f"{index:0{width}d}-{slug}.tex"
+    return f"{slug}.tex"
 
 
 def _contains_subfiles_package(preamble_text: str) -> bool:
@@ -395,6 +450,8 @@ def split_tex_file(
     with_standalone: bool = False,
     standalone_dir: Optional[Path] = None,
     dry_run: bool = False,
+    naming_mode: str = NAMING_MODE_SLUG,
+    prune_unreferenced: bool = False,
 ) -> SplitResult:
     root_path = root_tex_path.expanduser().resolve()
     if not root_path.exists():
@@ -403,6 +460,7 @@ def split_tex_file(
         raise ValueError(f"Root path is not a file: {root_tex_path}")
 
     mode = _normalize_standalone_mode(standalone_mode)
+    resolved_naming_mode = _normalize_naming_mode(naming_mode)
     if with_standalone:
         mode = STANDALONE_MODE_LEGACY_WRAPPER
     if mode == STANDALONE_MODE_SUBFILES and use_include:
@@ -426,10 +484,14 @@ def split_tex_file(
     end_document_and_tail = tex_text[body_end:]
 
     anchors = _find_top_level_anchors(body_text, split_command)
+    existing_refs = _extract_existing_subfile_refs(body_text)
+    existing_ref_paths = [
+        _path_from_tex_reference(root_path.parent, ref)
+        for ref in existing_refs
+    ]
     section_dir_path = _resolve_output_dir(sections_dir, root_path.parent)
     if not anchors:
         if mode == STANDALONE_MODE_SUBFILES:
-            existing_refs = _extract_existing_subfile_refs(body_text)
             if existing_refs:
                 existing_units = _build_units_from_existing_subfiles(
                     root_path,
@@ -444,11 +506,16 @@ def split_tex_file(
                     backup_path=None,
                     sections_dir=section_dir_path,
                     standalone_mode=mode,
+                    naming_mode=resolved_naming_mode,
                     include_macro="\\subfile",
                     subfiles_package_injected=False,
                     dry_run=bool(dry_run),
                     already_split=True,
                     units=existing_units,
+                    renamed_units=[],
+                    unchanged_units=[unit.path for unit in existing_units],
+                    unreferenced_existing_units=[],
+                    pruned_unreferenced_units=[],
                     standalone_dir=None,
                     standalone_wrappers=[],
                 )
@@ -465,7 +532,7 @@ def split_tex_file(
         chunk_text = body_text[chunk_start:chunk_end]
         title = _extract_heading_title(body_text, split_command, chunk_start)
         slug = _stable_slug_for_title(title, seen_slugs)
-        filename = f"{index:0{width}d}-{slug}.tex"
+        filename = _unit_filename_for_mode(index, width, slug, resolved_naming_mode)
         units.append(
             SplitUnit(
                 index=index,
@@ -476,7 +543,27 @@ def split_tex_file(
             )
         )
 
+    renamed_units: List[Tuple[Path, Path]] = []
+    unchanged_units: List[Path] = []
+    unreferenced_existing_units: List[Path] = []
+    pruned_unreferenced_units: List[Path] = []
+
+    # Incremental remap by existing root subfile references (index-based).
+    if mode == STANDALONE_MODE_SUBFILES and existing_ref_paths:
+        for idx, unit in enumerate(units):
+            if idx >= len(existing_ref_paths):
+                break
+            existing_path = existing_ref_paths[idx]
+            if existing_path.resolve() == unit.path.resolve():
+                unchanged_units.append(unit.path)
+            else:
+                renamed_units.append((existing_path, unit.path))
+        if len(existing_ref_paths) > len(units):
+            unreferenced_existing_units = existing_ref_paths[len(units):]
+
     leading_body = body_text[:anchors[0].start()]
+    if existing_refs:
+        leading_body = _strip_top_level_subfile_lines(leading_body)
     include_macro = "\\subfile"
     if mode == STANDALONE_MODE_LEGACY_WRAPPER:
         include_macro = "\\include" if use_include else "\\input"
@@ -505,11 +592,22 @@ def split_tex_file(
         raw_standalone_dir = standalone_dir or (section_dir_path / "_standalone")
         standalone_dir_path = _resolve_output_dir(raw_standalone_dir, root_path.parent)
     write_map: List[Tuple[Path, str]] = []
+    delete_paths: List[Path] = []
     for unit in units:
         unit_content = unit.content
         if mode == STANDALONE_MODE_SUBFILES:
             unit_content = _build_subfile_unit_text(root_path, unit.path, unit_content)
         write_map.append((unit.path, unit_content))
+
+    for old_path, new_path in renamed_units:
+        if old_path.resolve() != new_path.resolve():
+            delete_paths.append(old_path)
+
+    if prune_unreferenced:
+        for old_path in unreferenced_existing_units:
+            if old_path.exists() and old_path.is_file():
+                delete_paths.append(old_path)
+                pruned_unreferenced_units.append(old_path)
 
     if mode == STANDALONE_MODE_LEGACY_WRAPPER and standalone_dir_path is not None:
         for unit in units:
@@ -529,7 +627,7 @@ def split_tex_file(
     backup_path: Optional[Path] = _next_backup_path(root_path)
     if not dry_run:
         shutil.copy2(root_path, backup_path)
-        _write_text_transaction(write_map)
+        _write_text_transaction(write_map, delete_paths=delete_paths)
 
     return SplitResult(
         document_class=document_class,
@@ -538,11 +636,16 @@ def split_tex_file(
         backup_path=backup_path,
         sections_dir=section_dir_path,
         standalone_mode=mode,
+        naming_mode=resolved_naming_mode,
         include_macro=include_macro,
         subfiles_package_injected=subfiles_package_injected,
         dry_run=bool(dry_run),
         already_split=False,
         units=units,
+        renamed_units=renamed_units,
+        unchanged_units=unchanged_units,
+        unreferenced_existing_units=unreferenced_existing_units,
+        pruned_unreferenced_units=pruned_unreferenced_units,
         standalone_dir=standalone_dir_path,
         standalone_wrappers=standalone_wrappers,
     )
@@ -608,6 +711,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "Reports planned units and root rewrite mode only."
         ),
     )
+    parser.add_argument(
+        "--naming-mode",
+        default=NAMING_MODE_SLUG,
+        choices=sorted(NAMING_MODES),
+        help=(
+            "Generated unit naming mode (default: slug). "
+            "Use numbered to keep legacy index-prefixed filenames."
+        ),
+    )
+    parser.add_argument(
+        "--prune-unreferenced",
+        action="store_true",
+        help=(
+            "Delete unreferenced existing subfile targets discovered from current "
+            "root \\subfile list (subfiles mode only)."
+        ),
+    )
     return parser
 
 
@@ -631,6 +751,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.with_standalone:
         standalone_mode = STANDALONE_MODE_LEGACY_WRAPPER
     with_standalone = standalone_mode == STANDALONE_MODE_LEGACY_WRAPPER
+    naming_mode = _normalize_naming_mode(str(args.naming_mode))
     if str(args.standalone_dir).strip():
         if not with_standalone:
             parser.error("--standalone-dir requires --standalone-mode legacy-wrapper.")
@@ -647,6 +768,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             with_standalone=with_standalone,
             standalone_dir=standalone_dir,
             dry_run=bool(args.dry_run),
+            naming_mode=naming_mode,
+            prune_unreferenced=bool(args.prune_unreferenced),
         )
     except ValueError as error:
         print(f"[tex-splitter] {error}", file=sys.stderr)
@@ -668,7 +791,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"[tex-splitter] class={result.document_class} split-by=\\{result.split_command} "
         f"units={len(result.units)} mode={result.standalone_mode} "
-        f"macro={result.include_macro}"
+        f"macro={result.include_macro} naming={result.naming_mode}"
     )
     if result.already_split:
         print("[tex-splitter] detected existing subfile layout; no rewrite applied.")
@@ -679,6 +802,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     for unit in result.units:
         title = unit.title.strip() or f"{result.split_command}-{unit.index}"
         print(f"  - {_display_path(unit.path, cwd)} :: {title}")
+    if result.renamed_units:
+        print(f"[tex-splitter] renamed units: {len(result.renamed_units)}")
+        for old_path, new_path in result.renamed_units:
+            print(
+                "  - "
+                f"{_display_path(old_path, cwd)} -> {_display_path(new_path, cwd)}"
+            )
+    if result.unchanged_units:
+        print(f"[tex-splitter] unchanged unit paths: {len(result.unchanged_units)}")
+    if result.unreferenced_existing_units:
+        print(
+            "[tex-splitter] unreferenced existing units: "
+            f"{len(result.unreferenced_existing_units)}"
+        )
+        for path in result.unreferenced_existing_units:
+            print(f"  - {_display_path(path, cwd)}")
+    if result.pruned_unreferenced_units:
+        print(
+            "[tex-splitter] pruned unreferenced units: "
+            f"{len(result.pruned_unreferenced_units)}"
+        )
+        for path in result.pruned_unreferenced_units:
+            print(f"  - {_display_path(path, cwd)}")
     if result.standalone_wrappers:
         standalone_dir_display = (
             _display_path(result.standalone_dir, cwd)

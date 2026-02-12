@@ -836,6 +836,18 @@
           <input id="splitDryRun" type="checkbox">
           <label for="splitDryRun">Dry run (no file writes)</label>
         </div>
+        <details class="group">
+          <summary>Advanced</summary>
+          <div class="split-controls" style="margin-top: 8px;">
+            <label for="splitNamingMode">Naming</label>
+            <select id="splitNamingMode"></select>
+            <span class="hint">Default: slug (no numeric prefix)</span>
+          </div>
+          <div class="compile-options">
+            <input id="splitPruneUnreferenced" type="checkbox">
+            <label for="splitPruneUnreferenced">Prune unreferenced existing section files</label>
+          </div>
+        </details>
         <div id="splitResult" class="split-result">No split run yet.</div>
       </div>
 
@@ -895,6 +907,8 @@
     const selectorState = {
       starterTemplate: "",
       splitSource: "",
+      splitNamingMode: "slug",
+      splitPruneUnreferenced: false,
       compileTarget: "",
       compileRecipe: ""
     };
@@ -1128,6 +1142,10 @@
         selectorState.splitSource || selectorState.compileTarget,
         targets
       );
+      if (!selectorState.splitNamingMode) {
+        selectorState.splitNamingMode = "slug";
+      }
+      selectorState.splitPruneUnreferenced = !!selectorState.splitPruneUnreferenced;
 
       const recipes = (model.state.compile_recipes || []).map((item) => item.id);
       selectorState.compileRecipe = normalizeSelectableChoice(
@@ -1196,6 +1214,8 @@
       const modeTag = document.getElementById("splitModeTag");
       const switchBtn = document.getElementById("switchSplitTargetBtn");
       const dryRun = document.getElementById("splitDryRun");
+      const namingMode = document.getElementById("splitNamingMode");
+      const pruneUnreferenced = document.getElementById("splitPruneUnreferenced");
       const targets = model.state.compile_targets || [];
       const currentTarget = selectorState.splitSource || selectorState.compileTarget || model.state.compile_target || "";
       const selected = renderSelectEntries(
@@ -1214,6 +1234,25 @@
         dryRun.checked = false;
         dryRun.dataset.bound = "1";
       }
+      const selectedNamingMode = renderSelectEntries(
+        namingMode,
+        [
+          { value: "slug", label: "slug (default)" },
+          { value: "numbered", label: "numbered (legacy)" }
+        ],
+        selectorState.splitNamingMode || "slug"
+      );
+      selectorState.splitNamingMode = selectedNamingMode || "slug";
+      namingMode.onchange = () => {
+        selectorState.splitNamingMode = namingMode.value || "slug";
+      };
+      if (!pruneUnreferenced.dataset.bound) {
+        pruneUnreferenced.checked = !!selectorState.splitPruneUnreferenced;
+        pruneUnreferenced.dataset.bound = "1";
+      }
+      pruneUnreferenced.onchange = () => {
+        selectorState.splitPruneUnreferenced = !!pruneUnreferenced.checked;
+      };
     }
 
     function renderSplitResult() {
@@ -1226,6 +1265,8 @@
       const lines = [];
       lines.push(`source: ${latestSplitResult.source_target || "(unknown)"}`);
       lines.push(`mode: ${latestSplitResult.standalone_mode || SPLIT_MODE}`);
+      lines.push(`naming: ${latestSplitResult.naming_mode || "slug"}`);
+      lines.push(`prune-unreferenced: ${latestSplitResult.prune_unreferenced ? "yes" : "no"}`);
       lines.push(`split-by: \\${latestSplitResult.split_command || "(unknown)"}`);
       const dryRun = !!latestSplitResult.dry_run;
       lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
@@ -1235,6 +1276,29 @@
       lines.push(`updated files (${updated.length}):`);
       if (updated.length > 0) {
         for (const item of updated) lines.push(`- ${item}`);
+      } else {
+        lines.push("- (none)");
+      }
+      const renamed = latestSplitResult.renamed_units || [];
+      lines.push(`renamed units (${renamed.length}):`);
+      if (renamed.length > 0) {
+        for (const item of renamed) {
+          lines.push(`- ${item.from} -> ${item.to}`);
+        }
+      } else {
+        lines.push("- (none)");
+      }
+      const unreferenced = latestSplitResult.unreferenced_existing_units || [];
+      lines.push(`unreferenced existing units (${unreferenced.length}):`);
+      if (unreferenced.length > 0) {
+        for (const item of unreferenced) lines.push(`- ${item}`);
+      } else {
+        lines.push("- (none)");
+      }
+      const pruned = latestSplitResult.pruned_unreferenced_units || [];
+      lines.push(`pruned unreferenced units (${pruned.length}):`);
+      if (pruned.length > 0) {
+        for (const item of pruned) lines.push(`- ${item}`);
       } else {
         lines.push("- (none)");
       }
@@ -1778,17 +1842,23 @@
       const select = document.getElementById("splitSourceSelect");
       const selected = (select.value || model.state.compile_target || "").trim();
       const dryRun = document.getElementById("splitDryRun").checked;
+      const namingMode = (document.getElementById("splitNamingMode").value || "slug").trim();
+      const pruneUnreferenced = !!document.getElementById("splitPruneUnreferenced").checked;
       if (!selected) {
         setStatus("No split source target selected.", "err");
         return;
       }
-      setStatus(`Splitting ${selected} in ${SPLIT_MODE} mode${dryRun ? " (dry-run)" : ""}...`);
+      setStatus(
+        `Splitting ${selected} in ${SPLIT_MODE} mode (${namingMode})${dryRun ? " (dry-run)" : ""}...`
+      );
       const btn = document.getElementById("splitBtn");
       btn.disabled = true;
       try {
         model = await postJson("/api/split", {
           compile_target: selected,
           standalone_mode: SPLIT_MODE,
+          naming_mode: namingMode,
+          prune_unreferenced: pruneUnreferenced,
           dry_run: dryRun
         });
         syncSelectorStateFromModel();
