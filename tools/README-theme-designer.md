@@ -54,6 +54,7 @@ python3 tools/theme_designer.py --open-browser
   - choose compile mode:
     - internal fallback pipeline
     - VSCode recipe from `.vscode/settings.json`
+  - compile preflight validates `\subfile{...}` references and blocks obvious recursive/missing-path corruption before TeX execution
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
 - Preview current target PDF in the same UI page.
@@ -145,6 +146,11 @@ These files are loaded automatically by:
 
 ## Troubleshooting
 
+- Compile blocked before TeX execution (`[preflight] Compile blocked due to invalid \subfile references`):
+  - Read the listed offending path(s) from compile output.
+  - Typical corruption pattern: section unit contains `\subfile{Sections/...}` and causes `Sections/Sections/...` recursion.
+  - Fix that section file to real content (for example `\section{...}` + body text) and re-run compile.
+
 - Chapter color appears unchanged:
   - `theme-chapter` only affects rendered chapter headings.
   - If target class is `article` (or override forces `ThemeClassMode=article`), chapter heading styling is inactive.
@@ -188,10 +194,11 @@ Use the UI button `Reset (Delete Overrides)`, or manually delete:
 rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 ```
 
-## Roadmap
+## Active TODO
 
 See detailed plan and checkboxes in:
 
+- `tools/TODO-priority-hardening.md`
 - `tools/TODO-theme-designer.md`
 
 ## Naming Migration

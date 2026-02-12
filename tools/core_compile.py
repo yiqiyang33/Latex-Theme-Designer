@@ -7,6 +7,104 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+SUBFILE_PATTERN = re.compile(r"\\subfile(?:\[[^\]]*\])?\{([^}]+)\}")
+UNESCAPED_PERCENT_PATTERN = re.compile(r"(?<!\\)%.*$")
+
+
+def _strip_tex_comments(text: str) -> str:
+    lines: List[str] = []
+    for raw_line in text.splitlines():
+        lines.append(UNESCAPED_PERCENT_PATTERN.sub("", raw_line))
+    return "\n".join(lines)
+
+
+def validate_subfile_references(
+    entry_tex_abs: Path,
+    *,
+    root_dir: Path,
+    read_text_fn: Callable[[Path], str],
+    is_subpath_fn: Callable[[Path, Path], bool],
+) -> List[str]:
+    """Validate subfile include graph for obvious recursive/missing path failures."""
+
+    issues: List[str] = []
+    root_abs = root_dir.resolve()
+    visited: set[Path] = set()
+    visiting: set[Path] = set()
+
+    def _rel(path: Path) -> str:
+        try:
+            return path.resolve().relative_to(root_abs).as_posix()
+        except ValueError:
+            return str(path.resolve())
+
+    def _record(issue: str) -> None:
+        if issue not in issues:
+            issues.append(issue)
+
+    def _resolve_subfile_target(base_file: Path, raw_ref: str) -> Path:
+        raw = raw_ref.strip()
+        ref = Path(raw)
+        if ref.suffix.lower() != ".tex":
+            ref = ref.with_suffix(".tex")
+        if ref.is_absolute():
+            return ref.resolve()
+        return (base_file.parent / ref).resolve()
+
+    def _walk(current: Path, chain: List[Path]) -> None:
+        resolved = current.resolve()
+        if resolved in visiting:
+            cycle = " -> ".join([_rel(item) for item in chain + [resolved]])
+            _record(f"Recursive subfile cycle detected: {cycle}")
+            return
+        if resolved in visited:
+            return
+
+        visiting.add(resolved)
+        visited.add(resolved)
+        try:
+            raw_text = read_text_fn(resolved)
+        except OSError as err:
+            _record(f"Failed to read source file: {_rel(resolved)} ({err})")
+            visiting.discard(resolved)
+            return
+
+        text = _strip_tex_comments(raw_text)
+        for raw_ref in SUBFILE_PATTERN.findall(text):
+            target_abs = _resolve_subfile_target(resolved, raw_ref)
+            source_rel = _rel(resolved)
+            target_rel = _rel(target_abs)
+
+            if target_abs == resolved:
+                _record(
+                    f"Recursive subfile self-reference: {source_rel} includes '{raw_ref}'."
+                )
+                continue
+
+            if not is_subpath_fn(target_abs, root_abs):
+                _record(
+                    f"Subfile target outside workspace: {source_rel} -> '{raw_ref}'."
+                )
+                continue
+
+            if "Sections/Sections/" in target_rel:
+                _record(f"Suspicious nested Sections path: {source_rel} -> {target_rel}")
+
+            if not target_abs.exists():
+                _record(f"Missing subfile target: {source_rel} -> {target_rel}")
+                continue
+
+            _walk(target_abs, chain + [resolved])
+
+        visiting.discard(resolved)
+
+    entry_abs = entry_tex_abs.resolve()
+    if not is_subpath_fn(entry_abs, root_abs):
+        return [f"Compile target is outside workspace: {entry_tex_abs}"]
+
+    _walk(entry_abs, [])
+    return issues
+
 
 def resolve_compile_context(
     compile_target: str,
@@ -612,6 +710,7 @@ def compile_tex_target(
     use_internal_fallback: bool,
     *,
     resolve_compile_context_fn: Callable[[str], Any],
+    preflight_fn: Optional[Callable[[Any], Optional[Tuple[bool, str, str]]]] = None,
     compile_tex_target_internal_fn: Callable[[Any], Tuple[bool, str, str]],
     compile_tex_target_recipe_fn: Callable[[Any, str], Tuple[bool, str, str]],
 ) -> Tuple[bool, str, str]:
@@ -621,6 +720,11 @@ def compile_tex_target(
         ctx = resolve_compile_context_fn(compile_target)
     except ValueError as err:
         return False, str(err), ""
+
+    if preflight_fn is not None:
+        preflight_result = preflight_fn(ctx)
+        if preflight_result is not None:
+            return preflight_result
 
     if use_internal_fallback:
         return compile_tex_target_internal_fn(ctx)

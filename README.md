@@ -77,6 +77,16 @@ python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
 Note: split source must be a root `.tex` target. Subfile units (`\documentclass{subfiles}`) are rejected.
 For full splitter details and migration notes, see `tools/README-theme-designer.md`.
 
+## Quick Troubleshooting
+
+- UI compile fails with `Sections/Sections/... not found`:
+  - This usually means a section file accidentally contains a recursive `\subfile{Sections/...}` reference.
+  - The toolkit compile flow now runs a preflight check and reports the offending file path before TeX compile.
+  - Fix the listed section file to contain real section content, then re-run compile.
+- Recipe mode fails but internal mode works:
+  - Check `.vscode/settings.json` tool/recipe definitions and command availability in `PATH`.
+  - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
+
 ## What it edits
 
 - `theme.colors.tex`
@@ -115,10 +125,11 @@ To reset generated theme overrides:
 rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 ```
 
-## Roadmap
+## Active TODO
 
 See:
 
+- `tools/TODO-priority-hardening.md`
 - `tools/TODO-theme-designer.md`
 
 ## Naming Migration

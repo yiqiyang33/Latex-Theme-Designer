@@ -143,6 +143,73 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("No TeX engine found", output)
         self.assertEqual(pdf_path, "main.pdf")
 
+    def test_compile_preflight_blocks_nested_sections_subfile_reference(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_compile_preflight_self_ref"
+        target_rel = "tools/tests/_tmp_compile_preflight_self_ref/main.tex"
+        target_abs = root / target_rel
+        section_abs = base_dir / "Sections/01-overview.tex"
+        section_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-overview}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        section_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-overview}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            success, output, pdf_rel = td._compile_tex_target(target_rel)
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertFalse(success)
+        self.assertIn("[preflight] Compile blocked", output)
+        self.assertIn("Suspicious nested Sections path", output)
+        self.assertIn("Missing subfile target", output)
+        self.assertIn("tools/tests/_tmp_compile_preflight_self_ref/Sections/01-overview.tex", output)
+        self.assertEqual(pdf_rel, "tools/tests/_tmp_compile_preflight_self_ref/main.pdf")
+
+    def test_compile_preflight_blocks_missing_subfile_target_in_recipe_mode(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_compile_preflight_missing_ref"
+        target_rel = "tools/tests/_tmp_compile_preflight_missing_ref/main.tex"
+        target_abs = root / target_rel
+        target_abs.parent.mkdir(parents=True, exist_ok=True)
+        target_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/does-not-exist}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            success, output, pdf_rel = td._compile_tex_target(
+                target_rel,
+                compile_recipe="vscode-1-xelatex",
+                use_internal_fallback=False,
+            )
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertFalse(success)
+        self.assertIn("[preflight] Compile blocked", output)
+        self.assertIn("Missing subfile target", output)
+        self.assertIn("tools/tests/_tmp_compile_preflight_missing_ref/main.tex", output)
+        self.assertEqual(pdf_rel, "tools/tests/_tmp_compile_preflight_missing_ref/main.pdf")
+
     def test_run_command_uses_timeout_and_shell_disabled(self) -> None:
         captured: dict[str, object] = {}
         original_subprocess_run = td.subprocess.run

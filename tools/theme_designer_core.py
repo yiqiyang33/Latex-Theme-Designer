@@ -1506,6 +1506,31 @@ def _compile_tex_target_recipe(ctx: CompileContext, recipe_id: str) -> Tuple[boo
     )
 
 
+def _preflight_compile_context(
+    ctx: CompileContext,
+) -> Optional[Tuple[bool, str, str]]:
+    issues = _core_compile.validate_subfile_references(
+        ctx.target_abs,
+        root_dir=ROOT_DIR,
+        read_text_fn=_read_text,
+        is_subpath_fn=_is_subpath,
+    )
+    if not issues:
+        return None
+
+    logs: List[str] = [
+        "[preflight] Compile blocked due to invalid \\subfile references.",
+        "",
+    ]
+    for issue in issues[:8]:
+        logs.append(f"- {issue}")
+    if len(issues) > 8:
+        logs.append(f"- ... and {len(issues) - 8} more issue(s)")
+    logs.append("")
+    logs.append("Hint: fix the listed section/include paths, then re-run compile.")
+    return False, "\n".join(logs), ctx.default_pdf_rel
+
+
 def _compile_tex_target(
     compile_target: str,
     compile_recipe: str = "",
@@ -1516,6 +1541,7 @@ def _compile_tex_target(
         compile_recipe,
         use_internal_fallback,
         resolve_compile_context_fn=_resolve_compile_context,
+        preflight_fn=_preflight_compile_context,
         compile_tex_target_internal_fn=_compile_tex_target_internal,
         compile_tex_target_recipe_fn=_compile_tex_target_recipe,
     )
