@@ -140,7 +140,7 @@ python3 tools/tex_splitter.py main.tex --dry-run
 python3 tools/tex_splitter.py main.tex --naming-mode numbered
 ```
 
-- Prune unreferenced existing units discovered from current root `\subfile{...}` list:
+- Prune units that split marks as unreferenced (conservative cleanup):
 
 ```bash
 python3 tools/tex_splitter.py main.tex --prune-unreferenced
@@ -148,9 +148,10 @@ python3 tools/tex_splitter.py main.tex --prune-unreferenced
 
 - Rerun safety:
   - `main.tex` remains split source of truth.
-  - existing root `\subfile{...}` list is used as index-based incremental mapping hint.
-  - heading/title changes can auto-rename generated unit filenames to updated slugs.
-  - unreferenced existing units are kept by default (explicit `--prune-unreferenced` to delete).
+  - existing root `\subfile{...}` entries are kept unchanged.
+  - rerun only extracts newly added top-level anchors into new unit files.
+  - middle insertion order remains aligned with current `main.tex` body order.
+  - existing unit files are not auto-renamed on heading/title edits.
 
 - Toolkit UI split flow:
   - use `Split + Subfiles Standalone` panel

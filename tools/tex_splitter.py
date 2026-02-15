@@ -89,6 +89,17 @@ class SplitResult:
     standalone_wrappers: List[Path]
 
 
+@dataclass
+class BodyToken:
+    """Top-level body token used for incremental split rewrites."""
+
+    kind: str
+    start: int
+    end: int
+    title: str = ""
+    reference: str = ""
+
+
 def _extract_document_class(tex_text: str) -> str:
     match = DOCUMENTCLASS_PATTERN.search(tex_text)
     if not match:
@@ -250,23 +261,103 @@ def _resolve_output_dir(raw_dir: Path, root_parent: Path) -> Path:
     return resolved.resolve()
 
 
-def _extract_existing_subfile_refs(body_text: str) -> List[str]:
+def _find_top_level_subfile_tokens(body_text: str) -> List[BodyToken]:
     pattern = re.compile(
-        r"(?m)^[ \t]*\\subfile(?:[ \t]*\[[^\]\n]*\])?[ \t]*\{([^}\n]+)\}"
+        r"(?m)^[ \t]*\\subfile(?:[ \t]*\[[^\]\n]*\])?[ \t]*\{([^}\n]+)\}[ \t]*(?:\n|$)"
     )
-    refs: List[str] = []
+    tokens: List[BodyToken] = []
     for match in pattern.finditer(body_text):
         ref = str(match.group(1)).strip()
-        if ref:
-            refs.append(ref)
-    return refs
+        tokens.append(
+            BodyToken(
+                kind="subfile",
+                start=match.start(),
+                end=match.end(),
+                reference=ref,
+            )
+        )
+    return tokens
 
 
-def _strip_top_level_subfile_lines(body_text: str) -> str:
-    pattern = re.compile(
-        r"(?m)^[ \t]*\\subfile(?:[ \t]*\[[^\]\n]*\])?[ \t]*\{[^}\n]+\}[ \t]*\n?"
-    )
-    return pattern.sub("", body_text)
+def _build_body_tokens(body_text: str, command_name: str) -> List[BodyToken]:
+    tokens: List[BodyToken] = []
+    for match in _find_top_level_anchors(body_text, command_name):
+        title = _extract_heading_title(body_text, command_name, match.start())
+        tokens.append(
+            BodyToken(
+                kind="anchor",
+                start=match.start(),
+                end=match.end(),
+                title=title,
+            )
+        )
+    tokens.extend(_find_top_level_subfile_tokens(body_text))
+    tokens.sort(key=lambda token: token.start)
+
+    for index, token in enumerate(tokens):
+        if token.kind != "anchor":
+            continue
+        next_start = len(body_text)
+        if index + 1 < len(tokens):
+            next_start = tokens[index + 1].start
+        token.end = max(token.start, next_start)
+    return tokens
+
+
+def _unique_paths_in_order(paths: List[Path]) -> List[Path]:
+    unique: List[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
+
+
+def _non_conflicting_unit_path(
+    section_dir_path: Path,
+    *,
+    preferred_filename: str,
+    reserved_paths: set[Path],
+) -> Path:
+    preferred = (section_dir_path / preferred_filename).resolve()
+    if preferred not in reserved_paths:
+        return preferred
+
+    stem = Path(preferred_filename).stem
+    suffix = Path(preferred_filename).suffix or ".tex"
+    counter = 2
+    while True:
+        candidate = (section_dir_path / f"{stem}-dup-{counter}{suffix}").resolve()
+        if candidate not in reserved_paths:
+            return candidate
+        counter += 1
+
+
+def _rewrite_body_with_tokens(
+    body_text: str,
+    *,
+    tokens: List[BodyToken],
+    anchor_replacements: Dict[int, str],
+) -> str:
+    if not tokens:
+        return body_text
+    cursor = 0
+    fragments: List[str] = []
+    for token in tokens:
+        fragments.append(body_text[cursor:token.start])
+        if token.kind == "anchor":
+            replacement = anchor_replacements.get(token.start, "")
+            if replacement and not replacement.endswith("\n"):
+                replacement += "\n"
+            fragments.append(replacement)
+        else:
+            fragments.append(body_text[token.start:token.end])
+        cursor = token.end
+    fragments.append(body_text[cursor:])
+    return "".join(fragments)
 
 
 def _path_from_tex_reference(base_dir: Path, reference: str) -> Path:
@@ -483,14 +574,15 @@ def split_tex_file(
     body_text = tex_text[body_start:body_end]
     end_document_and_tail = tex_text[body_end:]
 
-    anchors = _find_top_level_anchors(body_text, split_command)
-    existing_refs = _extract_existing_subfile_refs(body_text)
-    existing_ref_paths = [
-        _path_from_tex_reference(root_path.parent, ref)
-        for ref in existing_refs
-    ]
+    tokens = _build_body_tokens(body_text, split_command)
+    anchor_tokens = [token for token in tokens if token.kind == "anchor"]
+    subfile_tokens = [token for token in tokens if token.kind == "subfile"]
+    existing_refs = [token.reference for token in subfile_tokens if token.reference]
+    existing_ref_paths = _unique_paths_in_order(
+        [_path_from_tex_reference(root_path.parent, ref) for ref in existing_refs]
+    )
     section_dir_path = _resolve_output_dir(sections_dir, root_path.parent)
-    if not anchors:
+    if not anchor_tokens:
         if mode == STANDALONE_MODE_SUBFILES:
             if existing_refs:
                 existing_units = _build_units_from_existing_subfiles(
@@ -524,60 +616,48 @@ def split_tex_file(
         )
 
     units: List[SplitUnit] = []
-    width = max(2, len(str(len(anchors))))
+    width = max(2, len(str(len(anchor_tokens))))
     seen_slugs: Dict[str, int] = {}
-    for index, anchor in enumerate(anchors, start=1):
-        chunk_start = anchor.start()
-        chunk_end = anchors[index].start() if index < len(anchors) else len(body_text)
+    reserved_paths: set[Path] = {path.resolve() for path in existing_ref_paths}
+    anchor_replacements: Dict[int, str] = {}
+    include_macro = "\\subfile"
+    if mode == STANDALONE_MODE_LEGACY_WRAPPER:
+        include_macro = "\\include" if use_include else "\\input"
+    for index, token in enumerate(anchor_tokens, start=1):
+        chunk_start = token.start
+        chunk_end = token.end
         chunk_text = body_text[chunk_start:chunk_end]
-        title = _extract_heading_title(body_text, split_command, chunk_start)
+        title = token.title
         slug = _stable_slug_for_title(title, seen_slugs)
         filename = _unit_filename_for_mode(index, width, slug, resolved_naming_mode)
+        unit_path = _non_conflicting_unit_path(
+            section_dir_path,
+            preferred_filename=filename,
+            reserved_paths=reserved_paths,
+        )
+        reserved_paths.add(unit_path.resolve())
         units.append(
             SplitUnit(
                 index=index,
                 title=title or f"{split_command}-{index}",
                 slug=slug,
-                path=section_dir_path / filename,
+                path=unit_path,
                 content=chunk_text,
             )
         )
+        anchor_replacements[token.start] = (
+            f"{include_macro}{{{_relative_tex_reference(root_path.parent, unit_path)}}}"
+        )
 
     renamed_units: List[Tuple[Path, Path]] = []
-    unchanged_units: List[Path] = []
+    unchanged_units: List[Path] = list(existing_ref_paths)
     unreferenced_existing_units: List[Path] = []
     pruned_unreferenced_units: List[Path] = []
-
-    # Incremental remap by existing root subfile references (index-based).
-    if mode == STANDALONE_MODE_SUBFILES and existing_ref_paths:
-        for idx, unit in enumerate(units):
-            if idx >= len(existing_ref_paths):
-                break
-            existing_path = existing_ref_paths[idx]
-            if existing_path.resolve() == unit.path.resolve():
-                unchanged_units.append(unit.path)
-            else:
-                renamed_units.append((existing_path, unit.path))
-        if len(existing_ref_paths) > len(units):
-            unreferenced_existing_units = existing_ref_paths[len(units):]
-
-    leading_body = body_text[:anchors[0].start()]
-    if existing_refs:
-        leading_body = _strip_top_level_subfile_lines(leading_body)
-    include_macro = "\\subfile"
-    if mode == STANDALONE_MODE_LEGACY_WRAPPER:
-        include_macro = "\\include" if use_include else "\\input"
-    include_lines = [
-        f"{include_macro}{{{_relative_tex_reference(root_path.parent, unit.path)}}}"
-        for unit in units
-    ]
-
-    new_body = leading_body
-    if new_body and not new_body.endswith("\n"):
-        new_body += "\n"
-    if new_body and not new_body.endswith("\n\n"):
-        new_body += "\n"
-    new_body += "\n".join(include_lines) + "\n"
+    new_body = _rewrite_body_with_tokens(
+        body_text,
+        tokens=tokens,
+        anchor_replacements=anchor_replacements,
+    )
     subfiles_package_injected = False
     rewritten_preamble_plus_begin = preamble_plus_begin
     if mode == STANDALONE_MODE_SUBFILES:
@@ -598,10 +678,6 @@ def split_tex_file(
         if mode == STANDALONE_MODE_SUBFILES:
             unit_content = _build_subfile_unit_text(root_path, unit.path, unit_content)
         write_map.append((unit.path, unit_content))
-
-    for old_path, new_path in renamed_units:
-        if old_path.resolve() != new_path.resolve():
-            delete_paths.append(old_path)
 
     if prune_unreferenced:
         for old_path in unreferenced_existing_units:
@@ -811,6 +887,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
     if result.unchanged_units:
         print(f"[tex-splitter] unchanged unit paths: {len(result.unchanged_units)}")
+        if not result.already_split:
+            print(
+                "[tex-splitter] incremental insert mode: existing subfiles kept unchanged."
+            )
     if result.unreferenced_existing_units:
         print(
             "[tex-splitter] unreferenced existing units: "

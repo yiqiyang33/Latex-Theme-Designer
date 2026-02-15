@@ -112,9 +112,10 @@ For full splitter details and migration notes, see `tools/README-theme-designer.
   - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
 - Re-running split after heading/title edits:
   - Split uses `main.tex` as source of truth.
-  - Existing root `\subfile{...}` entries are used as incremental mapping hints by index.
-  - Title changes can auto-rename unit files to new slug names.
-  - Unreferenced old unit files are kept by default; pass `--prune-unreferenced` to delete them.
+  - Existing root `\subfile{...}` entries are kept unchanged.
+  - New top-level `\section/\chapter` blocks are extracted into new unit files only.
+  - Middle insertion order is preserved in rewritten `\subfile{...}` layout.
+  - Existing unit files are not auto-renamed; rename manually if needed.
 
 ## What it edits
 
