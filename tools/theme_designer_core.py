@@ -23,13 +23,6 @@ TEMPLATE_DIR = ROOT_DIR / "templates"
 SPLIT_STANDALONE_MODE_SUBFILES = "subfiles"
 SPLIT_DEFAULT_SECTIONS_DIR = "Sections"
 SPLIT_ALLOWED_MODES = {SPLIT_STANDALONE_MODE_SUBFILES}
-SPLIT_NAMING_MODE_SLUG = "slug"
-SPLIT_NAMING_MODE_NUMBERED = "numbered"
-SPLIT_DEFAULT_NAMING_MODE = SPLIT_NAMING_MODE_SLUG
-SPLIT_ALLOWED_NAMING_MODES = {
-    SPLIT_NAMING_MODE_SLUG,
-    SPLIT_NAMING_MODE_NUMBERED,
-}
 COMPILE_COMMAND_TIMEOUT_SEC = 120.0
 COMPILE_TIMEOUT_EXIT_CODE = 124
 
@@ -1149,18 +1142,6 @@ def _normalize_split_sections_dir(raw_dir: Any) -> str:
     )
 
 
-def _normalize_split_naming_mode(raw_mode: Any) -> str:
-    return _core_split.normalize_split_naming_mode(
-        raw_mode,
-        default_mode=SPLIT_DEFAULT_NAMING_MODE,
-        allowed_modes=SPLIT_ALLOWED_NAMING_MODES,
-    )
-
-
-def _normalize_split_prune_unreferenced(raw_value: Any) -> bool:
-    return _core_split.normalize_split_prune_unreferenced(raw_value)
-
-
 def _validate_split_source_target(target_rel: str, target_abs: Path) -> None:
     _core_split.validate_split_source_target(
         target_rel,
@@ -1175,8 +1156,6 @@ def _split_compile_target(
     compile_target: str,
     standalone_mode: Any = SPLIT_STANDALONE_MODE_SUBFILES,
     sections_dir: Any = SPLIT_DEFAULT_SECTIONS_DIR,
-    naming_mode: Any = SPLIT_DEFAULT_NAMING_MODE,
-    prune_unreferenced: Any = False,
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """Split one compile target and return UI-facing operation summary."""
@@ -1185,17 +1164,45 @@ def _split_compile_target(
         compile_target,
         standalone_mode=standalone_mode,
         sections_dir=sections_dir,
-        naming_mode=naming_mode,
-        prune_unreferenced=prune_unreferenced,
         dry_run=bool(dry_run),
         default_mode=SPLIT_STANDALONE_MODE_SUBFILES,
         allowed_modes=SPLIT_ALLOWED_MODES,
         default_sections_dir=SPLIT_DEFAULT_SECTIONS_DIR,
-        default_naming_mode=SPLIT_DEFAULT_NAMING_MODE,
-        allowed_naming_modes=SPLIT_ALLOWED_NAMING_MODES,
         resolve_compile_context=_resolve_compile_context,
         extract_documentclass_declaration=_extract_documentclass_declaration,
         resolve_subfiles_parent_tex=_resolve_subfiles_parent_tex,
+        safe_workspace_relpath=_safe_workspace_relpath,
+        splitter=_tex_splitter,
+    )
+
+
+def _renumber_compile_target(
+    compile_target: str,
+    mode: Any = "add",
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    return _core_split.renumber_compile_target(
+        compile_target,
+        mode=mode,
+        dry_run=bool(dry_run),
+        resolve_compile_context=_resolve_compile_context,
+        extract_documentclass_declaration=_extract_documentclass_declaration,
+        resolve_subfiles_parent_tex=_resolve_subfiles_parent_tex,
+        safe_workspace_relpath=_safe_workspace_relpath,
+        splitter=_tex_splitter,
+    )
+
+
+def _unsplit_compile_target(
+    compile_target: str,
+    dry_run: bool = False,
+    delete_source: bool = True,
+) -> Dict[str, Any]:
+    return _core_split.unsplit_compile_target(
+        compile_target,
+        dry_run=bool(dry_run),
+        delete_source=bool(delete_source),
+        resolve_compile_context=_resolve_compile_context,
         safe_workspace_relpath=_safe_workspace_relpath,
         splitter=_tex_splitter,
     )

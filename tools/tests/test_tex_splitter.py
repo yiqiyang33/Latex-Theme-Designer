@@ -43,14 +43,14 @@ class TexSplitterTests(unittest.TestCase):
             rewritten = root.read_text(encoding="utf-8")
             self.assertEqual(rewritten.count("\\usepackage{subfiles}"), 1)
             self.assertIn("Front matter before split anchor.", rewritten)
-            self.assertIn("\\subfile{Sections/overview-and-goals}", rewritten)
-            self.assertIn("\\subfile{Sections/methods}", rewritten)
+            self.assertIn("\\subfile{Sections/01-overview-and-goals}", rewritten)
+            self.assertIn("\\subfile{Sections/02-methods}", rewritten)
             self.assertNotIn("\\section{Methods}", rewritten)
 
-            first_unit = (root.parent / "Sections" / "overview-and-goals.tex").read_text(
+            first_unit = (root.parent / "Sections" / "01-overview-and-goals.tex").read_text(
                 encoding="utf-8"
             )
-            second_unit = (root.parent / "Sections" / "methods.tex").read_text(
+            second_unit = (root.parent / "Sections" / "02-methods.tex").read_text(
                 encoding="utf-8"
             )
             self.assertTrue(
@@ -94,11 +94,11 @@ class TexSplitterTests(unittest.TestCase):
             self.assertEqual(len(result.standalone_wrappers), 2)
 
             rewritten = root.read_text(encoding="utf-8")
-            self.assertIn("\\include{Sections/first-chapter}", rewritten)
-            self.assertIn("\\include{Sections/second-chapter}", rewritten)
+            self.assertIn("\\include{Sections/01-first-chapter}", rewritten)
+            self.assertIn("\\include{Sections/02-second-chapter}", rewritten)
             self.assertNotIn("\\chapter{First Chapter}", rewritten)
 
-            first_unit = (root.parent / "Sections" / "first-chapter.tex").read_text(
+            first_unit = (root.parent / "Sections" / "01-first-chapter.tex").read_text(
                 encoding="utf-8"
             )
             self.assertTrue(first_unit.startswith("\\chapter{First Chapter}"))
@@ -216,8 +216,8 @@ class TexSplitterTests(unittest.TestCase):
             self.assertIsNotNone(result.backup_path)
             self.assertFalse(result.backup_path.exists())  # type: ignore[union-attr]
             self.assertEqual(root.read_text(encoding="utf-8"), original_text)
-            self.assertFalse((root.parent / "Sections" / "overview.tex").exists())
-            self.assertFalse((root.parent / "Sections" / "method.tex").exists())
+            self.assertFalse((root.parent / "Sections" / "01-overview.tex").exists())
+            self.assertFalse((root.parent / "Sections" / "02-method.tex").exists())
 
     def test_split_rerun_on_existing_subfiles_layout_is_noop(self) -> None:
         original_text = (
@@ -262,10 +262,10 @@ class TexSplitterTests(unittest.TestCase):
             result = ts.split_tex_file(root, root.parent / "Sections")
             names = [unit.path.name for unit in result.units]
 
-            self.assertEqual(names, ["preface.tex", "main.tex"])
+            self.assertEqual(names, ["01-preface.tex", "02-main.tex"])
             rewritten = root.read_text(encoding="utf-8")
-            self.assertIn("\\subfile{Sections/preface}", rewritten)
-            self.assertIn("\\subfile{Sections/main}", rewritten)
+            self.assertIn("\\subfile{Sections/01-preface}", rewritten)
+            self.assertIn("\\subfile{Sections/02-main}", rewritten)
 
     def test_split_slug_fallback_for_non_ascii_and_duplicates_is_deterministic(self) -> None:
         original_text = (
@@ -290,7 +290,7 @@ class TexSplitterTests(unittest.TestCase):
 
             self.assertEqual(
                 names,
-                ["unit.tex", "unit-dup-2.tex", "intro.tex", "intro-dup-2.tex"],
+                ["01-unit.tex", "02-unit-dup-2.tex", "03-intro.tex", "04-intro-dup-2.tex"],
             )
 
     def test_split_transaction_failure_keeps_existing_files_unchanged(self) -> None:
@@ -312,7 +312,7 @@ class TexSplitterTests(unittest.TestCase):
 
             original_writer = ts._write_text_transaction
             try:
-                def fail_writer(_write_map, **_kwargs):
+                def fail_writer(_write_map):
                     raise OSError("simulated write failure")
                 ts._write_text_transaction = fail_writer
                 with self.assertRaisesRegex(OSError, "simulated write failure"):
@@ -355,10 +355,10 @@ class TexSplitterTests(unittest.TestCase):
             )
 
             first_wrapper_path = (
-                root.parent / "Sections" / "_standalone" / "overview-standalone.tex"
+                root.parent / "Sections" / "_standalone" / "01-overview-standalone.tex"
             ).resolve()
             second_wrapper_path = (
-                root.parent / "Sections" / "_standalone" / "method-standalone.tex"
+                root.parent / "Sections" / "_standalone" / "02-method-standalone.tex"
             ).resolve()
             self.assertEqual(result.standalone_wrappers[0], first_wrapper_path)
             self.assertEqual(result.standalone_wrappers[1], second_wrapper_path)
@@ -366,8 +366,8 @@ class TexSplitterTests(unittest.TestCase):
             first_wrapper = first_wrapper_path.read_text(encoding="utf-8")
             second_wrapper = second_wrapper_path.read_text(encoding="utf-8")
             self.assertIn("\\documentclass{article}", first_wrapper)
-            self.assertIn("\\input{../overview}", first_wrapper)
-            self.assertIn("\\input{../method}", second_wrapper)
+            self.assertIn("\\input{../01-overview}", first_wrapper)
+            self.assertIn("\\input{../02-method}", second_wrapper)
 
     def test_legacy_wrapper_names_stable_across_runs(self) -> None:
         original_text = (
@@ -401,166 +401,224 @@ class TexSplitterTests(unittest.TestCase):
             self.assertEqual(first_names, second_names)
             self.assertEqual(
                 second_names,
-                ["start-here-standalone.tex", "next-step-standalone.tex"],
+                ["01-start-here-standalone.tex", "02-next-step-standalone.tex"],
             )
 
-    def test_split_numbered_naming_mode_keeps_legacy_index_prefix(self) -> None:
-        original_text = (
+    def test_renumber_add_only_fills_missing_prefixes_by_reference_order(self) -> None:
+        root_text = (
             "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
             "\\begin{document}\n"
-            "\\section{Overview}\n"
-            "Alpha.\n"
-            "\\section{Method}\n"
-            "Beta.\n"
+            "\\subfile{Sections/01-alpha}\n"
+            "\\subfile{Sections/beta}\n"
+            "\\subfile{Sections/04-delta}\n"
+            "\\subfile{Sections/gamma}\n"
             "\\end{document}\n"
         )
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "main.tex"
-            root.write_text(original_text, encoding="utf-8")
-            result = ts.split_tex_file(
-                root,
-                root.parent / "Sections",
-                naming_mode=ts.NAMING_MODE_NUMBERED,
-            )
-            names = [unit.path.name for unit in result.units]
-            rewritten = root.read_text(encoding="utf-8")
-        self.assertEqual(names, ["01-overview.tex", "02-method.tex"])
-        self.assertIn("\\subfile{Sections/01-overview}", rewritten)
-        self.assertIn("\\subfile{Sections/02-method}", rewritten)
+            sections = root.parent / "Sections"
+            sections.mkdir(parents=True, exist_ok=True)
+            root.write_text(root_text, encoding="utf-8")
+            (sections / "01-alpha.tex").write_text("A\n", encoding="utf-8")
+            (sections / "beta.tex").write_text("B\n", encoding="utf-8")
+            (sections / "04-delta.tex").write_text("D\n", encoding="utf-8")
+            (sections / "gamma.tex").write_text("G\n", encoding="utf-8")
 
-    def test_split_incremental_insert_middle_keeps_existing_units_unchanged(self) -> None:
+            result = ts.renumber_references(root, mode="add")
+            rewritten = root.read_text(encoding="utf-8")
+
+            self.assertEqual(result.mode, "add")
+            self.assertIn("\\subfile{Sections/01-alpha}", rewritten)
+            self.assertIn("\\subfile{Sections/02-beta}", rewritten)
+            self.assertIn("\\subfile{Sections/04-delta}", rewritten)
+            self.assertIn("\\subfile{Sections/03-gamma}", rewritten)
+            self.assertTrue((sections / "02-beta.tex").exists())
+            self.assertTrue((sections / "03-gamma.tex").exists())
+            self.assertFalse((sections / "beta.tex").exists())
+            self.assertFalse((sections / "gamma.tex").exists())
+            self.assertIsNotNone(result.backup_path)
+
+    def test_renumber_remove_strips_numeric_prefix_without_touching_unprefixed(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-alpha}\n"
+            "\\subfile{Sections/02-beta}\n"
+            "\\subfile{Sections/gamma}\n"
+            "\\end{document}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "main.tex"
-            sections = Path(tmp_dir) / "Sections"
+            sections = root.parent / "Sections"
             sections.mkdir(parents=True, exist_ok=True)
-            root.write_text(
-                "\\documentclass{article}\n"
-                "\\begin{document}\n"
-                "\\subfile{Sections/old-a}\n"
-                "\\section{Inserted Mid}\n"
-                "Alpha.\n"
-                "\\subfile{Sections/old-b}\n"
-                "\\end{document}\n",
-                encoding="utf-8",
-            )
-            old_a = sections / "old-a.tex"
-            old_b = sections / "old-b.tex"
-            old_a.write_text("OLD-A\n", encoding="utf-8")
-            old_b.write_text("OLD-B\n", encoding="utf-8")
+            root.write_text(root_text, encoding="utf-8")
+            (sections / "01-alpha.tex").write_text("A\n", encoding="utf-8")
+            (sections / "02-beta.tex").write_text("B\n", encoding="utf-8")
+            (sections / "gamma.tex").write_text("G\n", encoding="utf-8")
 
-            result = ts.split_tex_file(root, sections)
-
+            result = ts.renumber_references(root, mode="remove")
             rewritten = root.read_text(encoding="utf-8")
-            new_unit = sections / "inserted-mid.tex"
-            self.assertTrue(new_unit.exists())
-            self.assertEqual(old_a.read_text(encoding="utf-8"), "OLD-A\n")
-            self.assertEqual(old_b.read_text(encoding="utf-8"), "OLD-B\n")
-            self.assertLess(
-                rewritten.index("\\subfile{Sections/old-a}"),
-                rewritten.index("\\subfile{Sections/inserted-mid}"),
-            )
-            self.assertLess(
-                rewritten.index("\\subfile{Sections/inserted-mid}"),
-                rewritten.index("\\subfile{Sections/old-b}"),
-            )
-            self.assertIn("\\section{Inserted Mid}", new_unit.read_text(encoding="utf-8"))
-            self.assertNotIn("\\subfile{Sections/old-b}", new_unit.read_text(encoding="utf-8"))
-            self.assertEqual(result.renamed_units, [])
-            self.assertEqual([path.name for path in result.unchanged_units], ["old-a.tex", "old-b.tex"])
-            self.assertEqual(result.unreferenced_existing_units, [])
-            self.assertEqual(result.pruned_unreferenced_units, [])
 
-    def test_split_incremental_insert_tail_keeps_existing_units_unchanged(self) -> None:
+            self.assertEqual(result.mode, "remove")
+            self.assertIn("\\subfile{Sections/alpha}", rewritten)
+            self.assertIn("\\subfile{Sections/beta}", rewritten)
+            self.assertIn("\\subfile{Sections/gamma}", rewritten)
+            self.assertTrue((sections / "alpha.tex").exists())
+            self.assertTrue((sections / "beta.tex").exists())
+            self.assertTrue((sections / "gamma.tex").exists())
+            self.assertFalse((sections / "01-alpha.tex").exists())
+            self.assertFalse((sections / "02-beta.tex").exists())
+            self.assertIsNotNone(result.backup_path)
+
+    def test_renumber_dry_run_does_not_write(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/topic}\n"
+            "\\end{document}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "main.tex"
-            sections = Path(tmp_dir) / "Sections"
+            sections = root.parent / "Sections"
             sections.mkdir(parents=True, exist_ok=True)
-            root.write_text(
-                "\\documentclass{article}\n"
-                "\\begin{document}\n"
-                "\\subfile{Sections/old-a}\n"
-                "\\section{Tail Add}\n"
-                "Alpha.\n"
-                "\\end{document}\n",
-                encoding="utf-8",
-            )
-            old_a = sections / "old-a.tex"
-            old_a.write_text("OLD-A\n", encoding="utf-8")
+            root.write_text(root_text, encoding="utf-8")
+            (sections / "topic.tex").write_text("T\n", encoding="utf-8")
 
-            result = ts.split_tex_file(root, sections)
-            rewritten = root.read_text(encoding="utf-8")
+            result = ts.renumber_references(root, mode="add", dry_run=True)
 
-            self.assertTrue((sections / "tail-add.tex").exists())
-            self.assertEqual(old_a.read_text(encoding="utf-8"), "OLD-A\n")
-            self.assertLess(
-                rewritten.index("\\subfile{Sections/old-a}"),
-                rewritten.index("\\subfile{Sections/tail-add}"),
-            )
-            self.assertEqual(result.renamed_units, [])
-            self.assertEqual([path.name for path in result.unchanged_units], ["old-a.tex"])
+            self.assertTrue(result.dry_run)
+            self.assertEqual(root.read_text(encoding="utf-8"), root_text)
+            self.assertTrue((sections / "topic.tex").exists())
+            self.assertFalse((sections / "01-topic.tex").exists())
+            self.assertIsNotNone(result.backup_path)
+            self.assertFalse(result.backup_path.exists())  # type: ignore[union-attr]
 
-    def test_split_incremental_insert_head_keeps_existing_units_unchanged(self) -> None:
+    def test_renumber_conflict_raises_and_keeps_files(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-alpha}\n"
+            "\\subfile{Sections/alpha}\n"
+            "\\end{document}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "main.tex"
-            sections = Path(tmp_dir) / "Sections"
+            sections = root.parent / "Sections"
             sections.mkdir(parents=True, exist_ok=True)
-            root.write_text(
-                "\\documentclass{article}\n"
-                "\\begin{document}\n"
-                "\\section{Head Add}\n"
-                "Alpha.\n"
-                "\\subfile{Sections/old-a}\n"
-                "\\subfile{Sections/old-b}\n"
-                "\\end{document}\n",
-                encoding="utf-8",
-            )
-            old_a = sections / "old-a.tex"
-            old_b = sections / "old-b.tex"
-            old_a.write_text("OLD-A\n", encoding="utf-8")
-            old_b.write_text("OLD-B\n", encoding="utf-8")
+            root.write_text(root_text, encoding="utf-8")
+            (sections / "01-alpha.tex").write_text("A1\n", encoding="utf-8")
+            (sections / "alpha.tex").write_text("A0\n", encoding="utf-8")
 
-            result = ts.split_tex_file(root, sections)
-            rewritten = root.read_text(encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                ts.renumber_references(root, mode="remove")
 
-            self.assertTrue((sections / "head-add.tex").exists())
-            self.assertLess(
-                rewritten.index("\\subfile{Sections/head-add}"),
-                rewritten.index("\\subfile{Sections/old-a}"),
-            )
-            self.assertLess(
-                rewritten.index("\\subfile{Sections/old-a}"),
-                rewritten.index("\\subfile{Sections/old-b}"),
-            )
-            self.assertEqual(old_a.read_text(encoding="utf-8"), "OLD-A\n")
-            self.assertEqual(old_b.read_text(encoding="utf-8"), "OLD-B\n")
-            self.assertEqual(result.renamed_units, [])
-            self.assertEqual([path.name for path in result.unchanged_units], ["old-a.tex", "old-b.tex"])
+            self.assertEqual(root.read_text(encoding="utf-8"), root_text)
+            self.assertTrue((sections / "01-alpha.tex").exists())
+            self.assertTrue((sections / "alpha.tex").exists())
 
-    def test_split_incremental_insert_collision_uses_dup_suffix(self) -> None:
+    def test_unsplit_inlines_unit_and_deletes_source_by_default(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-topic}\n"
+            "\\end{document}\n"
+        )
+        unit_text = (
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Topic}\n"
+            "Alpha.\n"
+            "\\end{document}\n"
+        )
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir) / "main.tex"
-            sections = Path(tmp_dir) / "Sections"
-            sections.mkdir(parents=True, exist_ok=True)
-            root.write_text(
-                "\\documentclass{article}\n"
-                "\\begin{document}\n"
-                "\\subfile{Sections/overview}\n"
-                "\\section{Overview}\n"
-                "Alpha.\n"
-                "\\end{document}\n",
-                encoding="utf-8",
-            )
-            existing = sections / "overview.tex"
-            existing.write_text("KEEP\n", encoding="utf-8")
-            result = ts.split_tex_file(root, sections)
+            unit = Path(tmp_dir) / "Sections" / "01-topic.tex"
+            unit.parent.mkdir(parents=True, exist_ok=True)
+            root.write_text(root_text, encoding="utf-8")
+            unit.write_text(unit_text, encoding="utf-8")
+
+            result = ts.unsplit_one_unit(unit)
             rewritten = root.read_text(encoding="utf-8")
 
-            self.assertIn("\\subfile{Sections/overview}", rewritten)
-            self.assertIn("\\subfile{Sections/overview-dup-2}", rewritten)
-            self.assertTrue((sections / "overview-dup-2.tex").exists())
-            self.assertEqual(existing.read_text(encoding="utf-8"), "KEEP\n")
-            self.assertEqual(result.renamed_units, [])
-            self.assertEqual([path.name for path in result.unchanged_units], ["overview.tex"])
+            self.assertTrue(result.deleted_source)
+            self.assertIn("\\section{Topic}", rewritten)
+            self.assertNotIn("\\subfile{Sections/01-topic}", rewritten)
+            self.assertFalse(unit.exists())
+            self.assertIsNotNone(result.backup_path)
+
+    def test_unsplit_keep_source_retains_unit_file(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-topic}\n"
+            "\\end{document}\n"
+        )
+        unit_text = (
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Topic}\n"
+            "Alpha.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            unit = Path(tmp_dir) / "Sections" / "01-topic.tex"
+            unit.parent.mkdir(parents=True, exist_ok=True)
+            root.write_text(root_text, encoding="utf-8")
+            unit.write_text(unit_text, encoding="utf-8")
+
+            result = ts.unsplit_one_unit(unit, delete_source=False)
+
+            self.assertFalse(result.deleted_source)
+            self.assertTrue(unit.exists())
+            self.assertIn("\\section{Topic}", root.read_text(encoding="utf-8"))
+
+    def test_unsplit_dry_run_does_not_write(self) -> None:
+        root_text = (
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-topic}\n"
+            "\\end{document}\n"
+        )
+        unit_text = (
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Topic}\n"
+            "Alpha.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            unit = Path(tmp_dir) / "Sections" / "01-topic.tex"
+            unit.parent.mkdir(parents=True, exist_ok=True)
+            root.write_text(root_text, encoding="utf-8")
+            unit.write_text(unit_text, encoding="utf-8")
+
+            result = ts.unsplit_one_unit(unit, dry_run=True)
+
+            self.assertTrue(result.dry_run)
+            self.assertFalse(result.deleted_source)
+            self.assertEqual(root.read_text(encoding="utf-8"), root_text)
+            self.assertTrue(unit.exists())
+            self.assertIsNotNone(result.backup_path)
+            self.assertFalse(result.backup_path.exists())  # type: ignore[union-attr]
+
+    def test_unsplit_rejects_non_subfiles_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = Path(tmp_dir) / "plain.tex"
+            target.write_text(
+                "\\documentclass{article}\\begin{document}\\section{A}\\end{document}\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must be a subfiles unit"):
+                ts.unsplit_one_unit(target)
 
 
 if __name__ == "__main__":

@@ -32,8 +32,10 @@ try:
         _normalize_compile_target,
         _normalize_payload,
         _persist_ui_state,
+        _renumber_compile_target,
         _resolve_workspace_pdf,
         _split_compile_target,
+        _unsplit_compile_target,
         _write_override_files,
     )
     from tools.theme_designer_ui import HTML_PAGE
@@ -53,8 +55,10 @@ except ModuleNotFoundError:
         _normalize_compile_target,
         _normalize_payload,
         _persist_ui_state,
+        _renumber_compile_target,
         _resolve_workspace_pdf,
         _split_compile_target,
+        _unsplit_compile_target,
         _write_override_files,
     )
     from theme_designer_ui import HTML_PAGE
@@ -208,12 +212,53 @@ def _split_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             selected,
             standalone_mode=payload.get("standalone_mode", "subfiles"),
             sections_dir=payload.get("sections_dir", "Sections"),
-            naming_mode=payload.get("naming_mode", "slug"),
-            prune_unreferenced=payload.get("prune_unreferenced", False),
             dry_run=dry_run,
         )
         response = _build_response_state()
         response["split"] = split_result
+    return response
+
+
+def _renumber_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    dry_run = _coerce_bool_value(payload.get("dry_run", False), "dry_run")
+    mode = str(payload.get("mode", "add")).strip().lower()
+    with STATE_LOCK:
+        current = _load_state()
+        selected = _normalize_compile_target(
+            payload.get("compile_target", current.get("compile_target", "")),
+            current.get("compile_targets", []),
+        )
+        renumber_result = _renumber_compile_target(
+            selected,
+            mode=mode,
+            dry_run=dry_run,
+        )
+        response = _build_response_state()
+        response["renumber"] = renumber_result
+    return response
+
+
+def _unsplit_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    dry_run = _coerce_bool_value(payload.get("dry_run", False), "dry_run")
+    delete_source = _coerce_bool_value(
+        payload.get("delete_source", True),
+        "delete_source",
+    )
+    with STATE_LOCK:
+        current = _load_state()
+        if "compile_target" not in payload:
+            raise ValueError("Missing compile_target in request payload.")
+        selected = _normalize_compile_target(
+            payload.get("compile_target"),
+            current.get("compile_targets", []),
+        )
+        unsplit_result = _unsplit_compile_target(
+            selected,
+            dry_run=dry_run,
+            delete_source=delete_source,
+        )
+        response = _build_response_state()
+        response["unsplit"] = unsplit_result
     return response
 
 
@@ -481,10 +526,7 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     400,
                     str(err),
                     code="bad_request",
-                    hint=(
-                        "Check compile_target/standalone_mode/sections_dir/"
-                        "naming_mode/prune_unreferenced values."
-                    ),
+                    hint="Check compile_target/standalone_mode/sections_dir values.",
                 )
             except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
                 self._send_api_error(
@@ -505,10 +547,7 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     400,
                     str(err),
                     code="bad_request",
-                    hint=(
-                        "Check compile_target/standalone_mode/sections_dir/"
-                        "naming_mode/prune_unreferenced values."
-                    ),
+                    hint="Check compile_target/standalone_mode/sections_dir values.",
                 )
             except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
                 self._send_api_error(
@@ -516,6 +555,48 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     f"Failed to split target: {err}",
                     code="internal_error",
                     hint="Inspect server logs for split/IO failures.",
+                )
+            return
+
+        if self.path == "/api/renumber":
+            try:
+                payload = self._parse_json_body()
+                response = _renumber_response_payload(payload)
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check compile_target/mode/dry_run values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to renumber target references: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for renumber/IO failures.",
+                )
+            return
+
+        if self.path == "/api/unsplit":
+            try:
+                payload = self._parse_json_body()
+                response = _unsplit_response_payload(payload)
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Check compile_target/delete_source/dry_run values.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to unsplit target: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for unsplit/IO failures.",
                 )
             return
 

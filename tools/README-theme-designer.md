@@ -8,16 +8,6 @@ Local web UI for tuning template colors and on/off switches.
 python3 tools/latex_toolkit.py --open-browser
 ```
 
-One-click launcher script:
-
-```bash
-./scripts/start-ui.sh
-```
-
-macOS Finder double-click:
-
-- `scripts/start-ui.command`
-
 Default URL: `http://127.0.0.1:8765`
 
 Lifecycle example (auto-stop after last tab expires):
@@ -83,6 +73,10 @@ python3 tools/theme_designer.py --open-browser
   - UI sends heartbeat while page is open
 - Standalone compile strategy is locked as `Split + subfiles standalone`.
 - Existing wrapper-based standalone generation is retained as a legacy fallback during migration.
+- Split panel also supports:
+  - one-click renumber for referenced unit filenames (`add` / `remove`)
+  - one-click merge of a selected subfiles unit back into parent root
+  - optional source-file retention after merge (default: delete source)
 
 ## Known Limitations
 
@@ -109,8 +103,7 @@ python3 tools/tex_splitter.py main.tex
   - article-like classes split by top-level `\section{...}`
 - Default mode keeps preamble in root, injects `\usepackage{subfiles}` when missing, and rewrites body with `\subfile{Sections/...}` entries.
 - Generated units are standalone-compilable (`\documentclass[<relative-root>]{subfiles}` + document wrapper).
-- Default naming mode writes slug unit files to `Sections/` (for example `overview.tex`).
-- Legacy compatibility naming is available via `--naming-mode numbered` (for example `01-overview.tex`).
+- Writes ordered unit files to `Sections/` (for example `01-overview.tex`).
 - Saves a backup before rewrite (`main.tex.bak`, then `.bak.1`, ...).
 - Strategy lock (P0): default standalone model is `subfiles` ("Split + subfiles standalone").
 - Compatibility policy:
@@ -134,28 +127,36 @@ python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
 python3 tools/tex_splitter.py main.tex --dry-run
 ```
 
-- Force legacy numbered filenames:
+- Renumber referenced unit files for one root:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --naming-mode numbered
+python3 tools/tex_splitter.py main.tex --renumber-mode add
+python3 tools/tex_splitter.py main.tex --renumber-mode remove
 ```
 
-- Prune units that split marks as unreferenced (conservative cleanup):
+  - scope is root-referenced targets only (`\subfile`, `\input`, `\include` in document body)
+  - `add` keeps existing numbered files and fills missing numbers by reference order
+  - `remove` strips `^\d+-` prefixes from referenced filenames
+
+- Merge one split unit back into root at its original reference location:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --prune-unreferenced
+python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference.tex
 ```
+
+  - default behavior deletes source unit after merge
+  - keep source file with `--keep-source`
+  - `--dry-run` is supported
 
 - Rerun safety:
-  - `main.tex` remains split source of truth.
-  - existing root `\subfile{...}` entries are kept unchanged.
-  - rerun only extracts newly added top-level anchors into new unit files.
-  - middle insertion order remains aligned with current `main.tex` body order.
-  - existing unit files are not auto-renamed on heading/title edits.
+  - if root is already split with `\subfile{...}` entries, splitter returns no-op instead of injecting duplicates.
 
 - Toolkit UI split flow:
   - use `Split + Subfiles Standalone` panel
   - choose source target, optional dry-run, then click `Split Current Target`
+  - use `Renumber Referenced Units` with mode `add/remove` for filename prefix updates
+  - use `Merge Selected Back To Root` to unsplit one unit into parent root
+  - toggle `Delete source file after merge` as needed (default: enabled)
   - after success, use `Switch To First Subfile` for one-click compile-target switch
 
 ## What it edits

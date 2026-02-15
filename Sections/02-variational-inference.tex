@@ -1,0 +1,171 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+
+\chapter{Variational inference}
+
+\section{Intro}
+
+\subsection{The objective}
+
+Consider a model with unknown vars $\boldsymbol{z}$, known variable $\boldsymbol{x}$ and fixed parameter $\boldsymbol{\theta}$.
+The prior is $p_{\boldsymbol{\theta}}(\boldsymbol{z})$ and the likelihood is $p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z})$, and the posterior is 
+$p_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x}) = \frac{p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z})}{p_{\boldsymbol{\theta}}(\boldsymbol{x})}$.
+
+
+Usually , it is intractable to compute the normalization constant
+\[
+p_{\boldsymbol{\theta}}(\boldsymbol{x}) = \int p_{\boldsymbol{\theta}} (\boldsymbol{x}, \boldsymbol{z}) d \boldsymbol{z}
+\]
+and hence intractable to compute the normalized posterior. We then want to seek an approximation to the posterior $q(\boldsymbol{z})$, such that
+\[
+q = \mathop{\arg\min}\limits_{_{q \in  \mathcal{Q}}} D_{\mathbb{KL}} \left( q(\boldsymbol{z}) || p_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x}) \right) 
+\]
+This is called a \textbf{variatioinal method}.
+
+In practice we pick a parametric family $\mathcal{Q}$, where we use $\boldsymbol{\psi}$, known as the variational parameters.
+
+\[
+\begin{aligned}
+\boldsymbol{\psi}^{*} &= \mathop{\arg\min}\limits_{\boldsymbol{\psi}}  D_{\mathbb{KL}}(q_{\boldsymbol{\psi}}(\boldsymbol{z}) || p_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x}))\\
+&=  \mathop{\arg\min}\limits_{\boldsymbol{\psi}}  \mathbb{E}_{q_{\boldsymbol{\psi}}(\boldsymbol{z})} \left[ \log q_{\boldsymbol{\psi}}(\boldsymbol{z}) - \log  \left(  \frac{p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z}) p_{\boldsymbol{\theta}}(\boldsymbol{z})}{p_{\boldsymbol{\theta}}(\boldsymbol{x})} \right)  \right] \\ 
+&= \mathop{\arg\min}\limits_{\boldsymbol{\psi}} \mathbb{E}_{q_{\boldsymbol{\psi}}(\boldsymbol{z})} \left[ \log q_{\boldsymbol{\psi}}(\boldsymbol{z}) - \log p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z}) - \log p_{\boldsymbol{\theta}}(\boldsymbol{z})\right]  + \log p_{\boldsymbol{\theta}}(\boldsymbol{x})
+\end{aligned}
+\]
+
+\[
+\mathcal{L}(\boldsymbol{\theta}, \boldsymbol{\psi} | \boldsymbol{x}) = \mathbb{E}_{q_{\boldsymbol{\psi}}(\boldsymbol{z})}  \left[ - \log p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z}) + \log q_{\boldsymbol{\psi}}(\boldsymbol{z}) \right] .
+\]
+
+\begin{note}{ELBO}
+The negative of the VFE is the \emph{evidence lower bound} or \emph{ELBO} function
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\psi} | \boldsymbol{x}) = \mathbb{E}_{q_{\boldsymbol{\psi}}(\boldsymbol{z})} \left[ \log p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z})  - \log q_{\boldsymbol{\psi}}(\boldsymbol{z}) \right]  = \text{ELBO}
+\]
+We claim
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\psi} | \boldsymbol{x}) \le  \log p_{\boldsymbol{\theta}}(\boldsymbol{x})
+\]
+\[
+\begin{aligned}
+\log p_{\boldsymbol{\theta}}(\boldsymbol{x}) &= \log \int p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z}) d\boldsymbol{z} \\
+&= \log p_{\boldsymbol{\theta}}(\boldsymbol{x}) = \log \int q_{\boldsymbol{\psi}}(\boldsymbol{z}) \frac{p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z})}{q_{\boldsymbol{\psi}}(\boldsymbol{z})}d\boldsymbol{z} = \log \mathbb{E}_{q_{\boldsymbol{\psi}}(\boldsymbol{z})} \left[ \frac{p_{\boldsymbol{\theta}}(\boldsymbol{x},\boldsymbol{z})}{q_{\boldsymbol{\psi}}(\boldsymbol{z})} \right]  \\
+& \ge  \mathbb{E}_{q} \left[ \log \frac{p(\boldsymbol{x}, \boldsymbol{z})}{q(\boldsymbol{z})} \right] = \mathbb{E}_{q} \left[ \log p(\boldsymbol{x}, \boldsymbol{z}) - \log q(\boldsymbol{z}) \right] 
+\end{aligned}
+\]
+We can rewrite the ELBO as
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\psi} | \boldsymbol{x}) = \mathbb{E}_{q} \left[ \log p_{\boldsymbol{\theta}}(\boldsymbol{x}, \boldsymbol{z}) \right]  + \mathbb{H} \left( q_{\boldsymbol{\psi}}(\boldsymbol{z}) \right) .
+\]
+or 
+\[
+L(\boldsymbol{\psi} | \boldsymbol{\theta}, \boldsymbol{x})  = \mathbb{E}_{q} \left[ \log p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z}) - D_{\mathbb{KL}} (q_{\boldsymbol{\psi}}(\boldsymbol{z})|| p_{\boldsymbol{\theta}}(\boldsymbol{z})) \right] .
+\]
+
+
+
+\end{note} 
+
+\subsection{Form of the variational posterior}
+
+\textbf{Fixed-form VI}(multivariate Gaussian). 
+
+\textbf{Mean-field} assumption, the posterior factorizes:
+\[
+q_{\boldsymbol{\psi}}(\boldsymbol{z}) = \prod_{j=1}^{J} q_{j}(\boldsymbol{z}_{j}).
+\]
+The optimal distributional form can be derived by maximizing the ELBO wrt each group of variational parameters one at a time. This is called \emph{free-form VI}
+
+\begin{note}[Example of VI applied to a 2d lantent vec $\boldsymbol{z}$]
+   The prior is $\mathcal{N}(\boldsymbol{z} | \boldsymbol{m}, \boldsymbol{V})$, and the likelihood is 
+   \[
+   p(\mathcal{D} | \boldsymbol{z}) = \prod_{n=1}^{N} \mathcal{N}(\boldsymbol{x}_{n} | \boldsymbol{z}, \boldsymbol{\Sigma}) \propto \mathcal{N}(\bar{\boldsymbol{x}} | \boldsymbol{z}, \frac{1}{N}\boldsymbol{\Sigma})
+   \]
+   The exact poesterior $p(\boldsymbol{z} | \mathcal{D})$ can be computed analytically.
+\end{note} 
+
+
+\subsection{Parameter estimation using variational EM}
+
+Assume $\boldsymbol{\theta}$ is known, we can try to estimate them by maximizign the log marginal likelihood of dataset $\mathcal{D}$.
+\[
+\log p(\mathcal{D} | \boldsymbol{\theta}) = \sum_{n=1}^{N} \log p(\boldsymbol{x}_{n} | \boldsymbol{\theta})
+\]
+This is intractable to compute, so we need approximation.
+
+\paragraph{MLE for latent variable models}
+
+Suppose we have a latent variable  model
+\[
+p(\mathcal{D}, \boldsymbol{z}_{1 : N} | \boldsymbol{\theta})  = \prod_{n=1}^{N} p(\boldsymbol{z}_{n} | \boldsymbol{\theta}) p(\boldsymbol{x}_{n} | \boldsymbol{z}_{n}, \boldsymbol{\theta}).
+\]
+Since the latent variable $\boldsymbol{z}_{n}$ are hidden, we must marginalize them out 
+to get the local log marginal likelihood
+\[
+\log p(\boldsymbol{x}_{n} | \boldsymbol{\theta})  =  \log \left[ \int  p\left( \boldsymbol{x}_{n} | \boldsymbol{z}_{n}, \boldsymbol{\theta} \right) p(\boldsymbol{z}_{n} | \boldsymbol{\theta}) d \boldsymbol{z}_{n}\right] 
+\]
+This intergral is intractable, so we use ELBO
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\psi}_{n} | \boldsymbol{x}_{n})  \le  \log p(\boldsymbol{x}_{n} | \boldsymbol{\theta})
+\]
+We can optimize the model parameters by maximizing
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\psi}_{1 : N} | \mathcal{D}) = \sum_{n=1}^{N}L(\boldsymbol{\theta}, \boldsymbol{\psi}_{n} | \boldsymbol{x}_{n}) \le  \log p (\mathcal{D} | \boldsymbol{\theta})
+\]
+
+\paragraph{Empirical Bayes for fully observed models}
+
+\[
+p(\mathcal{D}, \boldsymbol{\theta} | \boldsymbol{\xi }) = p(\boldsymbol{\theta} | \boldsymbol{\xi }) \prod _{n=1}^{N} p(\boldsymbol{x}_{n} | \boldsymbol{\theta})
+\]
+our goals is to compute parameter posterior
+\[
+p(\boldsymbol{\theta} | \mathcal{D}, \boldsymbol{\xi }) = \frac{p(\mathcal{D} | \boldsymbol{\theta})p(\boldsymbol{\theta} | \boldsymbol{\xi })}{p(\mathcal{D}| \boldsymbol{\xi })}
+\]
+where $\boldsymbol{\theta}$ is the unknown model parameters, and $\boldsymbol{\xi }$ are the hyper-parameters for the prior.
+
+\[
+\hat{\boldsymbol{\xi }} = \mathop{\arg\max}\limits_{\boldsymbol{\xi }} \log p(\mathcal{D} | \boldsymbol{\xi })
+\]
+
+We use variational EM to compute this, now the parameters to be estimated are $\boldsymbol{\xi }$, and the latent variables are the shared global parameters $\boldsymbol{\theta}$.
+
+\[
+\log p(\mathcal{D} | \boldsymbol{\xi }) \ge  L(\boldsymbol{\xi }, \boldsymbol{\psi} | \mathcal{D}) = \mathbb{E}_{q} \left[ \sum_{n=1}^{N} \log p(\boldsymbol{x}_{n} | \boldsymbol{\theta}) \right] - D_{\mathbb{KL}}\left( q_{\boldsymbol{\psi}}(\boldsymbol{\theta}) ||p(\boldsymbol{\theta} | \boldsymbol{\xi }) \right) 
+\]
+We optimize this wrt the parameters of the variational posterior, $\boldsymbol{\psi}$, and the prior hyper-parameters $\boldsymbol{\xi }$.
+
+
+\subsection{Amortized VI}\label{sec:amortized-vi}
+
+
+We can't optimize loacal variational parameters $\boldsymbol{\psi}_{n}$ for each example. We now use a \textbf{inference network} or \textbf{recognition network}, to predict $\boldsymbol{\psi}_{n}$ from the observed data $\boldsymbol{x}_{n}$.
+\[
+\boldsymbol{\psi}_{n} = f_{\boldsymbol{\phi}}^{\text{inf}}(\boldsymbol{x}_{n}).
+\]
+We write the amortized posterior as 
+\[
+q(\boldsymbol{z}_{n} | \boldsymbol{\psi}_{n}) = q(\boldsymbol{z}_{n} | f_{\boldsymbol{\phi}}^{\text{inf}}(\boldsymbol{x}_{n})) = q_{\boldsymbol{\phi}} (\boldsymbol{z}_{n} | \boldsymbol{x}_{n}).
+\]
+ELBO becomes
+\[
+L(\boldsymbol{\theta}, \boldsymbol{\phi} | \mathcal{D}) = \sum_{n=1}^{N} \left[ \mathbb{E}_{q_{\boldsymbol{\phi}}(\boldsymbol{z}_{n} | \boldsymbol{x}_{n})} \left[ \log p_{\boldsymbol{\theta}} (\boldsymbol{x}_{n}, \boldsymbol{z}_{n}) - \log q_{\boldsymbol{\phi}}(\boldsymbol{z}_{n} | \boldsymbol{x}_{n})\right]  \right] 
+\]
+
+\begin{algorithm}[H]
+    \caption{Amortized stochastic variational EM}
+    \begin{algorithmic}[1]
+    \STATE Initialize $\boldsymbol{\theta}$, $\boldsymbol{\phi}$
+    \STATE \textbf{repeat}
+    \STATE \quad Sample $\boldsymbol{x}_{n} \sim  p_{\mathcal{D}}$
+    \STATE \quad E step: $\boldsymbol{\phi} = \mathop{\arg\max}\limits_{\boldsymbol{\phi}} L(\boldsymbol{\theta}, \boldsymbol{\phi} | \boldsymbol{x}_{n})$
+   \STATE \quad M step: $\boldsymbol{\theta} = \mathop{\arg\max}\limits_{\boldsymbol{\theta}} L(\boldsymbol{\theta}, \boldsymbol{\phi} | \boldsymbol{x}_{n})$
+   \STATE \textbf{until} convergence
+    \end{algorithmic}
+\end{algorithm} 
+
+
+\section{Gradient-based VI}
+
+
+
+\end{document}

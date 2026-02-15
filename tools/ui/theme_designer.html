@@ -832,22 +832,27 @@
           <code id="splitModeTag" class="split-mode-tag">subfiles</code>
           <button id="switchSplitTargetBtn">Switch To First Subfile</button>
         </div>
+        <div class="split-controls">
+          <label for="renumberModeSelect">Renumber</label>
+          <select id="renumberModeSelect">
+            <option value="add">Add Missing Prefixes</option>
+            <option value="remove">Remove Prefixes</option>
+          </select>
+          <button id="renumberBtn">Renumber Referenced Units</button>
+        </div>
+        <div class="split-controls">
+          <label>Merge</label>
+          <code class="split-mode-tag">subfiles unit -> root</code>
+          <button id="unsplitBtn">Merge Selected Back To Root</button>
+        </div>
         <div class="compile-options">
           <input id="splitDryRun" type="checkbox">
           <label for="splitDryRun">Dry run (no file writes)</label>
         </div>
-        <details class="group">
-          <summary>Advanced</summary>
-          <div class="split-controls" style="margin-top: 8px;">
-            <label for="splitNamingMode">Naming</label>
-            <select id="splitNamingMode"></select>
-            <span class="hint">Default: slug (no numeric prefix)</span>
-          </div>
-          <div class="compile-options">
-            <input id="splitPruneUnreferenced" type="checkbox">
-            <label for="splitPruneUnreferenced">Prune unreferenced existing section files</label>
-          </div>
-        </details>
+        <div class="compile-options">
+          <input id="unsplitDeleteSource" type="checkbox" checked>
+          <label for="unsplitDeleteSource">Delete source file after merge</label>
+        </div>
         <div id="splitResult" class="split-result">No split run yet.</div>
       </div>
 
@@ -904,11 +909,12 @@
     let sessionId = null;
     let heartbeatTimer = null;
     let latestSplitResult = null;
+    let latestRenumberResult = null;
+    let latestUnsplitResult = null;
+    let latestSplitOperation = "";
     const selectorState = {
       starterTemplate: "",
       splitSource: "",
-      splitNamingMode: "slug",
-      splitPruneUnreferenced: false,
       compileTarget: "",
       compileRecipe: ""
     };
@@ -1093,6 +1099,17 @@
       return latestSplitResult.suggested_compile_target || "";
     }
 
+    function unsplitSuggestedTarget() {
+      if (!latestUnsplitResult) return "";
+      if (latestUnsplitResult.dry_run) return "";
+      return latestUnsplitResult.suggested_compile_target || "";
+    }
+
+    function isLikelySubfilesUnitTarget(target) {
+      const normalized = String(target || "").replace(/\\/g, "/").toLowerCase();
+      return normalized.startsWith("sections/") || normalized.includes("/sections/");
+    }
+
     function renderTargetInfo() {
       const info = document.getElementById("targetInfo");
       const outputInfo = document.getElementById("outputInfo");
@@ -1142,10 +1159,6 @@
         selectorState.splitSource || selectorState.compileTarget,
         targets
       );
-      if (!selectorState.splitNamingMode) {
-        selectorState.splitNamingMode = "slug";
-      }
-      selectorState.splitPruneUnreferenced = !!selectorState.splitPruneUnreferenced;
 
       const recipes = (model.state.compile_recipes || []).map((item) => item.id);
       selectorState.compileRecipe = normalizeSelectableChoice(
@@ -1214,8 +1227,8 @@
       const modeTag = document.getElementById("splitModeTag");
       const switchBtn = document.getElementById("switchSplitTargetBtn");
       const dryRun = document.getElementById("splitDryRun");
-      const namingMode = document.getElementById("splitNamingMode");
-      const pruneUnreferenced = document.getElementById("splitPruneUnreferenced");
+      const renumberMode = document.getElementById("renumberModeSelect");
+      const deleteSource = document.getElementById("unsplitDeleteSource");
       const targets = model.state.compile_targets || [];
       const currentTarget = selectorState.splitSource || selectorState.compileTarget || model.state.compile_target || "";
       const selected = renderSelectEntries(
@@ -1234,78 +1247,94 @@
         dryRun.checked = false;
         dryRun.dataset.bound = "1";
       }
-      const selectedNamingMode = renderSelectEntries(
-        namingMode,
-        [
-          { value: "slug", label: "slug (default)" },
-          { value: "numbered", label: "numbered (legacy)" }
-        ],
-        selectorState.splitNamingMode || "slug"
-      );
-      selectorState.splitNamingMode = selectedNamingMode || "slug";
-      namingMode.onchange = () => {
-        selectorState.splitNamingMode = namingMode.value || "slug";
-      };
-      if (!pruneUnreferenced.dataset.bound) {
-        pruneUnreferenced.checked = !!selectorState.splitPruneUnreferenced;
-        pruneUnreferenced.dataset.bound = "1";
+      if (!renumberMode.dataset.bound) {
+        renumberMode.value = "add";
+        renumberMode.dataset.bound = "1";
       }
-      pruneUnreferenced.onchange = () => {
-        selectorState.splitPruneUnreferenced = !!pruneUnreferenced.checked;
-      };
+      if (!deleteSource.dataset.bound) {
+        deleteSource.checked = true;
+        deleteSource.dataset.bound = "1";
+      }
     }
 
     function renderSplitResult() {
       const box = document.getElementById("splitResult");
       box.className = "split-result";
-      if (!latestSplitResult) {
+      if (!latestSplitOperation) {
         box.textContent = "No split run yet.";
         return;
       }
       const lines = [];
-      lines.push(`source: ${latestSplitResult.source_target || "(unknown)"}`);
-      lines.push(`mode: ${latestSplitResult.standalone_mode || SPLIT_MODE}`);
-      lines.push(`naming: ${latestSplitResult.naming_mode || "slug"}`);
-      lines.push(`prune-unreferenced: ${latestSplitResult.prune_unreferenced ? "yes" : "no"}`);
-      lines.push(`split-by: \\${latestSplitResult.split_command || "(unknown)"}`);
-      const dryRun = !!latestSplitResult.dry_run;
-      lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
-      lines.push(`already-split: ${latestSplitResult.already_split ? "yes" : "no"}`);
-      lines.push(`backup: ${latestSplitResult.backup_path || (dryRun ? "(not written)" : "(none)")}`);
-      const updated = latestSplitResult.updated_files || [];
-      lines.push(`updated files (${updated.length}):`);
-      if (updated.length > 0) {
-        for (const item of updated) lines.push(`- ${item}`);
-      } else {
-        lines.push("- (none)");
-      }
-      const renamed = latestSplitResult.renamed_units || [];
-      lines.push(`renamed units (${renamed.length}):`);
-      if (renamed.length > 0) {
-        for (const item of renamed) {
-          lines.push(`- ${item.from} -> ${item.to}`);
+      if (latestSplitOperation === "split" && latestSplitResult) {
+        lines.push("operation: split");
+        lines.push(`source: ${latestSplitResult.source_target || "(unknown)"}`);
+        lines.push(`mode: ${latestSplitResult.standalone_mode || SPLIT_MODE}`);
+        lines.push(`split-by: \\${latestSplitResult.split_command || "(unknown)"}`);
+        const dryRun = !!latestSplitResult.dry_run;
+        lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
+        lines.push(`already-split: ${latestSplitResult.already_split ? "yes" : "no"}`);
+        lines.push(`backup: ${latestSplitResult.backup_path || (dryRun ? "(not written)" : "(none)")}`);
+        const updated = latestSplitResult.updated_files || [];
+        lines.push(`updated files (${updated.length}):`);
+        if (updated.length > 0) {
+          for (const item of updated) lines.push(`- ${item}`);
+        } else {
+          lines.push("- (none)");
+        }
+        const warnings = latestSplitResult.warnings || [];
+        if (warnings.length > 0) {
+          lines.push("warnings:");
+          for (const item of warnings) lines.push(`- ${item}`);
+        }
+      } else if (latestSplitOperation === "renumber" && latestRenumberResult) {
+        lines.push("operation: renumber");
+        lines.push(`source: ${latestRenumberResult.source_target || "(unknown)"}`);
+        lines.push(`mode: ${latestRenumberResult.mode || "(unknown)"}`);
+        const dryRun = !!latestRenumberResult.dry_run;
+        lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
+        lines.push(`backup: ${latestRenumberResult.backup_path || (dryRun ? "(not written)" : "(none)")}`);
+        const renamed = latestRenumberResult.renamed || {};
+        const renamedEntries = Object.entries(renamed);
+        lines.push(`renamed targets (${renamedEntries.length}):`);
+        if (renamedEntries.length > 0) {
+          for (const [from, to] of renamedEntries) lines.push(`- ${from} -> ${to}`);
+        } else {
+          lines.push("- (none)");
+        }
+        const updated = latestRenumberResult.updated_files || [];
+        lines.push(`updated files (${updated.length}):`);
+        if (updated.length > 0) {
+          for (const item of updated) lines.push(`- ${item}`);
+        } else {
+          lines.push("- (none)");
+        }
+        const warnings = latestRenumberResult.warnings || [];
+        if (warnings.length > 0) {
+          lines.push("warnings:");
+          for (const item of warnings) lines.push(`- ${item}`);
+        }
+      } else if (latestSplitOperation === "unsplit" && latestUnsplitResult) {
+        lines.push("operation: unsplit");
+        lines.push(`source: ${latestUnsplitResult.source_target || "(unknown)"}`);
+        lines.push(`root: ${latestUnsplitResult.root_target || "(unknown)"}`);
+        const dryRun = !!latestUnsplitResult.dry_run;
+        lines.push(`dry-run: ${dryRun ? "yes" : "no"}`);
+        lines.push(`deleted source: ${latestUnsplitResult.deleted_source ? "yes" : "no"}`);
+        lines.push(`backup: ${latestUnsplitResult.backup_path || (dryRun ? "(not written)" : "(none)")}`);
+        const updated = latestUnsplitResult.updated_files || [];
+        lines.push(`updated files (${updated.length}):`);
+        if (updated.length > 0) {
+          for (const item of updated) lines.push(`- ${item}`);
+        } else {
+          lines.push("- (none)");
+        }
+        const warnings = latestUnsplitResult.warnings || [];
+        if (warnings.length > 0) {
+          lines.push("warnings:");
+          for (const item of warnings) lines.push(`- ${item}`);
         }
       } else {
-        lines.push("- (none)");
-      }
-      const unreferenced = latestSplitResult.unreferenced_existing_units || [];
-      lines.push(`unreferenced existing units (${unreferenced.length}):`);
-      if (unreferenced.length > 0) {
-        for (const item of unreferenced) lines.push(`- ${item}`);
-      } else {
-        lines.push("- (none)");
-      }
-      const pruned = latestSplitResult.pruned_unreferenced_units || [];
-      lines.push(`pruned unreferenced units (${pruned.length}):`);
-      if (pruned.length > 0) {
-        for (const item of pruned) lines.push(`- ${item}`);
-      } else {
-        lines.push("- (none)");
-      }
-      const warnings = latestSplitResult.warnings || [];
-      if (warnings.length > 0) {
-        lines.push("warnings:");
-        for (const item of warnings) lines.push(`- ${item}`);
+        lines.push("No split run yet.");
       }
       box.textContent = lines.join("\\n");
       box.classList.add("ok");
@@ -1842,27 +1871,24 @@
       const select = document.getElementById("splitSourceSelect");
       const selected = (select.value || model.state.compile_target || "").trim();
       const dryRun = document.getElementById("splitDryRun").checked;
-      const namingMode = (document.getElementById("splitNamingMode").value || "slug").trim();
-      const pruneUnreferenced = !!document.getElementById("splitPruneUnreferenced").checked;
       if (!selected) {
         setStatus("No split source target selected.", "err");
         return;
       }
-      setStatus(
-        `Splitting ${selected} in ${SPLIT_MODE} mode (${namingMode})${dryRun ? " (dry-run)" : ""}...`
-      );
+      setStatus(`Splitting ${selected} in ${SPLIT_MODE} mode${dryRun ? " (dry-run)" : ""}...`);
       const btn = document.getElementById("splitBtn");
       btn.disabled = true;
       try {
         model = await postJson("/api/split", {
           compile_target: selected,
           standalone_mode: SPLIT_MODE,
-          naming_mode: namingMode,
-          prune_unreferenced: pruneUnreferenced,
           dry_run: dryRun
         });
         syncSelectorStateFromModel();
         latestSplitResult = model.split || null;
+        latestRenumberResult = null;
+        latestUnsplitResult = null;
+        latestSplitOperation = "split";
         renderStarterTemplateControls();
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
@@ -1882,6 +1908,119 @@
           setStatus(`Split complete. Generated ${generated.length} subfile target(s).`, "ok");
         } else {
           setStatus("Split complete.", "ok");
+        }
+      } catch (err) {
+        const box = document.getElementById("splitResult");
+        box.className = "split-result err";
+        box.textContent = err.message;
+        setStatus(err.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function renumberCurrentTarget() {
+      const select = document.getElementById("splitSourceSelect");
+      const mode = (document.getElementById("renumberModeSelect").value || "add").trim();
+      const selected = (select.value || model.state.compile_target || "").trim();
+      const dryRun = document.getElementById("splitDryRun").checked;
+      if (!selected) {
+        setStatus("No renumber source target selected.", "err");
+        return;
+      }
+      if (isLikelySubfilesUnitTarget(selected)) {
+        setStatus("Renumber requires a root target, not a subfiles unit target.", "err");
+        return;
+      }
+      setStatus(`Renumbering ${selected} (${mode})${dryRun ? " (dry-run)" : ""}...`);
+      const btn = document.getElementById("renumberBtn");
+      btn.disabled = true;
+      try {
+        model = await postJson("/api/renumber", {
+          compile_target: selected,
+          mode,
+          dry_run: dryRun
+        });
+        syncSelectorStateFromModel();
+        latestSplitResult = null;
+        latestRenumberResult = model.renumber || null;
+        latestUnsplitResult = null;
+        latestSplitOperation = "renumber";
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        const renamedCount = Object.keys((latestRenumberResult && latestRenumberResult.renamed) || {}).length;
+        if (dryRun) {
+          setStatus(`Renumber preview complete. Planned ${renamedCount} rename(s).`, "ok");
+        } else {
+          setStatus(`Renumber complete. Applied ${renamedCount} rename(s).`, "ok");
+        }
+      } catch (err) {
+        const box = document.getElementById("splitResult");
+        box.className = "split-result err";
+        box.textContent = err.message;
+        setStatus(err.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function unsplitSelectedTarget() {
+      const select = document.getElementById("splitSourceSelect");
+      const selected = (select.value || model.state.compile_target || "").trim();
+      const dryRun = document.getElementById("splitDryRun").checked;
+      const deleteSource = document.getElementById("unsplitDeleteSource").checked;
+      if (!selected) {
+        setStatus("No unsplit source target selected.", "err");
+        return;
+      }
+      if (!isLikelySubfilesUnitTarget(selected)) {
+        setStatus("Unsplit requires a subfiles unit target under Sections/.", "err");
+        return;
+      }
+      setStatus(`Merging ${selected} back to root${dryRun ? " (dry-run)" : ""}...`);
+      const btn = document.getElementById("unsplitBtn");
+      btn.disabled = true;
+      try {
+        model = await postJson("/api/unsplit", {
+          compile_target: selected,
+          delete_source: deleteSource,
+          dry_run: dryRun
+        });
+        syncSelectorStateFromModel();
+        latestSplitResult = null;
+        latestRenumberResult = null;
+        latestUnsplitResult = model.unsplit || null;
+        latestSplitOperation = "unsplit";
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        refreshPdf();
+        const rootTarget = (latestUnsplitResult && latestUnsplitResult.root_target) || "";
+        if (dryRun) {
+          setStatus("Unsplit preview complete.", "ok");
+        } else if (rootTarget) {
+          setStatus(`Unsplit complete. Root target: ${rootTarget}`, "ok");
+        } else {
+          setStatus("Unsplit complete.", "ok");
         }
       } catch (err) {
         const box = document.getElementById("splitResult");
@@ -2041,6 +2180,8 @@
       document.getElementById("saveBtn").addEventListener("click", saveOverrides);
       document.getElementById("resetBtn").addEventListener("click", resetOverrides);
       document.getElementById("splitBtn").addEventListener("click", splitCurrentTarget);
+      document.getElementById("renumberBtn").addEventListener("click", renumberCurrentTarget);
+      document.getElementById("unsplitBtn").addEventListener("click", unsplitSelectedTarget);
       document.getElementById("switchSplitTargetBtn").addEventListener("click", switchToFirstSplitTarget);
       document.getElementById("compileBtn").addEventListener("click", compilePdf);
       document.getElementById("refreshPdfBtn").addEventListener("click", refreshPdf);

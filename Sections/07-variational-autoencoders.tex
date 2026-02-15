@@ -1,0 +1,86 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+
+\chapter{Variational autoencoders}
+
+\[
+\begin{aligned}
+\boldsymbol{z} &\sim  p_{\boldsymbol{\theta}}(\boldsymbol{z}) \\
+\boldsymbol{x} | \boldsymbol{z} &\sim  \text{Expfam}(\boldsymbol{x} | d_{\boldsymbol{\theta}}(z))
+\end{aligned}
+\]
+
+
+where $p(\boldsymbol{z})$ is some kind prior on the latent code $\boldsymbol{z}$, $d_{\boldsymbol{\theta}}(\boldsymbol{z})$ is a deep nn (\emph{decoder}). Posterior inference is computationally intractable, 
+\[
+p_{\boldsymbol{\theta}}(\boldsymbol{x}) = \int p_{\boldsymbol{\theta}} (\boldsymbol{x} | \boldsymbol{z}) p_{\boldsymbol{\theta}}(\boldsymbol{z}) d \boldsymbol{z}.
+\]
+Hence we need to approximate inference.
+We use \emph{amortized inference}, we train another model $q_{\phi}(\boldsymbol{z} | \boldsymbol{x})$, called the \emph{recognition network}, simultaneously with the generative 
+model to approximate posterior inference.
+
+\begin{note}{MNIST Example Note}
+   \begin{enumerate}
+   \item Prior over latents: we first sample a latent code from a simple prior, typically a standard Gaussian: 
+   \[
+   \boldsymbol{z} \sim p(\boldsymbol{z}) = \mathcal{N}(0, \boldsymbol{I}).
+   \]
+   \item Likelihood(decoder): Given $z$, the decoder network $d_{\boldsymbol{\theta}}(z)$ outputs the parameter of a distribution over images. For MNIST, a common choice is a Bernoulli likelihood over pixels:
+   \[
+   p_{\theta}(\boldsymbol{x} | \boldsymbol{z}) = \text{Bernoulli}(\pi_{\theta}(\boldsymbol{z})), \quad \pi_{\boldsymbol{\theta}}(\boldsymbol{z}) = \sigma (d_{\boldsymbol{\theta}}(z)),
+   \]
+   where $\pi_{\boldsymbol{\theta}}(\boldsymbol{z}) \in  (0,1) ^{784}$ gives the prob that each pixel is ``on''.
+   \end{enumerate} 
+   This defines the joint distribution $p_{\theta}(\boldsymbol{x},\boldsymbol{z}) = p(\boldsymbol{z})p_{\boldsymbol{\theta}}(\boldsymbol{x}|\boldsymbol{z})$.
+
+   During training we observe $\boldsymbol{x}$(an image) but we do not observe $z$. To learn good parameters $\theta$, we need to perform inference over the latens $\boldsymbol{z}$
+   \[
+   p_{\theta}(\boldsymbol{z}, \boldsymbol{x}) = \frac{p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z})}{p_{\boldsymbol{\theta}}(\boldsymbol{x})}.
+   \]
+   The difficulty is the normalizing constant, which is a high-dimensional integral involving a nn. To avoid this, we want to approximate the posterior using a \emph{recognition network}
+   \[
+   q_{\phi}(\boldsymbol{z} |\boldsymbol{x})  \approx p_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x}).
+   \]
+   For MINIST we often choose
+   \[
+   q_{\phi}(\boldsymbol{z} | \boldsymbol{x}) = \mathcal{N}(\mu_{\phi}(x) , \text{diag}\left( \sigma_{\phi}(x)^{2} \right) ).
+   \]
+\end{note} 
+
+
+\section{VAE basics}
+
+A VAE defines a generative model of the form
+\[
+p_{\boldsymbol{\theta}}(\boldsymbol{z},\boldsymbol{x}) = p_{\boldsymbol{\theta}}(\boldsymbol{z}) p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z}).
+\]
+where $p_{\boldsymbol{\theta}}(\boldsymbol{z})$ is usually a Gaussian, and $p_{\boldsymbol{\theta}}(\boldsymbol{x} | \boldsymbol{z})$ is usually a product of exponential family distributions.
+
+In addition, VAE fits a recognition model
+\[
+q_{\phi}(\boldsymbol{z} | \boldsymbol{x}) = q \left( \boldsymbol{z} | e_{\boldsymbol{\phi}}(\boldsymbol{x}) \right)  \approx p_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x})
+\]
+to perform amortized inference. Here $q_{\phi}(\boldsymbol{z} | \boldsymbol{x})$ is usually a Gaussian, with parameters computed by a nn encoder $e_{\boldsymbol{\phi}}(\boldsymbol{x})$:
+\[
+\begin{aligned}
+q_{\phi}(\boldsymbol{z} | \boldsymbol{x}) &= \mathcal{N}\left( \boldsymbol{z} | \boldsymbol{\mu}, \text{diag} \left( \exp(\boldsymbol{\ell}) \right)  \right)  \\
+\left( \boldsymbol{\mu}, \boldsymbol{\ell} \right)  &= e_{\phi}(\boldsymbol{x})
+\end{aligned}
+\]
+where $\boldsymbol{\ell} = \log \boldsymbol{\sigma}$. The amortized inference is introduced in Section~\ref{sec:amortized-vi}.
+
+\paragraph{Model fitting}
+
+WE can fit a VAE using \emph{amortized stochastic varational inference}
+
+
+
+
+
+
+
+
+
+
+\printbibliography
+\end{document}

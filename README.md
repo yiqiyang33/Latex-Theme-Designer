@@ -44,16 +44,6 @@ Use the local UI tool:
 python3 tools/latex_toolkit.py --open-browser
 ```
 
-One-click launcher scripts:
-
-```bash
-./scripts/start-ui.sh
-```
-
-macOS Finder double-click:
-
-- `scripts/start-ui.command`
-
 See full tool documentation in:
 
 - `tools/README-theme-designer.md`
@@ -72,24 +62,34 @@ Split a monolithic root `.tex` into modular files in `Sections/`:
 python3 tools/tex_splitter.py main.tex
 ```
 
-Default naming mode is now slug-only (no numeric prefix), for example `Sections/overview.tex`.
-
 Preview split plan without writing files:
 
 ```bash
 python3 tools/tex_splitter.py main.tex --dry-run
 ```
 
-Use legacy index-prefixed naming when needed:
+Add missing numeric prefixes (`01-`, `02-`, ...) to referenced unit files:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --naming-mode numbered
+python3 tools/tex_splitter.py main.tex --renumber-mode add
 ```
 
-Clean unreferenced existing section files discovered from current root `\subfile{...}` list:
+Remove numeric prefixes from referenced unit files:
 
 ```bash
-python3 tools/tex_splitter.py main.tex --prune-unreferenced
+python3 tools/tex_splitter.py main.tex --renumber-mode remove
+```
+
+Merge one split unit back into its original root position (deletes source by default):
+
+```bash
+python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference.tex
+```
+
+Keep source file after merge:
+
+```bash
+python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference.tex --keep-source
 ```
 
 Optional legacy-wrapper fallback:
@@ -99,6 +99,8 @@ python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
 ```
 
 Note: split source must be a root `.tex` target. Subfile units (`\documentclass{subfiles}`) are rejected.
+Renumber only processes files referenced by the selected root.
+Unsplit supports `--dry-run` and defaults to deleting the merged source unit.
 For full splitter details and migration notes, see `tools/README-theme-designer.md`.
 
 ## Quick Troubleshooting
@@ -110,12 +112,6 @@ For full splitter details and migration notes, see `tools/README-theme-designer.
 - Recipe mode fails but internal mode works:
   - Check `.vscode/settings.json` tool/recipe definitions and command availability in `PATH`.
   - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
-- Re-running split after heading/title edits:
-  - Split uses `main.tex` as source of truth.
-  - Existing root `\subfile{...}` entries are kept unchanged.
-  - New top-level `\section/\chapter` blocks are extracted into new unit files only.
-  - Middle insertion order is preserved in rewritten `\subfile{...}` layout.
-  - Existing unit files are not auto-renamed; rename manually if needed.
 
 ## What it edits
 

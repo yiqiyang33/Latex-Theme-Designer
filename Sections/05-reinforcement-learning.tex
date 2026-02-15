@@ -1,0 +1,23 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+
+\chapter{Reinforcement Learning}
+
+\section{Introduction}
+
+\[
+\tau = (s_0,a_0,r_0, \ldots ,s_{T}, a_{T}, r_{T})
+\]
+is a \emph{trajectory} of length $T$. The goal of the agent is to optimize her action-selection
+policy, so that the discounted cumulative reward $G_0 = \sum_{t=0}^{T-1}\gamma^{t}r_t$ is maximized for some given discount 
+factor $\gamma \in [0,1]$.
+
+\paragraph{Value-based methods}
+
+A function approximator $Q_{w}$ is used to represent the $Q$-function. Given a transition $(s,a,r,s')$, we define the \emph{temporal difference} as 
+\[
+r + \gamma \max_{a'}Q_{w}(s',a') - Q_{w}(s,a).
+\]
+
+
+\end{document}

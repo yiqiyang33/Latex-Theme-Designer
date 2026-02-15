@@ -34,21 +34,6 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIs(td_entry.main, ltk.main)
         self.assertIs(td_entry.ThemeDesignerHandler, ltk.ThemeDesignerHandler)
 
-    def test_launcher_scripts_exist_and_use_latex_toolkit_entrypoint(self) -> None:
-        root = td.ROOT_DIR
-        shell_script = root / "scripts/start-ui.sh"
-        command_script = root / "scripts/start-ui.command"
-
-        self.assertTrue(shell_script.exists())
-        self.assertTrue(command_script.exists())
-        self.assertTrue(os.access(shell_script, os.X_OK))
-        self.assertTrue(os.access(command_script, os.X_OK))
-
-        sh_text = shell_script.read_text(encoding="utf-8")
-        command_text = command_script.read_text(encoding="utf-8")
-        self.assertIn("tools/latex_toolkit.py --open-browser --port auto", sh_text)
-        self.assertIn("start-ui.sh", command_text)
-
     def _embedded_ui_script(self) -> str:
         match = re.search(r"<script>(.*)</script>", tdu.HTML_PAGE, re.S)
         self.assertIsNotNone(match, "Embedded HTML page is missing <script> block.")
@@ -86,6 +71,15 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("select.disabled = entries.length === 0;", script)
         self.assertIn("applyBtn.disabled = recipes.length === 0;", script)
         self.assertNotIn("fallback.checked || recipes.length === 0", script)
+
+    def test_ui_has_renumber_and_unsplit_controls(self) -> None:
+        script = self._embedded_ui_script()
+        self.assertIn('id="renumberModeSelect"', tdu.HTML_PAGE)
+        self.assertIn('id="renumberBtn"', tdu.HTML_PAGE)
+        self.assertIn('id="unsplitBtn"', tdu.HTML_PAGE)
+        self.assertIn('id="unsplitDeleteSource"', tdu.HTML_PAGE)
+        self.assertIn("async function renumberCurrentTarget()", script)
+        self.assertIn("async function unsplitSelectedTarget()", script)
 
     def test_split_response_refresh_keeps_template_and_recipe_catalogs(self) -> None:
         baseline = td._build_response_state()
@@ -663,7 +657,7 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertTrue(result.get("subfiles_package_injected"))
         generated = result.get("generated_subfile_targets", [])
         self.assertTrue(len(generated) >= 2)
-        self.assertIn("\\subfile{Sections/overview}", rewritten)
+        self.assertIn("\\subfile{Sections/01-overview}", rewritten)
 
     def test_split_compile_target_dry_run_does_not_write_files(self) -> None:
         root = td.ROOT_DIR
@@ -681,7 +675,7 @@ class ThemeDesignerTests(unittest.TestCase):
             "\\end{document}\n"
         )
         source_abs.write_text(original_text, encoding="utf-8")
-        planned_unit = root / "tools/tests/_tmp_split_core_dry_run/Sections/overview.tex"
+        planned_unit = root / "tools/tests/_tmp_split_core_dry_run/Sections/01-overview.tex"
 
         try:
             result = td._split_compile_target(source_rel, dry_run=True)
@@ -791,7 +785,7 @@ class ThemeDesignerTests(unittest.TestCase):
             "\\end{document}\n"
         )
         source_abs.write_text(original_text, encoding="utf-8")
-        planned_unit = root / "tools/tests/_tmp_split_server_dry_run/Sections/a.tex"
+        planned_unit = root / "tools/tests/_tmp_split_server_dry_run/Sections/01-a.tex"
 
         try:
             response = tds._split_response_payload(
@@ -813,61 +807,6 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertFalse(planned_unit.exists())
         self.assertEqual(len(backup_candidates), 0)
 
-    def test_server_split_response_supports_numbered_naming_mode(self) -> None:
-        root = td.ROOT_DIR
-        base_dir = root / "tools/tests/_tmp_split_server_numbered"
-        source_rel = "tools/tests/_tmp_split_server_numbered/main.tex"
-        source_abs = root / source_rel
-        source_abs.parent.mkdir(parents=True, exist_ok=True)
-        source_abs.write_text(
-            "\\documentclass{article}\n"
-            "\\begin{document}\n"
-            "\\section{A}\n"
-            "Alpha.\n"
-            "\\section{B}\n"
-            "Beta.\n"
-            "\\end{document}\n",
-            encoding="utf-8",
-        )
-
-        try:
-            response = tds._split_response_payload(
-                {
-                    "compile_target": source_rel,
-                    "standalone_mode": "subfiles",
-                    "naming_mode": "numbered",
-                    "dry_run": True,
-                }
-            )
-        finally:
-            if base_dir.exists():
-                shutil.rmtree(base_dir)
-
-        split = response.get("split", {})
-        generated = split.get("generated_subfile_targets", [])
-        self.assertEqual(split.get("naming_mode"), "numbered")
-        self.assertTrue(any(path.endswith("/01-a.tex") for path in generated))
-
-    def test_server_split_response_rejects_invalid_naming_mode(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Unsupported split naming mode"):
-            tds._split_response_payload(
-                {
-                    "compile_target": "main.tex",
-                    "naming_mode": "bad-mode",
-                    "dry_run": True,
-                }
-            )
-
-    def test_server_split_response_rejects_invalid_prune_unreferenced_type(self) -> None:
-        with self.assertRaisesRegex(ValueError, "prune_unreferenced must be a boolean"):
-            tds._split_response_payload(
-                {
-                    "compile_target": "main.tex",
-                    "prune_unreferenced": 1,
-                    "dry_run": True,
-                }
-            )
-
     def test_server_split_response_rejects_invalid_dry_run_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "dry_run must be a boolean"):
             tds._split_response_payload({"dry_run": 1})
@@ -887,6 +826,181 @@ class ThemeDesignerTests(unittest.TestCase):
                 {
                     "compile_target": "../../outside.tex",
                     "dry_run": True,
+                }
+            )
+
+    def test_renumber_compile_target_returns_summary(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_renumber_core"
+        source_rel = "tools/tests/_tmp_renumber_core/main.tex"
+        source_abs = root / source_rel
+        sections_abs = source_abs.parent / "Sections"
+        sections_abs.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/overview}\n"
+            "\\subfile{Sections/02-method}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        (sections_abs / "overview.tex").write_text("A\n", encoding="utf-8")
+        (sections_abs / "02-method.tex").write_text("B\n", encoding="utf-8")
+
+        try:
+            result = td._renumber_compile_target(source_rel, mode="add")
+            rewritten = source_abs.read_text(encoding="utf-8")
+        finally:
+            for backup in source_abs.parent.glob("main.tex.bak*"):
+                if backup.exists():
+                    backup.unlink()
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertEqual(result.get("mode"), "add")
+        self.assertEqual(result.get("source_target"), source_rel)
+        self.assertIn("tools/tests/_tmp_renumber_core/Sections/overview.tex", result.get("renamed", {}))
+        self.assertIn("\\subfile{Sections/01-overview}", rewritten)
+
+    def test_unsplit_compile_target_merges_and_deletes_source(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_unsplit_core"
+        root_rel = "tools/tests/_tmp_unsplit_core/main.tex"
+        unit_rel = "tools/tests/_tmp_unsplit_core/Sections/01-topic.tex"
+        root_abs = root / root_rel
+        unit_abs = root / unit_rel
+        unit_abs.parent.mkdir(parents=True, exist_ok=True)
+        root_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-topic}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        unit_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Topic}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            result = td._unsplit_compile_target(unit_rel)
+            rewritten = root_abs.read_text(encoding="utf-8")
+        finally:
+            for backup in root_abs.parent.glob("main.tex.bak*"):
+                if backup.exists():
+                    backup.unlink()
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertEqual(result.get("source_target"), unit_rel)
+        self.assertEqual(result.get("root_target"), root_rel)
+        self.assertTrue(result.get("deleted_source"))
+        self.assertIn("\\section{Topic}", rewritten)
+        self.assertNotIn("\\subfile{Sections/01-topic}", rewritten)
+
+    def test_server_renumber_response_exposes_payload(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_renumber_server"
+        source_rel = "tools/tests/_tmp_renumber_server/main.tex"
+        source_abs = root / source_rel
+        sections_abs = source_abs.parent / "Sections"
+        sections_abs.mkdir(parents=True, exist_ok=True)
+        source_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/topic}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        (sections_abs / "topic.tex").write_text("A\n", encoding="utf-8")
+
+        try:
+            response = tds._renumber_response_payload(
+                {
+                    "compile_target": source_rel,
+                    "mode": "add",
+                    "dry_run": "true",
+                }
+            )
+            rewritten = source_abs.read_text(encoding="utf-8")
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertIn("state", response)
+        self.assertIn("renumber", response)
+        renumber = response["renumber"]
+        self.assertTrue(renumber.get("dry_run"))
+        self.assertEqual(rewritten.count("\\subfile{Sections/topic}"), 1)
+        self.assertIn(source_rel, response["state"].get("compile_targets", []))
+
+    def test_server_renumber_response_rejects_invalid_mode(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported renumber mode"):
+            tds._renumber_response_payload({"mode": "invalid"})
+
+    def test_server_unsplit_response_exposes_payload(self) -> None:
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_unsplit_server"
+        root_rel = "tools/tests/_tmp_unsplit_server/main.tex"
+        unit_rel = "tools/tests/_tmp_unsplit_server/Sections/01-topic.tex"
+        root_abs = root / root_rel
+        unit_abs = root / unit_rel
+        unit_abs.parent.mkdir(parents=True, exist_ok=True)
+        root_abs.write_text(
+            "\\documentclass{article}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-topic}\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+        unit_abs.write_text(
+            "\\documentclass[../main.tex]{subfiles}\n"
+            "\\begin{document}\n"
+            "\\section{Topic}\n"
+            "Alpha.\n"
+            "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            response = tds._unsplit_response_payload(
+                {
+                    "compile_target": unit_rel,
+                    "delete_source": False,
+                    "dry_run": True,
+                }
+            )
+            rewritten = root_abs.read_text(encoding="utf-8")
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
+        self.assertIn("state", response)
+        self.assertIn("unsplit", response)
+        unsplit = response["unsplit"]
+        self.assertTrue(unsplit.get("dry_run"))
+        self.assertFalse(unsplit.get("deleted_source"))
+        self.assertIn("\\subfile{Sections/01-topic}", rewritten)
+        self.assertIn(root_rel, response["state"].get("compile_targets", []))
+
+    def test_server_unsplit_response_requires_compile_target(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Missing compile_target"):
+            tds._unsplit_response_payload({"dry_run": True})
+
+    def test_server_unsplit_response_rejects_invalid_delete_source_type(self) -> None:
+        with self.assertRaisesRegex(ValueError, "delete_source must be a boolean"):
+            tds._unsplit_response_payload(
+                {
+                    "compile_target": "main.tex",
+                    "delete_source": 1,
                 }
             )
 
@@ -1055,6 +1169,19 @@ class ThemeDesignerTests(unittest.TestCase):
                 article_abs.unlink()
 
     def test_load_state_resets_forced_class_when_persisted_target_missing(self) -> None:
+        compile_targets = td._list_candidate_tex_files()
+        default_target = td._default_compile_target(compile_targets)
+        detected_default_class = td._detect_target_documentclass(default_target)
+        incompatible_mode = (
+            "article"
+            if td._is_chapter_capable_class(detected_default_class)
+            else "book"
+        )
+        expected_effective_class = td._effective_theme_class(
+            "auto",
+            detected_default_class,
+        )
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             cfg_path = tmp_path / "theme.ui.json"
@@ -1065,7 +1192,7 @@ class ThemeDesignerTests(unittest.TestCase):
                 json.dumps(
                     {
                         "compile_target": "tools/tests/_tmp_missing_target.tex",
-                        "class_config": {"theme_class_mode": "book"},
+                        "class_config": {"theme_class_mode": incompatible_mode},
                     }
                 )
                 + "\n",
@@ -1085,9 +1212,9 @@ class ThemeDesignerTests(unittest.TestCase):
                 td.TOGGLE_OVERRIDE_PATH = original_toggle
                 td.COLOR_OVERRIDE_PATH = original_color
 
-        self.assertEqual(state["compile_target"], "main.tex")
+        self.assertEqual(state["compile_target"], default_target)
         self.assertEqual(state["class_config"]["theme_class_mode"], "auto")
-        self.assertEqual(state["effective_theme_class"], "article")
+        self.assertEqual(state["effective_theme_class"], expected_effective_class)
 
     def test_write_override_files_includes_class_config_macros(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
