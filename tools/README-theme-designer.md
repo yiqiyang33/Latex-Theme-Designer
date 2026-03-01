@@ -57,6 +57,10 @@ python3 tools/theme_designer.py --open-browser
   - compile preflight validates `\subfile{...}` references and blocks obvious recursive/missing-path corruption before TeX execution
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
+- One-click cleanup for compile artifacts:
+  - scope is fixed to workspace root (`.`) and `Sections/`
+  - cleanup patterns come from `.vscode/settings.json` key `latex-workshop.latex.clean.fileTypes`
+  - `*.pdf` and `*.synctex.gz` are always protected and never deleted
 - Preview current target PDF in the same UI page.
 - Starter template bootstrap from UI:
   - choose built-in starter template (`book-minimal` / `article-minimal`)
@@ -210,6 +214,10 @@ PY
 - Stale PDF preview:
   - Click `Refresh PDF Preview` after compile.
   - Confirm the target and compile mode shown in the UI info line.
+- Clean Build Artifacts keeps files you expected to delete:
+  - Cleanup only runs in `.` and `Sections/`.
+  - Patterns are read from `.vscode/settings.json` (`latex-workshop.latex.clean.fileTypes`).
+  - `*.pdf` and `*.synctex.gz` are intentionally preserved for preview/synctex navigation.
 - Browser close behavior:
   - Server can always stop itself.
   - Force-closing browser tabs/windows from the server is not guaranteed due browser security constraints.

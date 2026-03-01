@@ -12,6 +12,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 
+from tools import core_cleanup as cc
 from tools import latex_toolkit as ltk
 from tools import theme_designer as td_entry
 from tools import theme_designer_core as td
@@ -80,6 +81,12 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn('id="unsplitDeleteSource"', tdu.HTML_PAGE)
         self.assertIn("async function renumberCurrentTarget()", script)
         self.assertIn("async function unsplitSelectedTarget()", script)
+
+    def test_ui_exposes_clean_build_artifacts_action(self) -> None:
+        script = self._embedded_ui_script()
+        self.assertIn('id="cleanBtn"', tdu.HTML_PAGE)
+        self.assertIn("async function cleanBuildArtifacts()", script)
+        self.assertIn('postJson("/api/clean"', script)
 
     def test_split_response_refresh_keeps_template_and_recipe_catalogs(self) -> None:
         baseline = td._build_response_state()
@@ -1597,6 +1604,156 @@ class ThemeDesignerTests(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertEqual(pdf_rel, "tools/tests/_tmp_smoke_article.pdf")
+
+    def test_cleanup_patterns_from_vscode_settings_and_fallback(self) -> None:
+        from_settings = cc.clean_patterns_from_vscode_settings(
+            {"latex-workshop.latex.clean.fileTypes": ["*.aux", " ", 123, "*.log", "*.aux"]},
+            fallback_patterns=["*.toc"],
+        )
+        fallback = cc.clean_patterns_from_vscode_settings(
+            {},
+            fallback_patterns=["*.toc", "*.out"],
+        )
+        self.assertEqual(from_settings, ["*.aux", "*.log"])
+        self.assertEqual(fallback, ["*.toc", "*.out"])
+
+    def test_load_vscode_clean_file_types_reads_workspace_settings(self) -> None:
+        patterns = td._load_vscode_clean_file_types()
+        self.assertIn("*.aux", patterns)
+        self.assertIn("*.log", patterns)
+
+    def test_load_vscode_clean_file_types_falls_back_on_parse_error(self) -> None:
+        original_loader = td._load_vscode_settings
+        try:
+            td._load_vscode_settings = lambda: (_ for _ in ()).throw(ValueError("broken settings"))
+            patterns = td._load_vscode_clean_file_types()
+        finally:
+            td._load_vscode_settings = original_loader
+
+        self.assertEqual(patterns, td.CLEAN_FALLBACK_FILE_TYPES)
+
+    def test_cleanup_scope_is_root_and_sections_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            root_aux = root / "main.aux"
+            sections_log = root / "Sections" / "part.log"
+            outside_aux = root / "tools" / "tests" / "outside.aux"
+
+            sections_log.parent.mkdir(parents=True, exist_ok=True)
+            outside_aux.parent.mkdir(parents=True, exist_ok=True)
+            root_aux.write_text("root aux\n", encoding="utf-8")
+            sections_log.write_text("sections log\n", encoding="utf-8")
+            outside_aux.write_text("outside aux\n", encoding="utf-8")
+
+            result = cc.clean_build_artifacts(
+                root_dir=root,
+                scope_dirs=[".", "Sections"],
+                patterns=["*.aux", "*.log"],
+                protected_patterns=["*.pdf", "*.synctex.gz"],
+                dry_run=False,
+                is_subpath_fn=td._is_subpath,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertIn("main.aux", result["deleted_files"])
+            self.assertIn("Sections/part.log", result["deleted_files"])
+            self.assertNotIn("tools/tests/outside.aux", result["deleted_files"])
+            self.assertFalse(root_aux.exists())
+            self.assertFalse(sections_log.exists())
+            self.assertTrue(outside_aux.exists())
+
+    def test_cleanup_preserves_pdf_and_synctex_even_when_pattern_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            pdf_path = root / "main.pdf"
+            synctex_path = root / "main.synctex.gz"
+            log_path = root / "main.log"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+            synctex_path.write_bytes(b"synctex")
+            log_path.write_text("log", encoding="utf-8")
+
+            result = cc.clean_build_artifacts(
+                root_dir=root,
+                scope_dirs=["."],
+                patterns=["*.pdf", "*.synctex.gz", "*.log"],
+                protected_patterns=["*.pdf", "*.synctex.gz"],
+                dry_run=False,
+                is_subpath_fn=td._is_subpath,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["deleted_files"], ["main.log"])
+            self.assertEqual(
+                sorted(result["skipped_protected_files"]),
+                ["main.pdf", "main.synctex.gz"],
+            )
+            self.assertTrue(pdf_path.exists())
+            self.assertTrue(synctex_path.exists())
+            self.assertFalse(log_path.exists())
+
+    def test_cleanup_dry_run_lists_targets_without_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            aux_path = root / "main.aux"
+            aux_path.write_text("aux\n", encoding="utf-8")
+
+            result = cc.clean_build_artifacts(
+                root_dir=root,
+                scope_dirs=["."],
+                patterns=["*.aux"],
+                protected_patterns=["*.pdf", "*.synctex.gz"],
+                dry_run=True,
+                is_subpath_fn=td._is_subpath,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["deleted_files"], ["main.aux"])
+            self.assertEqual(result["deleted_count"], 1)
+            self.assertTrue(aux_path.exists())
+
+    def test_server_api_clean_returns_structured_payload(self) -> None:
+        fake_response = {
+            "success": True,
+            "dry_run": True,
+            "scope": [".", "Sections"],
+            "patterns": ["*.aux"],
+            "protected_patterns": ["*.pdf", "*.synctex.gz"],
+            "deleted_files": ["main.aux"],
+            "deleted_count": 1,
+            "skipped_protected_files": ["main.pdf"],
+            "skipped_protected_count": 1,
+            "errors": [],
+        }
+        original_cleanup = tds._cleanup_build_artifacts
+        try:
+            tds._cleanup_build_artifacts = lambda dry_run=False: {
+                **fake_response,
+                "dry_run": bool(dry_run),
+            }
+            payload = tds._clean_response_payload({"dry_run": True})
+        finally:
+            tds._cleanup_build_artifacts = original_cleanup
+
+        self.assertTrue(payload.get("success"))
+        self.assertTrue(payload.get("dry_run"))
+        self.assertEqual(payload.get("scope"), [".", "Sections"])
+        self.assertEqual(payload.get("deleted_files"), ["main.aux"])
+
+    def test_server_api_clean_rejects_invalid_dry_run(self) -> None:
+        called = {"value": False}
+        original_cleanup = tds._cleanup_build_artifacts
+        try:
+            def _unexpected_cleanup(dry_run=False):
+                called["value"] = True
+                return {}
+
+            tds._cleanup_build_artifacts = _unexpected_cleanup
+            with self.assertRaisesRegex(ValueError, "dry_run must be a boolean"):
+                tds._clean_response_payload({"dry_run": "not-bool"})
+        finally:
+            tds._cleanup_build_artifacts = original_cleanup
+
+        self.assertFalse(called["value"])
 
     def test_server_parse_port_arg_supports_auto_and_integer(self) -> None:
         self.assertEqual(tds._parse_port_arg("auto"), "auto")

@@ -880,6 +880,7 @@
           <button id="saveBtn" class="primary">Save Overrides</button>
           <button id="compileBtn">Compile PDF</button>
           <button id="refreshPdfBtn">Refresh PDF Preview</button>
+          <button id="cleanBtn">Clean Build Artifacts</button>
           <button id="resetBtn" class="warn">Reset (Delete Overrides)</button>
         </div>
         <div id="status" class="status"></div>
@@ -2084,6 +2085,68 @@
       }
     }
 
+    async function cleanBuildArtifacts() {
+      setStatus("Cleaning build artifacts...");
+      const btn = document.getElementById("cleanBtn");
+      btn.disabled = true;
+      try {
+        const result = await postJson("/api/clean", { dry_run: false });
+        const deletedFiles = Array.isArray(result.deleted_files) ? result.deleted_files : [];
+        const skippedProtected = Array.isArray(result.skipped_protected_files)
+          ? result.skipped_protected_files
+          : [];
+        const errors = Array.isArray(result.errors) ? result.errors : [];
+        const patterns = Array.isArray(result.patterns) ? result.patterns : [];
+        const protectedPatterns = Array.isArray(result.protected_patterns)
+          ? result.protected_patterns
+          : [];
+        const scope = Array.isArray(result.scope) ? result.scope : [];
+
+        const lines = [
+          `[clean] success: ${result.success ? "yes" : "no"}`,
+          `[clean] dry-run: ${result.dry_run ? "yes" : "no"}`,
+          `[clean] scope: ${scope.join(", ") || "(none)"}`,
+          `[clean] patterns: ${patterns.join(", ") || "(none)"}`,
+          `[clean] protected: ${protectedPatterns.join(", ") || "(none)"}`,
+          `[clean] deleted: ${result.deleted_count || 0}`,
+          `[clean] kept protected: ${result.skipped_protected_count || 0}`
+        ];
+
+        if (deletedFiles.length > 0) {
+          lines.push("");
+          lines.push("[deleted files]");
+          lines.push(...deletedFiles);
+        }
+        if (skippedProtected.length > 0) {
+          lines.push("");
+          lines.push("[kept protected]");
+          lines.push(...skippedProtected);
+        }
+        if (errors.length > 0) {
+          lines.push("");
+          lines.push("[errors]");
+          lines.push(...errors);
+        }
+
+        document.getElementById("logBox").textContent = lines.join("\n");
+        if (result.success) {
+          setStatus(
+            `Cleaned ${result.deleted_count || 0} file(s), kept ${result.skipped_protected_count || 0} protected file(s).`,
+            "ok"
+          );
+        } else {
+          setStatus(
+            `Clean finished with ${errors.length} error(s).`,
+            "err"
+          );
+        }
+      } catch (err) {
+        setStatus(err.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function compilePdf() {
       const selected = document.getElementById("targetSelect").value || model.state.compile_target;
       model.state.compile_target = selected;
@@ -2179,6 +2242,7 @@
       document.getElementById("applyHeadingTocPresetBtn").addEventListener("click", applyHeadingTocPreset);
       document.getElementById("saveBtn").addEventListener("click", saveOverrides);
       document.getElementById("resetBtn").addEventListener("click", resetOverrides);
+      document.getElementById("cleanBtn").addEventListener("click", cleanBuildArtifacts);
       document.getElementById("splitBtn").addEventListener("click", splitCurrentTarget);
       document.getElementById("renumberBtn").addEventListener("click", renumberCurrentTarget);
       document.getElementById("unsplitBtn").addEventListener("click", unsplitSelectedTarget);

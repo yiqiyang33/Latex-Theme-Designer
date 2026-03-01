@@ -27,6 +27,7 @@ COMPILE_COMMAND_TIMEOUT_SEC = 120.0
 COMPILE_TIMEOUT_EXIT_CODE = 124
 
 try:
+    from tools import core_cleanup as _core_cleanup
     from tools import tex_splitter as _tex_splitter
     from tools import core_compile as _core_compile
     from tools import core_docclass as _core_docclass
@@ -39,6 +40,7 @@ try:
     from tools import core_vscode as _core_vscode
     from tools import core_split as _core_split
 except ModuleNotFoundError:
+    import core_cleanup as _core_cleanup
     import tex_splitter as _tex_splitter
     import core_compile as _core_compile
     import core_docclass as _core_docclass
@@ -50,6 +52,10 @@ except ModuleNotFoundError:
     import core_theme as _core_theme
     import core_vscode as _core_vscode
     import core_split as _core_split
+
+CLEAN_SCOPE_DIRS = [".", "Sections"]
+CLEAN_PROTECTED_PATTERNS = ["*.pdf", "*.synctex.gz"]
+CLEAN_FALLBACK_FILE_TYPES = list(_core_cleanup.DEFAULT_CLEAN_FILE_PATTERNS)
 
 IGNORE_TEX_FILENAMES = {
     "theme.colors.tex",
@@ -624,6 +630,17 @@ def _load_vscode_recipe_catalog() -> Dict[str, Any]:
     )
 
 
+def _load_vscode_clean_file_types() -> List[str]:
+    try:
+        settings = _load_vscode_settings()
+    except ValueError:
+        settings = {}
+    return _core_cleanup.clean_patterns_from_vscode_settings(
+        settings,
+        fallback_patterns=CLEAN_FALLBACK_FILE_TYPES,
+    )
+
+
 def _default_compile_recipe(recipes: List[Dict[str, Any]]) -> str:
     return _core_compile.default_compile_recipe(recipes)
 
@@ -1123,6 +1140,18 @@ def _safe_workspace_relpath(path: Optional[Path]) -> str:
     return _core_paths.safe_workspace_relpath(
         path,
         root_dir=ROOT_DIR,
+        is_subpath_fn=_is_subpath,
+    )
+
+
+def _cleanup_build_artifacts(dry_run: bool = False) -> Dict[str, Any]:
+    clean_patterns = _load_vscode_clean_file_types()
+    return _core_cleanup.clean_build_artifacts(
+        root_dir=ROOT_DIR,
+        scope_dirs=CLEAN_SCOPE_DIRS,
+        patterns=clean_patterns,
+        protected_patterns=CLEAN_PROTECTED_PATTERNS,
+        dry_run=bool(dry_run),
         is_subpath_fn=_is_subpath,
     )
 
