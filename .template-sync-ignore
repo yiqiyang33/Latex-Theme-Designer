@@ -1,0 +1,6 @@
+# Paths in this file are preserved during tools/sync_template.sh.
+# Customize as needed for local note content.
+main.tex
+Sections/
+.template-sync-ignore
+tools/sync_template.sh

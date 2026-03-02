@@ -25,6 +25,27 @@ Run tests:
 pytest -q tools/tests
 ```
 
+## Sync Template Updates (Keep Local Notes)
+
+If this repo is your template remote and your local notes live in `main.tex` + `Sections/`,
+use the sync helper to update toolkit/template files without overwriting note content.
+
+Preview changes first:
+
+```bash
+tools/sync_template.sh --dry-run
+```
+
+Apply sync:
+
+```bash
+tools/sync_template.sh
+```
+
+Defaults: remote `origin`, branch `main`.
+Built-in preserved paths: `main.tex`, `Sections/`, `.template-sync-ignore`, `tools/sync_template.sh`.
+Add more preserved paths in `.template-sync-ignore` when needed.
+
 ## Feature Overview
 
 - Centralized theme layout (`theme.sty`) for document + theorem styles.
