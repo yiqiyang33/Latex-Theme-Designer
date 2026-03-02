@@ -153,7 +153,13 @@ python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference
   - `--dry-run` is supported
 
 - Rerun safety:
-  - if root is already split with `\subfile{...}` entries, splitter returns no-op instead of injecting duplicates.
+  - if root is already split with `\subfile{...}` entries and has no new top-level `\chapter/\section`,
+    splitter returns no-op instead of injecting duplicates.
+  - if root has mixed layout (`\subfile{...}` entries plus newly written top-level `\chapter/\section`),
+    splitter preserves existing references and incrementally extracts only new top-level blocks.
+  - in mixed mode, new generated files continue numbering after the highest existing numeric prefix
+    and skip conflicting filenames deterministically.
+  - top-level `\appendix` is preserved in root and not moved into generated unit files.
 
 - Toolkit UI split flow:
   - use `Split + Subfiles Standalone` panel

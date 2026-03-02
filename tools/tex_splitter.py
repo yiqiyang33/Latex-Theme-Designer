@@ -55,6 +55,9 @@ TOP_LEVEL_REFERENCE_PATTERN = re.compile(
     r"(?m)^[ \t]*\\(?P<macro>subfile|input|include)"
     r"(?:[ \t]*\[[^\]\n]*\])?[ \t]*\{(?P<ref>[^}\n]+)\}"
 )
+APPENDIX_PATTERN = re.compile(
+    r"(?m)^[ \t]*\\appendix\b[^\n]*(?:\n|$)"
+)
 NUMERIC_PREFIX_PATTERN = re.compile(r"^(?P<number>\d+)-(?P<rest>.+)$")
 DOCUMENTCLASS_DECLARATION_PATTERN = re.compile(
     r"\\documentclass(?:\[(?P<options>[^\]]*)\])?\{(?P<class>[^}]+)\}",
@@ -186,6 +189,73 @@ def _build_anchor_pattern(command_name: str) -> re.Pattern[str]:
 
 def _find_top_level_anchors(body_text: str, command_name: str) -> List[re.Match[str]]:
     return list(_build_anchor_pattern(command_name).finditer(body_text))
+
+
+def _extract_root_preserved_spans(
+    body_text: str,
+    references: List[RootReference],
+) -> List[Tuple[int, int]]:
+    spans: List[Tuple[int, int]] = []
+    seen: set[Tuple[int, int]] = set()
+
+    for ref in references:
+        span = (ref.match_start, ref.match_end)
+        if span[0] >= span[1] or span in seen:
+            continue
+        seen.add(span)
+        spans.append(span)
+
+    for match in APPENDIX_PATTERN.finditer(body_text):
+        span = (match.start(), match.end())
+        if span[0] >= span[1] or span in seen:
+            continue
+        seen.add(span)
+        spans.append(span)
+
+    spans.sort(key=lambda item: (item[0], item[1]))
+    previous_end = -1
+    for start, end in spans:
+        if start < previous_end:
+            raise ValueError(
+                "Detected overlapping preserved root spans in document body."
+            )
+        previous_end = max(previous_end, end)
+    return spans
+
+
+def _compute_anchor_chunks(
+    body_text: str,
+    command_name: str,
+    preserved_spans: List[Tuple[int, int]],
+) -> List[Tuple[re.Match[str], int, int]]:
+    anchors = _find_top_level_anchors(body_text, command_name)
+    if not anchors:
+        return []
+
+    chunks: List[Tuple[re.Match[str], int, int]] = []
+    for index, anchor in enumerate(anchors):
+        chunk_start = anchor.start()
+        for preserved_start, preserved_end in preserved_spans:
+            if preserved_start <= chunk_start < preserved_end:
+                raise ValueError(
+                    f"Top-level \\{command_name} anchor overlaps preserved root content."
+                )
+
+        next_anchor_start = (
+            anchors[index + 1].start() if index + 1 < len(anchors) else len(body_text)
+        )
+        chunk_end = next_anchor_start
+        for preserved_start, _ in preserved_spans:
+            if preserved_start > chunk_start:
+                chunk_end = min(chunk_end, preserved_start)
+                break
+
+        if chunk_end <= chunk_start:
+            raise ValueError(
+                f"Failed to compute non-empty split chunk for \\{command_name} anchor."
+            )
+        chunks.append((anchor, chunk_start, chunk_end))
+    return chunks
 
 
 def _parse_balanced_group(
@@ -661,9 +731,13 @@ def split_tex_file(
     body_text = tex_text[body_start:body_end]
     end_document_and_tail = tex_text[body_end:]
 
-    anchors = _find_top_level_anchors(body_text, split_command)
+    existing_refs = _extract_top_level_references(root_path.parent, body_text)
+    preserved_spans = _extract_root_preserved_spans(body_text, existing_refs)
+    anchor_chunks = _compute_anchor_chunks(body_text, split_command, preserved_spans)
     section_dir_path = _resolve_output_dir(sections_dir, root_path.parent)
-    if not anchors:
+    if existing_refs:
+        section_dir_path = existing_refs[0].target_abs.parent
+    if not anchor_chunks:
         if mode == STANDALONE_MODE_SUBFILES:
             existing_refs = _extract_existing_subfile_refs(body_text)
             if existing_refs:
@@ -693,40 +767,68 @@ def split_tex_file(
         )
 
     units: List[SplitUnit] = []
-    width = max(2, len(str(len(anchors))))
+    mixed_layout = bool(existing_refs)
+    existing_numbers: set[int] = set()
+    for ref in existing_refs:
+        number, _ = _extract_numeric_prefix(ref.target_abs.stem)
+        if number is not None:
+            existing_numbers.add(number)
+
+    if mixed_layout:
+        start_number = max(existing_numbers) + 1 if existing_numbers else 1
+    else:
+        start_number = 1
+    estimated_max = start_number + len(anchor_chunks) - 1
+    if existing_numbers:
+        estimated_max = max(estimated_max, max(existing_numbers))
+    width = max(2, len(str(max(1, estimated_max))))
+
     seen_slugs: Dict[str, int] = {}
-    for index, anchor in enumerate(anchors, start=1):
-        chunk_start = anchor.start()
-        chunk_end = anchors[index].start() if index < len(anchors) else len(body_text)
+    replacement_map: Dict[Tuple[int, int], str] = {}
+    next_number = start_number
+    for index, (anchor, chunk_start, chunk_end) in enumerate(anchor_chunks, start=1):
         chunk_text = body_text[chunk_start:chunk_end]
         title = _extract_heading_title(body_text, split_command, chunk_start)
+        if not title:
+            raise ValueError(
+                f"Detected split chunk with missing \\{split_command} heading title."
+            )
         slug = _stable_slug_for_title(title, seen_slugs)
-        filename = f"{index:0{width}d}-{slug}.tex"
+        assigned_number = index
+        if mixed_layout:
+            assigned_number = next_number
+            while True:
+                candidate_filename = f"{assigned_number:0{width}d}-{slug}.tex"
+                candidate_path = section_dir_path / candidate_filename
+                if assigned_number in existing_numbers or candidate_path.exists():
+                    assigned_number += 1
+                    continue
+                break
+            next_number = assigned_number + 1
+            existing_numbers.add(assigned_number)
+
+        filename = f"{assigned_number:0{width}d}-{slug}.tex"
+        unit_path = section_dir_path / filename
+        unit_reference = _relative_tex_reference(root_path.parent, unit_path)
+        include_macro = "\\subfile"
+        if mode == STANDALONE_MODE_LEGACY_WRAPPER:
+            include_macro = "\\include" if use_include else "\\input"
+        replacement_map[(chunk_start, chunk_end)] = f"{include_macro}{{{unit_reference}}}\n"
         units.append(
             SplitUnit(
-                index=index,
+                index=assigned_number,
                 title=title or f"{split_command}-{index}",
                 slug=slug,
-                path=section_dir_path / filename,
+                path=unit_path,
                 content=chunk_text,
             )
         )
 
-    leading_body = body_text[:anchors[0].start()]
     include_macro = "\\subfile"
     if mode == STANDALONE_MODE_LEGACY_WRAPPER:
         include_macro = "\\include" if use_include else "\\input"
-    include_lines = [
-        f"{include_macro}{{{_relative_tex_reference(root_path.parent, unit.path)}}}"
-        for unit in units
-    ]
 
-    new_body = leading_body
-    if new_body and not new_body.endswith("\n"):
-        new_body += "\n"
-    if new_body and not new_body.endswith("\n\n"):
-        new_body += "\n"
-    new_body += "\n".join(include_lines) + "\n"
+    new_body = _build_text_with_reference_replacements(body_text, replacement_map)
     subfiles_package_injected = False
     rewritten_preamble_plus_begin = preamble_plus_begin
     if mode == STANDALONE_MODE_SUBFILES:

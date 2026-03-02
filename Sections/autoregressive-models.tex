@@ -1,0 +1,23 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+
+\chapter{Autoregressive models}
+
+\section{Intro}
+
+\defn{Autoregressive model}{arm}{
+The chain of probability, 
+\begin{equation}\label{eq:chain-rule}
+p(\boldsymbol{x}_{1 : T}) = \prod_{t=1}^{T}p(\boldsymbol{x}_{t}, \boldsymbol{x}_{1 : t-1}).
+\end{equation}
+where $\boldsymbol{x}_{t} \in \mathcal{X}$ is the $t$'th observation, and we define $p(\boldsymbol{x}_{1} | \boldsymbol{x}_{1:0}) = p(x_{1})$ as the initial state distribution.
+This is called an \textbf{autoregressive model} (ARM) because the distribution of each observation $\boldsymbol{x}_{t}$ depends on the previous observations $\boldsymbol{x}_{1 : t-1}$, creating a chain-like structure.
+}
+
+We make $\boldsymbol{x}_{t}$ depend on all the past $\boldsymbol{x}_{1 : t-1}$ without explicitly regressing on them.
+We assume that the past can be compressed into a hidden state $\boldsymbol{z}_{t}$.
+
+\section{Transformers}
+
+
+\end{document}

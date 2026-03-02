@@ -103,6 +103,162 @@ class TexSplitterTests(unittest.TestCase):
             )
             self.assertTrue(first_unit.startswith("\\chapter{First Chapter}"))
 
+    def test_split_book_with_inserted_middle_chapter_generates_three_units(self) -> None:
+        original_text = (
+            "\\documentclass{book}\n"
+            "\\begin{document}\n"
+            "\\chapter{First}\n"
+            "Alpha.\n"
+            "\\chapter{Middle}\n"
+            "Beta.\n"
+            "\\chapter{Last}\n"
+            "Gamma.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            root.write_text(original_text, encoding="utf-8")
+
+            result = ts.split_tex_file(root, root.parent / "Sections")
+
+            self.assertEqual(result.split_command, "chapter")
+            self.assertEqual([unit.path.name for unit in result.units], [
+                "01-first.tex",
+                "02-middle.tex",
+                "03-last.tex",
+            ])
+            rewritten = root.read_text(encoding="utf-8")
+            self.assertIn("\\subfile{Sections/01-first}", rewritten)
+            self.assertIn("\\subfile{Sections/02-middle}", rewritten)
+            self.assertIn("\\subfile{Sections/03-last}", rewritten)
+            self.assertNotIn("\\chapter{Middle}", rewritten)
+
+    def test_split_mixed_layout_preserves_existing_refs_and_inserts_new_unit(self) -> None:
+        original_text = (
+            "\\documentclass{book}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-intro}\n"
+            "\\chapter{New Mid}\n"
+            "Inserted body.\n"
+            "\\subfile{Sections/02-existing}\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            sections = root.parent / "Sections"
+            sections.mkdir(parents=True, exist_ok=True)
+            (sections / "01-intro.tex").write_text("intro\n", encoding="utf-8")
+            (sections / "02-existing.tex").write_text("existing\n", encoding="utf-8")
+            root.write_text(original_text, encoding="utf-8")
+
+            result = ts.split_tex_file(root, sections)
+            rewritten = root.read_text(encoding="utf-8")
+
+            self.assertFalse(result.already_split)
+            self.assertEqual([unit.path.name for unit in result.units], ["03-new-mid.tex"])
+            self.assertIn("\\subfile{Sections/01-intro}", rewritten)
+            self.assertIn("\\subfile{Sections/03-new-mid}", rewritten)
+            self.assertIn("\\subfile{Sections/02-existing}", rewritten)
+            self.assertNotIn("\\chapter{New Mid}", rewritten)
+            new_unit = (sections / "03-new-mid.tex").read_text(encoding="utf-8")
+            self.assertIn("\\chapter{New Mid}", new_unit)
+            self.assertNotIn("\\subfile{Sections/02-existing}", new_unit)
+
+    def test_split_mixed_layout_skips_existing_filename_conflicts(self) -> None:
+        original_text = (
+            "\\documentclass{book}\n"
+            "\\usepackage{subfiles}\n"
+            "\\begin{document}\n"
+            "\\subfile{Sections/01-intro}\n"
+            "\\chapter{New Mid}\n"
+            "Inserted body.\n"
+            "\\subfile{Sections/02-existing}\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            sections = root.parent / "Sections"
+            sections.mkdir(parents=True, exist_ok=True)
+            (sections / "01-intro.tex").write_text("intro\n", encoding="utf-8")
+            (sections / "02-existing.tex").write_text("existing\n", encoding="utf-8")
+            (sections / "03-new-mid.tex").write_text("occupied\n", encoding="utf-8")
+            root.write_text(original_text, encoding="utf-8")
+
+            result = ts.split_tex_file(root, sections)
+            rewritten = root.read_text(encoding="utf-8")
+
+            self.assertEqual([unit.path.name for unit in result.units], ["04-new-mid.tex"])
+            self.assertIn("\\subfile{Sections/04-new-mid}", rewritten)
+            self.assertTrue((sections / "03-new-mid.tex").exists())
+            self.assertTrue((sections / "04-new-mid.tex").exists())
+
+    def test_split_book_appendix_stays_in_root_and_not_in_previous_unit(self) -> None:
+        original_text = (
+            "\\documentclass{book}\n"
+            "\\begin{document}\n"
+            "\\chapter{Main Part}\n"
+            "Main body.\n"
+            "\\appendix\n"
+            "\\chapter{Proofs}\n"
+            "Proof text.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            root.write_text(original_text, encoding="utf-8")
+
+            result = ts.split_tex_file(root, root.parent / "Sections")
+            rewritten = root.read_text(encoding="utf-8")
+            first_unit = (root.parent / "Sections" / "01-main-part.tex").read_text(
+                encoding="utf-8"
+            )
+            second_unit = (root.parent / "Sections" / "02-proofs.tex").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual([unit.path.name for unit in result.units], [
+                "01-main-part.tex",
+                "02-proofs.tex",
+            ])
+            self.assertIn("\\subfile{Sections/01-main-part}", rewritten)
+            self.assertIn("\\appendix", rewritten)
+            self.assertIn("\\subfile{Sections/02-proofs}", rewritten)
+            self.assertLess(
+                rewritten.find("\\appendix"),
+                rewritten.find("\\subfile{Sections/02-proofs}"),
+            )
+            self.assertNotIn("\\appendix", first_unit)
+            self.assertIn("\\chapter{Proofs}", second_unit)
+
+    def test_split_article_appendix_stays_in_root(self) -> None:
+        original_text = (
+            "\\documentclass{article}\n"
+            "\\begin{document}\n"
+            "\\section{Main Part}\n"
+            "Main body.\n"
+            "\\appendix\n"
+            "\\section{Supplement}\n"
+            "Supp text.\n"
+            "\\end{document}\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "main.tex"
+            root.write_text(original_text, encoding="utf-8")
+
+            result = ts.split_tex_file(root, root.parent / "Sections")
+            rewritten = root.read_text(encoding="utf-8")
+            first_unit = (root.parent / "Sections" / "01-main-part.tex").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual([unit.path.name for unit in result.units], [
+                "01-main-part.tex",
+                "02-supplement.tex",
+            ])
+            self.assertIn("\\appendix", rewritten)
+            self.assertNotIn("\\appendix", first_unit)
+
     def test_split_does_not_duplicate_subfiles_package_when_already_present(self) -> None:
         original_text = (
             "\\documentclass{article}\n"

@@ -102,6 +102,9 @@ python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
 Note: split source must be a root `.tex` target. Subfile units (`\documentclass{subfiles}`) are rejected.
 Renumber only processes files referenced by the selected root.
 Unsplit supports `--dry-run` and defaults to deleting the merged source unit.
+If root already has `\subfile{...}` references and you insert new top-level `\chapter/\section` blocks,
+splitter now performs incremental insertion: existing refs are preserved and only new blocks are extracted.
+Top-level `\appendix` stays in root (not moved into generated section files).
 For full splitter details and migration notes, see `tools/README-theme-designer.md`.
 
 ## Quick Troubleshooting

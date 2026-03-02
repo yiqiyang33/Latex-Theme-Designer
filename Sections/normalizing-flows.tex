@@ -1,0 +1,50 @@
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+
+\chapter{Normalizing flows}
+
+\section{Intro}
+
+We want to create complex probability distributions $p(\boldsymbol{x})$ by passing random
+variables $\boldsymbol{u} \in  \mathbb{R}^{D}$ drawn from a simple \textbf{base distribution} $p(\boldsymbol{u})$ through a nonlinear
+but \emph{invertible} transformation $\boldsymbol{f} : \mathbb{R}^{D} \to  \mathbb{R}^{D}$. 
+\[
+\boldsymbol{x} = \boldsymbol{f}(\boldsymbol{u}), \quad \text{where } \boldsymbol{u} \sim  p(\boldsymbol{u})
+\]
+To compute the density $p(\boldsymbol{x})$, we rely on the fact that $\boldsymbol{f}$ is \emph{invertible}. Let $\boldsymbol{g}(\boldsymbol{x}) = \boldsymbol{f}^{-1}(\boldsymbol{x}) = \boldsymbol{u}$ be the 
+inverse mapping.
+\[
+p_{x}(\boldsymbol{x}) = p_{u} \left( \boldsymbol{g}(\boldsymbol{x}) \right) \left\vert \det \boldsymbol{J}(\boldsymbol{g}) (\boldsymbol{x})\right\vert  = p_{u}(\boldsymbol{u}) \left\vert \det \boldsymbol{J}(\boldsymbol{f}) (\boldsymbol{u}) \right\vert ^{-1},
+\]
+Take log,
+\[
+\log p_{x}(\boldsymbol{x}) = \log p_{u}(\boldsymbol{u}) - \log \left\vert \det \boldsymbol{J}(\boldsymbol{f})(\boldsymbol{u}) \right\vert .
+\]
+
+\subsection{How to train a flow model}
+
+There are two applications of normalizing flos, the first is \textbf{density estimation} of observed data ($p_{\boldsymbol{\theta}}(\boldsymbol{x})$). The second is \textbf{variational inference} (sampling from and evaluating a variational posterior $q_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x})$) parameterized by the flow model.
+The objectives are different.
+
+
+\paragraph{Density estimation} We need to efficiently evaluate the inverse flow $\boldsymbol{u} = \boldsymbol{f}^{-1}(\boldsymbol{x})$ and its Jacobian $\boldsymbol{J}(\boldsymbol{f}^{-1})(\boldsymbol{x})$ for any given $\boldsymbol{x}$.
+
+\paragraph{Varational inference} we are interested in approximating
+the true posterior $p^{*}(\boldsymbol{z} | \boldsymbol{x})$ with a normalizing flow $q_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x})$.
+
+The variational parameters are trained by maximizing the ELBO, 
+\[
+L(\boldsymbol{\theta}) = \mathbb{E}_{q_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x})} \left[ \log p(\boldsymbol{x} | \boldsymbol{z}) + \log p(\boldsymbol{z}) - \log q_{\boldsymbol{\theta}}(\boldsymbol{z} | \boldsymbol{x}) \right] 
+\]
+Drop the dependency on $\boldsymbol{x}$ for simplicity,
+\[
+L(\boldsymbol{\theta}) = \mathbb{E}_{q_{\boldsymbol{\theta}}(\boldsymbol{z})} \left[ \ell_{\boldsymbol{\theta}}(\boldsymbol{z}) \right] .
+\]
+
+Let $q_{\boldsymbol{\theta}}(\boldsymbol{z})$ denote a normalizing flow with base distribution $q(\boldsymbol{u})$ and transformation $\boldsymbol{z} = f_{\boldsymbol{\theta}}(\boldsymbol{u})$.
+The reparameterization trick allows us to optimize
+the parameters using stochastic gradients
+
+
+
+\end{document}
