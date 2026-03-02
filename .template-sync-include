@@ -10,5 +10,3 @@ pytest.ini
 references.bib
 theme.sty
 theorems.tex
-.template-sync-ignore
-.template-sync-include

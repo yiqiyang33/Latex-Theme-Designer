@@ -194,16 +194,27 @@ if [[ ${#INCLUDE_PATHS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-COMMON_RSYNC_ARGS=(
+DIR_RSYNC_ARGS=(
   -a
+  -c
+  --no-times
+  --omit-dir-times
+  --itemize-changes
+)
+FILE_RSYNC_ARGS=(
+  -a
+  -c
+  --no-times
+  --omit-dir-times
   --itemize-changes
 )
 
 if [[ -f "$IGNORE_FILE" ]]; then
-  COMMON_RSYNC_ARGS+=(--exclude-from "$IGNORE_FILE")
+  DIR_RSYNC_ARGS+=(--exclude-from "$IGNORE_FILE")
 fi
 if [[ "$DRY_RUN" == "1" ]]; then
-  COMMON_RSYNC_ARGS+=(--dry-run)
+  DIR_RSYNC_ARGS+=(--dry-run)
+  FILE_RSYNC_ARGS+=(--dry-run)
 fi
 
 echo "[sync-template] target: $TARGET_DIR"
@@ -225,10 +236,10 @@ for rel_path in "${INCLUDE_PATHS[@]}"; do
 
   if [[ -d "$src" ]]; then
     mkdir -p "$dst"
-    rsync "${COMMON_RSYNC_ARGS[@]}" "$src"/ "$dst"/
+    rsync "${DIR_RSYNC_ARGS[@]}" "$src"/ "$dst"/
   else
     mkdir -p "$(dirname "$dst")"
-    rsync "${COMMON_RSYNC_ARGS[@]}" "$src" "$dst"
+    rsync "${FILE_RSYNC_ARGS[@]}" "$src" "$dst"
   fi
 done
 
