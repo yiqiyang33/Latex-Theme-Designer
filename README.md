@@ -27,8 +27,8 @@ pytest -q tools/tests
 
 ## Sync Template Updates (Keep Local Notes)
 
-If this repo is your template remote and your local notes live in `main.tex` + `Sections/`,
-use the sync helper to update toolkit/template files without overwriting note content.
+Use the sync helper to update toolkit/template code without overwriting local note content.
+It works even when your notes folder has no `.git` repository.
 
 Preview changes first:
 
@@ -42,9 +42,13 @@ Apply sync:
 tools/sync_template.sh
 ```
 
-Defaults: remote `origin`, branch `main`.
-Built-in preserved paths: `main.tex`, `Sections/`, `.template-sync-ignore`, `tools/sync_template.sh`.
-Add more preserved paths in `.template-sync-ignore` when needed.
+Defaults:
+- source: `https://github.com/yiqiyang33/Latex-Theme-Designer`
+- branch: `main`
+- target: current directory
+
+Sync scope is controlled by `.template-sync-include` (only listed paths are synced).
+Extra excludes inside those synced paths can be configured in `.template-sync-ignore`.
 
 ## Feature Overview
 

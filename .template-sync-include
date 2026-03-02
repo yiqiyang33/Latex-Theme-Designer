@@ -1,0 +1,14 @@
+# Paths in this file will be synced from template source.
+# One path per line. Directories should end with "/".
+.github/
+templates/
+tools/
+.gitignore
+README.md
+commands.tex
+pytest.ini
+references.bib
+theme.sty
+theorems.tex
+.template-sync-ignore
+.template-sync-include

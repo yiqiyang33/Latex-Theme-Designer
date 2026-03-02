@@ -4,44 +4,63 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  tools/sync_template.sh [--remote origin] [--branch main] [--dry-run] [--allow-dirty]
+  tools/sync_template.sh [options]
 
-Description:
-  Sync project files from the template remote branch into current workspace,
-  while preserving paths listed in .template-sync-ignore.
+Options:
+  --target <dir>         Target workspace to sync into (default: current directory)
+  --branch <name>        Template branch/tag (default: main)
+  --source-url <url>     Template repository URL (default: this template GitHub repo)
+  --source-dir <dir>     Use local template directory as source (no network)
+  --include-file <file>  Paths to sync (default: <target>/.template-sync-include)
+  --ignore-file <file>   Exclude patterns inside synced paths (default: <target>/.template-sync-ignore)
+  --dry-run              Preview changes without writing files
+  -h, --help             Show help
 
-Defaults:
-  --remote origin
-  --branch main
-
-Examples:
-  tools/sync_template.sh --dry-run
-  tools/sync_template.sh
-  tools/sync_template.sh --remote origin --branch main
+Notes:
+  - This script syncs only include-paths (code/template files), not the whole folder.
+  - It does NOT require target directory to be a git repository.
+  - It does NOT require clean working tree (dirty is allowed by default).
 EOF
 }
 
-REMOTE="origin"
+DEFAULT_SOURCE_URL="https://github.com/yiqiyang33/Latex-Theme-Designer"
+TARGET_DIR="$(pwd)"
 BRANCH="main"
+SOURCE_URL="$DEFAULT_SOURCE_URL"
+SOURCE_DIR=""
 DRY_RUN="0"
-ALLOW_DIRTY="0"
+
+INCLUDE_FILE=""
+IGNORE_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --remote)
-      REMOTE="${2:-}"
+    --target)
+      TARGET_DIR="${2:-}"
       shift 2
       ;;
     --branch)
       BRANCH="${2:-}"
       shift 2
       ;;
+    --source-url)
+      SOURCE_URL="${2:-}"
+      shift 2
+      ;;
+    --source-dir)
+      SOURCE_DIR="${2:-}"
+      shift 2
+      ;;
+    --include-file)
+      INCLUDE_FILE="${2:-}"
+      shift 2
+      ;;
+    --ignore-file)
+      IGNORE_FILE="${2:-}"
+      shift 2
+      ;;
     --dry-run)
       DRY_RUN="1"
-      shift
-      ;;
-    --allow-dirty)
-      ALLOW_DIRTY="1"
       shift
       ;;
     -h|--help)
@@ -56,28 +75,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "Error: current directory is not a git repository." >&2
+TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
+if [[ -z "$INCLUDE_FILE" ]]; then
+  INCLUDE_FILE="$TARGET_DIR/.template-sync-include"
+fi
+if [[ -z "$IGNORE_FILE" ]]; then
+  IGNORE_FILE="$TARGET_DIR/.template-sync-ignore"
+fi
+
+if [[ ! -d "$TARGET_DIR" ]]; then
+  echo "Error: target directory does not exist: $TARGET_DIR" >&2
   exit 1
 fi
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-IGNORE_FILE="$REPO_ROOT/.template-sync-ignore"
-
-if [[ "$ALLOW_DIRTY" != "1" ]]; then
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "Error: working tree is not clean. Commit/stash first, or use --allow-dirty." >&2
-    exit 1
-  fi
-fi
-
-if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
-  echo "Error: remote '$REMOTE' does not exist." >&2
-  exit 1
-fi
-
-echo "[sync-template] fetch $REMOTE/$BRANCH"
-git fetch --prune "$REMOTE" "$BRANCH"
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {
@@ -85,36 +94,149 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[sync-template] export $REMOTE/$BRANCH"
-git archive --format=tar "$REMOTE/$BRANCH" | tar -xf - -C "$TMP_DIR"
+SNAPSHOT_DIR="$TMP_DIR/snapshot"
+mkdir -p "$SNAPSHOT_DIR"
 
-RSYNC_ARGS=(
+parse_github_slug() {
+  local raw="$1"
+  local stripped="$raw"
+
+  stripped="${stripped#https://github.com/}"
+  stripped="${stripped#http://github.com/}"
+  stripped="${stripped#git@github.com:}"
+  stripped="${stripped%.git}"
+  stripped="${stripped#/}"
+  stripped="${stripped%/}"
+
+  if [[ "$stripped" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+    echo "$stripped"
+    return 0
+  fi
+  return 1
+}
+
+fetch_snapshot_from_github() {
+  local repo_slug="$1"
+  local branch="$2"
+  local out_dir="$3"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "Error: curl is required to download template snapshot." >&2
+    return 1
+  fi
+  local tarball="$TMP_DIR/template.tar.gz"
+  local codeload_url="https://codeload.github.com/${repo_slug}/tar.gz/refs/heads/${branch}"
+
+  echo "[sync-template] download ${repo_slug}@${branch}"
+  curl -fsSL "$codeload_url" -o "$tarball"
+  tar -xzf "$tarball" -C "$TMP_DIR"
+
+  local extracted
+  extracted="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | grep -v '/snapshot$' | head -n 1 || true)"
+  if [[ -z "$extracted" ]]; then
+    echo "Error: failed to extract downloaded snapshot." >&2
+    return 1
+  fi
+  rsync -a "$extracted"/ "$out_dir"/
+}
+
+fetch_snapshot_with_git() {
+  local source_url="$1"
+  local branch="$2"
+  local out_dir="$3"
+
+  if ! command -v git >/dev/null 2>&1; then
+    echo "Error: git is required for non-GitHub source URL: $source_url" >&2
+    return 1
+  fi
+
+  echo "[sync-template] clone ${source_url}@${branch}"
+  git clone --depth 1 --branch "$branch" "$source_url" "$TMP_DIR/repo"
+  rsync -a --exclude ".git/" "$TMP_DIR/repo"/ "$out_dir"/
+}
+
+if [[ -n "$SOURCE_DIR" ]]; then
+  SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd)"
+  if [[ ! -d "$SOURCE_DIR" ]]; then
+    echo "Error: source directory does not exist: $SOURCE_DIR" >&2
+    exit 1
+  fi
+  echo "[sync-template] use local source directory: $SOURCE_DIR"
+  rsync -a --exclude ".git/" "$SOURCE_DIR"/ "$SNAPSHOT_DIR"/
+else
+  if repo_slug="$(parse_github_slug "$SOURCE_URL")"; then
+    fetch_snapshot_from_github "$repo_slug" "$BRANCH" "$SNAPSHOT_DIR"
+  else
+    fetch_snapshot_with_git "$SOURCE_URL" "$BRANCH" "$SNAPSHOT_DIR"
+  fi
+fi
+
+if [[ ! -f "$INCLUDE_FILE" ]]; then
+  echo "Error: include file not found: $INCLUDE_FILE" >&2
+  echo "Create it with paths you want to sync (one path per line)." >&2
+  exit 1
+fi
+
+INCLUDE_PATHS=()
+while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+  line="$(printf '%s' "$raw_line" | sed 's/[[:space:]]*$//')"
+  if [[ -z "$line" ]]; then
+    continue
+  fi
+  if [[ "$line" == \#* ]]; then
+    continue
+  fi
+  INCLUDE_PATHS+=("$line")
+done < "$INCLUDE_FILE"
+
+if [[ ${#INCLUDE_PATHS[@]} -eq 0 ]]; then
+  echo "Error: include file is empty: $INCLUDE_FILE" >&2
+  exit 1
+fi
+
+COMMON_RSYNC_ARGS=(
   -a
-  --delete
   --itemize-changes
-  --exclude ".git/"
-  --exclude "main.tex"
-  --exclude "Sections/"
-  --exclude ".template-sync-ignore"
-  --exclude "tools/sync_template.sh"
 )
 
 if [[ -f "$IGNORE_FILE" ]]; then
-  RSYNC_ARGS+=(--exclude-from "$IGNORE_FILE")
-else
-  echo "[sync-template] warning: $IGNORE_FILE not found, no custom excludes applied."
+  COMMON_RSYNC_ARGS+=(--exclude-from "$IGNORE_FILE")
 fi
-
 if [[ "$DRY_RUN" == "1" ]]; then
-  RSYNC_ARGS+=(--dry-run)
+  COMMON_RSYNC_ARGS+=(--dry-run)
 fi
 
-echo "[sync-template] rsync template snapshot into workspace"
-rsync "${RSYNC_ARGS[@]}" "$TMP_DIR"/ "$REPO_ROOT"/
+echo "[sync-template] target: $TARGET_DIR"
+echo "[sync-template] include-file: $INCLUDE_FILE"
+if [[ -f "$IGNORE_FILE" ]]; then
+  echo "[sync-template] ignore-file: $IGNORE_FILE"
+else
+  echo "[sync-template] ignore-file: (not found)"
+fi
+
+for rel_path in "${INCLUDE_PATHS[@]}"; do
+  src="$SNAPSHOT_DIR/$rel_path"
+  dst="$TARGET_DIR/$rel_path"
+
+  if [[ ! -e "$src" ]]; then
+    echo "[sync-template] skip missing source path: $rel_path"
+    continue
+  fi
+
+  if [[ -d "$src" ]]; then
+    mkdir -p "$dst"
+    rsync "${COMMON_RSYNC_ARGS[@]}" "$src"/ "$dst"/
+  else
+    mkdir -p "$(dirname "$dst")"
+    rsync "${COMMON_RSYNC_ARGS[@]}" "$src" "$dst"
+  fi
+done
 
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "[sync-template] dry-run complete (no files changed)."
 else
   echo "[sync-template] sync complete."
-  git -C "$REPO_ROOT" status --short
+  if git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$TARGET_DIR" status --short
+  fi
 fi
