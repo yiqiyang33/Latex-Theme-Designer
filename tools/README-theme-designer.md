@@ -58,9 +58,9 @@ python3 tools/theme_designer.py --open-browser
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
 - One-click cleanup for compile artifacts:
-  - scope is fixed to workspace root (`.`) and `Sections/`
-  - cleanup patterns come from `.vscode/settings.json` key `latex-workshop.latex.clean.fileTypes`
-  - `*.pdf` and `*.synctex.gz` are always protected and never deleted
+  - root scope (`.`): conservative cleanup using `.vscode/settings.json` key `latex-workshop.latex.clean.fileTypes`
+  - subfile scopes (auto-discovered from `\documentclass[..]{subfiles}` units): aggressive cleanup keeps only `*.tex` and `*.pdf`
+  - empty subdirectories under subfile scopes are pruned after cleanup (scope root folders are retained)
 - Preview current target PDF in the same UI page.
 - Starter template bootstrap from UI:
   - choose built-in starter template (`book-minimal` / `article-minimal`)
@@ -215,9 +215,9 @@ PY
   - Click `Refresh PDF Preview` after compile.
   - Confirm the target and compile mode shown in the UI info line.
 - Clean Build Artifacts keeps files you expected to delete:
-  - Cleanup only runs in `.` and `Sections/`.
-  - Patterns are read from `.vscode/settings.json` (`latex-workshop.latex.clean.fileTypes`).
-  - `*.pdf` and `*.synctex.gz` are intentionally preserved for preview/synctex navigation.
+  - Root cleanup uses `.vscode/settings.json` patterns (`latex-workshop.latex.clean.fileTypes`) and preserves `*.pdf` / `*.synctex.gz`.
+  - Subfile scopes are auto-discovered from `\documentclass[..]{subfiles}` units and keep only `*.tex` / `*.pdf`.
+  - `*.synctex.gz` inside subfile scopes is intentionally removed by the aggressive policy.
 - Browser close behavior:
   - Server can always stop itself.
   - Force-closing browser tabs/windows from the server is not guaranteed due browser security constraints.

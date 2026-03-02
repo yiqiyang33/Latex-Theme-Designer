@@ -1632,6 +1632,39 @@ class ThemeDesignerTests(unittest.TestCase):
 
         self.assertEqual(patterns, td.CLEAN_FALLBACK_FILE_TYPES)
 
+    def test_discover_subfile_scope_dirs_auto_detects_and_skips_ignored_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "main.tex").write_text(
+                "\\documentclass{article}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (root / "Sections").mkdir(parents=True, exist_ok=True)
+            (root / "Sections/01-unit.tex").write_text(
+                "\\documentclass[../main.tex]{subfiles}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (root / "chapters/part").mkdir(parents=True, exist_ok=True)
+            (root / "chapters/part/02-unit.tex").write_text(
+                "\\documentclass[../../main.tex]{subfiles}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (root / "build").mkdir(parents=True, exist_ok=True)
+            (root / "build/should-ignore.tex").write_text(
+                "\\documentclass[../main.tex]{subfiles}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+
+            original_root = td.ROOT_DIR
+            try:
+                td.ROOT_DIR = root
+                scope_dirs, errors = td._discover_subfile_scope_dirs()
+            finally:
+                td.ROOT_DIR = original_root
+
+        self.assertEqual(scope_dirs, ["Sections", "chapters/part"])
+        self.assertEqual(errors, [])
+
     def test_cleanup_scope_is_root_and_sections_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -1711,6 +1744,126 @@ class ThemeDesignerTests(unittest.TestCase):
             self.assertEqual(result["deleted_count"], 1)
             self.assertTrue(aux_path.exists())
 
+    def test_prune_empty_directories_removes_nested_dirs_but_preserves_scope_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "Sections/a/b").mkdir(parents=True, exist_ok=True)
+
+            result = cc.prune_empty_directories(
+                root_dir=root,
+                scope_dirs=["Sections"],
+                dry_run=False,
+                is_subpath_fn=td._is_subpath,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertIn("Sections/a/b", result["removed_empty_dirs"])
+            self.assertIn("Sections/a", result["removed_empty_dirs"])
+            self.assertTrue((root / "Sections").exists())
+            self.assertFalse((root / "Sections/a").exists())
+
+    def test_prune_empty_directories_dry_run_reports_full_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "Sections/x/y").mkdir(parents=True, exist_ok=True)
+
+            result = cc.prune_empty_directories(
+                root_dir=root,
+                scope_dirs=["Sections"],
+                dry_run=True,
+                is_subpath_fn=td._is_subpath,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertIn("Sections/x/y", result["removed_empty_dirs"])
+            self.assertIn("Sections/x", result["removed_empty_dirs"])
+            self.assertTrue((root / "Sections/x/y").exists())
+
+    def test_cleanup_build_artifacts_uses_dual_policy_and_prunes_empty_subdirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "main.tex").write_text(
+                "\\documentclass{article}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (root / "main.aux").write_text("aux", encoding="utf-8")
+            (root / "notes.tmp").write_text("keep", encoding="utf-8")
+            (root / "tools/tests").mkdir(parents=True, exist_ok=True)
+            (root / "tools/tests/outside.aux").write_text("outside", encoding="utf-8")
+
+            sections = root / "Sections"
+            (sections / "01-unit.tex").parent.mkdir(parents=True, exist_ok=True)
+            (sections / "01-unit.tex").write_text(
+                "\\documentclass[../main.tex]{subfiles}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (sections / "01-unit.pdf").write_bytes(b"%PDF-1.4\n")
+            (sections / "01-unit.log").write_text("log", encoding="utf-8")
+            (sections / "01-unit.synctex.gz").write_text("synctex", encoding="utf-8")
+            (sections / "build/tmp/main.aux").parent.mkdir(parents=True, exist_ok=True)
+            (sections / "build/tmp/main.aux").write_text("tmp-aux", encoding="utf-8")
+
+            original_root = td.ROOT_DIR
+            original_loader = td._load_vscode_clean_file_types
+            try:
+                td.ROOT_DIR = root
+                td._load_vscode_clean_file_types = lambda: ["*.aux", "*.log"]
+                result = td._cleanup_build_artifacts(dry_run=False)
+            finally:
+                td.ROOT_DIR = original_root
+                td._load_vscode_clean_file_types = original_loader
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["root_scope"], ["."])
+            self.assertEqual(result["subfile_scope"], ["Sections"])
+            self.assertEqual(result["root_patterns"], ["*.aux", "*.log"])
+            self.assertEqual(result["root_protected_patterns"], ["*.pdf", "*.synctex.gz"])
+            self.assertEqual(result["subfile_keep_patterns"], ["*.tex", "*.pdf"])
+            self.assertEqual(result["scope"], [".", "Sections"])
+            self.assertIn("main.aux", result["deleted_files"])
+            self.assertIn("Sections/01-unit.log", result["deleted_files"])
+            self.assertIn("Sections/01-unit.synctex.gz", result["deleted_files"])
+            self.assertIn("Sections/build/tmp/main.aux", result["deleted_files"])
+            self.assertIn("Sections/01-unit.pdf", result["skipped_protected_files"])
+            self.assertIn("Sections/01-unit.tex", result["skipped_protected_files"])
+            self.assertIn("Sections/build", result["removed_empty_dirs"])
+            self.assertIn("Sections/build/tmp", result["removed_empty_dirs"])
+            self.assertFalse((root / "main.aux").exists())
+            self.assertTrue((root / "notes.tmp").exists())
+            self.assertTrue((root / "tools/tests/outside.aux").exists())
+            self.assertTrue((sections / "01-unit.tex").exists())
+            self.assertTrue((sections / "01-unit.pdf").exists())
+            self.assertFalse((sections / "01-unit.log").exists())
+            self.assertFalse((sections / "01-unit.synctex.gz").exists())
+            self.assertFalse((sections / "build").exists())
+
+    def test_cleanup_build_artifacts_without_subfile_units_uses_root_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "main.tex").write_text(
+                "\\documentclass{article}\n\\begin{document}\n\\end{document}\n",
+                encoding="utf-8",
+            )
+            (root / "main.aux").write_text("aux", encoding="utf-8")
+
+            original_root = td.ROOT_DIR
+            original_loader = td._load_vscode_clean_file_types
+            try:
+                td.ROOT_DIR = root
+                td._load_vscode_clean_file_types = lambda: ["*.aux"]
+                result = td._cleanup_build_artifacts(dry_run=False)
+            finally:
+                td.ROOT_DIR = original_root
+                td._load_vscode_clean_file_types = original_loader
+
+            self.assertTrue(result["success"])
+            self.assertEqual(result["root_scope"], ["."])
+            self.assertEqual(result["subfile_scope"], [])
+            self.assertEqual(result["scope"], ["."])
+            self.assertEqual(result["deleted_files"], ["main.aux"])
+            self.assertEqual(result["removed_empty_dirs"], [])
+            self.assertFalse((root / "main.aux").exists())
+
     def test_server_api_clean_returns_structured_payload(self) -> None:
         fake_response = {
             "success": True,
@@ -1722,6 +1875,13 @@ class ThemeDesignerTests(unittest.TestCase):
             "deleted_count": 1,
             "skipped_protected_files": ["main.pdf"],
             "skipped_protected_count": 1,
+            "root_scope": ["."],
+            "subfile_scope": ["Sections"],
+            "root_patterns": ["*.aux"],
+            "root_protected_patterns": ["*.pdf", "*.synctex.gz"],
+            "subfile_keep_patterns": ["*.tex", "*.pdf"],
+            "removed_empty_dirs": ["Sections/build"],
+            "removed_empty_dir_count": 1,
             "errors": [],
         }
         original_cleanup = tds._cleanup_build_artifacts
@@ -1738,6 +1898,8 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertTrue(payload.get("dry_run"))
         self.assertEqual(payload.get("scope"), [".", "Sections"])
         self.assertEqual(payload.get("deleted_files"), ["main.aux"])
+        self.assertEqual(payload.get("subfile_scope"), ["Sections"])
+        self.assertEqual(payload.get("removed_empty_dirs"), ["Sections/build"])
 
     def test_server_api_clean_rejects_invalid_dry_run(self) -> None:
         called = {"value": False}

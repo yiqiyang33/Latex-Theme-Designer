@@ -53,8 +53,10 @@ except ModuleNotFoundError:
     import core_vscode as _core_vscode
     import core_split as _core_split
 
-CLEAN_SCOPE_DIRS = [".", "Sections"]
-CLEAN_PROTECTED_PATTERNS = ["*.pdf", "*.synctex.gz"]
+CLEAN_ROOT_SCOPE_DIRS = ["."]
+CLEAN_ROOT_PROTECTED_PATTERNS = ["*.pdf", "*.synctex.gz"]
+CLEAN_SUBFILE_DELETE_PATTERNS = ["*"]
+CLEAN_SUBFILE_KEEP_PATTERNS = ["*.tex", "*.pdf"]
 CLEAN_FALLBACK_FILE_TYPES = list(_core_cleanup.DEFAULT_CLEAN_FILE_PATTERNS)
 
 IGNORE_TEX_FILENAMES = {
@@ -1098,6 +1100,39 @@ def _list_candidate_tex_files() -> List[str]:
     )
 
 
+def _discover_subfile_scope_dirs() -> Tuple[List[str], List[str]]:
+    scope_dirs: set[str] = set()
+    errors: List[str] = []
+    resolved_root = ROOT_DIR.resolve()
+
+    for tex_path in sorted(ROOT_DIR.rglob("*.tex")):
+        rel_tex = tex_path.relative_to(ROOT_DIR)
+        if any(part in IGNORE_DIR_NAMES or part.startswith(".") for part in rel_tex.parts[:-1]):
+            continue
+
+        try:
+            class_name, _ = _extract_documentclass_declaration(tex_path)
+        except OSError as err:
+            errors.append(
+                f"Failed to inspect documentclass for {rel_tex.as_posix()}: {err}"
+            )
+            continue
+
+        if class_name != "subfiles":
+            continue
+        parent_abs = tex_path.parent.resolve()
+        if parent_abs == resolved_root:
+            continue
+        if not _is_subpath(parent_abs, resolved_root):
+            errors.append(
+                f"Skipped subfile scope outside workspace: {tex_path.parent.as_posix()}"
+            )
+            continue
+        scope_dirs.add(parent_abs.relative_to(resolved_root).as_posix())
+
+    return sorted(scope_dirs), sorted(set(errors))
+
+
 def _default_compile_target(candidates: List[str]) -> str:
     return _core_compile.default_compile_target(candidates)
 
@@ -1145,15 +1180,91 @@ def _safe_workspace_relpath(path: Optional[Path]) -> str:
 
 
 def _cleanup_build_artifacts(dry_run: bool = False) -> Dict[str, Any]:
+    dry_run = bool(dry_run)
     clean_patterns = _load_vscode_clean_file_types()
-    return _core_cleanup.clean_build_artifacts(
+    subfile_scope_dirs, discover_errors = _discover_subfile_scope_dirs()
+
+    root_result = _core_cleanup.clean_build_artifacts(
         root_dir=ROOT_DIR,
-        scope_dirs=CLEAN_SCOPE_DIRS,
+        scope_dirs=CLEAN_ROOT_SCOPE_DIRS,
         patterns=clean_patterns,
-        protected_patterns=CLEAN_PROTECTED_PATTERNS,
-        dry_run=bool(dry_run),
+        protected_patterns=CLEAN_ROOT_PROTECTED_PATTERNS,
+        dry_run=dry_run,
         is_subpath_fn=_is_subpath,
     )
+
+    if subfile_scope_dirs:
+        subfile_result = _core_cleanup.clean_build_artifacts(
+            root_dir=ROOT_DIR,
+            scope_dirs=subfile_scope_dirs,
+            patterns=CLEAN_SUBFILE_DELETE_PATTERNS,
+            protected_patterns=CLEAN_SUBFILE_KEEP_PATTERNS,
+            dry_run=dry_run,
+            is_subpath_fn=_is_subpath,
+        )
+        empty_dirs_result = _core_cleanup.prune_empty_directories(
+            root_dir=ROOT_DIR,
+            scope_dirs=subfile_scope_dirs,
+            dry_run=dry_run,
+            is_subpath_fn=_is_subpath,
+        )
+    else:
+        subfile_result = {
+            "success": True,
+            "dry_run": dry_run,
+            "scope": [],
+            "patterns": list(CLEAN_SUBFILE_DELETE_PATTERNS),
+            "protected_patterns": list(CLEAN_SUBFILE_KEEP_PATTERNS),
+            "deleted_files": [],
+            "deleted_count": 0,
+            "skipped_protected_files": [],
+            "skipped_protected_count": 0,
+            "errors": [],
+        }
+        empty_dirs_result = {
+            "success": True,
+            "dry_run": dry_run,
+            "scope": [],
+            "removed_empty_dirs": [],
+            "removed_empty_dir_count": 0,
+            "errors": [],
+        }
+
+    deleted_files = sorted(
+        set(root_result.get("deleted_files", [])) | set(subfile_result.get("deleted_files", []))
+    )
+    skipped_protected_files = sorted(
+        set(root_result.get("skipped_protected_files", []))
+        | set(subfile_result.get("skipped_protected_files", []))
+    )
+    removed_empty_dirs = sorted(set(empty_dirs_result.get("removed_empty_dirs", [])))
+    errors = sorted(
+        set(discover_errors)
+        | set(root_result.get("errors", []))
+        | set(subfile_result.get("errors", []))
+        | set(empty_dirs_result.get("errors", []))
+    )
+    merged_scope = sorted(set(root_result.get("scope", [])) | set(subfile_result.get("scope", [])))
+
+    return {
+        "success": len(errors) == 0,
+        "dry_run": dry_run,
+        "scope": merged_scope,
+        "patterns": clean_patterns,
+        "protected_patterns": list(CLEAN_ROOT_PROTECTED_PATTERNS),
+        "deleted_files": deleted_files,
+        "deleted_count": len(deleted_files),
+        "skipped_protected_files": skipped_protected_files,
+        "skipped_protected_count": len(skipped_protected_files),
+        "errors": errors,
+        "root_scope": list(root_result.get("scope", [])),
+        "subfile_scope": list(subfile_result.get("scope", [])),
+        "root_patterns": clean_patterns,
+        "root_protected_patterns": list(CLEAN_ROOT_PROTECTED_PATTERNS),
+        "subfile_keep_patterns": list(CLEAN_SUBFILE_KEEP_PATTERNS),
+        "removed_empty_dirs": removed_empty_dirs,
+        "removed_empty_dir_count": len(removed_empty_dirs),
+    }
 
 
 def _normalize_split_mode(raw_mode: Any) -> str:

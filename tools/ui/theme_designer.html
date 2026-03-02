@@ -2101,15 +2101,33 @@
           ? result.protected_patterns
           : [];
         const scope = Array.isArray(result.scope) ? result.scope : [];
+        const rootScope = Array.isArray(result.root_scope) ? result.root_scope : [];
+        const subfileScope = Array.isArray(result.subfile_scope) ? result.subfile_scope : [];
+        const rootPatterns = Array.isArray(result.root_patterns) ? result.root_patterns : [];
+        const rootProtectedPatterns = Array.isArray(result.root_protected_patterns)
+          ? result.root_protected_patterns
+          : [];
+        const subfileKeepPatterns = Array.isArray(result.subfile_keep_patterns)
+          ? result.subfile_keep_patterns
+          : [];
+        const removedEmptyDirs = Array.isArray(result.removed_empty_dirs)
+          ? result.removed_empty_dirs
+          : [];
 
         const lines = [
           `[clean] success: ${result.success ? "yes" : "no"}`,
           `[clean] dry-run: ${result.dry_run ? "yes" : "no"}`,
           `[clean] scope: ${scope.join(", ") || "(none)"}`,
+          `[clean] root scope: ${rootScope.join(", ") || "(none)"}`,
+          `[clean] subfile scope: ${subfileScope.join(", ") || "(none)"}`,
           `[clean] patterns: ${patterns.join(", ") || "(none)"}`,
           `[clean] protected: ${protectedPatterns.join(", ") || "(none)"}`,
+          `[clean] root patterns: ${rootPatterns.join(", ") || "(none)"}`,
+          `[clean] root protected: ${rootProtectedPatterns.join(", ") || "(none)"}`,
+          `[clean] subfile keep: ${subfileKeepPatterns.join(", ") || "(none)"}`,
           `[clean] deleted: ${result.deleted_count || 0}`,
-          `[clean] kept protected: ${result.skipped_protected_count || 0}`
+          `[clean] kept protected: ${result.skipped_protected_count || 0}`,
+          `[clean] removed empty dirs: ${result.removed_empty_dir_count || 0}`
         ];
 
         if (deletedFiles.length > 0) {
@@ -2121,6 +2139,11 @@
           lines.push("");
           lines.push("[kept protected]");
           lines.push(...skippedProtected);
+        }
+        if (removedEmptyDirs.length > 0) {
+          lines.push("");
+          lines.push("[removed empty dirs]");
+          lines.push(...removedEmptyDirs);
         }
         if (errors.length > 0) {
           lines.push("");

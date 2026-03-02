@@ -69,7 +69,7 @@
   "compile_output_pdf_expected": "main.pdf",
   "compile_recipe": "vscode-1-xelatex",
   "compile_target": "main.tex",
-  "compile_use_internal_fallback": false,
+  "compile_use_internal_fallback": true,
   "heading_toc_preset": "inkstone",
   "toggles": {
     "enable_block_shadow": true,

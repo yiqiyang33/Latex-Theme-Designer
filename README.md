@@ -31,7 +31,7 @@ pytest -q tools/tests
 - Local toolkit UI for color/toggle/class/compile tuning.
 - One-click split workflow (`tools/tex_splitter.py`) for modular `Sections/` authoring.
 - Compile integration with internal fallback pipeline and VSCode recipe mode.
-- One-click compile artifact cleanup scoped to root + `Sections/`, with `PDF`/`Synctex` protection.
+- One-click compile artifact cleanup with dual policy: root conservative cleanup + auto-discovered subfile directory aggressive cleanup (`.tex/.pdf` preserved in subfile dirs).
 
 Canonical capability list lives in:
 

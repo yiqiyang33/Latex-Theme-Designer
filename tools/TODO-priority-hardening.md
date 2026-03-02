@@ -12,3 +12,4 @@ Completed backlog items were removed. This file now tracks only remaining work.
 Acceptance:
 - Corrupted legacy/subfile-misuse projects fail fast with clear diagnostics.
 - User can recover with one documented command/path without manual log digging.
+
