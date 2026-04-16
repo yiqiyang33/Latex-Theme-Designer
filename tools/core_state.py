@@ -26,7 +26,7 @@ def parse_main_toggle_defaults(
     *,
     main_tex_path: Path,
     read_text_fn: Callable[[Path], str],
-    toggle_schema: List[Dict[str, str]],
+    toggle_schema: List[Dict[str, Any]],
     bool_from_str_fn: Callable[[str], Any],
 ) -> Dict[str, bool]:
     text = read_text_fn(main_tex_path)
@@ -38,7 +38,7 @@ def parse_main_toggle_defaults(
             parsed = bool_from_str_fn(matches[-1])
             defaults[entry["id"]] = True if parsed is None else bool(parsed)
         else:
-            defaults[entry["id"]] = True
+            defaults[entry["id"]] = bool(entry.get("default", True))
     return defaults
 
 

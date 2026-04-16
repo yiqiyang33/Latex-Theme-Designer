@@ -8,11 +8,12 @@
 \RequirePackage{tcolorbox}
 
 \makeatletter
-% Fallback defaults: if users do not define toggles in main.tex, use "true".
+% Fallback defaults: if users do not define toggles in main.tex, use defaults.
 \@ifundefined{ifEnableHeadingTheme}{\newif\ifEnableHeadingTheme\EnableHeadingThemetrue}{}
 \@ifundefined{ifEnableTOCTheme}{\newif\ifEnableTOCTheme\EnableTOCThemetrue}{}
 \@ifundefined{ifEnablePageTheme}{\newif\ifEnablePageTheme\EnablePageThemetrue}{}
 \@ifundefined{ifEnableEnhancedEnvStyle}{\newif\ifEnableEnhancedEnvStyle\EnableEnhancedEnvStyletrue}{}
+\@ifundefined{ifEnablePlainAmsthmTheorem}{\newif\ifEnablePlainAmsthmTheorem\EnablePlainAmsthmTheoremfalse}{}
 \@ifundefined{ifEnableBlockShadow}{\newif\ifEnableBlockShadow\EnableBlockShadowtrue}{}
 
 % Class-aware defaults (can be overridden by theme.overrides.tex).

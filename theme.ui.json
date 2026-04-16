@@ -63,7 +63,7 @@
     "theorem-title-bg": "#F8DEB9",
     "theorem-title-fg": "#664110"
   },
-  "compile_last_compile_at": "2026-02-12T06:54:34Z",
+  "compile_last_compile_at": "2026-04-16T13:54:38Z",
   "compile_last_success": true,
   "compile_output_pdf": "main.pdf",
   "compile_output_pdf_expected": "main.pdf",
@@ -76,6 +76,7 @@
     "enable_enhanced_env_style": true,
     "enable_heading_theme": true,
     "enable_page_theme": true,
+    "enable_plain_amsthm_theorem": true,
     "enable_toc_theme": true
   }
 }
