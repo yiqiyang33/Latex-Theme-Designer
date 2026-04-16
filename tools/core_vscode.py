@@ -215,3 +215,120 @@ def load_vscode_recipe_catalog(
     catalog["tools"] = tools
     catalog["recipes"] = recipes
     return catalog
+
+
+def toolkit_vscode_settings_template() -> Dict[str, Any]:
+    """Return standard Toolkit VSCode settings payload."""
+
+    return {
+        "latex-workshop.latex.autoBuild.run": "never",
+        "latex-workshop.showContextMenu": True,
+        "latex-workshop.intellisense.package.enabled": True,
+        "latex-workshop.message.error.show": False,
+        "latex-workshop.message.warning.show": False,
+        "latex-workshop.latex.rootFile.useSubFile": True,
+        "latex-workshop.latex.rootFile.doNotPrompt": False,
+        "latex-workshop.latex.build.enableMagicComments": False,
+        "latex-workshop.latex.tools": [
+            {
+                "name": "xelatex",
+                "command": "xelatex",
+                "args": [
+                    "-synctex=1",
+                    "-interaction=nonstopmode",
+                    "-file-line-error",
+                    "%DOCFILE%",
+                ],
+            },
+            {
+                "name": "latexmk",
+                "command": "latexmk",
+                "args": [
+                    "-synctex=1",
+                    "-interaction=nonstopmode",
+                    "-file-line-error",
+                    "-xelatex",
+                    "-outdir=%OUTDIR%",
+                    "%DOCFILE%",
+                ],
+            },
+            {
+                "name": "biber",
+                "command": "biber",
+                "args": ["%DOCFILE%"],
+            },
+        ],
+        "latex-workshop.latex.recipes": [
+            {"name": "XeLaTeX", "tools": ["xelatex"]},
+            {"name": "Biber", "tools": ["biber"]},
+            {"name": "LaTeXmk", "tools": ["latexmk"]},
+            {
+                "name": "xelatex -> biber -> xelatex*2",
+                "tools": ["xelatex", "biber", "xelatex", "xelatex"],
+            },
+        ],
+        "latex-workshop.latex.clean.fileTypes": [
+            "*.aux",
+            "*.bbl",
+            "*.blg",
+            "*.idx",
+            "*.ind",
+            "*.lof",
+            "*.lot",
+            "*.out",
+            "*.toc",
+            "*.acn",
+            "*.acr",
+            "*.alg",
+            "*.glg",
+            "*.glo",
+            "*.gls",
+            "*.ist",
+            "*.fls",
+            "*.log",
+            "*.fdb_latexmk",
+        ],
+        "latex-workshop.latex.autoClean.run": "onFailed",
+        "latex-workshop.latex.recipe.default": "LaTeXmk",
+        "latex-workshop.view.pdf.internal.synctex.keybinding": "double-click",
+        "[latex]": {"editor.defaultFormatter": "James-Yu.latex-workshop"},
+    }
+
+
+def generate_vscode_settings_if_missing(
+    *,
+    vscode_settings_path: Path,
+    root_dir: Path,
+    settings_template_fn: Callable[[], Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Create .vscode/settings.json when missing; never overwrite existing file."""
+
+    target = vscode_settings_path.resolve()
+    root = root_dir.resolve()
+    try:
+        display_path = target.relative_to(root).as_posix()
+    except ValueError:
+        display_path = target.as_posix()
+
+    if target.exists():
+        if target.is_dir():
+            raise ValueError(f"VSCode settings path is a directory: {display_path}")
+        return {
+            "created": False,
+            "skipped_existing": True,
+            "generated_path": display_path,
+            "message": f"Skipped: {display_path} already exists.",
+        }
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    content = settings_template_fn()
+    target.write_text(
+        json.dumps(content, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "created": True,
+        "skipped_existing": False,
+        "generated_path": display_path,
+        "message": f"Generated: {display_path}",
+    }

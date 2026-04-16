@@ -88,6 +88,16 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("async function cleanBuildArtifacts()", script)
         self.assertIn('postJson("/api/clean"', script)
 
+    def test_ui_exposes_generate_vscode_settings_action(self) -> None:
+        script = self._embedded_ui_script()
+        self.assertIn('id="generateVscodeSettingsBtn"', tdu.HTML_PAGE)
+        self.assertIn("async function generateVscodeSettings()", script)
+        self.assertIn('postJson("/api/vscode-settings-generate"', script)
+        self.assertIn(
+            'document.getElementById("generateVscodeSettingsBtn").addEventListener("click", generateVscodeSettings);',
+            script,
+        )
+
     def test_split_response_refresh_keeps_template_and_recipe_catalogs(self) -> None:
         baseline = td._build_response_state()
         baseline_templates = [
@@ -226,6 +236,85 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("tools/tests/_tmp_compile_preflight_missing_ref/main.tex", output)
         self.assertEqual(pdf_rel, "tools/tests/_tmp_compile_preflight_missing_ref/main.pdf")
 
+    def test_compile_theorem_toggle_modes_keep_command_compat_and_prefix_dedupe(self) -> None:
+        if not td._resolve_binary("xelatex"):
+            self.skipTest("xelatex is required for theorem toggle compile regression test")
+
+        root = td.ROOT_DIR
+        base_dir = root / "tools/tests/_tmp_theorem_toggle_compile"
+        plain_rel = "tools/tests/_tmp_theorem_toggle_compile/plain-amsthm.tex"
+        styled_rel = "tools/tests/_tmp_theorem_toggle_compile/styled-tcb.tex"
+        plain_abs = root / plain_rel
+        styled_abs = root / styled_rel
+        plain_abs.parent.mkdir(parents=True, exist_ok=True)
+
+        package_preamble = (
+            "\\documentclass{article}\n"
+            "\\usepackage{amsmath, amsthm, amssymb, amsfonts}\n"
+            "\\usepackage{thmtools}\n"
+            "\\usepackage{xparse}\n"
+            "\\usepackage[dvipsnames]{xcolor}\n"
+            "\\usepackage{tcolorbox}\n"
+            "\\tcbuselibrary{theorems,skins,breakable}\n"
+        )
+
+        plain_abs.write_text(
+            package_preamble
+            + "\\newif\\ifEnablePlainAmsthmTheorem\n"
+            + "\\EnablePlainAmsthmTheoremtrue\n"
+            + "\\usepackage{theme}\n"
+            + "\\input{theorems.tex}\n"
+            + "\\begin{document}\n"
+            + "\\section{Plain}\n"
+            + "\\thm{Command Theorem}{foo}{Command path.}\n"
+            + "\\thm{Command Theorem Prefixed}{thm:baz}{Command prefixed path.}\n"
+            + "\\begin{note}[Plain Note]\n"
+            + "Plain note body.\n"
+            + "\\end{note}\n"
+            + "\\begin{theorem}[Native Theorem]\\label{thm:bar}\n"
+            + "Native path.\n"
+            + "\\end{theorem}\n"
+            + "See \\ref{thm:foo}, \\ref{thm:baz}, and \\ref{thm:bar}.\n"
+            + "\\end{document}\n",
+            encoding="utf-8",
+        )
+        styled_abs.write_text(
+            package_preamble
+            + "\\newif\\ifEnablePlainAmsthmTheorem\n"
+            + "\\EnablePlainAmsthmTheoremfalse\n"
+            + "\\usepackage{theme}\n"
+            + "\\input{theorems.tex}\n"
+            + "\\begin{document}\n"
+            + "\\section{Styled}\n"
+            + "\\thm{Styled Theorem}{thm:foo}{Styled path.}\n"
+            + "See \\ref{thm:foo}.\n"
+            + "\\end{document}\n",
+            encoding="utf-8",
+        )
+
+        try:
+            plain_success, plain_output, plain_pdf = td._compile_tex_target(plain_rel)
+            styled_success, styled_output, styled_pdf = td._compile_tex_target(styled_rel)
+
+            self.assertTrue(plain_success, plain_output)
+            self.assertTrue(styled_success, styled_output)
+            self.assertEqual(plain_pdf, "tools/tests/_tmp_theorem_toggle_compile/plain-amsthm.pdf")
+            self.assertEqual(styled_pdf, "tools/tests/_tmp_theorem_toggle_compile/styled-tcb.pdf")
+
+            plain_aux = plain_abs.with_suffix(".aux").read_text(encoding="utf-8")
+            styled_aux = styled_abs.with_suffix(".aux").read_text(encoding="utf-8")
+
+            self.assertIn("\\newlabel{thm:foo}", plain_aux)
+            self.assertIn("\\newlabel{thm:baz}", plain_aux)
+            self.assertIn("\\newlabel{thm:bar}", plain_aux)
+            self.assertNotIn("\\newlabel{thm:thm:foo}", plain_aux)
+            self.assertNotIn("\\newlabel{thm:thm:baz}", plain_aux)
+            self.assertIn("\\newlabel{thm:foo}", styled_aux)
+            self.assertNotIn("\\newlabel{thm:thm:foo}", styled_aux)
+        finally:
+            if base_dir.exists():
+                shutil.rmtree(base_dir)
+
     def test_run_command_uses_timeout_and_shell_disabled(self) -> None:
         captured: dict[str, object] = {}
         original_subprocess_run = td.subprocess.run
@@ -312,6 +401,64 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIsInstance(catalog["tools"], dict)
         self.assertIsInstance(catalog["recipes"], list)
         self.assertTrue(len(catalog["recipes"]) >= 1)
+
+    def test_toolkit_vscode_settings_template_contains_required_keys(self) -> None:
+        settings = td._toolkit_vscode_settings_template()
+        self.assertIn("latex-workshop.latex.tools", settings)
+        self.assertIn("latex-workshop.latex.recipes", settings)
+        self.assertIn("latex-workshop.latex.clean.fileTypes", settings)
+        self.assertIn("latex-workshop.latex.recipe.default", settings)
+        self.assertIn("[latex]", settings)
+        self.assertEqual(
+            settings["[latex]"].get("editor.defaultFormatter"),
+            "James-Yu.latex-workshop",
+        )
+
+    def test_generate_vscode_settings_if_missing_creates_new_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            settings_path = root / ".vscode" / "settings.json"
+
+            original_root = td.ROOT_DIR
+            original_settings_path = td.VSCODE_SETTINGS_PATH
+            try:
+                td.ROOT_DIR = root
+                td.VSCODE_SETTINGS_PATH = settings_path
+                result = td._generate_vscode_settings_if_missing()
+            finally:
+                td.ROOT_DIR = original_root
+                td.VSCODE_SETTINGS_PATH = original_settings_path
+
+            self.assertTrue(result["created"])
+            self.assertFalse(result["skipped_existing"])
+            self.assertEqual(result["generated_path"], ".vscode/settings.json")
+            self.assertTrue(settings_path.exists())
+            loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+            self.assertIn("latex-workshop.latex.tools", loaded)
+            self.assertIn("latex-workshop.latex.recipes", loaded)
+
+    def test_generate_vscode_settings_if_missing_skips_existing_file_without_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            settings_path = root / ".vscode" / "settings.json"
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            original_text = '{"custom": true}\n'
+            settings_path.write_text(original_text, encoding="utf-8")
+
+            original_root = td.ROOT_DIR
+            original_settings_path = td.VSCODE_SETTINGS_PATH
+            try:
+                td.ROOT_DIR = root
+                td.VSCODE_SETTINGS_PATH = settings_path
+                result = td._generate_vscode_settings_if_missing()
+            finally:
+                td.ROOT_DIR = original_root
+                td.VSCODE_SETTINGS_PATH = original_settings_path
+
+            self.assertFalse(result["created"])
+            self.assertTrue(result["skipped_existing"])
+            self.assertEqual(result["generated_path"], ".vscode/settings.json")
+            self.assertEqual(settings_path.read_text(encoding="utf-8"), original_text)
 
     def test_recipe_executor_runs_steps_in_order(self) -> None:
         root = td.ROOT_DIR
@@ -1175,6 +1322,59 @@ class ThemeDesignerTests(unittest.TestCase):
             if article_abs.exists():
                 article_abs.unlink()
 
+    def test_toggle_schema_includes_plain_amsthm_switch_default_false(self) -> None:
+        toggle = next(
+            (
+                item
+                for item in td.TOGGLE_SCHEMA
+                if item.get("id") == "enable_plain_amsthm_theorem"
+            ),
+            None,
+        )
+        self.assertIsNotNone(toggle)
+        self.assertEqual(toggle.get("command"), "EnablePlainAmsthmTheorem")
+        self.assertFalse(bool(toggle.get("default", True)))
+
+    def test_load_state_defaults_plain_amsthm_toggle_false_when_legacy_config_missing_key(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            cfg_path.write_text(
+                json.dumps(
+                    {
+                        "toggles": {
+                            "enable_heading_theme": True,
+                            "enable_toc_theme": True,
+                            "enable_page_theme": True,
+                            "enable_enhanced_env_style": True,
+                            "enable_block_shadow": True,
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+                state = td._load_state()
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertFalse(state["toggles"]["enable_plain_amsthm_theorem"])
+
     def test_load_state_resets_forced_class_when_persisted_target_missing(self) -> None:
         compile_targets = td._list_candidate_tex_files()
         default_target = td._default_compile_target(compile_targets)
@@ -1251,6 +1451,38 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("\\def\\ThemeClassMode{article}", text)
         self.assertIn("\\def\\ThemeTheoremNumberingPolicy{none}", text)
         self.assertIn("\\def\\ThemeBodyFontSizePt{11.5}", text)
+        self.assertIn("\\EnablePlainAmsthmTheoremfalse", text)
+
+    def test_write_override_files_serializes_plain_amsthm_toggle_true_and_false(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+
+                state = td._load_state()
+                state["toggles"]["enable_plain_amsthm_theorem"] = True
+                td._write_override_files(state)
+                text_true = toggle_path.read_text(encoding="utf-8")
+
+                state["toggles"]["enable_plain_amsthm_theorem"] = False
+                td._write_override_files(state)
+                text_false = toggle_path.read_text(encoding="utf-8")
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertIn("\\EnablePlainAmsthmTheoremtrue", text_true)
+        self.assertIn("\\EnablePlainAmsthmTheoremfalse", text_false)
 
     def test_apply_block_preset_updates_block_tokens_only(self) -> None:
         state = td._load_state()
@@ -1916,6 +2148,35 @@ class ThemeDesignerTests(unittest.TestCase):
             tds._cleanup_build_artifacts = original_cleanup
 
         self.assertFalse(called["value"])
+
+    def test_server_api_vscode_settings_generate_returns_structured_payload(self) -> None:
+        original_generate = tds._generate_vscode_settings_if_missing
+        original_build_response = tds._build_response_state
+        try:
+            tds._generate_vscode_settings_if_missing = lambda: {
+                "created": True,
+                "skipped_existing": False,
+                "generated_path": ".vscode/settings.json",
+                "message": "Generated: .vscode/settings.json",
+            }
+            tds._build_response_state = lambda: {
+                "state": {"compile_recipes": [{"id": "vscode-1-xelatex", "name": "XeLaTeX"}]},
+                "schema": {"toggles": []},
+            }
+            payload = tds._vscode_settings_generate_response_payload()
+        finally:
+            tds._generate_vscode_settings_if_missing = original_generate
+            tds._build_response_state = original_build_response
+
+        self.assertTrue(payload.get("created"))
+        self.assertFalse(payload.get("skipped_existing"))
+        self.assertEqual(payload.get("generated_path"), ".vscode/settings.json")
+        self.assertIn("state", payload)
+        self.assertIn("schema", payload)
+        self.assertEqual(
+            payload.get("state", {}).get("compile_recipes", [{}])[0].get("id"),
+            "vscode-1-xelatex",
+        )
 
     def test_server_parse_port_arg_supports_auto_and_integer(self) -> None:
         self.assertEqual(tds._parse_port_arg("auto"), "auto")

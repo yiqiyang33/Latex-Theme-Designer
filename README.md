@@ -54,8 +54,10 @@ Extra excludes inside those synced paths can be configured in `.template-sync-ig
 
 - Centralized theme layout (`theme.sty`) for document + theorem styles.
 - Local toolkit UI for color/toggle/class/compile tuning.
+- Theorem mode toggle: switch theorem family between styled tcolorbox and native amsthm while keeping theorem commands compatible.
 - One-click split workflow (`tools/tex_splitter.py`) for modular `Sections/` authoring.
 - Compile integration with internal fallback pipeline and VSCode recipe mode.
+- UI one-click generation of `.vscode/settings.json` (create-if-missing, no overwrite) for recipe bootstrap on new machines.
 - One-click compile artifact cleanup with dual policy: root conservative cleanup + auto-discovered subfile directory aggressive cleanup (`.tex/.pdf` preserved in subfile dirs).
 
 Canonical capability list lives in:
@@ -140,6 +142,7 @@ For full splitter details and migration notes, see `tools/README-theme-designer.
   - Fix the listed section file to contain real section content, then re-run compile.
 - Recipe mode fails but internal mode works:
   - Check `.vscode/settings.json` tool/recipe definitions and command availability in `PATH`.
+  - If settings file is missing, use UI button `Generate VSCode settings.json` first.
   - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
 
 ## What it edits

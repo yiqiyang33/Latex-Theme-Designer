@@ -28,6 +28,7 @@ try:
         _cleanup_build_artifacts,
         _compile_tex_target,
         _extract_compile_preferences,
+        _generate_vscode_settings_if_missing,
         _delete_override_files,
         _load_state,
         _normalize_compile_target,
@@ -52,6 +53,7 @@ except ModuleNotFoundError:
         _cleanup_build_artifacts,
         _compile_tex_target,
         _extract_compile_preferences,
+        _generate_vscode_settings_if_missing,
         _delete_override_files,
         _load_state,
         _normalize_compile_target,
@@ -268,6 +270,14 @@ def _clean_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     dry_run = _coerce_bool_value(payload.get("dry_run", False), "dry_run")
     with STATE_LOCK:
         return _cleanup_build_artifacts(dry_run=dry_run)
+
+
+def _vscode_settings_generate_response_payload() -> Dict[str, Any]:
+    with STATE_LOCK:
+        generation = _generate_vscode_settings_if_missing()
+        response = _build_response_state()
+    response.update(generation)
+    return response
 
 
 def _api_error_payload(error: str, code: str, hint: str = "") -> Dict[str, str]:
@@ -520,6 +530,27 @@ class ThemeDesignerHandler(BaseHTTPRequestHandler):
                     f"Failed to bootstrap starter template: {err}",
                     code="internal_error",
                     hint="Inspect server logs for template file creation failures.",
+                )
+            return
+
+        if self.path == "/api/vscode-settings-generate":
+            try:
+                self._parse_json_body()
+                response = _vscode_settings_generate_response_payload()
+                self._send_json(200, response)
+            except ValueError as err:
+                self._send_api_error(
+                    400,
+                    str(err),
+                    code="bad_request",
+                    hint="Ensure .vscode/settings.json path is writable and not a directory.",
+                )
+            except RECOVERABLE_SERVER_ERROR_TYPES as err:  # pragma: no cover
+                self._send_api_error(
+                    500,
+                    f"Failed to generate VSCode settings: {err}",
+                    code="internal_error",
+                    hint="Inspect server logs for file IO/state refresh failures.",
                 )
             return
 

@@ -877,6 +877,7 @@
         <code id="targetInfo"></code>
         <div class="compile-meta"><code id="outputInfo"></code></div>
         <div class="actions">
+          <button id="generateVscodeSettingsBtn">Generate VSCode settings.json</button>
           <button id="saveBtn" class="primary">Save Overrides</button>
           <button id="compileBtn">Compile PDF</button>
           <button id="refreshPdfBtn">Refresh PDF Preview</button>
@@ -1597,6 +1598,19 @@
       `;
     }
 
+    function samplePlainTheorem(title, number) {
+      return `
+        <article class="sample" style="box-shadow:none;border:1px solid #D1D5DB;background:#FFFFFF;">
+          <div class="title" style="background:#FFFFFF;color:#111827;border-bottom:1px solid #E5E7EB;">
+            ${title} ${number}
+          </div>
+          <div class="body" style="background:#FFFFFF;border-left:0;">
+            <em>Short content preview for ${title.toLowerCase()}.</em>
+          </div>
+        </article>
+      `;
+    }
+
     function renderPreview() {
       const docPreview = document.getElementById("docPreview");
       const bodyFontPt = bodyFontSizeValue();
@@ -1615,7 +1629,16 @@
       }
 
       const noteShadow = toggleOn("enable_block_shadow") ? "box-shadow: 0 3px 0 rgba(17,24,39,0.11);" : "";
-      const noteCard = `
+      const noteCard = toggleOn("enable_plain_amsthm_theorem")
+        ? `
+        <article class="sample" style="box-shadow:none;border:1px solid #D1D5DB;background:#FFFFFF;">
+          <div class="title" style="background:#FFFFFF;color:#111827;border-bottom:1px solid #E5E7EB;">Note</div>
+          <div class="body" style="background:#FFFFFF;border-left:0;">
+            Plain note body preview.
+          </div>
+        </article>
+      `
+        : `
         <article class="sample" style="${noteShadow}">
           <div class="title" style="background:${color("note-title-bg")};color:${color("note-title-fg")}">Note</div>
           <div class="body" style="background:${color("note-bg")};border-left-color:${color("note-accent")}">
@@ -1624,11 +1647,22 @@
         </article>
       `;
 
+      const theoremCards = toggleOn("enable_plain_amsthm_theorem")
+        ? [
+            samplePlainTheorem("Definition", "1.1"),
+            samplePlainTheorem("Theorem", "1.2"),
+            samplePlainTheorem("Lemma", "1.3"),
+            samplePlainTheorem("Corollary", "1.4")
+          ]
+        : [
+            sampleCard("Definition", color("definition-title-bg"), color("definition-title-fg"), color("definition-body-bg"), color("definition-accent")),
+            sampleCard("Theorem", color("theorem-title-bg"), color("theorem-title-fg"), color("theorem-body-bg"), color("theorem-accent")),
+            sampleCard("Lemma", color("lemma-title-bg"), color("lemma-title-fg"), color("lemma-body-bg"), color("lemma-accent")),
+            sampleCard("Corollary", color("corollary-title-bg"), color("corollary-title-fg"), color("corollary-body-bg"), color("corollary-accent"))
+          ];
+
       document.getElementById("preview").innerHTML = [
-        sampleCard("Definition", color("definition-title-bg"), color("definition-title-fg"), color("definition-body-bg"), color("definition-accent")),
-        sampleCard("Theorem", color("theorem-title-bg"), color("theorem-title-fg"), color("theorem-body-bg"), color("theorem-accent")),
-        sampleCard("Lemma", color("lemma-title-bg"), color("lemma-title-fg"), color("lemma-body-bg"), color("lemma-accent")),
-        sampleCard("Corollary", color("corollary-title-bg"), color("corollary-title-fg"), color("corollary-body-bg"), color("corollary-accent")),
+        ...theoremCards,
         noteCard,
         sampleCard("Example", color("example-bg"), color("example-label-fg"), color("example-bg"), color("example-accent")),
         sampleCard("Remark", color("remark-bg"), color("remark-label-fg"), color("remark-bg"), color("remark-accent"))
@@ -1739,6 +1773,36 @@
           setStatus(`Template generated and overwritten: ${model.generated_target}`, "ok");
         } else {
           setStatus(`Template generated: ${model.generated_target}`, "ok");
+        }
+      } catch (err) {
+        setStatus(err.message, "err");
+      }
+    }
+
+    async function generateVscodeSettings() {
+      setStatus("Generating .vscode/settings.json...");
+      try {
+        model = await postJson("/api/vscode-settings-generate", {});
+        syncSelectorStateFromModel();
+        renderStarterTemplateControls();
+        renderBlockPresetSelector();
+        renderHeadingTocPresetSelector();
+        renderBodyFontSizeControl();
+        renderCompileTargetSelector();
+        renderSplitControls();
+        renderSplitResult();
+        renderCompileRecipeSelector();
+        renderClassConfig();
+        renderToggles();
+        renderColorGroups();
+        renderPreview();
+        const generatedPath = model.generated_path || ".vscode/settings.json";
+        if (model.created) {
+          setStatus(`Generated ${generatedPath}`, "ok");
+        } else if (model.skipped_existing) {
+          setStatus(`Skipped: ${generatedPath} already exists.`, "ok");
+        } else {
+          setStatus(model.message || "VSCode settings updated.", "ok");
         }
       } catch (err) {
         setStatus(err.message, "err");
@@ -2259,6 +2323,7 @@
       startHeartbeat();
 
       document.getElementById("generateTemplateBtn").addEventListener("click", generateStarterTemplate);
+      document.getElementById("generateVscodeSettingsBtn").addEventListener("click", generateVscodeSettings);
       document.getElementById("applyTargetBtn").addEventListener("click", applyCompileTarget);
       document.getElementById("applyRecipeBtn").addEventListener("click", applyCompileRecipe);
       document.getElementById("applyBlockPresetBtn").addEventListener("click", applyBlockPreset);

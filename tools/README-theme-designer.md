@@ -42,7 +42,12 @@ python3 tools/theme_designer.py --open-browser
   - TOC theme
   - page header theme
   - enhanced environment style
+  - plain amsthm theorem mode (default: off)
   - block shadow
+- Theorem compatibility mode:
+  - when `plain amsthm theorem mode` is on, theorem family switches to native `amsthm`
+  - existing commands like `\thm{title}{label}{body}` stay available
+  - label prefix behavior keeps compatibility with smart dedupe (for example `foo -> thm:foo`, `thm:foo -> thm:foo`)
 - Class-aware controls:
   - class mode: auto / force book / force article
   - chapter heading rule
@@ -54,6 +59,7 @@ python3 tools/theme_designer.py --open-browser
   - choose compile mode:
     - internal fallback pipeline
     - VSCode recipe from `.vscode/settings.json`
+  - one-click `Generate VSCode settings.json` writes a standard LaTeX Workshop config only when missing (existing file is never overwritten)
   - compile preflight validates `\subfile{...}` references and blocks obvious recursive/missing-path corruption before TeX execution
   - recipe execution runs tool-by-tool and stops on first failure
   - compile log includes per-step command and exit code
@@ -216,6 +222,7 @@ PY
   - If commands like `xelatex`/`latexmk` are not found, install TeX binaries or enable internal fallback mode.
 - Missing recipe/tool:
   - Check `.vscode/settings.json` for `latex-workshop.latex.tools` and `latex-workshop.latex.recipes`.
+  - If `.vscode/settings.json` does not exist, click `Generate VSCode settings.json` in Toolkit UI.
   - Use internal fallback pipeline if a recipe command is unavailable.
 - Stale PDF preview:
   - Click `Refresh PDF Preview` after compile.

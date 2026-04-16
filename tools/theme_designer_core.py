@@ -107,7 +107,7 @@ class CompileContext:
     default_pdf_rel: str
 
 
-TOGGLE_SCHEMA: List[Dict[str, str]] = [
+TOGGLE_SCHEMA: List[Dict[str, Any]] = [
     {
         "id": "enable_heading_theme",
         "command": "EnableHeadingTheme",
@@ -131,6 +131,13 @@ TOGGLE_SCHEMA: List[Dict[str, str]] = [
         "command": "EnableEnhancedEnvStyle",
         "label": "Enhanced Block Style",
         "help": "Use richer theorem/callout box styling.",
+    },
+    {
+        "id": "enable_plain_amsthm_theorem",
+        "command": "EnablePlainAmsthmTheorem",
+        "label": "Plain amsthm Theorem",
+        "help": "Switch theorem family to native amsthm environments.",
+        "default": False,
     },
     {
         "id": "enable_block_shadow",
@@ -629,6 +636,18 @@ def _load_vscode_recipe_catalog() -> Dict[str, Any]:
     return _core_vscode.load_vscode_recipe_catalog(
         load_vscode_settings_fn=_load_vscode_settings,
         slugify_fn=_slugify,
+    )
+
+
+def _toolkit_vscode_settings_template() -> Dict[str, Any]:
+    return _core_vscode.toolkit_vscode_settings_template()
+
+
+def _generate_vscode_settings_if_missing() -> Dict[str, Any]:
+    return _core_vscode.generate_vscode_settings_if_missing(
+        vscode_settings_path=VSCODE_SETTINGS_PATH,
+        root_dir=ROOT_DIR,
+        settings_template_fn=_toolkit_vscode_settings_template,
     )
 
 
