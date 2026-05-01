@@ -7,6 +7,7 @@
 
 \renewcommand{\familydefault}{\sfdefault}
 \usepackage{graphicx}
+\usepackage{eso-pic}
 \usepackage{setspace}
 \usepackage{geometry}
 \usepackage{float}
@@ -25,6 +26,7 @@
 
 \setstretch{1.2}
 \geometry{
+    a4paper,
     textheight=9in,
     textwidth=7.5in,
     top=1in,
@@ -75,6 +77,28 @@
 \def\notetitle{LaTeX Editing Toolkit Template Guide}
 \def\noteauthor{Yiqi Yang}
 \def\notedate{\today}
+\def\notecoverimage{Fig/cover.png}
+
+\newcommand{\makecustomcover}{
+    \begin{titlepage}
+        \AddToShipoutPictureBG*{
+            \AtPageLowerLeft{
+                \includegraphics[width=\paperwidth,height=\paperheight]{\notecoverimage}
+            }
+        }
+        \thispagestyle{empty}
+        \vspace*{0.31\paperheight}
+        \begin{center}
+            {\Huge\bfseries\color{black!82}\notetitle\par}
+            \vspace{1.2em}
+            {\Large\color{black!64}\noteauthor\par}
+            \vspace{0.6em}
+            {\large\color{black!52}\notedate\par}
+        \end{center}
+        \vfill
+    \end{titlepage}
+    \clearpage
+}
 
 % The theorem system and user-defined commands
 \input{theorems.tex}
@@ -84,12 +108,7 @@
 
 \usepackage{subfiles}
 \begin{document}
-\title{\textbf{\LARGE{\notetitle}}}
-\author{\noteauthor}
-\date{\notedate}
-
-\maketitle
-\newpage
+\makecustomcover
 
 \tableofcontents
 \newpage

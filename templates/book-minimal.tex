@@ -5,6 +5,7 @@
 \usepackage{xparse}
 \usepackage{lmodern}
 \usepackage{graphicx}
+\usepackage{eso-pic}
 \usepackage{setspace}
 \usepackage{geometry}
 \usepackage{float}
@@ -18,7 +19,7 @@
 \tcbuselibrary{theorems,skins,breakable}
 
 \setstretch{1.15}
-\geometry{margin=1in, headheight=21pt, headsep=25pt, footskip=30pt}
+\geometry{a4paper, margin=1in, headheight=21pt, headsep=25pt, footskip=30pt}
 
 % -------------------- Style Feature Toggles --------------------
 \newif\ifEnableHeadingTheme
@@ -46,12 +47,34 @@
 \input{theorems.tex}
 \input{commands.tex}
 
-\title{Book Notes Starter}
-\author{Author Name}
-\date{\today}
+\def\notetitle{Book Notes Starter}
+\def\noteauthor{Author Name}
+\def\notedate{\today}
+\def\notecoverimage{Fig/cover.png}
+
+\newcommand{\makecustomcover}{
+    \begin{titlepage}
+        \AddToShipoutPictureBG*{
+            \AtPageLowerLeft{
+                \includegraphics[width=\paperwidth,height=\paperheight]{\notecoverimage}
+            }
+        }
+        \thispagestyle{empty}
+        \vspace*{0.31\paperheight}
+        \begin{center}
+            {\Huge\bfseries\color{black!82}\notetitle\par}
+            \vspace{1.2em}
+            {\Large\color{black!64}\noteauthor\par}
+            \vspace{0.6em}
+            {\large\color{black!52}\notedate\par}
+        \end{center}
+        \vfill
+    \end{titlepage}
+    \clearpage
+}
 
 \begin{document}
-\maketitle
+\makecustomcover
 \tableofcontents
 
 \chapter{Getting Started}
