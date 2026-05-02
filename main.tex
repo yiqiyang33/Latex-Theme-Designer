@@ -28,8 +28,10 @@
 \geometry{
     a4paper,
     textheight=9in,
-    textwidth=7.5in,
+    textwidth=6.45in,
     top=1in,
+    marginparsep=0.14in,
+    marginparwidth=0.8in,
     headheight=21pt,
     headsep=25pt,
     footskip=30pt
@@ -115,10 +117,17 @@
 
 \chapter{Project Overview / 项目总览}
 
+\chapteroverview[Template Map / 模板地图]{
+This chapter shows the moving parts of the template: source files, compile paths,
+and the local Toolkit UI.
+
+本章展示模板的几个核心组成部分：源码文件、编译路径，以及本地 Toolkit UI。
+}
+
 \section{What This Repository Is / 这个仓库是什么}
 
 This repository is a local-first LaTeX note template with a Toolkit UI.
-You can tune styles, switch theorem modes, choose compile recipes, split files, and preview PDF from one place.
+You can tune styles, switch theorem modes, choose compile recipes, split files, and preview PDF from one place.\sidenote{Short reminders, page references, or local intuition fit well here.}
 
 这个仓库是一个本地优先的 LaTeX 笔记模板，并带有 Toolkit UI。
 你可以在同一套工作流中做样式调参、切换定理模式、选择编译配方、拆分文件并预览 PDF。
@@ -138,7 +147,9 @@ You can tune styles, switch theorem modes, choose compile recipes, split files, 
 
 \begin{itemize}
     \item Internal fallback pipeline / 内置回退管线：stable baseline without VSCode recipe dependency / 不依赖 VSCode recipe，作为稳定基线。
-    \item VSCode recipe mode / VSCode 配方模式：reads \texttt{.vscode/settings.json} / 读取 \texttt{.vscode/settings.json} 中的 tools + recipes。
+    \item VSCode recipe mode / VSCode 配方模式：
+    reads workspace settings and recipe definitions from \texttt{.vscode/settings.json}.
+    该模式会从 \texttt{.vscode/settings.json} 读取 tools 与 recipes。
 \end{itemize}
 
 If \texttt{.vscode/settings.json} is missing on a new machine,
@@ -199,6 +210,13 @@ The theorem commands keep automatic label prefix behavior with smart dedupe:
 \end{itemize}
 
 \chapter{Environment Tutorial / 环境与命令示例}
+
+\chapteroverview[Writing Helpers / 写作辅助]{
+This chapter previews theorem blocks, callouts, inline emphasis, side notes,
+and chapter overview boxes.
+
+本章预览定理块、提示块、行内强调、旁注以及章节摘要框。
+}
 
 \section{Theorem Family Commands / 定理家族命令}
 
@@ -271,6 +289,44 @@ This is a remark block from \texttt{\textbackslash rmkb}.
 This is a plain assumption callout environment.
 这是一个独立的 assumption 提示环境。
 \end{assump}
+
+\section{Inline + Study Note Helpers / 行内与笔记辅助}
+
+Inline helpers keep repeated note markup compact:
+\begin{itemize}
+    \item \texttt{\textbackslash key}: \key{key idea} / \key{关键想法}
+    \item \texttt{\textbackslash term}: \term{technical term} / \term{术语}
+    \item \texttt{\textbackslash warn}: \warn{watch this condition} / \warn{注意条件}
+    \item \texttt{\textbackslash todo}: \todo{fill in the proof} / \todo{补全证明}
+    \item \texttt{\textbackslash code}: \code{python3 tools/latex_toolkit.py --open-browser}
+\end{itemize}
+
+这些行内命令可以让常见笔记标记更紧凑，也可以在 Toolkit UI 里调整颜色。
+
+\insight{
+Use \texttt{\textbackslash insight\{...\}} for a distilled idea that should stand out from routine exposition.
+可以用 \texttt{\textbackslash insight\{...\}} 放置需要醒目的核心想法。
+}
+
+\pitfall{
+Use \texttt{\textbackslash pitfall\{...\}} for common mistakes, hidden assumptions, or fragile steps.
+可以用 \texttt{\textbackslash pitfall\{...\}} 标记常见错误、隐含假设或易错步骤。
+}
+
+\intuition{
+Use \texttt{\textbackslash intuition\{...\}} for geometric pictures, informal explanations, or mental models.
+可以用 \texttt{\textbackslash intuition\{...\}} 记录几何图像、非正式解释或心智模型。
+}
+
+\summary{
+Use \texttt{\textbackslash summary\{...\}} for a local recap before moving to the next topic.
+可以用 \texttt{\textbackslash summary\{...\}} 在进入下一主题前做局部总结。
+}
+
+\question{
+Use \texttt{\textbackslash question\{...\}} for open questions or checks to revisit later.
+可以用 \texttt{\textbackslash question\{...\}} 记录之后要回看的问题或检查点。
+}
 
 \pf{
 From the two theorem demonstrations above, references remain stable because

@@ -13,11 +13,13 @@ Options:
   --source-dir <dir>     Use local template directory as source (no network)
   --include-file <file>  Paths to sync (default: <target>/.template-sync-include)
   --ignore-file <file>   Exclude patterns inside synced paths (default: <target>/.template-sync-ignore)
+  --delete-stale         Delete files removed from synced source directories
   --dry-run              Preview changes without writing files
   -h, --help             Show help
 
 Notes:
   - This script syncs only include-paths (code/template files), not the whole folder.
+  - Directory sync does not delete extra target files unless --delete-stale is set.
   - It does NOT require target directory to be a git repository.
   - It does NOT require clean working tree (dirty is allowed by default).
 EOF
@@ -29,6 +31,7 @@ BRANCH="main"
 SOURCE_URL="$DEFAULT_SOURCE_URL"
 SOURCE_DIR=""
 DRY_RUN="0"
+DELETE_STALE="0"
 
 INCLUDE_FILE=""
 IGNORE_FILE=""
@@ -61,6 +64,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN="1"
+      shift
+      ;;
+    --delete-stale)
+      DELETE_STALE="1"
       shift
       ;;
     -h|--help)
@@ -212,6 +219,9 @@ FILE_RSYNC_ARGS=(
 if [[ -f "$IGNORE_FILE" ]]; then
   DIR_RSYNC_ARGS+=(--exclude-from "$IGNORE_FILE")
 fi
+if [[ "$DELETE_STALE" == "1" ]]; then
+  DIR_RSYNC_ARGS+=(--delete)
+fi
 if [[ "$DRY_RUN" == "1" ]]; then
   DIR_RSYNC_ARGS+=(--dry-run)
   FILE_RSYNC_ARGS+=(--dry-run)
@@ -223,6 +233,11 @@ if [[ -f "$IGNORE_FILE" ]]; then
   echo "[sync-template] ignore-file: $IGNORE_FILE"
 else
   echo "[sync-template] ignore-file: (not found)"
+fi
+if [[ "$DELETE_STALE" == "1" ]]; then
+  echo "[sync-template] delete-stale: enabled for synced directories"
+else
+  echo "[sync-template] delete-stale: disabled"
 fi
 
 for rel_path in "${INCLUDE_PATHS[@]}"; do

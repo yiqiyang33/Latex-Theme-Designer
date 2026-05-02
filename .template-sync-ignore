@@ -1,5 +1,16 @@
 # Optional rsync exclude patterns applied while syncing include-paths.
-# Use this when you want to skip files under paths from .template-sync-include.
-.template-sync-ignore
-sync_template.sh
-tools/sync_template.sh
+# Use this when you want to skip generated files under included directories.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+__pycache__/
+*.py[cod]

@@ -42,6 +42,12 @@ Apply sync:
 tools/sync_template.sh
 ```
 
+Remove stale files under synced template directories when the source removed them:
+
+```bash
+tools/sync_template.sh --delete-stale
+```
+
 Defaults:
 - source: `https://github.com/yiqiyang33/Latex-Theme-Designer`
 - branch: `main`
@@ -49,12 +55,15 @@ Defaults:
 
 Sync scope is controlled by `.template-sync-include` (only listed paths are synced).
 Extra excludes inside those synced paths can be configured in `.template-sync-ignore`.
+By default, extra target files are kept; use `--delete-stale` when you want synced directories
+to mirror source removals.
 
 ## Feature Overview
 
 - Centralized theme layout (`theme.sty`) for document + theorem styles.
 - Local toolkit UI for color/toggle/class/compile tuning.
 - Theorem mode toggle: switch theorem family between styled tcolorbox and native amsthm while keeping theorem commands compatible.
+- Note-writing helpers: `\key{}`, `\term{}`, `\warn{}`, `\todo{}`, `\code{}`, `\sidenote{}`, `\chapteroverview{}`, plus `\insight{}`, `\pitfall{}`, `\intuition{}`, `\summary{}`, and `\question{}` callouts.
 - One-click split workflow (`tools/tex_splitter.py`) for modular `Sections/` authoring.
 - Compile integration with internal fallback pipeline and VSCode recipe mode.
 - UI one-click generation of `.vscode/settings.json` (create-if-missing, no overwrite) for recipe bootstrap on new machines.

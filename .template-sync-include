@@ -4,6 +4,8 @@
 templates/
 tools/
 .gitignore
+.template-sync-ignore
+.template-sync-include
 README.md
 commands.tex
 pytest.ini

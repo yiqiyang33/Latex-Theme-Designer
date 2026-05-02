@@ -225,6 +225,25 @@ COLOR_GROUPS: List[Dict[str, Any]] = [
         ],
     },
     {
+        "title": "Inline Text",
+        "items": [
+            {"id": "inline-key-fg", "label": "Key"},
+            {"id": "inline-term-bg", "label": "Term bg"},
+            {"id": "inline-term-fg", "label": "Term text"},
+            {"id": "inline-warn-fg", "label": "Warn"},
+            {"id": "inline-todo-bg", "label": "TODO bg"},
+            {"id": "inline-todo-fg", "label": "TODO text"},
+            {"id": "inline-code-bg", "label": "Code bg"},
+            {"id": "inline-code-fg", "label": "Code text"},
+            {"id": "sidenote-fg", "label": "Side note text"},
+            {"id": "sidenote-accent", "label": "Side note accent"},
+            {"id": "chapter-overview-bg", "label": "Overview bg"},
+            {"id": "chapter-overview-title-bg", "label": "Overview title bg"},
+            {"id": "chapter-overview-title-fg", "label": "Overview title"},
+            {"id": "chapter-overview-accent", "label": "Overview accent"},
+        ],
+    },
+    {
         "title": "Definition",
         "items": [
             {"id": "definition-body-bg", "label": "Body bg"},
@@ -321,6 +340,26 @@ COLOR_GROUPS: List[Dict[str, Any]] = [
             {"id": "assump-accent", "label": "Assump accent"},
         ],
     },
+    {
+        "title": "Study Callouts",
+        "items": [
+            {"id": "insight-bg", "label": "Insight bg"},
+            {"id": "insight-label-fg", "label": "Insight label"},
+            {"id": "insight-accent", "label": "Insight accent"},
+            {"id": "pitfall-bg", "label": "Pitfall bg"},
+            {"id": "pitfall-label-fg", "label": "Pitfall label"},
+            {"id": "pitfall-accent", "label": "Pitfall accent"},
+            {"id": "intuition-bg", "label": "Intuition bg"},
+            {"id": "intuition-label-fg", "label": "Intuition label"},
+            {"id": "intuition-accent", "label": "Intuition accent"},
+            {"id": "summary-bg", "label": "Summary bg"},
+            {"id": "summary-label-fg", "label": "Summary label"},
+            {"id": "summary-accent", "label": "Summary accent"},
+            {"id": "question-bg", "label": "Question bg"},
+            {"id": "question-label-fg", "label": "Question label"},
+            {"id": "question-accent", "label": "Question accent"},
+        ],
+    },
 ]
 
 COLOR_ORDER: List[str] = [
@@ -383,8 +422,14 @@ BASE_COLORS: Dict[str, Tuple[int, int, int]] = {
     "royalblue": (65, 105, 225),
 }
 
+INLINE_COLOR_TOKENS: List[str] = [
+    token for token in COLOR_ORDER if token.startswith("inline-")
+]
+
 BLOCK_COLOR_TOKENS: List[str] = [
-    token for token in COLOR_ORDER if not token.startswith("theme-")
+    token
+    for token in COLOR_ORDER
+    if not token.startswith("theme-") and token not in INLINE_COLOR_TOKENS
 ]
 
 DOCUMENT_COLOR_TOKENS: List[str] = [

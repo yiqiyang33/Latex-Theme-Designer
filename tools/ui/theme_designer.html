@@ -1693,13 +1693,31 @@
           <div class="chapter" style="color:${color("theme-chapter")}">Chapter 1. Variational Inference</div>
           <div class="section" style="color:${color("theme-section")}">1.1 Intro</div>
           <div class="subsection" style="color:${color("theme-subsection")}">1.1.1 The objective</div>
-          <p>Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>.</p>
+          <p>
+            Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>,
+            <strong style="color:${color("inline-key-fg")}">key ideas</strong>,
+            <span style="background:${color("inline-term-bg")};color:${color("inline-term-fg")};padding:1px 4px;">terms</span>,
+            <strong style="color:${color("inline-warn-fg")}">warnings</strong>,
+            <code style="background:${color("inline-code-bg")};color:${color("inline-code-fg")};padding:1px 4px;">code</code>.
+          </p>
+          <p style="border-left:2px solid ${color("sidenote-accent")};color:${color("sidenote-fg")};padding-left:7px;font-size:0.86em;">
+            Side note preview for reminders and page references.
+          </p>
         `;
       } else {
         docPreview.innerHTML = `
           <div class="section" style="color:${color("theme-section")}">1 Intro</div>
           <div class="subsection" style="color:${color("theme-subsection")}">1.1 The objective</div>
-          <p>Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>.</p>
+          <p>
+            Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>,
+            <strong style="color:${color("inline-key-fg")}">key ideas</strong>,
+            <span style="background:${color("inline-term-bg")};color:${color("inline-term-fg")};padding:1px 4px;">terms</span>,
+            <strong style="color:${color("inline-warn-fg")}">warnings</strong>,
+            <code style="background:${color("inline-code-bg")};color:${color("inline-code-fg")};padding:1px 4px;">code</code>.
+          </p>
+          <p style="border-left:2px solid ${color("sidenote-accent")};color:${color("sidenote-fg")};padding-left:7px;font-size:0.86em;">
+            Side note preview for reminders and page references.
+          </p>
         `;
       }
 
@@ -1740,7 +1758,11 @@
         ...theoremCards,
         noteCard,
         sampleCard("Example", color("example-bg"), color("example-label-fg"), color("example-bg"), color("example-accent")),
-        sampleCard("Remark", color("remark-bg"), color("remark-label-fg"), color("remark-bg"), color("remark-accent"))
+        sampleCard("Remark", color("remark-bg"), color("remark-label-fg"), color("remark-bg"), color("remark-accent")),
+        sampleCard("Overview", color("chapter-overview-title-bg"), color("chapter-overview-title-fg"), color("chapter-overview-bg"), color("chapter-overview-accent")),
+        sampleCard("Insight", color("insight-bg"), color("insight-label-fg"), color("insight-bg"), color("insight-accent")),
+        sampleCard("Pitfall", color("pitfall-bg"), color("pitfall-label-fg"), color("pitfall-bg"), color("pitfall-accent")),
+        sampleCard("Question", color("question-bg"), color("question-label-fg"), color("question-bg"), color("question-accent"))
       ].join("");
       document.getElementById("preview").style.fontSize = `${bodyFontPt}pt`;
     }

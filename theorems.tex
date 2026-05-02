@@ -188,6 +188,72 @@
     }{assump}
 \fi
 
+% -------------------- Study Callout Blocks --------------------
+\NewDocumentEnvironment{insightbox}{O{Insight} +b}{
+    \begin{tcolorbox}[callout/variant={insight-bg}{insight-accent}]
+        {\textcolor{insight-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{pitfallbox}{O{Pitfall} +b}{
+    \begin{tcolorbox}[callout/variant={pitfall-bg}{pitfall-accent}]
+        {\textcolor{pitfall-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{intuitionbox}{O{Intuition} +b}{
+    \begin{tcolorbox}[callout/variant={intuition-bg}{intuition-accent}]
+        {\textcolor{intuition-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{summarybox}{O{Summary} +b}{
+    \begin{tcolorbox}[callout/variant={summary-bg}{summary-accent}]
+        {\textcolor{summary-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{questionbox}{O{Question} +b}{
+    \begin{tcolorbox}[callout/variant={question-bg}{question-accent}]
+        {\textcolor{question-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentCommand{\insight}{O{Insight} +m}{
+    \begin{insightbox}[#1]
+        #2
+    \end{insightbox}
+}
+
+\NewDocumentCommand{\pitfall}{O{Pitfall} +m}{
+    \begin{pitfallbox}[#1]
+        #2
+    \end{pitfallbox}
+}
+
+\NewDocumentCommand{\intuition}{O{Intuition} +m}{
+    \begin{intuitionbox}[#1]
+        #2
+    \end{intuitionbox}
+}
+
+\NewDocumentCommand{\summary}{O{Summary} +m}{
+    \begin{summarybox}[#1]
+        #2
+    \end{summarybox}
+}
+
+\NewDocumentCommand{\question}{O{Question} +m}{
+    \begin{questionbox}[#1]
+        #2
+    \end{questionbox}
+}
+
 % -------------------- Theorem Commands --------------------
 \ifEnablePlainAmsthmTheorem
     \NewDocumentCommand{\defn}{mm+m}{

@@ -105,6 +105,28 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertEqual(state["colors"]["theme-bold"], "#3F6F9F")
         self.assertGreaterEqual(len(td.BOLD_TEXT_PRESETS), 4)
 
+    def test_study_note_color_tokens_are_available(self) -> None:
+        state = td._load_state()
+        for token in (
+            "inline-key-fg",
+            "inline-term-bg",
+            "inline-code-fg",
+            "sidenote-fg",
+            "chapter-overview-bg",
+            "chapter-overview-accent",
+            "insight-bg",
+            "pitfall-accent",
+            "intuition-label-fg",
+            "summary-bg",
+            "question-accent",
+        ):
+            self.assertIn(token, td.COLOR_ORDER)
+            self.assertRegex(state["colors"][token], r"^#[0-9A-F]{6}$")
+
+        self.assertIn("inline-key-fg", td.INLINE_COLOR_TOKENS)
+        self.assertNotIn("inline-key-fg", td.BLOCK_COLOR_TOKENS)
+        self.assertIn("insight-bg", td.BLOCK_COLOR_TOKENS)
+
     def test_response_schema_includes_bold_text_presets(self) -> None:
         response = td._build_response_state()
         presets = response.get("schema", {}).get("bold_text_presets", [])
