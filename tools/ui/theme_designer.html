@@ -225,6 +225,45 @@
       color: var(--muted);
     }
 
+    .swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .swatch-button {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 34px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fcfdfa;
+      color: #26382f;
+      font-weight: 750;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+    }
+
+    .swatch-button:hover,
+    .swatch-button.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 45, 37, 0.18);
+    }
+
     details.group {
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -794,6 +833,11 @@
       </div>
 
       <div class="section-block">
+        <h2>Bold Text Presets</h2>
+        <div id="boldTextPresetBox" class="swatch-grid"></div>
+      </div>
+
+      <div class="section-block">
         <h2>Color Tokens</h2>
         <div id="groupBox"></div>
       </div>
@@ -1002,6 +1046,10 @@
       const options = headingTocPresetOptions();
       if (model.state.heading_toc_preset) return model.state.heading_toc_preset;
       return options.length > 0 ? options[0].id : "default";
+    }
+
+    function boldTextPresets() {
+      return model.schema.bold_text_presets || [];
     }
 
     function starterTemplateOptions() {
@@ -1496,6 +1544,29 @@
       };
     }
 
+    function renderBoldTextPresets() {
+      const box = document.getElementById("boldTextPresetBox");
+      box.innerHTML = "";
+      const current = color("theme-bold").toUpperCase();
+      for (const preset of boldTextPresets()) {
+        const presetColor = String(preset.color || "#808080").toUpperCase();
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `swatch-button${presetColor === current ? " active" : ""}`;
+        button.innerHTML = `
+          <span class="swatch" style="background:${presetColor}"></span>
+          <span>${preset.label || preset.id}</span>
+        `;
+        button.addEventListener("click", () => {
+          model.state.colors["theme-bold"] = presetColor;
+          renderBoldTextPresets();
+          renderColorGroups();
+          renderPreview();
+        });
+        box.appendChild(button);
+      }
+    }
+
     function renderToggles() {
       const box = document.getElementById("toggleBox");
       box.innerHTML = "";
@@ -1524,6 +1595,7 @@
         inputHex.value = inputColor.value.toUpperCase();
         inputHex.classList.remove("invalid");
         model.state.colors[token] = inputColor.value.toUpperCase();
+        if (token === "theme-bold") renderBoldTextPresets();
         renderPreview();
       });
       inputHex.addEventListener("input", () => {
@@ -1533,6 +1605,7 @@
           inputHex.classList.remove("invalid");
           inputColor.value = fixed;
           model.state.colors[token] = fixed;
+          if (token === "theme-bold") renderBoldTextPresets();
           renderPreview();
         } else {
           inputHex.classList.add("invalid");
@@ -1620,11 +1693,13 @@
           <div class="chapter" style="color:${color("theme-chapter")}">Chapter 1. Variational Inference</div>
           <div class="section" style="color:${color("theme-section")}">1.1 Intro</div>
           <div class="subsection" style="color:${color("theme-subsection")}">1.1.1 The objective</div>
+          <p>Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>.</p>
         `;
       } else {
         docPreview.innerHTML = `
           <div class="section" style="color:${color("theme-section")}">1 Intro</div>
           <div class="subsection" style="color:${color("theme-subsection")}">1.1 The objective</div>
+          <p>Body text with <strong style="color:${color("theme-bold")}">bold emphasis</strong>.</p>
         `;
       }
 
@@ -1758,6 +1833,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1788,6 +1864,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1819,6 +1896,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1843,6 +1921,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1868,6 +1947,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1893,6 +1973,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -1920,6 +2001,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderSplitControls();
         renderSplitResult();
         renderCompileRecipeSelector();
@@ -1958,6 +2040,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -2015,6 +2098,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -2070,6 +2154,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -2111,6 +2196,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -2134,6 +2220,7 @@
         renderBlockPresetSelector();
         renderHeadingTocPresetSelector();
         renderBodyFontSizeControl();
+        renderBoldTextPresets();
         renderCompileTargetSelector();
         renderSplitControls();
         renderSplitResult();
@@ -2310,6 +2397,7 @@
       renderBlockPresetSelector();
       renderHeadingTocPresetSelector();
       renderBodyFontSizeControl();
+      renderBoldTextPresets();
       renderCompileTargetSelector();
       renderSplitControls();
       renderSplitResult();

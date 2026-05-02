@@ -221,6 +221,7 @@ COLOR_GROUPS: List[Dict[str, Any]] = [
             {"id": "theme-toc-chapter", "label": "TOC chapter"},
             {"id": "theme-toc-section", "label": "TOC section"},
             {"id": "theme-header-rule", "label": "Header rule"},
+            {"id": "theme-bold", "label": "Bold text"},
         ],
     },
     {
@@ -354,6 +355,15 @@ BODY_FONT_SIZE_MIN = float(BODY_FONT_SIZE_CONFIG["min"])
 BODY_FONT_SIZE_MAX = float(BODY_FONT_SIZE_CONFIG["max"])
 BODY_FONT_SIZE_STEP = float(BODY_FONT_SIZE_CONFIG["step"])
 BODY_FONT_SIZE_DEFAULT = float(BODY_FONT_SIZE_CONFIG["default"])
+
+BOLD_TEXT_PRESETS: List[Dict[str, str]] = [
+    {"id": "soft-blue", "label": "Soft Blue", "color": "#3F6F9F"},
+    {"id": "slate-indigo", "label": "Slate Indigo", "color": "#4B5E8C"},
+    {"id": "deep-teal", "label": "Deep Teal", "color": "#2F6F73"},
+    {"id": "muted-violet", "label": "Muted Violet", "color": "#6F5A8A"},
+    {"id": "warm-rose", "label": "Warm Rose", "color": "#9A5C6A"},
+    {"id": "forest", "label": "Forest", "color": "#4E7357"},
+]
 
 BASE_COLORS: Dict[str, Tuple[int, int, int]] = {
     "white": (255, 255, 255),
@@ -1752,6 +1762,7 @@ def _build_response_state() -> Dict[str, Any]:
             "block_presets": state.get("block_presets", []),
             "heading_toc_presets": state.get("heading_toc_presets", []),
             "body_font_size": BODY_FONT_SIZE_CONFIG,
+            "bold_text_presets": BOLD_TEXT_PRESETS,
             "starter_templates": starter_templates,
             "starter_default_template": _default_starter_template_id(starter_templates),
             "starter_default_output_target": STARTER_DEFAULT_OUTPUT_TARGET,

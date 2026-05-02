@@ -98,6 +98,53 @@ class ThemeDesignerTests(unittest.TestCase):
             script,
         )
 
+    def test_bold_text_color_token_is_document_color(self) -> None:
+        state = td._load_state()
+        self.assertIn("theme-bold", td.COLOR_ORDER)
+        self.assertIn("theme-bold", td.DOCUMENT_COLOR_TOKENS)
+        self.assertEqual(state["colors"]["theme-bold"], "#3F6F9F")
+        self.assertGreaterEqual(len(td.BOLD_TEXT_PRESETS), 4)
+
+    def test_response_schema_includes_bold_text_presets(self) -> None:
+        response = td._build_response_state()
+        presets = response.get("schema", {}).get("bold_text_presets", [])
+        self.assertGreaterEqual(len(presets), 4)
+        self.assertIn("#3F6F9F", {item.get("color") for item in presets})
+
+    def test_ui_exposes_bold_text_presets(self) -> None:
+        script = self._embedded_ui_script()
+        self.assertIn('id="boldTextPresetBox"', tdu.HTML_PAGE)
+        self.assertIn("function renderBoldTextPresets()", script)
+        self.assertIn('model.state.colors["theme-bold"] = presetColor;', script)
+
+    def test_write_override_files_includes_bold_text_color(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            cfg_path = tmp_path / "theme.ui.json"
+            toggle_path = tmp_path / "theme.overrides.tex"
+            color_path = tmp_path / "theme.colors.tex"
+
+            original_config = td.CONFIG_PATH
+            original_toggle = td.TOGGLE_OVERRIDE_PATH
+            original_color = td.COLOR_OVERRIDE_PATH
+            try:
+                td.CONFIG_PATH = cfg_path
+                td.TOGGLE_OVERRIDE_PATH = toggle_path
+                td.COLOR_OVERRIDE_PATH = color_path
+
+                state = td._load_state()
+                state["colors"]["theme-bold"] = "#4477AA"
+                td._write_override_files(state)
+
+                color_text = color_path.read_text(encoding="utf-8")
+            finally:
+                td.CONFIG_PATH = original_config
+                td.TOGGLE_OVERRIDE_PATH = original_toggle
+                td.COLOR_OVERRIDE_PATH = original_color
+
+        self.assertIn("\\definecolor{themeuithemebold}{HTML}{4477AA}", color_text)
+        self.assertIn("\\colorlet{theme-bold}{themeuithemebold}", color_text)
+
     def test_split_response_refresh_keeps_template_and_recipe_catalogs(self) -> None:
         baseline = td._build_response_state()
         baseline_templates = [

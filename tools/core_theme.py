@@ -58,6 +58,17 @@ def parse_theme_color_defaults(
     hex_from_rgb_fn: Callable[[Tuple[int, int, int]], str],
 ) -> Dict[str, str]:
     theme_text = read_text_fn(theme_sty_path)
+    defined_colors = {
+        name.lower(): (
+            int(hex_value[0:2], 16),
+            int(hex_value[2:4], 16),
+            int(hex_value[4:6], 16),
+        )
+        for name, hex_value in re.findall(
+            r"\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}",
+            theme_text,
+        )
+    }
     colorlet_pairs = re.findall(r"\\colorlet\{([^}]+)\}\{([^}]+)\}", theme_text)
     expr_map: Dict[str, str] = {}
     for key, expr in colorlet_pairs:
@@ -79,6 +90,8 @@ def parse_theme_color_defaults(
         lowered = expr.lower()
         if lowered in base_colors:
             return base_colors[lowered]
+        if lowered in defined_colors:
+            return defined_colors[lowered]
 
         if expr in expr_map:
             return resolve_token(expr, depth + 1)
