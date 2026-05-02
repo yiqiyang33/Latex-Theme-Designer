@@ -221,7 +221,7 @@ def toolkit_vscode_settings_template() -> Dict[str, Any]:
     """Return standard Toolkit VSCode settings payload."""
 
     return {
-        "latex-workshop.latex.autoBuild.run": "never",
+        "latex-workshop.latex.autoBuild.run": "onSave",
         "latex-workshop.showContextMenu": True,
         "latex-workshop.intellisense.package.enabled": True,
         "latex-workshop.message.error.show": False,

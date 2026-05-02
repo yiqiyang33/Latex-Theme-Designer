@@ -409,6 +409,9 @@ class ThemeDesignerTests(unittest.TestCase):
         self.assertIn("latex-workshop.latex.clean.fileTypes", settings)
         self.assertIn("latex-workshop.latex.recipe.default", settings)
         self.assertIn("[latex]", settings)
+        self.assertEqual(settings["latex-workshop.latex.autoBuild.run"], "onSave")
+        self.assertTrue(settings["latex-workshop.latex.rootFile.useSubFile"])
+        self.assertFalse(settings["latex-workshop.latex.rootFile.doNotPrompt"])
         self.assertEqual(
             settings["[latex]"].get("editor.defaultFormatter"),
             "James-Yu.latex-workshop",

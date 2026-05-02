@@ -82,6 +82,14 @@ Compatibility alias (still supported during transition):
 python3 tools/theme_designer.py --open-browser
 ```
 
+## VSCode LaTeX Workshop Flow
+
+The workspace settings are tuned for subfile-first note writing:
+
+- saving a `.tex` file triggers LaTeX Workshop auto-build (`onSave`);
+- `\documentclass[../main.tex]{subfiles}` units build as standalone subfiles;
+- to compile the full root document, open `main.tex` and run LaTeX Workshop build manually, or use its root-file prompt/selection command.
+
 ## TeX Splitter
 
 Split a monolithic root `.tex` into modular files in `Sections/`:
