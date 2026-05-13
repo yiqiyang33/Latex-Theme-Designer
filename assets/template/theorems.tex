@@ -1,0 +1,515 @@
+% Theorem System
+% The following blocks are provided:
+%   Definition:     \defn
+%   Theorem:        \thm
+%   Lemma:          \lem
+%   Corollary:      \cor
+%   Proposition:    \prop
+%   Claim:          \clm
+%   Fact:           \fact
+%   Assumption:     \assumption
+%   Proof:          \pf
+%   Example:        \ex
+%   Remark:         \rmk (sentence), \rmkb (block)
+%
+% Toggle:
+%   \EnablePlainAmsthmTheoremtrue  -> native amsthm theorem environments
+%   \EnablePlainAmsthmTheoremfalse -> styled tcolorbox theorem environments
+%
+% Label behavior for theorem commands:
+%   - empty label: no \label written
+%   - already prefixed (e.g. thm:foo for \thm): keep as-is
+%   - otherwise auto-prefix (e.g. foo -> thm:foo)
+
+\makeatletter
+\@ifundefined{ifEnablePlainAmsthmTheorem}{
+    \newif\ifEnablePlainAmsthmTheorem
+    \EnablePlainAmsthmTheoremfalse
+}{}
+
+\newif\ifThemeTheoremNumberingNone
+\ThemeTheoremNumberingNonefalse
+\newif\ifThemeTheoremCounterWithinChapter
+\ThemeTheoremCounterWithinChapterfalse
+\def\ThemeTheoremCounterWithin{section}
+
+\def\theme@theorem@chapter{chapter}
+\def\theme@theorem@section{section}
+\def\theme@theorem@none{none}
+\@ifundefined{ThemeResolvedTheoremNumbering}{}{
+    \ifx\ThemeResolvedTheoremNumbering\theme@theorem@chapter
+        \@ifundefined{chapter}{
+            \def\ThemeTheoremCounterWithin{section}
+            \ThemeTheoremCounterWithinChapterfalse
+        }{
+            \def\ThemeTheoremCounterWithin{chapter}
+            \ThemeTheoremCounterWithinChaptertrue
+        }
+    \else
+        \ifx\ThemeResolvedTheoremNumbering\theme@theorem@none
+            \ThemeTheoremNumberingNonetrue
+            \ThemeTheoremCounterWithinChapterfalse
+        \else
+            \def\ThemeTheoremCounterWithin{section}
+            \ThemeTheoremCounterWithinChapterfalse
+        \fi
+    \fi
+}
+
+\newcommand{\ThemeOptionalTheoremTitle}[1]{%
+    \if\relax\detokenize{#1}\relax
+    \else
+        [#1]%
+    \fi
+}
+\makeatother
+
+\ExplSyntaxOn
+\tl_new:N \l_theme_tcb_label_tl
+
+\cs_new_protected:Npn \theme_emit_prefixed_label:nn #1#2
+{
+    \tl_if_blank:nF {#2}
+    {
+        \regex_match:nnTF { \A#1: } {#2}
+        {
+            \label{#2}
+        }
+        {
+            \label{#1:#2}
+        }
+    }
+}
+
+\cs_new_protected:Npn \theme_normalize_tcb_label:nn #1#2
+{
+    \tl_clear:N \l_theme_tcb_label_tl
+    \tl_if_blank:nF {#2}
+    {
+        \tl_set:Nn \l_theme_tcb_label_tl {#2}
+        \regex_match:nnT { \A#1: } {#2}
+        {
+            \regex_replace_once:nnN { \A#1: } {} \l_theme_tcb_label_tl
+        }
+    }
+}
+
+\cs_new_protected:Npn \theme_begin_tcb_theorem:nnn #1#2#3
+{
+    \begin{#1}{#2}{#3}
+}
+
+\cs_new_protected:Npn \theme_run_tcb_theorem:nnnnn #1#2#3#4#5
+{
+    \theme_normalize_tcb_label:nn {#2} {#4}
+    \exp_args:Nne \theme_begin_tcb_theorem:nnn {#1} {#3} { \tl_use:N \l_theme_tcb_label_tl }
+        #5
+    \end{#1}
+}
+
+\cs_new_protected:Npn \ThemeEmitPrefixedLabel #1#2
+{
+    \theme_emit_prefixed_label:nn {#1} {#2}
+}
+
+\cs_new_protected:Npn \ThemeRunTcbTheorem #1#2#3#4#5
+{
+    \theme_run_tcb_theorem:nnnnn {#1} {#2} {#3} {#4} {#5}
+}
+\ExplSyntaxOff
+
+\ifEnablePlainAmsthmTheorem
+    % -------------------- Native amsthm theorem family --------------------
+    \ifThemeTheoremNumberingNone
+        \newtheorem{definition}{Definition}
+    \else
+        \ifThemeTheoremCounterWithinChapter
+            \newtheorem{definition}{Definition}[chapter]
+        \else
+            \newtheorem{definition}{Definition}[section]
+        \fi
+    \fi
+    \newtheorem{theorem}[definition]{Theorem}
+    \newtheorem{lemma}[definition]{Lemma}
+    \newtheorem{corollary}[definition]{Corollary}
+    \newtheorem{proposition}[definition]{Proposition}
+    \newtheorem{claim}[definition]{Claim}
+    \newtheorem{fact}[definition]{Fact}
+    \newtheorem{assumption}[definition]{Assumption}
+    \let\ThemeFactEnvBegin\fact
+    \let\ThemeAssumptionEnvBegin\assumption
+\else
+    % -------------------- Styled tcolorbox theorem family --------------------
+    \ifThemeTheoremNumberingNone
+        \newtcbtheorem{mydefinition}{Definition}
+        {
+            theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
+        }{defn}
+    \else
+        \newtcbtheorem[number within=\ThemeTheoremCounterWithin]{mydefinition}{Definition}
+        {
+            theorem/variant={definition-body-bg}{definition-title-bg}{definition-accent}{definition-title-fg},
+        }{defn}
+    \fi
+
+    \newtcbtheorem[use counter from=mydefinition]{mytheorem}{Theorem}
+    {
+        theorem/variant={theorem-body-bg}{theorem-title-bg}{theorem-accent}{theorem-title-fg},
+    }{thm}
+
+    \newtcbtheorem[use counter from=mydefinition]{mylemma}{Lemma}
+    {
+        theorem/variant={lemma-body-bg}{lemma-title-bg}{lemma-accent}{lemma-title-fg},
+    }{lem}
+
+    \newtcbtheorem[use counter from=mydefinition]{mycorollary}{Corollary}
+    {
+        theorem/variant={corollary-body-bg}{corollary-title-bg}{corollary-accent}{corollary-title-fg},
+    }{cor}
+
+    \newtcbtheorem[use counter from=mydefinition]{myproposition}{Proposition}
+    {
+        theorem/variant={proposition-body-bg}{proposition-title-bg}{proposition-accent}{proposition-title-fg},
+    }{prop}
+
+    \newtcbtheorem[use counter from=mydefinition]{myclaim}{Claim}
+    {
+        theorem/variant={claim-body-bg}{claim-title-bg}{claim-accent}{claim-title-fg},
+    }{clm}
+
+    \newtcbtheorem[use counter from=mydefinition]{myfact}{Fact}
+    {
+        theorem/variant={fact-body-bg}{fact-title-bg}{fact-accent}{fact-title-fg},
+    }{fact}
+
+    \newtcbtheorem[use counter from=mydefinition]{myassumption}{Assumption}
+    {
+        theorem/variant={assumption-body-bg}{assumption-title-bg}{assumption-accent}{assumption-title-fg},
+    }{assump}
+\fi
+
+% -------------------- Study Callout Blocks --------------------
+\NewDocumentEnvironment{insightbox}{O{Insight} +b}{
+    \begin{tcolorbox}[callout/variant={insight-bg}{insight-accent}]
+        {\textcolor{insight-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{pitfallbox}{O{Pitfall} +b}{
+    \begin{tcolorbox}[callout/variant={pitfall-bg}{pitfall-accent}]
+        {\textcolor{pitfall-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{intuitionbox}{O{Intuition} +b}{
+    \begin{tcolorbox}[callout/variant={intuition-bg}{intuition-accent}]
+        {\textcolor{intuition-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{summarybox}{O{Summary} +b}{
+    \begin{tcolorbox}[callout/variant={summary-bg}{summary-accent}]
+        {\textcolor{summary-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentEnvironment{questionbox}{O{Question} +b}{
+    \begin{tcolorbox}[callout/variant={question-bg}{question-accent}]
+        {\textcolor{question-label-fg}{\bfseries #1.}}\quad #2
+}{
+    \end{tcolorbox}
+}
+
+\NewDocumentCommand{\insight}{O{Insight} +m}{
+    \begin{insightbox}[#1]
+        #2
+    \end{insightbox}
+}
+
+\NewDocumentCommand{\pitfall}{O{Pitfall} +m}{
+    \begin{pitfallbox}[#1]
+        #2
+    \end{pitfallbox}
+}
+
+\NewDocumentCommand{\intuition}{O{Intuition} +m}{
+    \begin{intuitionbox}[#1]
+        #2
+    \end{intuitionbox}
+}
+
+\NewDocumentCommand{\summary}{O{Summary} +m}{
+    \begin{summarybox}[#1]
+        #2
+    \end{summarybox}
+}
+
+\NewDocumentCommand{\question}{O{Question} +m}{
+    \begin{questionbox}[#1]
+        #2
+    \end{questionbox}
+}
+
+% -------------------- Theorem Commands --------------------
+\ifEnablePlainAmsthmTheorem
+    \NewDocumentCommand{\defn}{mm+m}{
+        \begin{definition}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{defn}{#2}
+            #3
+        \end{definition}
+    }
+
+    \NewDocumentCommand{\thm}{mm+m}{
+        \begin{theorem}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{thm}{#2}
+            #3
+        \end{theorem}
+    }
+
+    \NewDocumentCommand{\lem}{mm+m}{
+        \begin{lemma}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{lem}{#2}
+            #3
+        \end{lemma}
+    }
+
+    \NewDocumentCommand{\cor}{mm+m}{
+        \begin{corollary}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{cor}{#2}
+            #3
+        \end{corollary}
+    }
+
+    \NewDocumentCommand{\prop}{mm+m}{
+        \begin{proposition}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{prop}{#2}
+            #3
+        \end{proposition}
+    }
+
+    \NewDocumentCommand{\clm}{mm+m}{
+        \begin{claim}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{clm}{#2}
+            #3
+        \end{claim}
+    }
+
+    \newcommand{\ThemeFactCommand}[3]{
+        \begin{fact}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{fact}{#2}
+            #3
+        \end{fact}
+    }
+
+    \newcommand{\ThemeAssumptionCommand}[3]{
+        \begin{assumption}\ThemeOptionalTheoremTitle{#1}
+            \ThemeEmitPrefixedLabel{assump}{#2}
+            #3
+        \end{assumption}
+    }
+
+    \makeatletter
+    \renewcommand{\fact}{\@ifnextchar\bgroup{\ThemeFactCommand}{\ThemeFactEnvBegin}}
+    \renewcommand{\assumption}{\@ifnextchar\bgroup{\ThemeAssumptionCommand}{\ThemeAssumptionEnvBegin}}
+    \makeatother
+\else
+    \NewDocumentCommand{\defn}{mm+m}{
+        \ThemeRunTcbTheorem{mydefinition}{defn}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\thm}{mm+m}{
+        \ThemeRunTcbTheorem{mytheorem}{thm}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\lem}{mm+m}{
+        \ThemeRunTcbTheorem{mylemma}{lem}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\cor}{mm+m}{
+        \ThemeRunTcbTheorem{mycorollary}{cor}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\prop}{mm+m}{
+        \ThemeRunTcbTheorem{myproposition}{prop}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\clm}{mm+m}{
+        \ThemeRunTcbTheorem{myclaim*}{clm}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\fact}{mm+m}{
+        \ThemeRunTcbTheorem{myfact}{fact}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\assumption}{mm+m}{
+        \ThemeRunTcbTheorem{myassumption}{assump}{#1}{#2}{#3}
+    }
+\fi
+
+\NewDocumentCommand{\lemp}{m+m+m}{
+    \lem{#1}{}{#2}
+    \pf{#3}
+}
+
+\NewDocumentCommand{\corp}{m+m+m}{
+    \cor{#1}{}{#2}
+    \pf{#3}
+}
+
+% Proof
+\NewDocumentCommand{\pf}{+m}{
+    \begin{proof}[\noindent\textbf{Proof.}]
+        #1
+    \end{proof}
+}
+
+\ifEnablePlainAmsthmTheorem
+    % Example (plain mode)
+    \newenvironment{example}{%
+        \par
+        \vspace{5pt}
+        \noindent\textbf{Example. }\ignorespaces
+    }{%
+        \par
+        \vspace{5pt}
+    }
+
+    \NewDocumentCommand{\ex}{+m}{
+        \begin{example}
+            #1
+        \end{example}
+    }
+
+    % Remark (plain mode)
+    \NewDocumentCommand{\rmk}{+m}{
+        {\it #1}
+    }
+
+    \newenvironment{remark}{
+        \par
+        \vspace{5pt}
+        \begingroup
+        \noindent\textbf{Remark. }\itshape\ignorespaces
+    }{
+        \par
+        \endgroup
+        \vspace{5pt}
+    }
+
+    \NewDocumentCommand{\rmkb}{+m}{
+        \begin{remark}
+            #1
+        \end{remark}
+    }
+
+    \newenvironment{assump}{
+        \par
+        \vspace{5pt}
+        \begingroup
+        \noindent\textit{\textbf{Assumption. }}\ignorespaces
+    }{
+        \hbox{}\nobreak\hfill$\blacksquare$
+        \par
+        \endgroup
+        \vspace{5pt}
+    }
+
+    % Note (plain mode)
+    \NewDocumentEnvironment{note}{o g +b}{
+        \par
+        \vspace{5pt}
+        \noindent
+        \IfNoValueTF{#1}{
+            \IfNoValueTF{#2}{
+                \textbf{Note.}
+            }{
+                \textbf{Note (#2).}
+            }
+        }{
+            \textbf{Note (#1).}
+        }
+        \par
+        #3
+    }{
+        \par
+        \vspace{5pt}
+    }
+\else
+    % Example (styled mode)
+    \newenvironment{example}{%
+        \par
+        \vspace{5pt}
+        \begin{minipage}{\textwidth}
+                \noindent\textbf{\color{example-label-fg}Example.}
+                \tcolorbox[
+                callout/variant={example-bg}{example-accent},
+                callout/indented
+            ]
+    }{%
+            \endtcolorbox
+        \end{minipage}
+        \vspace{5pt}
+    }
+
+    \NewDocumentCommand{\ex}{+m}{
+        \begin{example}
+            #1
+        \end{example}
+    }
+
+    % Remark (styled mode)
+    \NewDocumentCommand{\rmk}{+m}{
+        {\it \color{remark-inline-fg}#1}
+    }
+
+    \newenvironment{remark}{
+        \par
+        \vspace{5pt}
+        \begin{minipage}{\textwidth}
+            {\par\noindent{\textbf{\color{remark-label-fg}Remark.}}}
+            \tcolorbox[
+                callout/variant={remark-bg}{remark-accent}
+            ]
+    }{
+            \endtcolorbox
+        \end{minipage}
+        \vspace{5pt}
+    }
+
+    \NewDocumentCommand{\rmkb}{+m}{
+        \begin{remark}
+            #1
+        \end{remark}
+    }
+
+    \newenvironment{assump}{
+        {\noindent{\it \textbf{\color{assump-label-fg}Assumption.}}}
+        \tcolorbox[
+            callout/variant={assump-bg}{assump-accent},
+            callout/indented
+        ]
+    }{
+        \textcolor{assump-accent}{\hbox{}\nobreak\hfill$\blacksquare$}
+        \endtcolorbox
+    }
+
+    % Note (styled mode)
+    \NewDocumentEnvironment{note}{o g +b}{
+        \IfNoValueTF{#1}{
+            \IfNoValueTF{#2}{
+                \begin{tcolorbox}[note/base]
+            }{
+                \begin{tcolorbox}[note/base,note/title={#2}]
+            }
+        }{
+            \begin{tcolorbox}[note/base,note/title={#1}]
+        }
+        #3
+    }{
+        \end{tcolorbox}
+    }
+\fi

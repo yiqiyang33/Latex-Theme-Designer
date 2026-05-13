@@ -1,5 +1,37 @@
 # LaTeX Editing Toolkit
 
+This repository is now a VS Code / Cursor extension plus a legacy Python toolkit.
+The extension is the primary runtime and does not depend on Python.
+
+## VS Code / Cursor Extension
+
+Build, test, and package a local VSIX:
+
+```bash
+npm install
+npm test
+npm run package
+```
+
+Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then run:
+
+- `LaTeX Editing Toolkit: Open Toolkit`
+- `LaTeX Editing Toolkit: Create Project`
+- `LaTeX Editing Toolkit: Initialize Workspace`
+
+The extension contributes commands for template creation, theme overrides, compile workflows,
+build cleanup, split/renumber/unsplit operations, and PDF preview inside a VS Code Webview.
+
+Workspace file contracts are unchanged:
+
+- `theme.ui.json`
+- `theme.overrides.tex`
+- `theme.colors.tex`
+- `.vscode/settings.json`
+
+The old Python implementation under `tools/` is retained as a legacy reference and fallback,
+but it is excluded from the packaged VSIX.
+
 Open-source LaTeX toolkit for theme tuning, project splitting, and compile workflow orchestration.
 
 ## Run

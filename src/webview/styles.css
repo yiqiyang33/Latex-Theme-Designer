@@ -1,0 +1,279 @@
+:root {
+  color-scheme: light dark;
+  --line: var(--vscode-panel-border, rgba(127, 127, 127, .3));
+  --panel: var(--vscode-editor-background);
+  --text: var(--vscode-editor-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-button-background);
+  --accent-text: var(--vscode-button-foreground);
+  --danger: var(--vscode-errorForeground);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+}
+
+button, select, input {
+  font: inherit;
+}
+
+button {
+  border: 1px solid var(--line);
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  padding: 5px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+select, input[type="text"], input:not([type]) {
+  min-width: 0;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--vscode-input-background);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.left {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+
+.right {
+  display: grid;
+  gap: 12px;
+}
+
+section {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+header + section,
+.right > section:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.path, .hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.row, .toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.row select {
+  flex: 1 1 180px;
+}
+
+.inline {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.toggle-row, .config-row, .color-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 28px;
+}
+
+.toggle-row {
+  grid-template-columns: auto 1fr;
+}
+
+.config-row {
+  grid-template-columns: 170px minmax(160px, 1fr);
+  margin-bottom: 6px;
+}
+
+.color-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.color-row {
+  grid-template-columns: minmax(130px, 1fr) 34px 90px;
+}
+
+.color-row input[type="color"] {
+  inline-size: 30px;
+  block-size: 24px;
+  padding: 0;
+}
+
+details {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+  margin-bottom: 6px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.swatch-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.swatch-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.swatch-button[data-active="true"] {
+  outline: 2px solid var(--vscode-focusBorder);
+}
+
+.meta {
+  display: block;
+  color: var(--muted);
+  white-space: normal;
+  margin: 4px 0;
+}
+
+.status {
+  min-height: 24px;
+  padding: 5px 0;
+  color: var(--muted);
+}
+
+.status[data-kind="ok"] {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.status[data-kind="error"] {
+  color: var(--danger);
+}
+
+.preview-area {
+  display: grid;
+  grid-template-columns: minmax(280px, .9fr) minmax(320px, 1.1fr);
+  gap: 12px;
+}
+
+.doc-preview, .sample-card, .result, .log, iframe {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+}
+
+.doc-preview {
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.sample-card {
+  overflow: hidden;
+}
+
+.sample-card > div {
+  padding: 7px 9px;
+  font-weight: 700;
+  border-bottom: 1px solid;
+}
+
+.sample-card > p {
+  padding: 9px;
+  line-height: 1.45;
+}
+
+.result, .log {
+  min-height: 80px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+iframe {
+  width: 100%;
+  min-height: 520px;
+}
+
+@media (max-width: 980px) {
+  .layout, .preview-area {
+    grid-template-columns: 1fr;
+  }
+  .left {
+    position: static;
+    max-height: none;
+  }
+}

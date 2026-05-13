@@ -7,6 +7,9 @@ __pycache__/
 .pytest_cache
 *.py[cod]
 *.pyd
+node_modules/
+coverage/
+*.vsix
 
 # LaTeX build artifacts
 *.aux

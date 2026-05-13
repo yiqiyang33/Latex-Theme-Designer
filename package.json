@@ -1,0 +1,144 @@
+{
+  "name": "latex-editing-toolkit",
+  "displayName": "LaTeX Editing Toolkit",
+  "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
+  "version": "0.1.2",
+  "publisher": "yiqiyang33",
+  "icon": "assets/latex-toolkit.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yiqiyang33/Latex-Theme-Designer.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "latex",
+    "tex",
+    "cursor",
+    "notes",
+    "template"
+  ],
+  "activationEvents": [
+    "onCommand:latexEditingToolkit.openToolkit",
+    "onCommand:latexEditingToolkit.createProject",
+    "onCommand:latexEditingToolkit.initializeWorkspace",
+    "onCommand:latexEditingToolkit.generateVscodeSettings",
+    "onCommand:latexEditingToolkit.saveOverrides",
+    "onCommand:latexEditingToolkit.resetOverrides",
+    "onCommand:latexEditingToolkit.compilePdf",
+    "onCommand:latexEditingToolkit.cleanArtifacts",
+    "onCommand:latexEditingToolkit.splitCurrentTarget",
+    "onCommand:latexEditingToolkit.renumberUnits",
+    "onCommand:latexEditingToolkit.unsplitUnit",
+    "onWebviewPanel:latexEditingToolkit.toolkit"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "latexEditingToolkit.openToolkit",
+        "title": "LaTeX Editing Toolkit: Open Toolkit"
+      },
+      {
+        "command": "latexEditingToolkit.createProject",
+        "title": "LaTeX Editing Toolkit: Create Project"
+      },
+      {
+        "command": "latexEditingToolkit.initializeWorkspace",
+        "title": "LaTeX Editing Toolkit: Initialize Workspace"
+      },
+      {
+        "command": "latexEditingToolkit.generateVscodeSettings",
+        "title": "LaTeX Editing Toolkit: Generate VS Code Settings"
+      },
+      {
+        "command": "latexEditingToolkit.saveOverrides",
+        "title": "LaTeX Editing Toolkit: Save Overrides"
+      },
+      {
+        "command": "latexEditingToolkit.resetOverrides",
+        "title": "LaTeX Editing Toolkit: Reset Overrides"
+      },
+      {
+        "command": "latexEditingToolkit.compilePdf",
+        "title": "LaTeX Editing Toolkit: Compile PDF"
+      },
+      {
+        "command": "latexEditingToolkit.cleanArtifacts",
+        "title": "LaTeX Editing Toolkit: Clean Build Artifacts"
+      },
+      {
+        "command": "latexEditingToolkit.splitCurrentTarget",
+        "title": "LaTeX Editing Toolkit: Split Current Target"
+      },
+      {
+        "command": "latexEditingToolkit.renumberUnits",
+        "title": "LaTeX Editing Toolkit: Renumber Units"
+      },
+      {
+        "command": "latexEditingToolkit.unsplitUnit",
+        "title": "LaTeX Editing Toolkit: Merge Unit Back To Root"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "latexEditingToolkit.openToolkit"
+        },
+        {
+          "command": "latexEditingToolkit.createProject"
+        },
+        {
+          "command": "latexEditingToolkit.initializeWorkspace"
+        },
+        {
+          "command": "latexEditingToolkit.generateVscodeSettings"
+        },
+        {
+          "command": "latexEditingToolkit.saveOverrides"
+        },
+        {
+          "command": "latexEditingToolkit.resetOverrides"
+        },
+        {
+          "command": "latexEditingToolkit.compilePdf"
+        },
+        {
+          "command": "latexEditingToolkit.cleanArtifacts"
+        },
+        {
+          "command": "latexEditingToolkit.splitCurrentTarget"
+        },
+        {
+          "command": "latexEditingToolkit.renumberUnits"
+        },
+        {
+          "command": "latexEditingToolkit.unsplitUnit"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "compile": "npm run clean && tsc --noEmit && node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test:unit": "vitest run",
+    "test:extension": "npm run compile",
+    "test": "npm run compile && npm run test:unit",
+    "package": "npm run test && vsce package --no-dependencies"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

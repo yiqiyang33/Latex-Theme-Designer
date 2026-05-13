@@ -1,0 +1,43 @@
+\RequirePackage{soul}
+\sethlcolor{yellow}
+
+\makeatletter
+\newcommand{\key}[1]{\textcolor{inline-key-fg}{\theme@originaltextbf{#1}}}
+\newcommand{\term}[1]{%
+    \begingroup
+    \setlength{\fboxsep}{1.4pt}%
+    \colorbox{inline-term-bg}{\textcolor{inline-term-fg}{\strut #1}}%
+    \endgroup
+}
+\newcommand{\warn}[1]{\textcolor{inline-warn-fg}{\theme@originaltextbf{#1}}}
+\newcommand{\todo}[1]{%
+    \begingroup
+    \setlength{\fboxsep}{1.4pt}%
+    \colorbox{inline-todo-bg}{\textcolor{inline-todo-fg}{\strut TODO: #1}}%
+    \endgroup
+}
+\newcommand{\code}[1]{%
+    \begingroup
+    \setlength{\fboxsep}{1.2pt}%
+    \colorbox{inline-code-bg}{\textcolor{inline-code-fg}{\ttfamily\strut\detokenize{#1}}}%
+    \endgroup
+}
+\newcommand{\sidenote}[1]{%
+    \marginnote{%
+        \footnotesize
+        \setlength{\parindent}{0pt}%
+        \color{sidenote-fg}%
+        \textcolor{sidenote-accent}{\rule{1.3pt}{1.15em}}%
+        \hspace{3pt}%
+        \parbox[t]{0.82\marginparwidth}{\raggedright #1}%
+    }%
+}
+\newcommand{\mnote}[1]{\sidenote{#1}}
+\NewDocumentCommand{\chapteroverview}{O{Chapter Overview} +m}{%
+    \begin{tcolorbox}[chapteroverview/base,title={#1}]
+        #2
+    \end{tcolorbox}
+}
+\makeatother
+
+\newcommand{\lcm}{\operatorname{lcm}}

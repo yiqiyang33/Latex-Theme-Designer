@@ -29,3 +29,9 @@ jobs:
 
       - name: Run tools test suite
         run: pytest -q tools/tests
+
+      - name: Install extension dependencies
+        run: npm ci
+
+      - name: Run extension test suite
+        run: npm test
