@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { ToolkitService } from "./toolkitService";
 
 let activePanel: ToolkitPanel | undefined;
@@ -24,10 +25,20 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
         return;
       }
+      const pickedTemplate = await vscode.window.showQuickPick(
+        STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+          label: template.label,
+          description: template.id,
+          detail: template.description,
+          template
+        })),
+        { placeHolder: "Select starter template" }
+      );
+      if (!pickedTemplate) return;
       const service = new ToolkitService(target[0].fsPath, context.extensionPath);
       await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, async () => {
         await service.handle("initialize-workspace", {});
-        await service.handle("template-bootstrap", { template_id: "book-minimal", output_target: "main.tex", overwrite: false });
+        await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
       });
       vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
       await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });

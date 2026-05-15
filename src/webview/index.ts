@@ -10,6 +10,7 @@ let latestSplit: any = null;
 let latestRenumber: any = null;
 let latestUnsplit: any = null;
 let latestOperation = "";
+let starterTemplateSelection = "";
 
 function request(command: string, payload: Record<string, unknown> = {}): Promise<any> {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -119,10 +120,17 @@ function renderStarter(): void {
   const select = byId<HTMLSelectElement>("starterTemplateSelect");
   const output = byId<HTMLInputElement>("starterOutputTarget");
   const templates = model.schema.starter_templates || [];
-  const selected = renderSelect(select, templates.map((item: any) => ({ value: item.id, label: item.label })), model.schema.starter_default_template || "book-minimal");
+  const preferred = starterTemplateSelection || select.value || model.schema.starter_default_template || "book-minimal";
+  starterTemplateSelection = renderSelect(select, templates.map((item: any) => ({ value: item.id, label: item.label })), preferred);
+  renderStarterDescription();
+  if (!output.value) output.value = model.schema.starter_default_output_target || "main.tex";
+}
+
+function renderStarterDescription(): void {
+  const templates = model.schema.starter_templates || [];
+  const selected = byId<HTMLSelectElement>("starterTemplateSelect").value;
   const info = templates.find((item: any) => item.id === selected);
   byId("starterTemplateDesc").textContent = info?.description || "";
-  if (!output.value) output.value = model.schema.starter_default_output_target || "main.tex";
 }
 
 function renderPresets(): void {
@@ -344,6 +352,7 @@ async function bootstrapStarter(): Promise<void> {
     output_target: output,
     overwrite
   });
+  starterTemplateSelection = byId<HTMLSelectElement>("starterTemplateSelect").value;
   model = result;
   setStatus(`Generated ${result.generated_target}.`, "ok");
   renderAll();
@@ -429,6 +438,10 @@ async function unsplitCurrent(): Promise<void> {
 }
 
 function wire(): void {
+  byId("starterTemplateSelect").addEventListener("change", () => {
+    starterTemplateSelection = byId<HTMLSelectElement>("starterTemplateSelect").value;
+    renderStarterDescription();
+  });
   byId("generateTemplateBtn").addEventListener("click", () => run(bootstrapStarter));
   byId("generateVscodeSettingsBtn").addEventListener("click", () => run(async () => {
     const result = await request("vscode-settings-generate", {});

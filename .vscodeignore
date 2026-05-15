@@ -38,6 +38,7 @@ examples/**/*.fls
 examples/**/*.log
 examples/**/*.out
 examples/**/*.run.xml
+examples/**/*.synctex.gz
 examples/**/*.toc
 examples/**/*.xdv
 templates/**/*.pdf
@@ -46,6 +47,7 @@ templates/**/*.fdb_latexmk
 templates/**/*.fls
 templates/**/*.log
 templates/**/*.out
+templates/**/*.synctex.gz
 templates/**/*.toc
 templates/**/*.xdv
 *.aux
@@ -58,6 +60,7 @@ templates/**/*.xdv
 *.out
 *.pdf
 *.run.xml
+*.synctex.gz
 *.toc
 *.xdv
 coverage/**

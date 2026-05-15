@@ -317,10 +317,9 @@ export class StateService {
   async starterTemplateMeta(): Promise<PresetMeta[]> {
     const templateDir = path.join(this.rootDir, "templates");
     const assetTemplateDir = path.resolve(__dirname, "..", "assets", "template", "templates");
-    const sourceDir = await exists(templateDir) ? templateDir : assetTemplateDir;
     const out: PresetMeta[] = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path.join(sourceDir, entry.filename))) {
+      if (await exists(path.join(templateDir, entry.filename)) || await exists(path.join(assetTemplateDir, entry.filename))) {
         out.push({ id: entry.id, label: entry.label, description: entry.description });
       }
     }
@@ -586,6 +585,20 @@ export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDi
   if (!(await exists(templatesTarget))) {
     await copyDirectory(path.join(assetRoot, "templates"), templatesTarget);
     copied.push("templates/");
+  } else {
+    const templatesSource = path.join(assetRoot, "templates");
+    for (const entry of await fs.readdir(templatesSource, { withFileTypes: true })) {
+      const source = path.join(templatesSource, entry.name);
+      const target = path.join(templatesTarget, entry.name);
+      if (await exists(target)) continue;
+      if (entry.isDirectory()) {
+        await copyDirectory(source, target);
+        copied.push(`templates/${entry.name}/`);
+      } else if (entry.isFile()) {
+        await fs.copyFile(source, target);
+        copied.push(`templates/${entry.name}`);
+      }
+    }
   }
   return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path.join(rootDir, item)));
 }

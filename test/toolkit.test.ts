@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { COLOR_ORDER } from "../src/schema";
+import { COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
@@ -22,7 +22,7 @@ async function copyBaseAssets(root: string): Promise<void> {
     await fs.copyFile(path.join(repoRoot, "assets", "template", file), path.join(root, file));
   }
   await fs.mkdir(path.join(root, "templates"), { recursive: true });
-  for (const file of ["book-minimal.tex", "article-minimal.tex"]) {
+  for (const file of ["book-minimal.tex", "article-minimal.tex", "homework-assignment.tex"]) {
     await fs.copyFile(path.join(repoRoot, "assets", "template", "templates", file), path.join(root, "templates", file));
   }
   await fs.mkdir(path.join(root, "Fig"), { recursive: true });
@@ -57,6 +57,38 @@ describe("TypeScript Toolkit migration", () => {
     expect(copied).toContain("theme.sty");
     expect(result.generated_target).toBe("notes.tex");
     expect(response.state.compile_targets).toContain("notes.tex");
+  });
+
+  it("exposes and creates the homework assignment starter", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new TemplateService(root, repoRoot, state);
+    const templates = STARTER_TEMPLATE_DEFINITIONS.map((entry) => entry.id);
+    expect(templates).toContain("homework-assignment");
+    const result = await service.createStarter("homework-assignment", "homework", false);
+    const text = await fs.readFile(path.join(root, result.generated_target), "utf8");
+    const response = await state.buildResponseState();
+    const starterIds = response.schema.starter_templates.map((entry) => entry.id);
+    expect(result.generated_target).toBe("homework.tex");
+    expect(starterIds).toContain("homework-assignment");
+    expect(text).toContain("\\documentclass[oneside]{article}");
+    expect(text).toContain("\\NewDocumentEnvironment{homeworkProblem}");
+    expect(text).toContain("\\NewDocumentEnvironment{homeworkSection}");
+    expect(text).toContain("\\NewDocumentEnvironment{solution}");
+  });
+
+  it("adds missing built-in starter templates without overwriting existing workspace templates", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    await fs.mkdir(path.join(root, "templates"), { recursive: true });
+    await fs.writeFile(path.join(root, "templates", "article-minimal.tex"), "% custom article\n", "utf8");
+    const beforeInit = await state.starterTemplateMeta();
+    const copied = await ensureWorkspaceTemplateAssets(root, repoRoot);
+    const article = await fs.readFile(path.join(root, "templates", "article-minimal.tex"), "utf8");
+    expect(beforeInit.map((entry) => entry.id)).toContain("homework-assignment");
+    expect(article).toBe("% custom article\n");
+    expect(copied).toContain("templates/homework-assignment.tex");
+    await expect(fs.access(path.join(root, "templates", "homework-assignment.tex"))).resolves.toBeUndefined();
   });
 
   it("splits a book root into subfiles and preserves appendix in root", async () => {

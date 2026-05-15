@@ -1757,7 +1757,7 @@ class ThemeDesignerTests(unittest.TestCase):
         schema = payload.get("schema", {})
         starter_templates = schema.get("starter_templates", [])
         starter_ids = {entry.get("id") for entry in starter_templates}
-        self.assertTrue({"book-minimal", "article-minimal"}.issubset(starter_ids))
+        self.assertTrue({"book-minimal", "article-minimal", "homework-assignment"}.issubset(starter_ids))
         self.assertEqual(schema.get("starter_default_template"), "book-minimal")
 
     def test_generate_starter_template_supports_custom_output_name(self) -> None:
@@ -1814,6 +1814,31 @@ class ThemeDesignerTests(unittest.TestCase):
                 target_abs.unlink()
 
         self.assertIn("\\documentclass[oneside]{article}", text)
+
+    def test_generate_homework_assignment_template(self) -> None:
+        root = td.ROOT_DIR
+        target_rel = "tools/tests/_tmp_homework_assignment.tex"
+        target_abs = root / target_rel
+        if target_abs.exists():
+            target_abs.unlink()
+
+        try:
+            generated_target, overwritten = td._generate_starter_template_file(
+                "homework-assignment",
+                target_rel,
+                overwrite=False,
+            )
+            self.assertEqual(generated_target, target_rel)
+            self.assertFalse(overwritten)
+            text = target_abs.read_text(encoding="utf-8")
+        finally:
+            if target_abs.exists():
+                target_abs.unlink()
+
+        self.assertIn("\\documentclass[oneside]{article}", text)
+        self.assertIn("\\NewDocumentEnvironment{homeworkProblem}", text)
+        self.assertIn("\\NewDocumentEnvironment{homeworkSection}", text)
+        self.assertIn("\\NewDocumentEnvironment{solution}", text)
 
     def test_bootstrap_starter_template_refreshes_and_selects_generated_target(self) -> None:
         root = td.ROOT_DIR

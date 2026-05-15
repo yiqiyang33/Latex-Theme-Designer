@@ -216,7 +216,8 @@ var init_schema = __esm({
     BLOCK_COLOR_TOKENS = COLOR_ORDER.filter((token) => !token.startsWith("theme-") && !INLINE_COLOR_TOKENS.includes(token));
     STARTER_TEMPLATE_DEFINITIONS = [
       { id: "book-minimal", label: "Book Minimal", description: "Minimal book starter wired to theme.sty and theorem blocks.", filename: "book-minimal.tex" },
-      { id: "article-minimal", label: "Article Minimal", description: "Minimal article starter wired to theme.sty and theorem blocks.", filename: "article-minimal.tex" }
+      { id: "article-minimal", label: "Article Minimal", description: "Minimal article starter wired to theme.sty and theorem blocks.", filename: "article-minimal.tex" },
+      { id: "homework-assignment", label: "Homework Assignment", description: "Formal homework starter with problem, part, and solution environments.", filename: "homework-assignment.tex" }
     ];
     CHAPTER_CLASS_NAMES = /* @__PURE__ */ new Set(["book", "report", "memoir", "scrbook", "scrreprt", "ctexbook", "ctexrep", "bxjsbook"]);
     BLOCK_PRESET_DEFINITIONS = [
@@ -725,6 +726,7 @@ module.exports = __toCommonJS(extension_exports);
 var fs9 = __toESM(require("node:fs"));
 var path9 = __toESM(require("node:path"));
 var vscode = __toESM(require("vscode"));
+init_schema();
 
 // src/toolkitService.ts
 var import_node_fs8 = require("node:fs");
@@ -2007,10 +2009,9 @@ var StateService = class {
   async starterTemplateMeta() {
     const templateDir = path6.join(this.rootDir, "templates");
     const assetTemplateDir = path6.resolve(__dirname, "..", "assets", "template", "templates");
-    const sourceDir = await exists(templateDir) ? templateDir : assetTemplateDir;
     const out = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path6.join(sourceDir, entry.filename))) {
+      if (await exists(path6.join(templateDir, entry.filename)) || await exists(path6.join(assetTemplateDir, entry.filename))) {
         out.push({ id: entry.id, label: entry.label, description: entry.description });
       }
     }
@@ -2250,6 +2251,20 @@ async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
   if (!await exists(templatesTarget)) {
     await copyDirectory(path6.join(assetRoot, "templates"), templatesTarget);
     copied.push("templates/");
+  } else {
+    const templatesSource = path6.join(assetRoot, "templates");
+    for (const entry of await import_node_fs6.promises.readdir(templatesSource, { withFileTypes: true })) {
+      const source = path6.join(templatesSource, entry.name);
+      const target = path6.join(templatesTarget, entry.name);
+      if (await exists(target)) continue;
+      if (entry.isDirectory()) {
+        await copyDirectory(source, target);
+        copied.push(`templates/${entry.name}/`);
+      } else if (entry.isFile()) {
+        await import_node_fs6.promises.copyFile(source, target);
+        copied.push(`templates/${entry.name}`);
+      }
+    }
   }
   return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path6.join(rootDir, item)));
 }
@@ -2460,10 +2475,20 @@ function activate(context) {
         vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
         return;
       }
+      const pickedTemplate = await vscode.window.showQuickPick(
+        STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+          label: template.label,
+          description: template.id,
+          detail: template.description,
+          template
+        })),
+        { placeHolder: "Select starter template" }
+      );
+      if (!pickedTemplate) return;
       const service = new ToolkitService(target[0].fsPath, context.extensionPath);
       await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, async () => {
         await service.handle("initialize-workspace", {});
-        await service.handle("template-bootstrap", { template_id: "book-minimal", output_target: "main.tex", overwrite: false });
+        await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
       });
       vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
       await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });

@@ -91,6 +91,12 @@ STARTER_TEMPLATE_DEFINITIONS: List[Dict[str, str]] = [
         "description": "Minimal article starter wired to theme.sty and theorem blocks.",
         "filename": "article-minimal.tex",
     },
+    {
+        "id": "homework-assignment",
+        "label": "Homework Assignment",
+        "description": "Formal homework starter with problem, part, and solution environments.",
+        "filename": "homework-assignment.tex",
+    },
 ]
 
 
