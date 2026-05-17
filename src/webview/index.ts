@@ -313,7 +313,8 @@ function renderPreview(): void {
     sampleCard("Theorem", color("theorem-title-bg"), color("theorem-title-fg"), color("theorem-body-bg"), color("theorem-accent")),
     sampleCard("Note", color("note-title-bg"), color("note-title-fg"), color("note-bg"), color("note-accent"))
   );
-  byId("docPreview").innerHTML = `<h1 style="color:${color("theme-chapter")}">Chapter Heading</h1><h2 style="color:${color("theme-section")}">Section Heading</h2><p style="font-size:${bodyFontSize()}pt">A short note preview with <b style="color:${color("theme-bold")}">bold emphasis</b>, <code style="background:${color("inline-code-bg")};color:${color("inline-code-fg")}">inline code</code>, and current theme colors.</p>`;
+  const chip = "display:inline-block;border-radius:4px;border:1px solid;padding:0 .28em;line-height:1.45";
+  byId("docPreview").innerHTML = `<h1 style="color:${color("theme-chapter")}">Chapter Heading</h1><h2 style="color:${color("theme-section")}">Section Heading</h2><p style="font-size:${bodyFontSize()}pt">A short note preview with <b style="color:${color("theme-bold")}">bold emphasis</b>, <b style="color:${color("inline-key-fg")}">key idea</b>, <span style="${chip};background:${color("inline-term-bg")};border-color:${color("inline-term-fg")}55;color:${color("inline-term-fg")}">term</span>, <b style="color:${color("inline-warn-fg")}">warning</b>, <span style="${chip};background:${color("inline-todo-bg")};border-color:${color("inline-todo-fg")}55;color:${color("inline-todo-fg")};font-weight:700">TODO task</span>, and <code style="${chip};background:${color("inline-code-bg")};border-color:${color("inline-code-fg")}44;color:${color("inline-code-fg")}">inline code</code>.</p>`;
 }
 
 function sampleCard(title: string, titleBg: string, titleFg: string, bodyBg: string, accent: string): HTMLElement {
@@ -376,6 +377,14 @@ async function applyRecipe(): Promise<void> {
     compile_use_internal_fallback: byId<HTMLInputElement>("useInternalFallback").checked
   });
   setStatus("Compile config updated.", "ok");
+  renderAll();
+}
+
+async function upgradeThemeAssets(): Promise<void> {
+  if (!confirm("Back up and replace theme.sty, theorems.tex, and commands.tex with the bundled extension versions?\n\nThis will also back up and delete theme.colors.tex and theme.ui.json so the new default colors can load.")) return;
+  const result = await request("upgrade-theme-assets", { reset_color_overrides: true });
+  model = await request("state", {});
+  setStatus(`Upgraded ${result.upgraded_files?.length || 0} theme asset(s). Backup: ${result.backup_dir}.`, "ok");
   renderAll();
 }
 
@@ -466,6 +475,7 @@ function wire(): void {
     renderPreview();
   });
   byId("saveBtn").addEventListener("click", () => run(saveOverrides));
+  byId("upgradeThemeAssetsBtn").addEventListener("click", () => run(upgradeThemeAssets));
   byId("applyTargetBtn").addEventListener("click", () => run(applyTarget));
   byId("applyRecipeBtn").addEventListener("click", () => run(applyRecipe));
   byId("compileBtn").addEventListener("click", () => run(compilePdf));
@@ -548,7 +558,7 @@ function shell(): void {
           <p id="compileHelp" class="hint"></p>
           <code id="targetInfo" class="meta"></code>
           <code id="outputInfo" class="meta"></code>
-          <div class="toolbar"><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button><button id="saveBtn" class="primary">Save Overrides</button><button id="compileBtn">Compile PDF</button><button id="refreshPdfBtn">Refresh PDF</button><button id="openPdfBtn">Open PDF</button><button id="cleanBtn">Clean</button><button id="resetBtn" class="danger">Reset</button></div>
+          <div class="toolbar"><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button><button id="saveBtn" class="primary">Save Overrides</button><button id="upgradeThemeAssetsBtn">Upgrade Theme Assets</button><button id="compileBtn">Compile PDF</button><button id="refreshPdfBtn">Refresh PDF</button><button id="openPdfBtn">Open PDF</button><button id="cleanBtn">Clean</button><button id="resetBtn" class="danger">Reset</button></div>
           <div id="status" class="status"></div>
         </section>
         <section class="preview-area">

@@ -209,6 +209,34 @@ export const BLOCK_PRESET_DEFINITIONS: PresetDefinition[] = [
       "remark-bg": "#FFF2F1", "remark-label-fg": "#7A3030", "remark-inline-fg": "#A04242", "remark-accent": "#C55A50",
       "assump-bg": "#FFF8E9", "assump-label-fg": "#6C5A20", "assump-accent": "#A58625"
     }
+  },
+  {
+    id: "uchicago",
+    label: "UChicago",
+    description: "Maroon-forward palette with greystone neutrals for University of Chicago styled notes.",
+    colors: {
+      "inline-key-fg": "#800000", "inline-term-bg": "#F6F4F2", "inline-term-fg": "#800000", "inline-warn-fg": "#800000",
+      "inline-todo-bg": "#F8F1F0", "inline-todo-fg": "#800000", "inline-code-bg": "#F2F2F2", "inline-code-fg": "#4A4A4A",
+      "sidenote-fg": "#737373", "sidenote-accent": "#800000",
+      "chapter-overview-bg": "#F7F6F5", "chapter-overview-title-bg": "#D9D9D9", "chapter-overview-title-fg": "#800000", "chapter-overview-accent": "#800000",
+      "definition-body-bg": "#F7F6F5", "definition-title-bg": "#E5DEDA", "definition-title-fg": "#800000", "definition-accent": "#800000",
+      "theorem-body-bg": "#F6F4F2", "theorem-title-bg": "#E6DAD7", "theorem-title-fg": "#800000", "theorem-accent": "#800000",
+      "lemma-body-bg": "#F7F7F7", "lemma-title-bg": "#D9D9D9", "lemma-title-fg": "#4A4A4A", "lemma-accent": "#737373",
+      "corollary-body-bg": "#FAF7F5", "corollary-title-bg": "#E8DDD8", "corollary-title-fg": "#6A1B1B", "corollary-accent": "#800000",
+      "proposition-body-bg": "#F7F7F7", "proposition-title-bg": "#E0E0E0", "proposition-title-fg": "#4D4D4D", "proposition-accent": "#737373",
+      "claim-body-bg": "#FBF5F5", "claim-title-bg": "#E8D6D6", "claim-title-fg": "#800000", "claim-accent": "#800000",
+      "fact-body-bg": "#F6F6F6", "fact-title-bg": "#D9D9D9", "fact-title-fg": "#4B4B4B", "fact-accent": "#A6A6A6",
+      "assumption-body-bg": "#FAF8F4", "assumption-title-bg": "#E3DDD4", "assumption-title-fg": "#5A4738", "assumption-accent": "#737373",
+      "note-bg": "#F6F6F6", "note-title-bg": "#D9D9D9", "note-title-fg": "#4A4A4A", "note-accent": "#800000", "note-frame": "#A6A6A6",
+      "example-bg": "#F7F6F5", "example-label-fg": "#800000", "example-accent": "#800000",
+      "remark-bg": "#F7F7F7", "remark-label-fg": "#4A4A4A", "remark-inline-fg": "#800000", "remark-accent": "#737373",
+      "assump-bg": "#FAF8F4", "assump-label-fg": "#5A4738", "assump-accent": "#737373",
+      "insight-bg": "#F7F6F5", "insight-label-fg": "#800000", "insight-accent": "#800000",
+      "pitfall-bg": "#FBF5F5", "pitfall-label-fg": "#800000", "pitfall-accent": "#800000",
+      "intuition-bg": "#F7F7F7", "intuition-label-fg": "#4A4A4A", "intuition-accent": "#737373",
+      "summary-bg": "#F6F6F6", "summary-label-fg": "#4A4A4A", "summary-accent": "#A6A6A6",
+      "question-bg": "#FAF8F4", "question-label-fg": "#5A4738", "question-accent": "#737373"
+    }
   }
 ];
 
@@ -216,5 +244,6 @@ export const HEADING_TOC_PRESET_DEFINITIONS: PresetDefinition[] = [
   { id: "default", label: "Default", description: "Current built-in heading/TOC palette from theme.sty." },
   { id: "inkstone", label: "Inkstone", description: "Deep indigo heading palette with restrained TOC contrast.", colors: { "theme-chapter": "#1F2A44", "theme-section": "#273B66", "theme-subsection": "#35589A", "theme-toc-title": "#1E2D53", "theme-toc-chapter": "#243A6A", "theme-toc-section": "#4465A8", "theme-header-rule": "#1B2948" } },
   { id: "aurora", label: "Aurora", description: "Cool teal-forward scheme for modern notes and reports.", colors: { "theme-chapter": "#0E5A61", "theme-section": "#12727E", "theme-subsection": "#2F94A3", "theme-toc-title": "#0F6169", "theme-toc-chapter": "#107681", "theme-toc-section": "#2C8D99", "theme-header-rule": "#0D4A50" } },
-  { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } }
+  { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } },
+  { id: "uchicago", label: "UChicago", description: "University of Chicago maroon with greystone heading contrast.", colors: { "theme-chapter": "#800000", "theme-section": "#800000", "theme-subsection": "#737373", "theme-toc-title": "#800000", "theme-toc-chapter": "#800000", "theme-toc-section": "#737373", "theme-header-rule": "#A6A6A6" } }
 ];

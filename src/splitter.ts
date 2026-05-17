@@ -3,16 +3,13 @@ import * as path from "node:path";
 import type { RenumberResult, SplitResult, SplitUnit, UnsplitResult } from "./types";
 import { StateService } from "./state";
 import {
-  defaultCompileTarget,
   escapeRegExp,
   exists,
   extractDocumentclassDeclaration,
   isChapterCapableClass,
   isSubpath,
   normalizeCompileTarget,
-  safeWorkspaceRel,
   slugify,
-  stripTexComments,
   toPosixPath,
   workspaceRel
 } from "./utils";

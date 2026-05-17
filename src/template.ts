@@ -2,8 +2,12 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
+import type { UpgradeThemeAssetsResult } from "./types";
 import { exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
+
+const UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
+const COLOR_OVERRIDE_FILES = ["theme.colors.tex", "theme.ui.json"];
 
 export class TemplateService {
   constructor(
@@ -16,6 +20,50 @@ export class TemplateService {
     const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
+  }
+
+  async upgradeThemeAssets(resetColorOverrides: boolean): Promise<UpgradeThemeAssetsResult> {
+    const assetRoot = path.join(this.extensionDir, "assets", "template");
+    const backupDir = path.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
+    const upgradedFiles: string[] = [];
+    const resetFiles: string[] = [];
+    const skippedMissingFiles: string[] = [];
+
+    for (const file of UPGRADE_THEME_ASSET_FILES) {
+      const source = path.join(assetRoot, file);
+      const target = path.join(this.rootDir, file);
+      this.assertInsideWorkspace(target);
+      if (!(await exists(source))) {
+        skippedMissingFiles.push(file);
+        continue;
+      }
+      if (await exists(target)) await this.backupFile(target, backupDir);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.copyFile(source, target);
+      upgradedFiles.push(file);
+    }
+
+    if (resetColorOverrides) {
+      for (const file of COLOR_OVERRIDE_FILES) {
+        const target = path.join(this.rootDir, file);
+        this.assertInsideWorkspace(target);
+        if (!(await exists(target))) {
+          skippedMissingFiles.push(file);
+          continue;
+        }
+        await this.backupFile(target, backupDir);
+        await fs.unlink(target);
+        resetFiles.push(file);
+      }
+    }
+
+    return {
+      success: true,
+      backup_dir: workspaceRel(this.rootDir, backupDir),
+      upgraded_files: upgradedFiles,
+      reset_files: resetFiles,
+      skipped_missing_files: skippedMissingFiles
+    };
   }
 
   async createStarter(templateId: unknown, outputTarget: unknown, overwrite: boolean): Promise<{ response: unknown; generated_target: string; overwrote_existing: boolean }> {
@@ -59,5 +107,22 @@ export class TemplateService {
     const resolved = path.resolve(this.rootDir, target);
     if (!isSubpath(resolved, this.rootDir)) throw new Error("Output target is outside workspace.");
     return workspaceRel(this.rootDir, resolved);
+  }
+
+  private async backupFile(source: string, backupDir: string): Promise<void> {
+    this.assertInsideWorkspace(source);
+    const rel = workspaceRel(this.rootDir, source);
+    const backupPath = path.join(backupDir, rel);
+    this.assertInsideWorkspace(backupPath);
+    await fs.mkdir(path.dirname(backupPath), { recursive: true });
+    await fs.copyFile(source, backupPath);
+  }
+
+  private assertInsideWorkspace(absPath: string): void {
+    if (!isSubpath(path.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
+  }
+
+  private timestamp(): string {
+    return new Date().toISOString().replace(/[-:]/g, "").replace(".", "-");
   }
 }

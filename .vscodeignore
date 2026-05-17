@@ -1,13 +1,11 @@
 .git/**
 .github/**
 .gitignore
-.template-sync-*
 .pytest_cache/**
 .vscode/**
 node_modules/**
 src/**
 test/**
-tools/**
 Fig/**
 templates/**
 commands.tex
@@ -65,7 +63,6 @@ templates/**/*.xdv
 *.xdv
 coverage/**
 tsconfig.json
-pytest.ini
 theme.ui.json
 theme.colors.tex
 theme.overrides.tex

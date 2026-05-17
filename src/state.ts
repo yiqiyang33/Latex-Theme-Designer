@@ -289,8 +289,6 @@ export class StateService {
   }
 
   applyBlockPreset(state: ToolkitState, presetId: string): void {
-    const defaults = Object.fromEntries(state.block_presets.map((item) => [item.id, item]));
-    void defaults;
     const catalog = this.buildPresetCatalog(BLOCK_PRESET_DEFINITIONS, BLOCK_COLOR_TOKENS, state.colors);
     const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
     const preset = catalog.find((item) => item.id === selected);
@@ -298,6 +296,7 @@ export class StateService {
     for (const [token, value] of Object.entries(preset.colors ?? {})) {
       if (COLOR_SET.has(token)) state.colors[token] = value;
     }
+    if (selected !== "default") this.applySupportColorsForBlockPreset(state, preset.colors ?? {});
     state.block_preset = selected;
     state.block_presets = this.presetMeta(catalog);
   }
@@ -543,6 +542,45 @@ export class StateService {
     throw new Error(`Unknown compile recipe: ${value}`);
   }
 
+  private applySupportColorsForBlockPreset(state: ToolkitState, presetColors: Record<string, string>): void {
+    const derived: Record<string, string> = {
+      "inline-key-fg": "definition-accent",
+      "inline-term-bg": "definition-body-bg",
+      "inline-term-fg": "definition-title-fg",
+      "inline-warn-fg": "claim-accent",
+      "inline-todo-bg": "assumption-body-bg",
+      "inline-todo-fg": "assumption-title-fg",
+      "inline-code-bg": "fact-body-bg",
+      "inline-code-fg": "fact-title-fg",
+      "sidenote-fg": "note-title-fg",
+      "sidenote-accent": "note-accent",
+      "chapter-overview-bg": "note-bg",
+      "chapter-overview-title-bg": "note-title-bg",
+      "chapter-overview-title-fg": "note-title-fg",
+      "chapter-overview-accent": "note-accent",
+      "insight-bg": "example-bg",
+      "insight-label-fg": "example-label-fg",
+      "insight-accent": "example-accent",
+      "pitfall-bg": "claim-body-bg",
+      "pitfall-label-fg": "claim-title-fg",
+      "pitfall-accent": "claim-accent",
+      "intuition-bg": "lemma-body-bg",
+      "intuition-label-fg": "lemma-title-fg",
+      "intuition-accent": "lemma-accent",
+      "summary-bg": "fact-body-bg",
+      "summary-label-fg": "fact-title-fg",
+      "summary-accent": "fact-accent",
+      "question-bg": "assumption-body-bg",
+      "question-label-fg": "assumption-title-fg",
+      "question-accent": "assumption-accent"
+    };
+    for (const [target, source] of Object.entries(derived)) {
+      if (target in presetColors) continue;
+      const color = state.colors[source];
+      if (color) state.colors[target] = color;
+    }
+  }
+
   private async coerceClassModeOnTargetSwitch(state: ToolkitState): Promise<void> {
     const mode = this.normalizeClassConfigValue("theme_class_mode", state.class_config.theme_class_mode);
     if (mode !== "book" && mode !== "article") return;
@@ -565,6 +603,26 @@ export async function copyDirectory(src: string, dest: string): Promise<void> {
   }
 }
 
+async function copyMissingDirectory(src: string, dest: string, relLabel: string, copied: string[]): Promise<void> {
+  if (!(await exists(dest))) {
+    await copyDirectory(src, dest);
+    copied.push(`${relLabel}/`);
+    return;
+  }
+  for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+    const source = path.join(src, entry.name);
+    const target = path.join(dest, entry.name);
+    if (await exists(target)) continue;
+    if (entry.isDirectory()) {
+      await copyDirectory(source, target);
+      copied.push(`${relLabel}/${entry.name}/`);
+    } else if (entry.isFile()) {
+      await fs.copyFile(source, target);
+      copied.push(`${relLabel}/${entry.name}`);
+    }
+  }
+}
+
 export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDir: string): Promise<string[]> {
   const assetRoot = path.join(extensionDir, "assets", "template");
   const copied: string[] = [];
@@ -576,30 +634,8 @@ export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDi
       copied.push(file);
     }
   }
-  const figTarget = path.join(rootDir, "Fig");
-  if (!(await exists(figTarget))) {
-    await copyDirectory(path.join(assetRoot, "Fig"), figTarget);
-    copied.push("Fig/");
-  }
-  const templatesTarget = path.join(rootDir, "templates");
-  if (!(await exists(templatesTarget))) {
-    await copyDirectory(path.join(assetRoot, "templates"), templatesTarget);
-    copied.push("templates/");
-  } else {
-    const templatesSource = path.join(assetRoot, "templates");
-    for (const entry of await fs.readdir(templatesSource, { withFileTypes: true })) {
-      const source = path.join(templatesSource, entry.name);
-      const target = path.join(templatesTarget, entry.name);
-      if (await exists(target)) continue;
-      if (entry.isDirectory()) {
-        await copyDirectory(source, target);
-        copied.push(`templates/${entry.name}/`);
-      } else if (entry.isFile()) {
-        await fs.copyFile(source, target);
-        copied.push(`templates/${entry.name}`);
-      }
-    }
-  }
+  await copyMissingDirectory(path.join(assetRoot, "Fig"), path.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(path.join(assetRoot, "templates"), path.join(rootDir, "templates"), "templates", copied);
   return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path.join(rootDir, item)));
 }
 

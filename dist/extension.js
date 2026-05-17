@@ -383,13 +383,97 @@ var init_schema = __esm({
           "assump-label-fg": "#6C5A20",
           "assump-accent": "#A58625"
         }
+      },
+      {
+        id: "uchicago",
+        label: "UChicago",
+        description: "Maroon-forward palette with greystone neutrals for University of Chicago styled notes.",
+        colors: {
+          "inline-key-fg": "#800000",
+          "inline-term-bg": "#F6F4F2",
+          "inline-term-fg": "#800000",
+          "inline-warn-fg": "#800000",
+          "inline-todo-bg": "#F8F1F0",
+          "inline-todo-fg": "#800000",
+          "inline-code-bg": "#F2F2F2",
+          "inline-code-fg": "#4A4A4A",
+          "sidenote-fg": "#737373",
+          "sidenote-accent": "#800000",
+          "chapter-overview-bg": "#F7F6F5",
+          "chapter-overview-title-bg": "#D9D9D9",
+          "chapter-overview-title-fg": "#800000",
+          "chapter-overview-accent": "#800000",
+          "definition-body-bg": "#F7F6F5",
+          "definition-title-bg": "#E5DEDA",
+          "definition-title-fg": "#800000",
+          "definition-accent": "#800000",
+          "theorem-body-bg": "#F6F4F2",
+          "theorem-title-bg": "#E6DAD7",
+          "theorem-title-fg": "#800000",
+          "theorem-accent": "#800000",
+          "lemma-body-bg": "#F7F7F7",
+          "lemma-title-bg": "#D9D9D9",
+          "lemma-title-fg": "#4A4A4A",
+          "lemma-accent": "#737373",
+          "corollary-body-bg": "#FAF7F5",
+          "corollary-title-bg": "#E8DDD8",
+          "corollary-title-fg": "#6A1B1B",
+          "corollary-accent": "#800000",
+          "proposition-body-bg": "#F7F7F7",
+          "proposition-title-bg": "#E0E0E0",
+          "proposition-title-fg": "#4D4D4D",
+          "proposition-accent": "#737373",
+          "claim-body-bg": "#FBF5F5",
+          "claim-title-bg": "#E8D6D6",
+          "claim-title-fg": "#800000",
+          "claim-accent": "#800000",
+          "fact-body-bg": "#F6F6F6",
+          "fact-title-bg": "#D9D9D9",
+          "fact-title-fg": "#4B4B4B",
+          "fact-accent": "#A6A6A6",
+          "assumption-body-bg": "#FAF8F4",
+          "assumption-title-bg": "#E3DDD4",
+          "assumption-title-fg": "#5A4738",
+          "assumption-accent": "#737373",
+          "note-bg": "#F6F6F6",
+          "note-title-bg": "#D9D9D9",
+          "note-title-fg": "#4A4A4A",
+          "note-accent": "#800000",
+          "note-frame": "#A6A6A6",
+          "example-bg": "#F7F6F5",
+          "example-label-fg": "#800000",
+          "example-accent": "#800000",
+          "remark-bg": "#F7F7F7",
+          "remark-label-fg": "#4A4A4A",
+          "remark-inline-fg": "#800000",
+          "remark-accent": "#737373",
+          "assump-bg": "#FAF8F4",
+          "assump-label-fg": "#5A4738",
+          "assump-accent": "#737373",
+          "insight-bg": "#F7F6F5",
+          "insight-label-fg": "#800000",
+          "insight-accent": "#800000",
+          "pitfall-bg": "#FBF5F5",
+          "pitfall-label-fg": "#800000",
+          "pitfall-accent": "#800000",
+          "intuition-bg": "#F7F7F7",
+          "intuition-label-fg": "#4A4A4A",
+          "intuition-accent": "#737373",
+          "summary-bg": "#F6F6F6",
+          "summary-label-fg": "#4A4A4A",
+          "summary-accent": "#A6A6A6",
+          "question-bg": "#FAF8F4",
+          "question-label-fg": "#5A4738",
+          "question-accent": "#737373"
+        }
       }
     ];
     HEADING_TOC_PRESET_DEFINITIONS = [
       { id: "default", label: "Default", description: "Current built-in heading/TOC palette from theme.sty." },
       { id: "inkstone", label: "Inkstone", description: "Deep indigo heading palette with restrained TOC contrast.", colors: { "theme-chapter": "#1F2A44", "theme-section": "#273B66", "theme-subsection": "#35589A", "theme-toc-title": "#1E2D53", "theme-toc-chapter": "#243A6A", "theme-toc-section": "#4465A8", "theme-header-rule": "#1B2948" } },
       { id: "aurora", label: "Aurora", description: "Cool teal-forward scheme for modern notes and reports.", colors: { "theme-chapter": "#0E5A61", "theme-section": "#12727E", "theme-subsection": "#2F94A3", "theme-toc-title": "#0F6169", "theme-toc-chapter": "#107681", "theme-toc-section": "#2C8D99", "theme-header-rule": "#0D4A50" } },
-      { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } }
+      { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } },
+      { id: "uchicago", label: "UChicago", description: "University of Chicago maroon with greystone heading contrast.", colors: { "theme-chapter": "#800000", "theme-section": "#800000", "theme-subsection": "#737373", "theme-toc-title": "#800000", "theme-toc-chapter": "#800000", "theme-toc-section": "#737373", "theme-header-rule": "#A6A6A6" } }
     ];
   }
 });
@@ -1983,8 +2067,6 @@ var StateService = class {
     }
   }
   applyBlockPreset(state, presetId) {
-    const defaults = Object.fromEntries(state.block_presets.map((item) => [item.id, item]));
-    void defaults;
     const catalog = this.buildPresetCatalog(BLOCK_PRESET_DEFINITIONS, BLOCK_COLOR_TOKENS, state.colors);
     const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
     const preset = catalog.find((item) => item.id === selected);
@@ -1992,6 +2074,7 @@ var StateService = class {
     for (const [token, value] of Object.entries(preset.colors ?? {})) {
       if (COLOR_SET.has(token)) state.colors[token] = value;
     }
+    if (selected !== "default") this.applySupportColorsForBlockPreset(state, preset.colors ?? {});
     state.block_preset = selected;
     state.block_presets = this.presetMeta(catalog);
   }
@@ -2211,6 +2294,44 @@ var StateService = class {
     if (recipes.some((item) => item.id === value)) return value;
     throw new Error(`Unknown compile recipe: ${value}`);
   }
+  applySupportColorsForBlockPreset(state, presetColors) {
+    const derived = {
+      "inline-key-fg": "definition-accent",
+      "inline-term-bg": "definition-body-bg",
+      "inline-term-fg": "definition-title-fg",
+      "inline-warn-fg": "claim-accent",
+      "inline-todo-bg": "assumption-body-bg",
+      "inline-todo-fg": "assumption-title-fg",
+      "inline-code-bg": "fact-body-bg",
+      "inline-code-fg": "fact-title-fg",
+      "sidenote-fg": "note-title-fg",
+      "sidenote-accent": "note-accent",
+      "chapter-overview-bg": "note-bg",
+      "chapter-overview-title-bg": "note-title-bg",
+      "chapter-overview-title-fg": "note-title-fg",
+      "chapter-overview-accent": "note-accent",
+      "insight-bg": "example-bg",
+      "insight-label-fg": "example-label-fg",
+      "insight-accent": "example-accent",
+      "pitfall-bg": "claim-body-bg",
+      "pitfall-label-fg": "claim-title-fg",
+      "pitfall-accent": "claim-accent",
+      "intuition-bg": "lemma-body-bg",
+      "intuition-label-fg": "lemma-title-fg",
+      "intuition-accent": "lemma-accent",
+      "summary-bg": "fact-body-bg",
+      "summary-label-fg": "fact-title-fg",
+      "summary-accent": "fact-accent",
+      "question-bg": "assumption-body-bg",
+      "question-label-fg": "assumption-title-fg",
+      "question-accent": "assumption-accent"
+    };
+    for (const [target, source] of Object.entries(derived)) {
+      if (target in presetColors) continue;
+      const color = state.colors[source];
+      if (color) state.colors[target] = color;
+    }
+  }
   async coerceClassModeOnTargetSwitch(state) {
     const mode = this.normalizeClassConfigValue("theme_class_mode", state.class_config.theme_class_mode);
     if (mode !== "book" && mode !== "article") return;
@@ -2231,6 +2352,25 @@ async function copyDirectory(src, dest) {
     else if (entry.isFile()) await import_node_fs6.promises.copyFile(srcPath, destPath);
   }
 }
+async function copyMissingDirectory(src, dest, relLabel, copied) {
+  if (!await exists(dest)) {
+    await copyDirectory(src, dest);
+    copied.push(`${relLabel}/`);
+    return;
+  }
+  for (const entry of await import_node_fs6.promises.readdir(src, { withFileTypes: true })) {
+    const source = path6.join(src, entry.name);
+    const target = path6.join(dest, entry.name);
+    if (await exists(target)) continue;
+    if (entry.isDirectory()) {
+      await copyDirectory(source, target);
+      copied.push(`${relLabel}/${entry.name}/`);
+    } else if (entry.isFile()) {
+      await import_node_fs6.promises.copyFile(source, target);
+      copied.push(`${relLabel}/${entry.name}`);
+    }
+  }
+}
 async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
   const assetRoot = path6.join(extensionDir, "assets", "template");
   const copied = [];
@@ -2242,30 +2382,8 @@ async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
       copied.push(file);
     }
   }
-  const figTarget = path6.join(rootDir, "Fig");
-  if (!await exists(figTarget)) {
-    await copyDirectory(path6.join(assetRoot, "Fig"), figTarget);
-    copied.push("Fig/");
-  }
-  const templatesTarget = path6.join(rootDir, "templates");
-  if (!await exists(templatesTarget)) {
-    await copyDirectory(path6.join(assetRoot, "templates"), templatesTarget);
-    copied.push("templates/");
-  } else {
-    const templatesSource = path6.join(assetRoot, "templates");
-    for (const entry of await import_node_fs6.promises.readdir(templatesSource, { withFileTypes: true })) {
-      const source = path6.join(templatesSource, entry.name);
-      const target = path6.join(templatesTarget, entry.name);
-      if (await exists(target)) continue;
-      if (entry.isDirectory()) {
-        await copyDirectory(source, target);
-        copied.push(`templates/${entry.name}/`);
-      } else if (entry.isFile()) {
-        await import_node_fs6.promises.copyFile(source, target);
-        copied.push(`templates/${entry.name}`);
-      }
-    }
-  }
+  await copyMissingDirectory(path6.join(assetRoot, "Fig"), path6.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(path6.join(assetRoot, "templates"), path6.join(rootDir, "templates"), "templates", copied);
   return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path6.join(rootDir, item)));
 }
 
@@ -2274,6 +2392,8 @@ var import_node_fs7 = require("node:fs");
 var path7 = __toESM(require("node:path"));
 init_schema();
 init_utils();
+var UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
+var COLOR_OVERRIDE_FILES = ["theme.colors.tex", "theme.ui.json"];
 var TemplateService = class {
   constructor(rootDir, extensionDir, stateService) {
     this.rootDir = rootDir;
@@ -2287,6 +2407,46 @@ var TemplateService = class {
     const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
+  }
+  async upgradeThemeAssets(resetColorOverrides) {
+    const assetRoot = path7.join(this.extensionDir, "assets", "template");
+    const backupDir = path7.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
+    const upgradedFiles = [];
+    const resetFiles = [];
+    const skippedMissingFiles = [];
+    for (const file of UPGRADE_THEME_ASSET_FILES) {
+      const source = path7.join(assetRoot, file);
+      const target = path7.join(this.rootDir, file);
+      this.assertInsideWorkspace(target);
+      if (!await exists(source)) {
+        skippedMissingFiles.push(file);
+        continue;
+      }
+      if (await exists(target)) await this.backupFile(target, backupDir);
+      await import_node_fs7.promises.mkdir(path7.dirname(target), { recursive: true });
+      await import_node_fs7.promises.copyFile(source, target);
+      upgradedFiles.push(file);
+    }
+    if (resetColorOverrides) {
+      for (const file of COLOR_OVERRIDE_FILES) {
+        const target = path7.join(this.rootDir, file);
+        this.assertInsideWorkspace(target);
+        if (!await exists(target)) {
+          skippedMissingFiles.push(file);
+          continue;
+        }
+        await this.backupFile(target, backupDir);
+        await import_node_fs7.promises.unlink(target);
+        resetFiles.push(file);
+      }
+    }
+    return {
+      success: true,
+      backup_dir: workspaceRel(this.rootDir, backupDir),
+      upgraded_files: upgradedFiles,
+      reset_files: resetFiles,
+      skipped_missing_files: skippedMissingFiles
+    };
   }
   async createStarter(templateId, outputTarget, overwrite) {
     await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
@@ -2325,6 +2485,20 @@ var TemplateService = class {
     const resolved = path7.resolve(this.rootDir, target);
     if (!isSubpath(resolved, this.rootDir)) throw new Error("Output target is outside workspace.");
     return workspaceRel(this.rootDir, resolved);
+  }
+  async backupFile(source, backupDir) {
+    this.assertInsideWorkspace(source);
+    const rel = workspaceRel(this.rootDir, source);
+    const backupPath = path7.join(backupDir, rel);
+    this.assertInsideWorkspace(backupPath);
+    await import_node_fs7.promises.mkdir(path7.dirname(backupPath), { recursive: true });
+    await import_node_fs7.promises.copyFile(source, backupPath);
+  }
+  assertInsideWorkspace(absPath) {
+    if (!isSubpath(path7.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
+  }
+  timestamp() {
+    return (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(".", "-");
   }
 };
 
@@ -2427,6 +2601,8 @@ var ToolkitService = class {
         return this.runSerialized(async () => this.compile.compileFromPayload(payload));
       case "initialize-workspace":
         return this.runSerialized(async () => this.template.initializeWorkspace());
+      case "upgrade-theme-assets":
+        return this.runSerialized(async () => this.template.upgradeThemeAssets(Boolean(payload.reset_color_overrides)));
       case "pdf-uri":
         return this.resolvePdfPath(String(payload.path ?? ""));
       default:
@@ -2498,6 +2674,23 @@ function activate(context) {
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
       vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async () => {
+      const service = await serviceForCommand(context);
+      if (!service) return;
+      const choice = await vscode.window.showWarningMessage(
+        "Upgrade workspace theme assets from the bundled extension template? Existing files will be backed up first.",
+        { modal: true },
+        "Upgrade + Reset Colors",
+        "Upgrade Assets Only"
+      );
+      if (!choice) return;
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
+        () => service.handle("upgrade-theme-assets", { reset_color_overrides: choice === "Upgrade + Reset Colors" })
+      );
+      const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
+      vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async () => {
       const service = await serviceForCommand(context);

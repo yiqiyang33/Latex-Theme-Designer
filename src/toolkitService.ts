@@ -104,6 +104,8 @@ export class ToolkitService {
         return this.runSerialized(async (): Promise<CompileResult> => this.compile.compileFromPayload(payload));
       case "initialize-workspace":
         return this.runSerialized(async () => this.template.initializeWorkspace());
+      case "upgrade-theme-assets":
+        return this.runSerialized(async () => this.template.upgradeThemeAssets(Boolean(payload.reset_color_overrides)));
       case "pdf-uri":
         return this.resolvePdfPath(String(payload.path ?? ""));
       default:

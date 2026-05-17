@@ -1,34 +1,21 @@
-name: Tools Tests
+name: Extension Tests
 
 on:
   pull_request:
   push:
 
 jobs:
-  test-tools:
+  test-extension:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest
-
-      - name: Run tools test suite
-        run: pytest -q tools/tests
 
       - name: Install extension dependencies
         run: npm ci

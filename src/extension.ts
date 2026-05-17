@@ -49,6 +49,23 @@ export function activate(context: vscode.ExtensionContext): void {
       const result = await service.handle("initialize-workspace", {});
       vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
     }),
+    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async () => {
+      const service = await serviceForCommand(context);
+      if (!service) return;
+      const choice = await vscode.window.showWarningMessage(
+        "Upgrade workspace theme assets from the bundled extension template? Existing files will be backed up first.",
+        { modal: true },
+        "Upgrade + Reset Colors",
+        "Upgrade Assets Only"
+      );
+      if (!choice) return;
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
+        () => service.handle("upgrade-theme-assets", { reset_color_overrides: choice === "Upgrade + Reset Colors" })
+      ) as { backup_dir?: string; upgraded_files?: string[]; reset_files?: string[] };
+      const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
+      vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
+    }),
     vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async () => {
       const service = await serviceForCommand(context);
       if (!service) return;

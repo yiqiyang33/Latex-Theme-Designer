@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "publisher": "yiqiyang33",
   "icon": "assets/latex-toolkit.png",
   "license": "MIT",
@@ -27,6 +27,7 @@
     "onCommand:latexEditingToolkit.openToolkit",
     "onCommand:latexEditingToolkit.createProject",
     "onCommand:latexEditingToolkit.initializeWorkspace",
+    "onCommand:latexEditingToolkit.upgradeWorkspaceThemeAssets",
     "onCommand:latexEditingToolkit.generateVscodeSettings",
     "onCommand:latexEditingToolkit.saveOverrides",
     "onCommand:latexEditingToolkit.resetOverrides",
@@ -51,6 +52,10 @@
       {
         "command": "latexEditingToolkit.initializeWorkspace",
         "title": "LaTeX Editing Toolkit: Initialize Workspace"
+      },
+      {
+        "command": "latexEditingToolkit.upgradeWorkspaceThemeAssets",
+        "title": "LaTeX Editing Toolkit: Upgrade Workspace Theme Assets"
       },
       {
         "command": "latexEditingToolkit.generateVscodeSettings",
@@ -95,6 +100,9 @@
         },
         {
           "command": "latexEditingToolkit.initializeWorkspace"
+        },
+        {
+          "command": "latexEditingToolkit.upgradeWorkspaceThemeAssets"
         },
         {
           "command": "latexEditingToolkit.generateVscodeSettings"

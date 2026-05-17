@@ -3,10 +3,7 @@
 .vscode/
 *.swp
 *~
-__pycache__/
-.pytest_cache
-*.py[cod]
-*.pyd
+.pytest_cache/
 node_modules/
 coverage/
 *.vsix

@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
+import { BLOCK_PRESET_DEFINITIONS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
@@ -35,6 +35,32 @@ describe("TypeScript Toolkit migration", () => {
     expect(defaults["theme-bold"]).toBe("#3F6F9F");
     expect(defaults["definition-body-bg"]).toMatch(/^#[0-9A-F]{6}$/);
     expect(defaults["question-accent"]).toMatch(/^#[0-9A-F]{6}$/);
+  });
+
+  it("exposes UChicago block and heading presets", () => {
+    expect(BLOCK_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["theorem-accent"]).toBe("#800000");
+    expect(BLOCK_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["inline-key-fg"]).toBe("#800000");
+    expect(HEADING_TOC_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["theme-chapter"]).toBe("#800000");
+  });
+
+  it("renders inline helpers through theme-aware box styling", async () => {
+    const commands = await fs.readFile(path.join(repoRoot, "assets", "template", "commands.tex"), "utf8");
+    expect(commands).toContain("\\NewDocumentCommand{\\themeInlineBox}");
+    expect(commands).toContain("\\tcbox");
+    expect(commands).toContain("\\newcommand{\\term}[1]{\\themeInlineBox{inline-term-bg}{inline-term-fg}{#1}}");
+    expect(commands).toContain("\\newcommand{\\todo}[1]{\\themeInlineBox");
+    expect(commands).toContain("\\newcommand{\\code}[1]");
+  });
+
+  it("derives inline helper colors when applying a block preset", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    const stateService = new StateService(root);
+    const state = await stateService.loadState();
+    stateService.applyBlockPreset(state, "ember");
+    expect(state.colors["inline-key-fg"]).toBe("#9A4B33");
+    expect(state.colors["inline-warn-fg"]).toBe("#A44C33");
+    expect(state.colors["inline-code-bg"]).toBe("#F2F3FD");
   });
 
   it("loads VS Code JSONC recipes and generates settings only when missing", async () => {
@@ -89,6 +115,30 @@ describe("TypeScript Toolkit migration", () => {
     expect(article).toBe("% custom article\n");
     expect(copied).toContain("templates/homework-assignment.tex");
     await expect(fs.access(path.join(root, "templates", "homework-assignment.tex"))).resolves.toBeUndefined();
+  });
+
+  it("backs up and upgrades workspace theme assets, optionally resetting color overrides", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new TemplateService(root, repoRoot, state);
+    await fs.writeFile(path.join(root, "theme.sty"), "% old theme\n", "utf8");
+    await fs.writeFile(path.join(root, "theorems.tex"), "% old theorems\n", "utf8");
+    await fs.writeFile(path.join(root, "commands.tex"), "% old commands\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.colors.tex"), "% old colors\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.ui.json"), "{\"colors\":{}}\n", "utf8");
+
+    const result = await service.upgradeThemeAssets(true);
+    const upgradedTheme = await fs.readFile(path.join(root, "theme.sty"), "utf8");
+    const backupTheme = await fs.readFile(path.join(root, result.backup_dir, "theme.sty"), "utf8");
+    const backupColors = await fs.readFile(path.join(root, result.backup_dir, "theme.colors.tex"), "utf8");
+
+    expect(result.upgraded_files).toEqual(["theme.sty", "theorems.tex", "commands.tex"]);
+    expect(result.reset_files).toEqual(["theme.colors.tex", "theme.ui.json"]);
+    expect(upgradedTheme).toContain("\\ProvidesPackage{theme}");
+    expect(backupTheme).toBe("% old theme\n");
+    expect(backupColors).toBe("% old colors\n");
+    await expect(fs.access(path.join(root, "theme.colors.tex"))).rejects.toThrow();
+    await expect(fs.access(path.join(root, "theme.ui.json"))).rejects.toThrow();
   });
 
   it("splits a book root into subfiles and preserves appendix in root", async () => {

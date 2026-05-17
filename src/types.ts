@@ -198,3 +198,11 @@ export interface CleanResult {
   removed_empty_dirs: string[];
   removed_empty_dir_count: number;
 }
+
+export interface UpgradeThemeAssetsResult {
+  success: boolean;
+  backup_dir: string;
+  upgraded_files: string[];
+  reset_files: string[];
+  skipped_missing_files: string[];
+}

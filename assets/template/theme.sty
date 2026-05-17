@@ -133,24 +133,28 @@
 \makeatother
 
 % -------------------- Document Theme Tokens --------------------
-\colorlet{theme-chapter}{MidnightBlue}
-\colorlet{theme-section}{NavyBlue}
-\colorlet{theme-subsection}{RoyalBlue}
-\colorlet{theme-toc-title}{MidnightBlue}
-\colorlet{theme-toc-chapter}{NavyBlue}
-\colorlet{theme-toc-section}{RoyalBlue!80!black}
-\colorlet{theme-header-rule}{MidnightBlue!35!black}
+\definecolor{theme-default-ink}{HTML}{1F2937}
+\definecolor{theme-default-slate}{HTML}{334155}
+\definecolor{theme-default-steel}{HTML}{486581}
+\definecolor{theme-default-rule}{HTML}{94A3B8}
+\colorlet{theme-chapter}{theme-default-ink}
+\colorlet{theme-section}{theme-default-slate}
+\colorlet{theme-subsection}{theme-default-steel}
+\colorlet{theme-toc-title}{theme-default-ink}
+\colorlet{theme-toc-chapter}{theme-default-slate}
+\colorlet{theme-toc-section}{theme-default-steel}
+\colorlet{theme-header-rule}{theme-default-rule}
 \definecolor{theme-default-bold}{HTML}{3F6F9F}
 \colorlet{theme-bold}{theme-default-bold}
 
 \definecolor{theme-default-inline-key}{HTML}{2F6F73}
-\definecolor{theme-default-inline-term-bg}{HTML}{EAF3F2}
+\definecolor{theme-default-inline-term-bg}{HTML}{EBF5F4}
 \definecolor{theme-default-inline-term-fg}{HTML}{245E62}
-\definecolor{theme-default-inline-warn}{HTML}{9A5C2E}
-\definecolor{theme-default-inline-todo-bg}{HTML}{FFF4C7}
-\definecolor{theme-default-inline-todo-fg}{HTML}{775C12}
-\definecolor{theme-default-inline-code-bg}{HTML}{EEF2F0}
-\definecolor{theme-default-inline-code-fg}{HTML}{2F3E38}
+\definecolor{theme-default-inline-warn}{HTML}{8A5A24}
+\definecolor{theme-default-inline-todo-bg}{HTML}{FFF4CF}
+\definecolor{theme-default-inline-todo-fg}{HTML}{6F5517}
+\definecolor{theme-default-inline-code-bg}{HTML}{F1F4F6}
+\definecolor{theme-default-inline-code-fg}{HTML}{2D3742}
 \colorlet{inline-key-fg}{theme-default-inline-key}
 \colorlet{inline-term-bg}{theme-default-inline-term-bg}
 \colorlet{inline-term-fg}{theme-default-inline-term-fg}
@@ -160,12 +164,12 @@
 \colorlet{inline-code-bg}{theme-default-inline-code-bg}
 \colorlet{inline-code-fg}{theme-default-inline-code-fg}
 
-\definecolor{theme-default-sidenote-fg}{HTML}{53665E}
-\definecolor{theme-default-sidenote-accent}{HTML}{86A99A}
-\definecolor{theme-default-overview-bg}{HTML}{F3F7FB}
-\definecolor{theme-default-overview-title-bg}{HTML}{DCE9F5}
-\definecolor{theme-default-overview-title-fg}{HTML}{315778}
-\definecolor{theme-default-overview-accent}{HTML}{4B78A8}
+\definecolor{theme-default-sidenote-fg}{HTML}{5A6570}
+\definecolor{theme-default-sidenote-accent}{HTML}{8AA0B2}
+\definecolor{theme-default-overview-bg}{HTML}{F5F7FA}
+\definecolor{theme-default-overview-title-bg}{HTML}{E3EAF2}
+\definecolor{theme-default-overview-title-fg}{HTML}{2F4050}
+\definecolor{theme-default-overview-accent}{HTML}{6F879C}
 \colorlet{sidenote-fg}{theme-default-sidenote-fg}
 \colorlet{sidenote-accent}{theme-default-sidenote-accent}
 \colorlet{chapter-overview-bg}{theme-default-overview-bg}
@@ -174,78 +178,125 @@
 \colorlet{chapter-overview-accent}{theme-default-overview-accent}
 
 % -------------------- Block Theme Tokens --------------------
-\colorlet{definition-title-bg}{green!28!white}
-\colorlet{definition-body-bg}{green!6!white}
-\colorlet{definition-accent}{green!55!black}
-\colorlet{definition-title-fg}{green!25!black}
+\definecolor{theme-default-definition-body-bg}{HTML}{F4F8F7}
+\definecolor{theme-default-definition-title-bg}{HTML}{E1EEEC}
+\definecolor{theme-default-definition-title-fg}{HTML}{234A48}
+\definecolor{theme-default-definition-accent}{HTML}{5D8D87}
+\colorlet{definition-body-bg}{theme-default-definition-body-bg}
+\colorlet{definition-title-bg}{theme-default-definition-title-bg}
+\colorlet{definition-title-fg}{theme-default-definition-title-fg}
+\colorlet{definition-accent}{theme-default-definition-accent}
 
-\colorlet{theorem-title-bg}{cyan!28!white}
-\colorlet{theorem-body-bg}{cyan!6!white}
-\colorlet{theorem-accent}{cyan!60!black}
-\colorlet{theorem-title-fg}{cyan!30!black}
+\definecolor{theme-default-theorem-body-bg}{HTML}{F3F7FB}
+\definecolor{theme-default-theorem-title-bg}{HTML}{DFEAF5}
+\definecolor{theme-default-theorem-title-fg}{HTML}{244761}
+\definecolor{theme-default-theorem-accent}{HTML}{5B7FA2}
+\colorlet{theorem-body-bg}{theme-default-theorem-body-bg}
+\colorlet{theorem-title-bg}{theme-default-theorem-title-bg}
+\colorlet{theorem-title-fg}{theme-default-theorem-title-fg}
+\colorlet{theorem-accent}{theme-default-theorem-accent}
 
-\colorlet{lemma-title-bg}{violet!28!white}
-\colorlet{lemma-body-bg}{violet!6!white}
-\colorlet{lemma-accent}{violet!62!black}
-\colorlet{lemma-title-fg}{violet!30!black}
+\definecolor{theme-default-lemma-body-bg}{HTML}{F7F5FB}
+\definecolor{theme-default-lemma-title-bg}{HTML}{E8E2F1}
+\definecolor{theme-default-lemma-title-fg}{HTML}{463B5E}
+\definecolor{theme-default-lemma-accent}{HTML}{7A6B9A}
+\colorlet{lemma-body-bg}{theme-default-lemma-body-bg}
+\colorlet{lemma-title-bg}{theme-default-lemma-title-bg}
+\colorlet{lemma-title-fg}{theme-default-lemma-title-fg}
+\colorlet{lemma-accent}{theme-default-lemma-accent}
 
-\colorlet{corollary-title-bg}{orange!30!white}
-\colorlet{corollary-body-bg}{orange!7!white}
-\colorlet{corollary-accent}{orange!75!black}
-\colorlet{corollary-title-fg}{orange!40!black}
+\definecolor{theme-default-corollary-body-bg}{HTML}{FBF7F1}
+\definecolor{theme-default-corollary-title-bg}{HTML}{F0E4D2}
+\definecolor{theme-default-corollary-title-fg}{HTML}{5B4730}
+\definecolor{theme-default-corollary-accent}{HTML}{9B7A4A}
+\colorlet{corollary-body-bg}{theme-default-corollary-body-bg}
+\colorlet{corollary-title-bg}{theme-default-corollary-title-bg}
+\colorlet{corollary-title-fg}{theme-default-corollary-title-fg}
+\colorlet{corollary-accent}{theme-default-corollary-accent}
 
-\colorlet{proposition-title-bg}{yellow!34!white}
-\colorlet{proposition-body-bg}{yellow!11!white}
-\colorlet{proposition-accent}{yellow!58!black}
-\colorlet{proposition-title-fg}{yellow!30!black}
+\definecolor{theme-default-proposition-body-bg}{HTML}{F8F8F1}
+\definecolor{theme-default-proposition-title-bg}{HTML}{E9EAD8}
+\definecolor{theme-default-proposition-title-fg}{HTML}{4E5433}
+\definecolor{theme-default-proposition-accent}{HTML}{87905E}
+\colorlet{proposition-body-bg}{theme-default-proposition-body-bg}
+\colorlet{proposition-title-bg}{theme-default-proposition-title-bg}
+\colorlet{proposition-title-fg}{theme-default-proposition-title-fg}
+\colorlet{proposition-accent}{theme-default-proposition-accent}
 
-\colorlet{claim-title-bg}{pink!33!white}
-\colorlet{claim-body-bg}{pink!10!white}
-\colorlet{claim-accent}{pink!72!black}
-\colorlet{claim-title-fg}{pink!40!black}
+\definecolor{theme-default-claim-body-bg}{HTML}{FBF4F4}
+\definecolor{theme-default-claim-title-bg}{HTML}{F0DEDE}
+\definecolor{theme-default-claim-title-fg}{HTML}{633F3F}
+\definecolor{theme-default-claim-accent}{HTML}{9C6A6A}
+\colorlet{claim-body-bg}{theme-default-claim-body-bg}
+\colorlet{claim-title-bg}{theme-default-claim-title-bg}
+\colorlet{claim-title-fg}{theme-default-claim-title-fg}
+\colorlet{claim-accent}{theme-default-claim-accent}
 
-\colorlet{fact-title-bg}{purple!26!white}
-\colorlet{fact-body-bg}{purple!6!white}
-\colorlet{fact-accent}{purple!58!black}
-\colorlet{fact-title-fg}{purple!35!black}
+\definecolor{theme-default-fact-body-bg}{HTML}{F5F6FA}
+\definecolor{theme-default-fact-title-bg}{HTML}{E2E6F0}
+\definecolor{theme-default-fact-title-fg}{HTML}{34405C}
+\definecolor{theme-default-fact-accent}{HTML}{6B7898}
+\colorlet{fact-body-bg}{theme-default-fact-body-bg}
+\colorlet{fact-title-bg}{theme-default-fact-title-bg}
+\colorlet{fact-title-fg}{theme-default-fact-title-fg}
+\colorlet{fact-accent}{theme-default-fact-accent}
 
-\colorlet{assumption-title-bg}{yellow!26!white}
-\colorlet{assumption-body-bg}{yellow!10!white}
-\colorlet{assumption-accent}{yellow!58!black}
-\colorlet{assumption-title-fg}{yellow!30!black}
+\definecolor{theme-default-assumption-body-bg}{HTML}{FBF8EF}
+\definecolor{theme-default-assumption-title-bg}{HTML}{EEE5CD}
+\definecolor{theme-default-assumption-title-fg}{HTML}{5F5133}
+\definecolor{theme-default-assumption-accent}{HTML}{9A8555}
+\colorlet{assumption-body-bg}{theme-default-assumption-body-bg}
+\colorlet{assumption-title-bg}{theme-default-assumption-title-bg}
+\colorlet{assumption-title-fg}{theme-default-assumption-title-fg}
+\colorlet{assumption-accent}{theme-default-assumption-accent}
 
-\colorlet{note-bg}{blue!5!white}
-\colorlet{note-frame}{blue!20!white}
-\colorlet{note-accent}{blue!50!black}
-\colorlet{note-title-fg}{blue!30!black}
-\colorlet{note-title-bg}{blue!24!white}
+\definecolor{theme-default-note-bg}{HTML}{F5F7FA}
+\definecolor{theme-default-note-frame}{HTML}{D9E1EA}
+\definecolor{theme-default-note-accent}{HTML}{6F879C}
+\definecolor{theme-default-note-title-fg}{HTML}{2F4050}
+\definecolor{theme-default-note-title-bg}{HTML}{E4EBF2}
+\colorlet{note-bg}{theme-default-note-bg}
+\colorlet{note-frame}{theme-default-note-frame}
+\colorlet{note-accent}{theme-default-note-accent}
+\colorlet{note-title-fg}{theme-default-note-title-fg}
+\colorlet{note-title-bg}{theme-default-note-title-bg}
 
-\colorlet{remark-inline-fg}{blue!60!black}
-\colorlet{example-bg}{cyan!7!white}
-\colorlet{example-accent}{cyan!58!black}
-\colorlet{example-label-fg}{cyan!50!black}
-\colorlet{remark-bg}{blue!5!white}
-\colorlet{remark-accent}{blue!50!black}
-\colorlet{remark-label-fg}{blue!45!black}
-\colorlet{assump-bg}{yellow!10!white}
-\colorlet{assump-accent}{yellow!58!black}
-\colorlet{assump-label-fg}{yellow!42!black}
+\definecolor{theme-default-example-bg}{HTML}{F4F8F7}
+\definecolor{theme-default-example-accent}{HTML}{5D8D87}
+\definecolor{theme-default-example-label}{HTML}{2C5A57}
+\definecolor{theme-default-remark-bg}{HTML}{F5F7FA}
+\definecolor{theme-default-remark-accent}{HTML}{6F879C}
+\definecolor{theme-default-remark-label}{HTML}{40576A}
+\definecolor{theme-default-remark-inline}{HTML}{3F6F9F}
+\definecolor{theme-default-assump-bg}{HTML}{FBF8EF}
+\definecolor{theme-default-assump-accent}{HTML}{9A8555}
+\definecolor{theme-default-assump-label}{HTML}{5F5133}
+\colorlet{example-bg}{theme-default-example-bg}
+\colorlet{example-accent}{theme-default-example-accent}
+\colorlet{example-label-fg}{theme-default-example-label}
+\colorlet{remark-bg}{theme-default-remark-bg}
+\colorlet{remark-accent}{theme-default-remark-accent}
+\colorlet{remark-label-fg}{theme-default-remark-label}
+\colorlet{remark-inline-fg}{theme-default-remark-inline}
+\colorlet{assump-bg}{theme-default-assump-bg}
+\colorlet{assump-accent}{theme-default-assump-accent}
+\colorlet{assump-label-fg}{theme-default-assump-label}
 
-\definecolor{theme-default-insight-bg}{HTML}{EEF7F4}
-\definecolor{theme-default-insight-accent}{HTML}{2F7D73}
-\definecolor{theme-default-insight-label}{HTML}{23645D}
-\definecolor{theme-default-pitfall-bg}{HTML}{FFF2EE}
-\definecolor{theme-default-pitfall-accent}{HTML}{B85B43}
-\definecolor{theme-default-pitfall-label}{HTML}{7D3D2B}
-\definecolor{theme-default-intuition-bg}{HTML}{F2F0FA}
-\definecolor{theme-default-intuition-accent}{HTML}{7061A8}
-\definecolor{theme-default-intuition-label}{HTML}{504680}
-\definecolor{theme-default-summary-bg}{HTML}{F1F5FA}
-\definecolor{theme-default-summary-accent}{HTML}{4B78A8}
-\definecolor{theme-default-summary-label}{HTML}{315778}
-\definecolor{theme-default-question-bg}{HTML}{FFF7E8}
-\definecolor{theme-default-question-accent}{HTML}{B9852D}
-\definecolor{theme-default-question-label}{HTML}{72511C}
+\definecolor{theme-default-insight-bg}{HTML}{F1F8F6}
+\definecolor{theme-default-insight-accent}{HTML}{3F7D73}
+\definecolor{theme-default-insight-label}{HTML}{2E625B}
+\definecolor{theme-default-pitfall-bg}{HTML}{FBF4F4}
+\definecolor{theme-default-pitfall-accent}{HTML}{9C6A6A}
+\definecolor{theme-default-pitfall-label}{HTML}{633F3F}
+\definecolor{theme-default-intuition-bg}{HTML}{F7F5FB}
+\definecolor{theme-default-intuition-accent}{HTML}{7A6B9A}
+\definecolor{theme-default-intuition-label}{HTML}{463B5E}
+\definecolor{theme-default-summary-bg}{HTML}{F5F7FA}
+\definecolor{theme-default-summary-accent}{HTML}{6F879C}
+\definecolor{theme-default-summary-label}{HTML}{40576A}
+\definecolor{theme-default-question-bg}{HTML}{FBF8EF}
+\definecolor{theme-default-question-accent}{HTML}{9A8555}
+\definecolor{theme-default-question-label}{HTML}{5F5133}
 \colorlet{insight-bg}{theme-default-insight-bg}
 \colorlet{insight-accent}{theme-default-insight-accent}
 \colorlet{insight-label-fg}{theme-default-insight-label}
@@ -262,7 +313,7 @@
 \colorlet{question-accent}{theme-default-question-accent}
 \colorlet{question-label-fg}{theme-default-question-label}
 
-% Optional color override file generated by tools/theme_designer.py.
+% Optional color override file generated by LaTeX Editing Toolkit.
 % Delete theme.colors.tex to return to the defaults in this file.
 \InputIfFileExists{theme.colors.tex}{}{}
 
@@ -344,8 +395,8 @@
 \ifEnableBlockShadow
 \tcbset{
     theme/shadow/.style={
-        borderline east={0.6pt}{0pt}{black!14!white},
-        borderline south={0.6pt}{0pt}{black!14!white}
+        borderline east={0.45pt}{0pt}{black!8!white},
+        borderline south={0.45pt}{0pt}{black!8!white}
     }
 }
 \else
@@ -359,7 +410,8 @@
     theorem/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         frame hidden,
         boxrule=0pt,
         left=5mm,
@@ -380,12 +432,13 @@
         colbacktitle=#2,
         coltitle=#4,
         fonttitle=\bfseries\large\color{#4},
-        borderline west={2.1pt}{0pt}{#3}
+        borderline west={1.6pt}{0pt}{#3}
     },
     callout/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         boxrule=0pt,
         left=5mm,
         right=4mm,
@@ -398,7 +451,7 @@
     callout/variant/.style n args={2}{
         callout/base,
         colback=#1,
-        borderline west={1.4mm}{0pt}{#2}
+        borderline west={1mm}{0pt}{#2}
     },
     callout/indented/.style={
         parbox=false,
@@ -407,7 +460,8 @@
     note/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         boxrule=0pt,
         colback=note-bg,
         colframe=note-frame,
@@ -419,7 +473,7 @@
         after skip=10pt,
         coltitle=note-title-fg,
         fonttitle=\bfseries\color{note-title-fg},
-        borderline west={2.2pt}{0pt}{note-accent},
+        borderline west={1.6pt}{0pt}{note-accent},
         theme/shadow
     },
     note/title/.style={
@@ -429,7 +483,8 @@
     chapteroverview/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         boxrule=0pt,
         colback=chapter-overview-bg,
         colframe=chapter-overview-accent,
@@ -442,7 +497,7 @@
         bottom=3mm,
         before skip=10pt,
         after skip=12pt,
-        borderline west={2.2pt}{0pt}{chapter-overview-accent},
+        borderline west={1.6pt}{0pt}{chapter-overview-accent},
         theme/shadow
     }
 }
@@ -481,7 +536,8 @@
     note/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         boxrule=0pt,
         colback=note-bg,
         colframe=note-frame,
@@ -501,7 +557,8 @@
     chapteroverview/base/.style={
         enhanced,
         breakable,
-        sharp corners,
+        arc=2pt,
+        outer arc=2pt,
         boxrule=0pt,
         colback=chapter-overview-bg,
         colframe=chapter-overview-accent,
@@ -514,7 +571,7 @@
         bottom=3mm,
         before skip=10pt,
         after skip=12pt,
-        borderline west={2pt}{0pt}{chapter-overview-accent}
+        borderline west={1.6pt}{0pt}{chapter-overview-accent}
     }
 }
 \fi

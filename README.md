@@ -1,11 +1,8 @@
 # LaTeX Editing Toolkit
 
-This repository is now a VS Code / Cursor extension plus a legacy Python toolkit.
-The extension is the primary runtime and does not depend on Python.
+VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and PDF preview from a webview panel.
 
-## VS Code / Cursor Extension
-
-Build, test, and package a local VSIX:
+## Build
 
 ```bash
 npm install
@@ -18,25 +15,45 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 - `LaTeX Editing Toolkit: Open Toolkit`
 - `LaTeX Editing Toolkit: Create Project`
 - `LaTeX Editing Toolkit: Initialize Workspace`
+- `LaTeX Editing Toolkit: Upgrade Workspace Theme Assets`
 
-The extension contributes commands for template creation, theme overrides, compile workflows,
-build cleanup, split/renumber/unsplit operations, and PDF preview inside a VS Code Webview.
+## Workspace Files
 
-Workspace file contracts are unchanged:
+The extension reads and writes these project files:
 
 - `theme.ui.json`
 - `theme.overrides.tex`
 - `theme.colors.tex`
 - `.vscode/settings.json`
 
-The old Python implementation under `tools/` is retained as a legacy reference and fallback,
-but it is excluded from the packaged VSIX.
+Template assets live under `assets/template/` and are copied into a workspace only when missing.
 
-Open-source LaTeX toolkit for theme tuning, project splitting, and compile workflow orchestration.
+## Starter Templates
 
-## Run
+Available starters:
 
-Compile the default entry:
+- `book-minimal`
+- `article-minimal`
+- `homework-assignment`
+
+The default starter remains `book-minimal`.
+
+## Main Features
+
+- Centralized LaTeX theme module in `theme.sty`.
+- Theorem and callout environments from `theorems.tex`.
+- Note-writing helpers from `commands.tex`.
+- Theme color, toggle, class mode, body font size, and compile target controls.
+- Built-in color presets, including UChicago maroon/greystone.
+- Safe workspace theme asset upgrade with local backups.
+- Internal fallback compile pipeline plus optional VS Code recipe mode.
+- Generate `.vscode/settings.json` for LaTeX Workshop-compatible recipes.
+- Clean build artifacts while preserving source files and PDFs.
+- Split root documents into `Sections/`, renumber referenced units, and merge a unit back into the root.
+
+## Local Compile
+
+Compile the guide document directly:
 
 ```bash
 latexmk -xelatex -bibtex main.tex
@@ -51,196 +68,10 @@ xelatex main.tex
 xelatex main.tex
 ```
 
-Run tests:
-
-```bash
-pytest -q tools/tests
-```
-
-## Sync Template Updates (Keep Local Notes)
-
-Use the sync helper to update toolkit/template code without overwriting local note content.
-It works even when your notes folder has no `.git` repository.
-
-Preview changes first:
-
-```bash
-tools/sync_template.sh --dry-run
-```
-
-Apply sync:
-
-```bash
-tools/sync_template.sh
-```
-
-Remove stale files under synced template directories when the source removed them:
-
-```bash
-tools/sync_template.sh --delete-stale
-```
-
-Defaults:
-- source: `https://github.com/yiqiyang33/Latex-Theme-Designer`
-- branch: `main`
-- target: current directory
-
-Sync scope is controlled by `.template-sync-include` (only listed paths are synced).
-Extra excludes inside those synced paths can be configured in `.template-sync-ignore`.
-By default, extra target files are kept; use `--delete-stale` when you want synced directories
-to mirror source removals.
-
-## Feature Overview
-
-- Centralized theme layout (`theme.sty`) for document + theorem styles.
-- Local toolkit UI for color/toggle/class/compile tuning.
-- Theorem mode toggle: switch theorem family between styled tcolorbox and native amsthm while keeping theorem commands compatible.
-- Note-writing helpers: `\key{}`, `\term{}`, `\warn{}`, `\todo{}`, `\code{}`, `\sidenote{}`, `\chapteroverview{}`, plus `\insight{}`, `\pitfall{}`, `\intuition{}`, `\summary{}`, and `\question{}` callouts.
-- One-click split workflow (`tools/tex_splitter.py`) for modular `Sections/` authoring.
-- Compile integration with internal fallback pipeline and VSCode recipe mode.
-- UI one-click generation of `.vscode/settings.json` (create-if-missing, no overwrite) for recipe bootstrap on new machines.
-- One-click compile artifact cleanup with dual policy: root conservative cleanup + auto-discovered subfile directory aggressive cleanup (`.tex/.pdf` preserved in subfile dirs).
-
-Canonical capability list lives in:
-
-- `tools/README-theme-designer.md#current-capabilities`
-
-## Toolkit UI
-
-Use the local UI tool:
-
-```bash
-python3 tools/latex_toolkit.py --open-browser
-```
-
-See full tool documentation in:
-
-- `tools/README-theme-designer.md`
-
-Compatibility alias (still supported during transition):
-
-```bash
-python3 tools/theme_designer.py --open-browser
-```
-
-## VSCode LaTeX Workshop Flow
-
-The workspace settings are tuned for subfile-first note writing:
-
-- saving a `.tex` file triggers LaTeX Workshop auto-build (`onSave`);
-- `\documentclass[../main.tex]{subfiles}` units build as standalone subfiles;
-- to compile the full root document, open `main.tex` and run LaTeX Workshop build manually, or use its root-file prompt/selection command.
-
-## TeX Splitter
-
-Split a monolithic root `.tex` into modular files in `Sections/`:
-
-```bash
-python3 tools/tex_splitter.py main.tex
-```
-
-Preview split plan without writing files:
-
-```bash
-python3 tools/tex_splitter.py main.tex --dry-run
-```
-
-Add missing numeric prefixes (`01-`, `02-`, ...) to referenced unit files:
-
-```bash
-python3 tools/tex_splitter.py main.tex --renumber-mode add
-```
-
-Remove numeric prefixes from referenced unit files:
-
-```bash
-python3 tools/tex_splitter.py main.tex --renumber-mode remove
-```
-
-Merge one split unit back into its original root position (deletes source by default):
-
-```bash
-python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference.tex
-```
-
-Keep source file after merge:
-
-```bash
-python3 tools/tex_splitter.py --unsplit-target Sections/02-variational-inference.tex --keep-source
-```
-
-Optional legacy-wrapper fallback:
-
-```bash
-python3 tools/tex_splitter.py main.tex --standalone-mode legacy-wrapper
-```
-
-Note: split source must be a root `.tex` target. Subfile units (`\documentclass{subfiles}`) are rejected.
-Renumber only processes files referenced by the selected root.
-Unsplit supports `--dry-run` and defaults to deleting the merged source unit.
-If root already has `\subfile{...}` references and you insert new top-level `\chapter/\section` blocks,
-splitter now performs incremental insertion: existing refs are preserved and only new blocks are extracted.
-Top-level `\appendix` stays in root (not moved into generated section files).
-For full splitter details and migration notes, see `tools/README-theme-designer.md`.
-
-## Quick Troubleshooting
-
-- UI compile fails with `Sections/Sections/... not found`:
-  - This usually means a section file accidentally contains a recursive `\subfile{Sections/...}` reference.
-  - The toolkit compile flow now runs a preflight check and reports the offending file path before TeX compile.
-  - Fix the listed section file to contain real section content, then re-run compile.
-- Recipe mode fails but internal mode works:
-  - Check `.vscode/settings.json` tool/recipe definitions and command availability in `PATH`.
-  - If settings file is missing, use UI button `Generate VSCode settings.json` first.
-  - Switch `Compile` mode to internal fallback in UI for a known-good baseline.
-
-## What it edits
-
-- `theme.colors.tex`
-  - Color overrides.
-- `theme.overrides.tex`
-  - Feature toggle, class-aware, and body-font-size overrides.
-- `theme.ui.json`
-  - UI state cache.
-
-These files are loaded automatically by:
-
-- `main.tex` (`theme.overrides.tex`)
-- `theme.sty` (`theme.colors.tex`)
-
-## What to keep in Git
-
-Keep source files:
-
-- `main.tex`
-- `theme.sty`
-- `theme.colors.tex`
-- `theme.overrides.tex` (optional)
-- `commands.tex`
-- `theorems.tex`
-- `references.bib`
-- `tools/`
-- `Fig/` (when used)
-
-Ignore LaTeX build artifacts via `.gitignore`.
-
-## Reset
+## Reset Theme Overrides
 
 To reset generated theme overrides:
 
 ```bash
 rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 ```
-
-## Active TODO
-
-See:
-
-- `tools/TODO-priority-hardening.md`
-- `tools/TODO-theme-designer.md`
-
-## Naming Migration
-
-- New primary name: `LaTeX Editing Toolkit`.
-- New preferred UI entrypoint: `tools/latex_toolkit.py`.
-- Legacy alias is retained: `tools/theme_designer.py`.
