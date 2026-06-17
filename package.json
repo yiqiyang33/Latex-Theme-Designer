@@ -24,8 +24,10 @@
     "template"
   ],
   "activationEvents": [
+    "onView:latexEditingToolkit.actions",
     "onCommand:latexEditingToolkit.openToolkit",
     "onCommand:latexEditingToolkit.createProject",
+    "onCommand:latexEditingToolkit.refreshTree",
     "onCommand:latexEditingToolkit.initializeWorkspace",
     "onCommand:latexEditingToolkit.upgradeWorkspaceThemeAssets",
     "onCommand:latexEditingToolkit.generateVscodeSettings",
@@ -47,7 +49,13 @@
       },
       {
         "command": "latexEditingToolkit.createProject",
-        "title": "LaTeX Editing Toolkit: Create Project"
+        "title": "LaTeX Editing Toolkit: Create Project",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "latexEditingToolkit.refreshTree",
+        "title": "LaTeX Editing Toolkit: Refresh Tree",
+        "icon": "$(refresh)"
       },
       {
         "command": "latexEditingToolkit.initializeWorkspace",
@@ -90,6 +98,23 @@
         "title": "LaTeX Editing Toolkit: Merge Unit Back To Root"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "latexEditingToolkit",
+          "title": "LaTeX Toolkit",
+          "icon": "assets/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "latexEditingToolkit": [
+        {
+          "id": "latexEditingToolkit.actions",
+          "name": "Toolkit"
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         {
@@ -97,6 +122,10 @@
         },
         {
           "command": "latexEditingToolkit.createProject"
+        },
+        {
+          "command": "latexEditingToolkit.refreshTree",
+          "when": "false"
         },
         {
           "command": "latexEditingToolkit.initializeWorkspace"
@@ -127,6 +156,18 @@
         },
         {
           "command": "latexEditingToolkit.unsplitUnit"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "latexEditingToolkit.createProject",
+          "when": "view == latexEditingToolkit.actions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "latexEditingToolkit.refreshTree",
+          "when": "view == latexEditingToolkit.actions",
+          "group": "navigation@2"
         }
       ]
     }

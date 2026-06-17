@@ -7,9 +7,14 @@ import { ToolkitService } from "./toolkitService";
 let activePanel: ToolkitPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  const treeProvider = new ToolkitTreeProvider();
+
   context.subscriptions.push(
-    vscode.commands.registerCommand("latexEditingToolkit.openToolkit", async () => {
-      const folder = await selectWorkspaceFolder();
+    treeProvider,
+    vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
+    vscode.commands.registerCommand("latexEditingToolkit.openToolkit", async (folderUri?: vscode.Uri) => {
+      const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder);
     }),
@@ -41,16 +46,20 @@ export function activate(context: vscode.ExtensionContext): void {
         await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
       });
       vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
+      treeProvider.refresh();
       await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.initializeWorkspace", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.refreshTree", () => {
+      treeProvider.refresh();
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.initializeWorkspace", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
       vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const choice = await vscode.window.showWarningMessage(
         "Upgrade workspace theme assets from the bundled extension template? Existing files will be backed up first.",
@@ -66,59 +75,59 @@ export function activate(context: vscode.ExtensionContext): void {
       const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
       vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {}) as { message?: string };
       vscode.window.showInformationMessage(result.message ?? "VS Code settings checked.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.saveOverrides", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.saveOverrides", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: unknown };
       await service.handle("save", response.state as Record<string, unknown>);
       vscode.window.showInformationMessage("Saved LaTeX Toolkit overrides.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.resetOverrides", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.resetOverrides", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const ok = await vscode.window.showWarningMessage("Delete theme.ui.json, theme.overrides.tex, and theme.colors.tex?", { modal: true }, "Delete");
       if (ok !== "Delete") return;
       await service.handle("reset", {});
       vscode.window.showInformationMessage("Deleted LaTeX Toolkit override files.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.compilePdf", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.compilePdf", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: Record<string, unknown> };
       const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => service.handle("compile", response.state));
       const success = Boolean((result as { success?: boolean }).success);
       vscode.window.showInformationMessage(success ? "LaTeX compile succeeded." : "LaTeX compile failed. Open Toolkit for logs.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.cleanArtifacts", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.cleanArtifacts", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const ok = await vscode.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {}) as { deleted_count?: number; errors?: string[] };
       vscode.window.showInformationMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.splitCurrentTarget", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.splitCurrentTarget", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       vscode.window.showInformationMessage("Split current LaTeX target.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.renumberUnits", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.renumberUnits", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       vscode.window.showInformationMessage("Renumbered referenced units.");
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.unsplitUnit", async () => {
-      const service = await serviceForCommand(context);
+    vscode.commands.registerCommand("latexEditingToolkit.unsplitUnit", async (folderUri?: vscode.Uri) => {
+      const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
       const ok = await vscode.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
@@ -134,7 +143,7 @@ export function deactivate(): void {
   activePanel = undefined;
 }
 
-async function selectWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
+async function selectWorkspaceFolder(preferredFolderUri?: vscode.Uri): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   if (folders.length === 0) {
     vscode.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
@@ -145,15 +154,163 @@ async function selectWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefin
     vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
     return undefined;
   }
+  if (preferredFolderUri?.scheme === "file") {
+    const matched = localFolders.find((folder) => folder.uri.toString() === preferredFolderUri.toString());
+    if (matched) return matched;
+  }
   if (localFolders.length === 1) return localFolders[0];
   const picked = await vscode.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
   return picked?.folder;
 }
 
-async function serviceForCommand(context: vscode.ExtensionContext): Promise<ToolkitService | undefined> {
-  const folder = await selectWorkspaceFolder();
+async function serviceForCommand(context: vscode.ExtensionContext, preferredFolderUri?: vscode.Uri): Promise<ToolkitService | undefined> {
+  const folder = await selectWorkspaceFolder(preferredFolderUri);
   if (!folder) return undefined;
   return new ToolkitService(folder.uri.fsPath, context.extensionPath);
+}
+
+interface ToolkitTreeNode {
+  id: string;
+  label: string;
+  description?: string;
+  tooltip?: string;
+  iconId?: string;
+  commandId?: string;
+  commandArgs?: unknown[];
+  children?: ToolkitTreeNode[];
+  collapsibleState?: vscode.TreeItemCollapsibleState;
+  contextValue?: string;
+  resourceUri?: vscode.Uri;
+}
+
+class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, vscode.Disposable {
+  private readonly changeEmitter = new vscode.EventEmitter<ToolkitTreeNode | undefined | void>();
+  readonly onDidChangeTreeData = this.changeEmitter.event;
+
+  refresh(): void {
+    this.changeEmitter.fire();
+  }
+
+  dispose(): void {
+    this.changeEmitter.dispose();
+  }
+
+  getTreeItem(node: ToolkitTreeNode): vscode.TreeItem {
+    const collapsibleState = node.collapsibleState
+      ?? (node.children ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(node.label, collapsibleState);
+    item.id = node.id;
+    item.description = node.description;
+    item.tooltip = node.tooltip ?? node.label;
+    item.contextValue = node.contextValue;
+    item.resourceUri = node.resourceUri;
+    if (node.iconId) item.iconPath = new vscode.ThemeIcon(node.iconId);
+    if (node.commandId) {
+      item.command = {
+        command: node.commandId,
+        title: node.label,
+        arguments: node.commandArgs
+      };
+    }
+    return item;
+  }
+
+  getChildren(node?: ToolkitTreeNode): ToolkitTreeNode[] {
+    if (node) return node.children ?? [];
+    return this.rootNodes();
+  }
+
+  private rootNodes(): ToolkitTreeNode[] {
+    const localFolders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
+    const nodes: ToolkitTreeNode[] = [];
+    if (localFolders.length === 0) {
+      nodes.push({
+        id: "open-local-folder",
+        label: "Open Local Folder",
+        description: "required",
+        tooltip: "Open a local folder to use LaTeX Editing Toolkit.",
+        iconId: "folder-opened",
+        commandId: "workbench.action.files.openFolder",
+        contextValue: "openFolder"
+      });
+    } else {
+      nodes.push(...localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1)));
+    }
+    nodes.push({
+      id: "create-new-project",
+      label: "Create New Project",
+      description: "from template",
+      tooltip: "Create a LaTeX Toolkit project in a selected local folder.",
+      iconId: "new-folder",
+      commandId: "latexEditingToolkit.createProject",
+      contextValue: "createProject"
+    });
+    return nodes;
+  }
+
+  private workspaceNode(folder: vscode.WorkspaceFolder, isOnlyFolder: boolean): ToolkitTreeNode {
+    const description = isOnlyFolder ? path.dirname(folder.uri.fsPath) : folder.uri.fsPath;
+    return {
+      id: `workspace:${folder.uri.toString()}`,
+      label: folder.name,
+      description,
+      tooltip: folder.uri.fsPath,
+      iconId: "root-folder",
+      resourceUri: folder.uri,
+      collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+      contextValue: "workspace",
+      children: this.workspaceGroups(folder)
+    };
+  }
+
+  private workspaceGroups(folder: vscode.WorkspaceFolder): ToolkitTreeNode[] {
+    const folderArg = [folder.uri];
+    return [
+      this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
+        this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg),
+        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
+        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
+      ]),
+      this.groupNode(`build:${folder.uri.toString()}`, "Build", "run-all", [
+        this.actionNode("compile-pdf", "Compile PDF", "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
+        this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
+      ]),
+      this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
+        this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
+        this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
+        this.actionNode("unsplit-unit", "Merge Unit Back To Root", "selected target", "git-merge", "latexEditingToolkit.unsplitUnit", folderArg)
+      ]),
+      this.groupNode(`theme:${folder.uri.toString()}`, "Theme", "symbol-color", [
+        this.actionNode("save-overrides", "Save Overrides", "theme files", "save", "latexEditingToolkit.saveOverrides", folderArg),
+        this.actionNode("reset-overrides", "Reset Overrides", "delete generated files", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+      ])
+    ];
+  }
+
+  private groupNode(id: string, label: string, iconId: string, children: ToolkitTreeNode[]): ToolkitTreeNode {
+    return {
+      id,
+      label,
+      iconId,
+      children,
+      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+      contextValue: "group"
+    };
+  }
+
+  private actionNode(id: string, label: string, description: string, iconId: string, commandId: string, commandArgs: unknown[]): ToolkitTreeNode {
+    return {
+      id: `${id}:${String(commandArgs[0])}`,
+      label,
+      description,
+      tooltip: label,
+      iconId,
+      commandId,
+      commandArgs,
+      contextValue: "action"
+    };
+  }
 }
 
 class ToolkitPanel {
@@ -163,8 +320,11 @@ class ToolkitPanel {
 
   static createOrShow(context: vscode.ExtensionContext, folder: vscode.WorkspaceFolder): ToolkitPanel {
     if (activePanel) {
-      activePanel.panel.reveal(vscode.ViewColumn.One);
-      return activePanel;
+      if (activePanel.folder.uri.toString() === folder.uri.toString()) {
+        activePanel.panel.reveal(vscode.ViewColumn.One);
+        return activePanel;
+      }
+      activePanel.dispose();
     }
     const panel = vscode.window.createWebviewPanel(
       "latexEditingToolkit.toolkit",

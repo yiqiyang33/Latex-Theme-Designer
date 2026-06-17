@@ -17,6 +17,9 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 - `LaTeX Editing Toolkit: Initialize Workspace`
 - `LaTeX Editing Toolkit: Upgrade Workspace Theme Assets`
 
+The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
+for project setup, build, structure, and theme actions.
+
 ## Workspace Files
 
 The extension reads and writes these project files:
