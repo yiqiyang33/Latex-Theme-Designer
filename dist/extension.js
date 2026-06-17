@@ -81,12 +81,12 @@ var init_schema = __esm({
         id: "theme_theorem_numbering_policy",
         command: "ThemeTheoremNumberingPolicy",
         label: "Theorem Numbering",
-        help: "Select theorem counter scope for definition/theorem family.",
+        help: "Select whether theorem counters are global or reset within section/chapter.",
         options: [
-          { value: "auto", label: "Auto (book=chapter, article=section)" },
+          { value: "none", label: "No hierarchy" },
           { value: "section", label: "Within section" },
           { value: "chapter", label: "Within chapter (fallback section)" },
-          { value: "none", label: "Global continuous counter" }
+          { value: "auto", label: "Auto (book=chapter, article=section)" }
         ]
       }
     ];
@@ -1448,7 +1448,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve8) => {
+    return new Promise((resolve9) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -1467,12 +1467,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve8({ code: 127, output: `${output}
+        resolve9({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve8({ code: code ?? 1, output });
+        resolve9({ code: code ?? 1, output });
       });
     });
   }
@@ -2633,7 +2633,7 @@ var ToolkitService = class {
 // src/extension.ts
 var activePanel;
 function activate(context) {
-  const treeProvider = new ToolkitTreeProvider();
+  const treeProvider = new ToolkitTreeProvider(context);
   context.subscriptions.push(
     treeProvider,
     vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
@@ -2677,10 +2677,41 @@ function activate(context) {
     vscode.commands.registerCommand("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
     }),
+    vscode.commands.registerCommand("latexEditingToolkit.createStarterInWorkspace", async (folderUri) => {
+      await createStarterInWorkspace(context, treeProvider, folderUri);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickCompileTarget", async (folderUri) => {
+      await pickCompileTarget(context, treeProvider, folderUri);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickCompileRecipe", async (folderUri) => {
+      await pickCompileRecipe(context, treeProvider, folderUri);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.toggleInternalFallback", async (folderUri) => {
+      await toggleInternalFallback(context, treeProvider, folderUri);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.openCurrentPdf", async (folderUri) => {
+      await openCurrentPdf(context, folderUri);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.toggleThemeOption", async (folderUri, toggleId) => {
+      await toggleThemeOption(context, treeProvider, folderUri, toggleId);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickClassConfig", async (folderUri, fieldId) => {
+      await pickClassConfig(context, treeProvider, folderUri, fieldId);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickBlockPreset", async (folderUri) => {
+      await pickPreset(context, treeProvider, folderUri, "block");
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickHeadingTocPreset", async (folderUri) => {
+      await pickPreset(context, treeProvider, folderUri, "heading");
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickBodyFontSize", async (folderUri) => {
+      await pickBodyFontSize(context, treeProvider, folderUri);
+    }),
     vscode.commands.registerCommand("latexEditingToolkit.initializeWorkspace", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
+      treeProvider.refresh();
       vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
@@ -2698,12 +2729,14 @@ function activate(context) {
         () => service.handle("upgrade-theme-assets", { reset_color_overrides: choice === "Upgrade + Reset Colors" })
       );
       const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
+      treeProvider.refresh();
       vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {});
+      treeProvider.refresh();
       vscode.window.showInformationMessage(result.message ?? "VS Code settings checked.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.saveOverrides", async (folderUri) => {
@@ -2711,6 +2744,7 @@ function activate(context) {
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("save", response.state);
+      treeProvider.refresh();
       vscode.window.showInformationMessage("Saved LaTeX Toolkit overrides.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.resetOverrides", async (folderUri) => {
@@ -2719,6 +2753,7 @@ function activate(context) {
       const ok = await vscode.window.showWarningMessage("Delete theme.ui.json, theme.overrides.tex, and theme.colors.tex?", { modal: true }, "Delete");
       if (ok !== "Delete") return;
       await service.handle("reset", {});
+      treeProvider.refresh();
       vscode.window.showInformationMessage("Deleted LaTeX Toolkit override files.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.compilePdf", async (folderUri) => {
@@ -2727,6 +2762,7 @@ function activate(context) {
       const response = await service.handle("state", {});
       const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => service.handle("compile", response.state));
       const success = Boolean(result.success);
+      treeProvider.refresh();
       vscode.window.showInformationMessage(success ? "LaTeX compile succeeded." : "LaTeX compile failed. Open Toolkit for logs.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
@@ -2735,6 +2771,7 @@ function activate(context) {
       const ok = await vscode.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {});
+      treeProvider.refresh();
       vscode.window.showInformationMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
@@ -2742,6 +2779,7 @@ function activate(context) {
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
+      treeProvider.refresh();
       vscode.window.showInformationMessage("Split current LaTeX target.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.renumberUnits", async (folderUri) => {
@@ -2749,6 +2787,7 @@ function activate(context) {
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
+      treeProvider.refresh();
       vscode.window.showInformationMessage("Renumbered referenced units.");
     }),
     vscode.commands.registerCommand("latexEditingToolkit.unsplitUnit", async (folderUri) => {
@@ -2758,6 +2797,7 @@ function activate(context) {
       const ok = await vscode.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
+      treeProvider.refresh();
       vscode.window.showInformationMessage("Merged selected unit back to root.");
     })
   );
@@ -2786,11 +2826,211 @@ async function selectWorkspaceFolder(preferredFolderUri) {
   return picked?.folder;
 }
 async function serviceForCommand(context, preferredFolderUri) {
+  return (await folderAndServiceForCommand(context, preferredFolderUri))?.service;
+}
+async function folderAndServiceForCommand(context, preferredFolderUri) {
   const folder = await selectWorkspaceFolder(preferredFolderUri);
   if (!folder) return void 0;
-  return new ToolkitService(folder.uri.fsPath, context.extensionPath);
+  return { folder, service: new ToolkitService(folder.uri.fsPath, context.extensionPath) };
+}
+async function responseForCommand(context, preferredFolderUri) {
+  const scoped = await folderAndServiceForCommand(context, preferredFolderUri);
+  if (!scoped) return void 0;
+  const response = await scoped.service.handle("state", {});
+  return { ...scoped, response };
+}
+function pdfForTarget(target) {
+  return target && target.endsWith(".tex") ? `${target.slice(0, -4)}.pdf` : "main.pdf";
+}
+function currentPdfPath(state) {
+  return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
+}
+async function createStarterInWorkspace(context, treeProvider, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const templates = scoped.response.schema.starter_templates;
+  const picked = await vscode.window.showQuickPick(
+    templates.map((template) => ({
+      label: template.label,
+      description: template.id,
+      detail: template.description,
+      template
+    })),
+    { placeHolder: "Select starter template" }
+  );
+  if (!picked) return;
+  const outputTarget = await vscode.window.showInputBox({
+    title: "Generate Starter",
+    prompt: "Workspace-relative .tex file to create",
+    value: scoped.response.schema.starter_default_output_target || "main.tex"
+  });
+  if (!outputTarget) return;
+  let overwrite = false;
+  if (fs9.existsSync(path9.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+    const ok = await vscode.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
+    if (ok !== "Overwrite") return;
+    overwrite = true;
+  }
+  const result = await scoped.service.handle("template-bootstrap", {
+    template_id: picked.template.id,
+    output_target: outputTarget,
+    overwrite
+  });
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`Generated ${result.generated_target ?? outputTarget}.`);
+}
+async function pickCompileTarget(context, treeProvider, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const targets = scoped.response.state.compile_targets;
+  if (targets.length === 0) {
+    vscode.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(
+    targets.map((target) => ({
+      label: target,
+      description: target === scoped.response.state.compile_target ? "current" : ""
+    })),
+    { placeHolder: "Select compile target" }
+  );
+  if (!picked) return;
+  await scoped.service.handle("target", { compile_target: picked.label });
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`Compile target set to ${picked.label}.`);
+}
+async function pickCompileRecipe(context, treeProvider, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const recipes = scoped.response.state.compile_recipes;
+  if (recipes.length === 0) {
+    vscode.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(
+    recipes.map((recipe) => ({
+      label: recipe.name,
+      description: recipe.id === scoped.response.state.compile_recipe ? "current" : recipe.id,
+      detail: recipe.tools.join(" -> "),
+      recipe
+    })),
+    { placeHolder: "Select compile recipe" }
+  );
+  if (!picked) return;
+  await scoped.service.handle("compile-config", {
+    compile_recipe: picked.recipe.id,
+    compile_use_internal_fallback: false
+  });
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`Compile recipe set to ${picked.recipe.name}.`);
+}
+async function toggleInternalFallback(context, treeProvider, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const next = !scoped.response.state.compile_use_internal_fallback;
+  await scoped.service.handle("compile-config", {
+    compile_recipe: scoped.response.state.compile_recipe,
+    compile_use_internal_fallback: next
+  });
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`);
+}
+async function openCurrentPdf(context, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const rawPath = currentPdfPath(scoped.response.state);
+  try {
+    const pdfPath = await scoped.service.readPdfIfExists(rawPath);
+    await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
+  } catch {
+    vscode.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
+  }
+}
+async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped || !toggleId) return;
+  const toggle = scoped.response.schema.toggles.find((item) => item.id === toggleId);
+  if (!toggle) return;
+  const state = scoped.response.state;
+  state.toggles[toggleId] = !state.toggles[toggleId];
+  await scoped.service.handle("save", state);
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`);
+}
+async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped || !fieldId) return;
+  const field = scoped.response.schema.class_config.find((item) => item.id === fieldId);
+  if (!field) return;
+  const current = scoped.response.state.class_config[field.id];
+  const picked = await vscode.window.showQuickPick(
+    field.options.map((option) => ({
+      label: option.label,
+      description: option.value === current ? "current" : option.value,
+      option
+    })),
+    { placeHolder: field.label }
+  );
+  if (!picked) return;
+  const state = scoped.response.state;
+  state.class_config[field.id] = picked.option.value;
+  await scoped.service.handle("save", state);
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`${field.label}: ${picked.option.label}.`);
+}
+async function pickPreset(context, treeProvider, folderUri, kind) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const presets = kind === "block" ? scoped.response.schema.block_presets : scoped.response.schema.heading_toc_presets;
+  const current = kind === "block" ? scoped.response.state.block_preset : scoped.response.state.heading_toc_preset;
+  const picked = await vscode.window.showQuickPick(
+    presets.map((preset) => ({
+      label: preset.label,
+      description: preset.id === current ? "current" : preset.id,
+      detail: preset.description,
+      preset
+    })),
+    { placeHolder: kind === "block" ? "Select block preset" : "Select heading/TOC preset" }
+  );
+  if (!picked) return;
+  await scoped.service.handle(kind === "block" ? "block-preset" : "heading-toc-preset", {
+    [kind === "block" ? "block_preset" : "heading_toc_preset"]: picked.preset.id
+  });
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`${kind === "block" ? "Block" : "Heading/TOC"} preset: ${picked.preset.label}.`);
+}
+async function pickBodyFontSize(context, treeProvider, folderUri) {
+  const scoped = await responseForCommand(context, folderUri);
+  if (!scoped) return;
+  const config = scoped.response.schema.body_font_size;
+  const values = [];
+  for (let value = config.min; value <= config.max + config.step / 2; value += config.step) {
+    values.push(Number(value.toFixed(2)));
+  }
+  const current = scoped.response.state.body_font_size_pt;
+  const picked = await vscode.window.showQuickPick(
+    values.map((value) => ({
+      label: `${formatPointSize(value)} pt`,
+      description: value === current ? "current" : "",
+      value
+    })),
+    { placeHolder: config.label }
+  );
+  if (!picked) return;
+  const state = scoped.response.state;
+  state.body_font_size_pt = picked.value;
+  await scoped.service.handle("save", state);
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(`${config.label}: ${picked.label}.`);
+}
+function formatPointSize(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 var ToolkitTreeProvider = class {
+  constructor(context) {
+    this.context = context;
+  }
+  context;
   changeEmitter = new vscode.EventEmitter();
   onDidChangeTreeData = this.changeEmitter.event;
   refresh() {
@@ -2817,11 +3057,11 @@ var ToolkitTreeProvider = class {
     }
     return item;
   }
-  getChildren(node) {
+  async getChildren(node) {
     if (node) return node.children ?? [];
     return this.rootNodes();
   }
-  rootNodes() {
+  async rootNodes() {
     const localFolders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes = [];
     if (localFolders.length === 0) {
@@ -2835,7 +3075,7 @@ var ToolkitTreeProvider = class {
         contextValue: "openFolder"
       });
     } else {
-      nodes.push(...localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1)));
+      nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
     }
     nodes.push({
       id: "create-new-project",
@@ -2848,8 +3088,9 @@ var ToolkitTreeProvider = class {
     });
     return nodes;
   }
-  workspaceNode(folder, isOnlyFolder) {
+  async workspaceNode(folder, isOnlyFolder) {
     const description = isOnlyFolder ? path9.dirname(folder.uri.fsPath) : folder.uri.fsPath;
+    const response = await this.loadWorkspaceState(folder);
     return {
       id: `workspace:${folder.uri.toString()}`,
       label: folder.name,
@@ -2859,40 +3100,97 @@ var ToolkitTreeProvider = class {
       resourceUri: folder.uri,
       collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
       contextValue: "workspace",
-      children: this.workspaceGroups(folder)
+      children: response instanceof Error ? this.workspaceErrorGroups(folder, response) : this.workspaceGroups(folder, response)
     };
   }
-  workspaceGroups(folder) {
+  async loadWorkspaceState(folder) {
+    try {
+      return await new ToolkitService(folder.uri.fsPath, this.context.extensionPath).handle("state", {});
+    } catch (err) {
+      return err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  workspaceGroups(folder, response) {
     const folderArg = [folder.uri];
+    const state = response.state;
+    const schema = response.schema;
     return [
+      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", [
+        this.actionNode("status-target", "Target", state.compile_target || "select target", "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
+        this.actionNode("status-recipe", "Recipe", this.compileRecipeDescription(state), "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
+        this.actionNode("status-pdf", "PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
+        this.infoNode(`status-last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state)),
+        this.infoNode(`status-class:${folder.uri.toString()}`, "Document Class", this.documentClassDescription(state), "symbol-class")
+      ], vscode.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
         this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg),
+        this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
         this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
       ]),
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "run-all", [
-        this.actionNode("compile-pdf", "Compile PDF", "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
+        this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
+        this.actionNode("pick-target", "Pick Target", `${state.compile_targets.length} found`, "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
+        this.actionNode("pick-recipe", "Pick Recipe", `${state.compile_recipes.length} found`, "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
+        this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
+        this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
-      ]),
+      ], vscode.TreeItemCollapsibleState.Expanded),
       this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
         this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
         this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
         this.actionNode("unsplit-unit", "Merge Unit Back To Root", "selected target", "git-merge", "latexEditingToolkit.unsplitUnit", folderArg)
       ]),
       this.groupNode(`theme:${folder.uri.toString()}`, "Theme", "symbol-color", [
+        this.groupNode(`theme-presets:${folder.uri.toString()}`, "Presets", "symbol-misc", [
+          this.actionNode("pick-block-preset", "Block Preset", this.presetLabel(schema.block_presets, state.block_preset), "symbol-color", "latexEditingToolkit.pickBlockPreset", folderArg),
+          this.actionNode("pick-heading-toc-preset", "Heading/TOC Preset", this.presetLabel(schema.heading_toc_presets, state.heading_toc_preset), "list-flat", "latexEditingToolkit.pickHeadingTocPreset", folderArg),
+          this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg)
+        ], vscode.TreeItemCollapsibleState.Expanded),
+        this.groupNode(`theme-class-config:${folder.uri.toString()}`, "Class Rules", "symbol-class", schema.class_config.map((field) => this.actionNode(
+          `pick-class-config-${field.id}`,
+          field.label,
+          this.optionLabel(field.options, state.class_config[field.id]),
+          "settings",
+          "latexEditingToolkit.pickClassConfig",
+          [folder.uri, field.id]
+        )), vscode.TreeItemCollapsibleState.Expanded),
+        this.groupNode(`theme-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => this.actionNode(
+          `toggle-theme-${toggle.id}`,
+          toggle.label,
+          state.toggles[toggle.id] ? "on" : "off",
+          state.toggles[toggle.id] ? "check" : "circle-slash",
+          "latexEditingToolkit.toggleThemeOption",
+          [folder.uri, toggle.id]
+        )), vscode.TreeItemCollapsibleState.Expanded),
         this.actionNode("save-overrides", "Save Overrides", "theme files", "save", "latexEditingToolkit.saveOverrides", folderArg),
         this.actionNode("reset-overrides", "Reset Overrides", "delete generated files", "discard", "latexEditingToolkit.resetOverrides", folderArg)
       ])
     ];
   }
-  groupNode(id, label, iconId, children) {
+  workspaceErrorGroups(folder, error) {
+    const folderArg = [folder.uri];
+    return [
+      this.groupNode(`status:${folder.uri.toString()}`, "Status", "warning", [
+        this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error"),
+        this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg)
+      ], vscode.TreeItemCollapsibleState.Expanded),
+      this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
+        this.actionNode("generate-starter", "Generate Starter", "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
+        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
+      ], vscode.TreeItemCollapsibleState.Expanded)
+    ];
+  }
+  groupNode(id, label, iconId, children, collapsibleState = vscode.TreeItemCollapsibleState.Collapsed) {
     return {
       id,
       label,
       iconId,
       children,
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+      collapsibleState,
       contextValue: "group"
     };
   }
@@ -2907,6 +3205,51 @@ var ToolkitTreeProvider = class {
       commandArgs,
       contextValue: "action"
     };
+  }
+  infoNode(id, label, description, iconId) {
+    return {
+      id,
+      label,
+      description,
+      tooltip: description ? `${label}: ${description}` : label,
+      iconId,
+      contextValue: "info"
+    };
+  }
+  compileRecipeDescription(state) {
+    if (state.compile_use_internal_fallback) return "internal fallback";
+    return state.compile_recipe_name || state.compile_recipe || "not set";
+  }
+  lastCompileDescription(state) {
+    if (state.compile_last_success === null) return "not run";
+    const status = state.compile_last_success ? "succeeded" : "failed";
+    return state.compile_last_compile_at ? `${status} ${this.formatTimestamp(state.compile_last_compile_at)}` : status;
+  }
+  lastCompileIcon(state) {
+    if (state.compile_last_success === null) return "circle-outline";
+    return state.compile_last_success ? "pass-filled" : "error";
+  }
+  documentClassDescription(state) {
+    const detected = state.detected_document_class || "unknown";
+    const effective = state.effective_theme_class || "auto";
+    const chapter = state.detected_document_class_has_chapter ? "chapter" : "section";
+    return `${detected} -> ${effective}, ${chapter} headings`;
+  }
+  presetLabel(presets, value) {
+    return presets.find((preset) => preset.id === value)?.label ?? value;
+  }
+  optionLabel(options, value) {
+    return options.find((option) => option.value === value)?.label ?? value;
+  }
+  formatTimestamp(raw) {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toLocaleString(void 0, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
   }
 };
 var ToolkitPanel = class _ToolkitPanel {

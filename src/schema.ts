@@ -47,12 +47,12 @@ export const CLASS_CONFIG_SCHEMA: ClassConfigSchemaItem[] = [
     id: "theme_theorem_numbering_policy",
     command: "ThemeTheoremNumberingPolicy",
     label: "Theorem Numbering",
-    help: "Select theorem counter scope for definition/theorem family.",
+    help: "Select whether theorem counters are global or reset within section/chapter.",
     options: [
-      { value: "auto", label: "Auto (book=chapter, article=section)" },
+      { value: "none", label: "No hierarchy" },
       { value: "section", label: "Within section" },
       { value: "chapter", label: "Within chapter (fallback section)" },
-      { value: "none", label: "Global continuous counter" }
+      { value: "auto", label: "Auto (book=chapter, article=section)" }
     ]
   }
 ];

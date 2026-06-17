@@ -52,7 +52,8 @@
     return target && target.endsWith(".tex") ? `${target.slice(0, -4)}.pdf` : "main.pdf";
   }
   function classConfigValue(id) {
-    return model.state.class_config?.[id] || "auto";
+    const fallback = (model.schema.class_config || []).find((field) => field.id === id)?.options?.[0]?.value || "auto";
+    return model.state.class_config?.[id] || fallback;
   }
   function effectiveThemeClass() {
     const mode = classConfigValue("theme_class_mode");

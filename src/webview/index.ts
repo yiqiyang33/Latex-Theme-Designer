@@ -65,7 +65,8 @@ function pdfForTarget(target: string): string {
 }
 
 function classConfigValue(id: string): string {
-  return model.state.class_config?.[id] || "auto";
+  const fallback = (model.schema.class_config || []).find((field: any) => field.id === id)?.options?.[0]?.value || "auto";
+  return model.state.class_config?.[id] || fallback;
 }
 
 function effectiveThemeClass(): string {

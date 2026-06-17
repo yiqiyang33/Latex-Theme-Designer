@@ -28,6 +28,16 @@
     "onCommand:latexEditingToolkit.openToolkit",
     "onCommand:latexEditingToolkit.createProject",
     "onCommand:latexEditingToolkit.refreshTree",
+    "onCommand:latexEditingToolkit.createStarterInWorkspace",
+    "onCommand:latexEditingToolkit.pickCompileTarget",
+    "onCommand:latexEditingToolkit.pickCompileRecipe",
+    "onCommand:latexEditingToolkit.toggleInternalFallback",
+    "onCommand:latexEditingToolkit.openCurrentPdf",
+    "onCommand:latexEditingToolkit.toggleThemeOption",
+    "onCommand:latexEditingToolkit.pickClassConfig",
+    "onCommand:latexEditingToolkit.pickBlockPreset",
+    "onCommand:latexEditingToolkit.pickHeadingTocPreset",
+    "onCommand:latexEditingToolkit.pickBodyFontSize",
     "onCommand:latexEditingToolkit.initializeWorkspace",
     "onCommand:latexEditingToolkit.upgradeWorkspaceThemeAssets",
     "onCommand:latexEditingToolkit.generateVscodeSettings",
@@ -56,6 +66,54 @@
         "command": "latexEditingToolkit.refreshTree",
         "title": "LaTeX Editing Toolkit: Refresh Tree",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "latexEditingToolkit.createStarterInWorkspace",
+        "title": "LaTeX Editing Toolkit: Generate Starter In Workspace",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "latexEditingToolkit.pickCompileTarget",
+        "title": "LaTeX Editing Toolkit: Pick Compile Target",
+        "icon": "$(symbol-file)"
+      },
+      {
+        "command": "latexEditingToolkit.pickCompileRecipe",
+        "title": "LaTeX Editing Toolkit: Pick Compile Recipe",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "latexEditingToolkit.toggleInternalFallback",
+        "title": "LaTeX Editing Toolkit: Toggle Internal Fallback",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "latexEditingToolkit.openCurrentPdf",
+        "title": "LaTeX Editing Toolkit: Open Current PDF",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "latexEditingToolkit.toggleThemeOption",
+        "title": "LaTeX Editing Toolkit: Toggle Theme Option"
+      },
+      {
+        "command": "latexEditingToolkit.pickClassConfig",
+        "title": "LaTeX Editing Toolkit: Pick Class Config"
+      },
+      {
+        "command": "latexEditingToolkit.pickBlockPreset",
+        "title": "LaTeX Editing Toolkit: Pick Block Preset",
+        "icon": "$(symbol-color)"
+      },
+      {
+        "command": "latexEditingToolkit.pickHeadingTocPreset",
+        "title": "LaTeX Editing Toolkit: Pick Heading/TOC Preset",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "latexEditingToolkit.pickBodyFontSize",
+        "title": "LaTeX Editing Toolkit: Pick Body Font Size",
+        "icon": "$(text-size)"
       },
       {
         "command": "latexEditingToolkit.initializeWorkspace",
@@ -126,6 +184,39 @@
         {
           "command": "latexEditingToolkit.refreshTree",
           "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.createStarterInWorkspace"
+        },
+        {
+          "command": "latexEditingToolkit.pickCompileTarget"
+        },
+        {
+          "command": "latexEditingToolkit.pickCompileRecipe"
+        },
+        {
+          "command": "latexEditingToolkit.toggleInternalFallback",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.openCurrentPdf"
+        },
+        {
+          "command": "latexEditingToolkit.toggleThemeOption",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.pickClassConfig",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.pickBlockPreset"
+        },
+        {
+          "command": "latexEditingToolkit.pickHeadingTocPreset"
+        },
+        {
+          "command": "latexEditingToolkit.pickBodyFontSize"
         },
         {
           "command": "latexEditingToolkit.initializeWorkspace"

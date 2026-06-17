@@ -5,7 +5,7 @@
     "theme_class_mode": "article",
     "theme_heading_chapter_mode": "auto",
     "theme_page_header_mode": "auto",
-    "theme_theorem_numbering_policy": "auto"
+    "theme_theorem_numbering_policy": "none"
   },
   "colors": {
     "theme-chapter": "#1F2937",

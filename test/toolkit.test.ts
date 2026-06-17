@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BLOCK_PRESET_DEFINITIONS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
+import { BLOCK_PRESET_DEFINITIONS, CLASS_CONFIG_DEFAULTS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
@@ -50,6 +50,16 @@ describe("TypeScript Toolkit migration", () => {
     expect(commands).toContain("\\newcommand{\\term}[1]{\\themeInlineBox{inline-term-bg}{inline-term-fg}{#1}}");
     expect(commands).toContain("\\newcommand{\\todo}[1]{\\themeInlineBox");
     expect(commands).toContain("\\newcommand{\\code}[1]");
+  });
+
+  it("defaults theorem numbering to no hierarchy while keeping styled shortcuts optional", async () => {
+    const theorems = await fs.readFile(path.join(repoRoot, "assets", "template", "theorems.tex"), "utf8");
+    expect(CLASS_CONFIG_DEFAULTS.theme_theorem_numbering_policy).toBe("none");
+    expect(theorems).toContain("\\newtheorem{definition}{Definition}");
+    expect(theorems).toContain("\\newtheorem{theorem}{Theorem}");
+    expect(theorems).toContain("\\newtcbtheorem[number within=\\ThemeTheoremCounterWithin]{mydefinition}{Definition}");
+    expect(theorems).toContain("\\NewDocumentCommand{\\defn}{mm+m}");
+    expect(theorems).toContain("\\ThemeRunTcbTheorem{mydefinition}{defn}{#1}{#2}{#3}");
   });
 
   it("derives inline helper colors when applying a block preset", async () => {

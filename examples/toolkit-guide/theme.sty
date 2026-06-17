@@ -21,7 +21,7 @@
 \@ifundefined{ThemeClassMode}{\def\ThemeClassMode{auto}}{}
 \@ifundefined{ThemeHeadingChapterMode}{\def\ThemeHeadingChapterMode{auto}}{}
 \@ifundefined{ThemePageHeaderMode}{\def\ThemePageHeaderMode{auto}}{}
-\@ifundefined{ThemeTheoremNumberingPolicy}{\def\ThemeTheoremNumberingPolicy{auto}}{}
+\@ifundefined{ThemeTheoremNumberingPolicy}{\def\ThemeTheoremNumberingPolicy{none}}{}
 \@ifundefined{ThemeBodyFontSizePt}{\def\ThemeBodyFontSizePt{}}{}
 
 \newif\ifThemeHasChapter
@@ -80,7 +80,7 @@
     \fi
 \fi
 
-\def\ThemeResolvedTheoremNumbering{section}
+\def\ThemeResolvedTheoremNumbering{none}
 \def\theme@number@chapter{chapter}
 \def\theme@number@section{section}
 \def\theme@number@none{none}
