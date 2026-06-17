@@ -56,10 +56,67 @@
     \fi
 }
 
-\newcommand{\ThemeOptionalTheoremTitle}[1]{%
+\newcommand{\ThemeBeginDefinition}[1]{%
     \if\relax\detokenize{#1}\relax
+        \begin{definition}%
     \else
-        [#1]%
+        \begin{definition}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginTheorem}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{theorem}%
+    \else
+        \begin{theorem}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginLemma}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{lemma}%
+    \else
+        \begin{lemma}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginCorollary}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{corollary}%
+    \else
+        \begin{corollary}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginProposition}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{proposition}%
+    \else
+        \begin{proposition}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginClaim}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{claim}%
+    \else
+        \begin{claim}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginFact}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{fact}%
+    \else
+        \begin{fact}[#1]%
+    \fi
+}
+
+\newcommand{\ThemeBeginAssumption}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{assumption}%
+    \else
+        \begin{assumption}[#1]%
     \fi
 }
 \makeatother
@@ -297,56 +354,56 @@
 % -------------------- Theorem Commands --------------------
 \ifEnablePlainAmsthmTheorem
     \NewDocumentCommand{\defn}{mm+m}{
-        \begin{definition}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginDefinition{#1}
             \ThemeEmitPrefixedLabel{defn}{#2}
             #3
         \end{definition}
     }
 
     \NewDocumentCommand{\thm}{mm+m}{
-        \begin{theorem}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginTheorem{#1}
             \ThemeEmitPrefixedLabel{thm}{#2}
             #3
         \end{theorem}
     }
 
     \NewDocumentCommand{\lem}{mm+m}{
-        \begin{lemma}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginLemma{#1}
             \ThemeEmitPrefixedLabel{lem}{#2}
             #3
         \end{lemma}
     }
 
     \NewDocumentCommand{\cor}{mm+m}{
-        \begin{corollary}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginCorollary{#1}
             \ThemeEmitPrefixedLabel{cor}{#2}
             #3
         \end{corollary}
     }
 
     \NewDocumentCommand{\prop}{mm+m}{
-        \begin{proposition}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginProposition{#1}
             \ThemeEmitPrefixedLabel{prop}{#2}
             #3
         \end{proposition}
     }
 
     \NewDocumentCommand{\clm}{mm+m}{
-        \begin{claim}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginClaim{#1}
             \ThemeEmitPrefixedLabel{clm}{#2}
             #3
         \end{claim}
     }
 
     \newcommand{\ThemeFactCommand}[3]{
-        \begin{fact}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginFact{#1}
             \ThemeEmitPrefixedLabel{fact}{#2}
             #3
         \end{fact}
     }
 
     \newcommand{\ThemeAssumptionCommand}[3]{
-        \begin{assumption}\ThemeOptionalTheoremTitle{#1}
+        \ThemeBeginAssumption{#1}
             \ThemeEmitPrefixedLabel{assump}{#2}
             #3
         \end{assumption}

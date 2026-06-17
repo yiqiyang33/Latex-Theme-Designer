@@ -58,6 +58,9 @@ describe("TypeScript Toolkit migration", () => {
     expect(theorems).toContain("\\newtheorem{definition}{Definition}");
     expect(theorems).toContain("\\newtheorem{theorem}{Theorem}");
     expect(theorems).toContain("\\newtcbtheorem[number within=\\ThemeTheoremCounterWithin]{mydefinition}{Definition}");
+    expect(theorems).toContain("\\ThemeBeginDefinition{#1}");
+    expect(theorems).not.toContain("\\begin{definition}\\ThemeOptionalTheoremTitle");
+    expect(theorems).not.toContain("\\ThemeOptionalTheoremTitle");
     expect(theorems).toContain("\\NewDocumentCommand{\\defn}{mm+m}");
     expect(theorems).toContain("\\ThemeRunTcbTheorem{mydefinition}{defn}{#1}{#2}{#3}");
   });
