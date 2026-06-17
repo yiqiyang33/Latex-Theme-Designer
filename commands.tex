@@ -21,9 +21,9 @@
         #1
     ]{\strut #4}%
 }
-\newcommand{\key}[1]{\textcolor{inline-key-fg}{\theme@originaltextbf{#1}}}
+\newcommand{\key}[1]{\themeInlineBox[fontupper=\bfseries]{inline-term-bg}{inline-key-fg}{#1}}
 \newcommand{\term}[1]{\themeInlineBox{inline-term-bg}{inline-term-fg}{#1}}
-\newcommand{\warn}[1]{\textcolor{inline-warn-fg}{\theme@originaltextbf{#1}}}
+\newcommand{\warn}[1]{\themeInlineBox[fontupper=\bfseries]{inline-todo-bg}{inline-warn-fg}{#1}}
 \newcommand{\todo}[1]{\themeInlineBox[fontupper=\sffamily\footnotesize\bfseries]{inline-todo-bg}{inline-todo-fg}{TODO\hspace{0.25em}#1}}
 \newcommand{\code}[1]{%
     \themeInlineBox[fontupper=\ttfamily\footnotesize]{inline-code-bg}{inline-code-fg}{\detokenize{#1}}%

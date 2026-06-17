@@ -118,24 +118,64 @@
 }
 \ExplSyntaxOff
 
+% -------------------- Native amsthm theorem family --------------------
+% These environments are always available for imported paper-style LaTeX:
+% \begin{theorem}, \begin{lemma}, \begin{proposition}, \begin{corollary},
+% \begin{claim}, and \begin{remark} stay plain even when shortcut commands
+% such as \thm use styled tcolorbox blocks.
+\ifThemeTheoremNumberingNone
+    \theoremstyle{definition}
+    \newtheorem{definition}{Definition}
+    \theoremstyle{plain}
+    \newtheorem{theorem}{Theorem}
+    \newtheorem{lemma}{Lemma}
+    \newtheorem{proposition}{Proposition}
+    \newtheorem{corollary}{Corollary}
+    \newtheorem{claim}{Claim}
+    \theoremstyle{remark}
+    \newtheorem{remark}{Remark}
+\else
+    \ifThemeTheoremCounterWithinChapter
+        \theoremstyle{definition}
+        \newtheorem{definition}{Definition}[chapter]
+        \theoremstyle{plain}
+        \newtheorem{theorem}{Theorem}[chapter]
+        \newtheorem{lemma}{Lemma}[chapter]
+        \newtheorem{proposition}{Proposition}[chapter]
+        \newtheorem{corollary}{Corollary}[chapter]
+        \newtheorem{claim}{Claim}[chapter]
+        \theoremstyle{remark}
+        \newtheorem{remark}{Remark}[chapter]
+    \else
+        \theoremstyle{definition}
+        \newtheorem{definition}{Definition}[section]
+        \theoremstyle{plain}
+        \newtheorem{theorem}{Theorem}[section]
+        \newtheorem{lemma}{Lemma}[section]
+        \newtheorem{proposition}{Proposition}[section]
+        \newtheorem{corollary}{Corollary}[section]
+        \newtheorem{claim}{Claim}[section]
+        \theoremstyle{remark}
+        \newtheorem{remark}{Remark}[section]
+    \fi
+\fi
+
 \ifEnablePlainAmsthmTheorem
-    % -------------------- Native amsthm theorem family --------------------
     \ifThemeTheoremNumberingNone
-        \newtheorem{definition}{Definition}
+        \theoremstyle{plain}
+        \newtheorem{fact}{Fact}
+        \newtheorem{assumption}{Assumption}
     \else
         \ifThemeTheoremCounterWithinChapter
-            \newtheorem{definition}{Definition}[chapter]
+            \theoremstyle{plain}
+            \newtheorem{fact}{Fact}[chapter]
+            \newtheorem{assumption}{Assumption}[chapter]
         \else
-            \newtheorem{definition}{Definition}[section]
+            \theoremstyle{plain}
+            \newtheorem{fact}{Fact}[section]
+            \newtheorem{assumption}{Assumption}[section]
         \fi
     \fi
-    \newtheorem{theorem}[definition]{Theorem}
-    \newtheorem{lemma}[definition]{Lemma}
-    \newtheorem{corollary}[definition]{Corollary}
-    \newtheorem{proposition}[definition]{Proposition}
-    \newtheorem{claim}[definition]{Claim}
-    \newtheorem{fact}[definition]{Fact}
-    \newtheorem{assumption}[definition]{Assumption}
     \let\ThemeFactEnvBegin\fact
     \let\ThemeAssumptionEnvBegin\assumption
 \else
@@ -389,17 +429,6 @@
         {\it #1}
     }
 
-    \newenvironment{remark}{
-        \par
-        \vspace{5pt}
-        \begingroup
-        \noindent\textbf{Remark. }\itshape\ignorespaces
-    }{
-        \par
-        \endgroup
-        \vspace{5pt}
-    }
-
     \NewDocumentCommand{\rmkb}{+m}{
         \begin{remark}
             #1
@@ -466,7 +495,7 @@
         {\it \color{remark-inline-fg}#1}
     }
 
-    \newenvironment{remark}{
+    \newenvironment{styledremark}{
         \par
         \vspace{5pt}
         \begin{minipage}{\textwidth}
@@ -481,9 +510,9 @@
     }
 
     \NewDocumentCommand{\rmkb}{+m}{
-        \begin{remark}
+        \begin{styledremark}
             #1
-        \end{remark}
+        \end{styledremark}
     }
 
     \newenvironment{assump}{
