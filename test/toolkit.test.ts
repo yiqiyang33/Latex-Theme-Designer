@@ -3,11 +3,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BLOCK_PRESET_DEFINITIONS, CLASS_CONFIG_DEFAULTS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS } from "../src/schema";
+import { BLOCK_PRESET_DEFINITIONS, CLASS_CONFIG_DEFAULTS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
+import { LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry } from "../src/projectRegistry";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
 import { TemplateService } from "../src/template";
+import type { LocalProjectStateStore } from "../src/types";
 import { parseThemeColorDefaults } from "../src/utils";
 import { generateVscodeSettingsIfMissing, loadRecipeCatalog } from "../src/vscodeSettings";
 
@@ -29,7 +31,179 @@ async function copyBaseAssets(root: string): Promise<void> {
   await fs.copyFile(path.join(repoRoot, "assets", "template", "Fig", "cover.png"), path.join(root, "Fig", "cover.png"));
 }
 
+class MemoryProjectStateStore implements LocalProjectStateStore {
+  private readonly values = new Map<string, unknown>();
+
+  get<T>(key: string): T | undefined {
+    return this.values.get(key) as T | undefined;
+  }
+
+  async update(key: string, value: unknown): Promise<void> {
+    this.values.set(key, value);
+  }
+}
+
 describe("TypeScript Toolkit migration", () => {
+  it("exposes five complete unified style presets with the documented pairings", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    const response = await new StateService(root).buildResponseState();
+    expect(response.schema.style_presets.map((preset) => preset.id)).toEqual(["default", "midnight", "meadow", "ember", "uchicago"]);
+    expect(STYLE_PRESET_DEFINITIONS.map((preset) => [preset.block_source, preset.heading_source])).toEqual([
+      ["default", "default"],
+      ["midnight", "inkstone"],
+      ["meadow", "aurora"],
+      ["ember", "sunset"],
+      ["uchicago", "uchicago"]
+    ]);
+    expect(STYLE_PRESET_DEFINITIONS).toHaveLength(5);
+    for (const preset of STYLE_PRESET_DEFINITIONS) {
+      expect(Object.keys(preset.colors).sort()).toEqual([...COLOR_ORDER].sort());
+      expect(preset.colors["theme-bold"]).toBe(preset.bold_color);
+    }
+  });
+
+  it("applies complete style bundles including inline commands and bold text", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    const service = new StateService(root);
+    const state = await service.loadState();
+    service.applyStylePreset(state, "uchicago");
+    expect(state.style_preset).toBe("uchicago");
+    expect(state.colors["theme-bold"]).toBe("#800000");
+    expect(state.colors["theme-section"]).toBe("#800000");
+    expect(state.colors["inline-key-fg"]).toBe("#800000");
+    expect(state.colors["inline-term-bg"]).toBe("#F6F4F2");
+
+    service.applyStylePreset(state, "default");
+    expect(state.style_preset).toBe("default");
+    expect(state.colors["theme-bold"]).toBe("#334155");
+    expect(state.colors["theme-section"]).toBe("#334155");
+    expect(state.colors["inline-key-fg"]).toBe("#2F6F73");
+    expect(state.colors["inline-term-bg"]).toBe("#EBF5F4");
+  });
+
+  it("does not leave custom colors behind when switching presets", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    const service = new StateService(root);
+    const state = await service.loadState();
+    state.colors["question-accent"] = "#123456";
+    state.colors["theme-bold"] = "#654321";
+
+    service.applyStylePreset(state, "midnight");
+    expect(state.colors["question-accent"]).toBe(STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "midnight")?.colors["question-accent"]);
+    expect(state.colors["theme-bold"]).toBe("#273B66");
+
+    service.applyStylePreset(state, "default");
+    expect(state.colors["question-accent"]).toBe(STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "default")?.colors["question-accent"]);
+    expect(state.colors["theme-bold"]).toBe("#334155");
+  });
+
+  it("normalizes a style-only payload to the complete bundle while preserving explicit color edits", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    const service = new StateService(root);
+    const state = await service.loadState();
+
+    const applied = await service.normalizePayload({ style_preset: "uchicago" }, state);
+    expect(applied.style_preset).toBe("uchicago");
+    expect(applied.colors["theme-bold"]).toBe("#800000");
+    expect(applied.colors["inline-key-fg"]).toBe("#800000");
+
+    const edited = await service.normalizePayload({ style_preset: "uchicago", colors: { "inline-key-fg": "#123456" } }, state);
+    expect(edited.style_preset).toBe("uchicago");
+    expect(edited.colors["inline-key-fg"]).toBe("#123456");
+  });
+
+  it("migrates legacy preset ids by block precedence without replacing saved colors", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.ui.json"), JSON.stringify({
+      colors: { "inline-key-fg": "#123456" },
+      block_preset: "uchicago",
+      heading_toc_preset: "default"
+    }), "utf8");
+    const service = new StateService(root);
+    const state = await service.loadState();
+    expect(state.style_preset).toBe("uchicago");
+    expect(state.colors["inline-key-fg"]).toBe("#123456");
+
+    await service.writeOverrideFiles(state);
+    const persisted = JSON.parse(await fs.readFile(path.join(root, "theme.ui.json"), "utf8"));
+    expect(persisted.style_preset).toBe("uchicago");
+    expect(persisted.block_preset).toBe("uchicago");
+    expect(persisted.heading_toc_preset).toBe("uchicago");
+  });
+
+  it("registers local note projects globally and deduplicates normalized paths", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const firstRoot = await tempWorkspace();
+    const secondRoot = await tempWorkspace();
+    await fs.writeFile(path.join(firstRoot, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await fs.writeFile(path.join(secondRoot, "main.tex"), "\\documentclass{article}\n", "utf8");
+
+    const first = await registry.add(firstRoot, "book-minimal");
+    const duplicate = await registry.add(path.join(firstRoot, "."), "article-minimal");
+    await registry.add(secondRoot, "article-minimal");
+    const projects = await registry.list();
+
+    expect(projects).toHaveLength(2);
+    expect(duplicate.id).toBe(first.id);
+    expect(projects.find((entry) => entry.id === first.id)?.templateId).toBe("article-minimal");
+    expect(projects.every((entry) => entry.missing === false)).toBe(true);
+  });
+
+  it("keeps missing projects until they are explicitly removed", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const missingRoot = path.join(await tempWorkspace(), "moved-note");
+    await registry.add(missingRoot, "book-minimal");
+
+    expect((await registry.list())[0]?.missing).toBe(true);
+    expect(await registry.remove(missingRoot)).toBe(true);
+    expect(await registry.list()).toEqual([]);
+    expect(await registry.remove(missingRoot)).toBe(false);
+  });
+
+  it("relocates a missing project only to a directory containing main.tex", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const missingRoot = path.join(await tempWorkspace(), "old-note");
+    const invalidRoot = await tempWorkspace();
+    const validRoot = await tempWorkspace();
+    await registry.add(missingRoot, "book-minimal");
+    await fs.writeFile(path.join(validRoot, "main.tex"), "\\documentclass{book}\n", "utf8");
+
+    await expect(registry.relocate(missingRoot, invalidRoot)).rejects.toThrow("does not contain main.tex");
+    const relocated = await registry.relocate(missingRoot, validRoot);
+    const projects = await registry.list();
+
+    expect(relocated.rootPath).toBe(path.normalize(validRoot));
+    expect(projects).toHaveLength(1);
+    expect(projects[0]?.missing).toBe(false);
+    expect(projects[0]?.label).toBe(path.basename(validRoot));
+  });
+
+  it("ignores malformed registry data and migrates partial legacy entries", async () => {
+    const store = new MemoryProjectStateStore();
+    const root = await tempWorkspace();
+    await store.update(LOCAL_PROJECTS_STATE_KEY, [null, { root_path: "relative/path" }, { root_path: root }]);
+    const projects = await new LocalProjectRegistry(store).list();
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0]?.rootPath).toBe(path.normalize(root));
+    expect(projects[0]?.templateId).toBe("unknown");
+    expect(projects[0]?.label).toBe(path.basename(root));
+  });
+
+  it("rejects non-local project paths", async () => {
+    const registry = new LocalProjectRegistry(new MemoryProjectStateStore());
+    await expect(registry.add("https://example.com/note", "book-minimal")).rejects.toThrow("absolute local path");
+  });
+
   it("parses theme color defaults from theme.sty", async () => {
     const defaults = await parseThemeColorDefaults(path.join(repoRoot, "theme.sty"), COLOR_ORDER);
     expect(defaults["theme-bold"]).toBe("#3F6F9F");

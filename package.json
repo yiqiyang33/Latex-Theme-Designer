@@ -27,6 +27,9 @@
     "onView:latexEditingToolkit.actions",
     "onCommand:latexEditingToolkit.openToolkit",
     "onCommand:latexEditingToolkit.createProject",
+    "onCommand:latexEditingToolkit.openLocalProject",
+    "onCommand:latexEditingToolkit.relocateLocalProject",
+    "onCommand:latexEditingToolkit.removeLocalProject",
     "onCommand:latexEditingToolkit.refreshTree",
     "onCommand:latexEditingToolkit.createStarterInWorkspace",
     "onCommand:latexEditingToolkit.pickCompileTarget",
@@ -35,6 +38,7 @@
     "onCommand:latexEditingToolkit.openCurrentPdf",
     "onCommand:latexEditingToolkit.toggleThemeOption",
     "onCommand:latexEditingToolkit.pickClassConfig",
+    "onCommand:latexEditingToolkit.pickStylePreset",
     "onCommand:latexEditingToolkit.pickBlockPreset",
     "onCommand:latexEditingToolkit.pickHeadingTocPreset",
     "onCommand:latexEditingToolkit.pickBodyFontSize",
@@ -61,6 +65,20 @@
         "command": "latexEditingToolkit.createProject",
         "title": "LaTeX Editing Toolkit: Create Project",
         "icon": "$(new-folder)"
+      },
+      {
+        "command": "latexEditingToolkit.openLocalProject",
+        "title": "LaTeX Editing Toolkit: Open Local Project"
+      },
+      {
+        "command": "latexEditingToolkit.relocateLocalProject",
+        "title": "LaTeX Editing Toolkit: Relocate Local Project",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "latexEditingToolkit.removeLocalProject",
+        "title": "LaTeX Editing Toolkit: Remove Local Project",
+        "icon": "$(close)"
       },
       {
         "command": "latexEditingToolkit.refreshTree",
@@ -101,13 +119,18 @@
         "title": "LaTeX Editing Toolkit: Pick Class Config"
       },
       {
+        "command": "latexEditingToolkit.pickStylePreset",
+        "title": "LaTeX Editing Toolkit: Pick Style Preset",
+        "icon": "$(symbol-color)"
+      },
+      {
         "command": "latexEditingToolkit.pickBlockPreset",
-        "title": "LaTeX Editing Toolkit: Pick Block Preset",
+        "title": "LaTeX Editing Toolkit: Pick Block Preset (Legacy)",
         "icon": "$(symbol-color)"
       },
       {
         "command": "latexEditingToolkit.pickHeadingTocPreset",
-        "title": "LaTeX Editing Toolkit: Pick Heading/TOC Preset",
+        "title": "LaTeX Editing Toolkit: Pick Heading/TOC Preset (Legacy)",
         "icon": "$(list-flat)"
       },
       {
@@ -182,6 +205,18 @@
           "command": "latexEditingToolkit.createProject"
         },
         {
+          "command": "latexEditingToolkit.openLocalProject",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.relocateLocalProject",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.removeLocalProject",
+          "when": "false"
+        },
+        {
           "command": "latexEditingToolkit.refreshTree",
           "when": "false"
         },
@@ -210,10 +245,15 @@
           "when": "false"
         },
         {
-          "command": "latexEditingToolkit.pickBlockPreset"
+          "command": "latexEditingToolkit.pickStylePreset"
         },
         {
-          "command": "latexEditingToolkit.pickHeadingTocPreset"
+          "command": "latexEditingToolkit.pickBlockPreset",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.pickHeadingTocPreset",
+          "when": "false"
         },
         {
           "command": "latexEditingToolkit.pickBodyFontSize"
@@ -259,6 +299,18 @@
           "command": "latexEditingToolkit.refreshTree",
           "when": "view == latexEditingToolkit.actions",
           "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "latexEditingToolkit.removeLocalProject",
+          "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
+          "group": "inline@1"
+        },
+        {
+          "command": "latexEditingToolkit.relocateLocalProject",
+          "when": "view == latexEditingToolkit.actions && viewItem == localProjectMissing",
+          "group": "inline@2"
         }
       ]
     }

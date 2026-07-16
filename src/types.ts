@@ -1,5 +1,22 @@
 export type JsonObject = Record<string, unknown>;
 
+export interface LocalProjectStateStore {
+  get<T>(key: string): T | undefined;
+  update(key: string, value: unknown): Promise<void> | Thenable<void>;
+}
+
+export interface LocalNoteProject {
+  id: string;
+  rootPath: string;
+  label: string;
+  templateId: string;
+  createdAt: string;
+}
+
+export interface LocalNoteProjectStatus extends LocalNoteProject {
+  missing: boolean;
+}
+
 export interface ToggleSchemaItem {
   id: string;
   command: string;
@@ -47,10 +64,8 @@ export interface RecipeCatalog {
 export interface ToolkitState {
   toggles: Record<string, boolean>;
   colors: Record<string, string>;
-  block_preset: string;
-  block_presets: PresetMeta[];
-  heading_toc_preset: string;
-  heading_toc_presets: PresetMeta[];
+  style_preset: string;
+  style_presets: PresetMeta[];
   body_font_size_pt: number;
   class_config: Record<string, string>;
   compile_target: string;
@@ -73,8 +88,7 @@ export interface ToolkitSchema {
   toggles: ToggleSchemaItem[];
   groups: ColorGroup[];
   class_config: ClassConfigSchemaItem[];
-  block_presets: PresetMeta[];
-  heading_toc_presets: PresetMeta[];
+  style_presets: PresetMeta[];
   body_font_size: {
     id: "body_font_size_pt";
     label: string;
@@ -84,7 +98,6 @@ export interface ToolkitSchema {
     step: number;
     default: number;
   };
-  bold_text_presets: Array<{ id: string; label: string; color: string }>;
   starter_templates: StarterTemplateMeta[];
   starter_default_template: string;
   starter_default_output_target: string;
@@ -103,6 +116,14 @@ export interface PresetMeta {
 
 export interface PresetDefinition extends PresetMeta {
   colors?: Record<string, string>;
+}
+
+export interface StylePresetDefinition extends PresetMeta {
+  block_source: string;
+  heading_source: string;
+  bold_color: string;
+  /** Complete color-token package applied atomically by the Style Preset action. */
+  colors: Record<string, string>;
 }
 
 export interface StarterTemplateMeta {

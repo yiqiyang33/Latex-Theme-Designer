@@ -1,14 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { LocalProjectRegistry } from "./projectRegistry";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { ToolkitService } from "./toolkitService";
-import type { ResponseState, ToolkitState } from "./types";
+import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 
 let activePanel: ToolkitPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const treeProvider = new ToolkitTreeProvider(context);
+  const projectRegistry = new LocalProjectRegistry(context.globalState);
+  const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
 
   context.subscriptions.push(
     treeProvider,
@@ -46,9 +48,19 @@ export function activate(context: vscode.ExtensionContext): void {
         await service.handle("initialize-workspace", {});
         await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
       });
+      await projectRegistry.add(target[0].fsPath, pickedTemplate.template.id);
       vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
       treeProvider.refresh();
       await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
+      await openLocalProject(projectPath);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.relocateLocalProject", async (projectPath?: unknown) => {
+      await relocateLocalProject(projectRegistry, treeProvider, projectPath);
+    }),
+    vscode.commands.registerCommand("latexEditingToolkit.removeLocalProject", async (projectPath?: unknown) => {
+      await removeLocalProject(projectRegistry, treeProvider, projectPath);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
@@ -74,11 +86,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("latexEditingToolkit.pickClassConfig", async (folderUri?: vscode.Uri, fieldId?: string) => {
       await pickClassConfig(context, treeProvider, folderUri, fieldId);
     }),
+    vscode.commands.registerCommand("latexEditingToolkit.pickStylePreset", async (folderUri?: vscode.Uri) => {
+      await pickStylePreset(context, treeProvider, folderUri);
+    }),
+    // Legacy command aliases now use the unified style preset.
     vscode.commands.registerCommand("latexEditingToolkit.pickBlockPreset", async (folderUri?: vscode.Uri) => {
-      await pickPreset(context, treeProvider, folderUri, "block");
+      await pickStylePreset(context, treeProvider, folderUri);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.pickHeadingTocPreset", async (folderUri?: vscode.Uri) => {
-      await pickPreset(context, treeProvider, folderUri, "heading");
+      await pickStylePreset(context, treeProvider, folderUri);
     }),
     vscode.commands.registerCommand("latexEditingToolkit.pickBodyFontSize", async (folderUri?: vscode.Uri) => {
       await pickBodyFontSize(context, treeProvider, folderUri);
@@ -229,6 +245,86 @@ function currentPdfPath(state: ToolkitState): string {
   return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
 }
 
+async function openLocalProject(projectPathArg: unknown): Promise<void> {
+  const projectPath = localProjectPathFromArgument(projectPathArg);
+  if (!projectPath) {
+    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    return;
+  }
+  try {
+    if (!fs.statSync(projectPath).isDirectory()) throw new Error("not a directory");
+  } catch {
+    vscode.window.showWarningMessage(`Local note project not found: ${projectPath}`);
+    return;
+  }
+  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectPath), { forceNewWindow: false });
+}
+
+async function relocateLocalProject(
+  registry: LocalProjectRegistry,
+  treeProvider: ToolkitTreeProvider,
+  projectPathArg: unknown
+): Promise<void> {
+  const oldPath = localProjectPathFromArgument(projectPathArg);
+  if (!oldPath) {
+    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    return;
+  }
+  const target = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Relocate Toolkit Project Here"
+  });
+  if (!target?.[0]) return;
+  if (target[0].scheme !== "file") {
+    vscode.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
+    return;
+  }
+  try {
+    const updated = await registry.relocate(oldPath, target[0].fsPath);
+    treeProvider.refresh();
+    vscode.window.showInformationMessage(`Relocated local note project to ${updated.rootPath}.`);
+  } catch (err) {
+    vscode.window.showErrorMessage(`Could not relocate local note project: ${(err as Error).message}`);
+  }
+}
+
+async function removeLocalProject(
+  registry: LocalProjectRegistry,
+  treeProvider: ToolkitTreeProvider,
+  projectPathArg: unknown
+): Promise<void> {
+  const projectPath = localProjectPathFromArgument(projectPathArg);
+  if (!projectPath) {
+    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    return;
+  }
+  const project = (await registry.list()).find((entry) => entry.rootPath === path.normalize(projectPath));
+  const label = project?.label ?? path.basename(path.normalize(projectPath));
+  const choice = await vscode.window.showWarningMessage(
+    `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
+    { modal: true },
+    "Forget"
+  );
+  if (choice !== "Forget") return;
+  const removed = await registry.remove(projectPath);
+  treeProvider.refresh();
+  vscode.window.showInformationMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.");
+}
+
+function localProjectPathFromArgument(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { fsPath?: unknown; resourceUri?: unknown };
+  if (typeof candidate.fsPath === "string") return candidate.fsPath;
+  const resourceUri = candidate.resourceUri;
+  if (resourceUri && typeof resourceUri === "object" && typeof (resourceUri as { fsPath?: unknown }).fsPath === "string") {
+    return (resourceUri as { fsPath: string }).fsPath;
+  }
+  return undefined;
+}
+
 async function createStarterInWorkspace(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
@@ -369,11 +465,11 @@ async function pickClassConfig(context: vscode.ExtensionContext, treeProvider: T
   vscode.window.showInformationMessage(`${field.label}: ${picked.option.label}.`);
 }
 
-async function pickPreset(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri: vscode.Uri | undefined, kind: "block" | "heading"): Promise<void> {
+async function pickStylePreset(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
-  const presets = kind === "block" ? scoped.response.schema.block_presets : scoped.response.schema.heading_toc_presets;
-  const current = kind === "block" ? scoped.response.state.block_preset : scoped.response.state.heading_toc_preset;
+  const presets = scoped.response.schema.style_presets;
+  const current = scoped.response.state.style_preset;
   const picked = await vscode.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.label,
@@ -381,14 +477,12 @@ async function pickPreset(context: vscode.ExtensionContext, treeProvider: Toolki
       detail: preset.description,
       preset
     })),
-    { placeHolder: kind === "block" ? "Select block preset" : "Select heading/TOC preset" }
+    { placeHolder: "Select style preset" }
   );
   if (!picked) return;
-  await scoped.service.handle(kind === "block" ? "block-preset" : "heading-toc-preset", {
-    [kind === "block" ? "block_preset" : "heading_toc_preset"]: picked.preset.id
-  });
+  await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${kind === "block" ? "Block" : "Heading/TOC"} preset: ${picked.preset.label}.`);
+  vscode.window.showInformationMessage(`Style preset: ${picked.preset.label}.`);
 }
 
 async function pickBodyFontSize(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -440,7 +534,10 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
   private readonly changeEmitter = new vscode.EventEmitter<ToolkitTreeNode | undefined | void>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly projectRegistry: LocalProjectRegistry
+  ) {}
 
   refresh(): void {
     this.changeEmitter.fire();
@@ -478,6 +575,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
   private async rootNodes(): Promise<ToolkitTreeNode[]> {
     const localFolders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes: ToolkitTreeNode[] = [];
+    nodes.push(await this.localNotesNode());
     if (localFolders.length === 0) {
       nodes.push({
         id: "open-local-folder",
@@ -501,6 +599,37 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       contextValue: "createProject"
     });
     return nodes;
+  }
+
+  private async localNotesNode(): Promise<ToolkitTreeNode> {
+    const projects = await this.projectRegistry.list();
+    const children = projects.length > 0
+      ? projects.map((project) => this.localProjectNode(project))
+      : [
+          this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
+          this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
+        ];
+    return this.groupNode(
+      "local-notes",
+      "Local Notes",
+      "book",
+      children,
+      vscode.TreeItemCollapsibleState.Expanded
+    );
+  }
+
+  private localProjectNode(project: LocalNoteProjectStatus): ToolkitTreeNode {
+    return {
+      id: `local-project:${project.id}`,
+      label: project.label,
+      description: project.missing ? "Missing" : project.rootPath,
+      tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
+      iconId: project.missing ? "warning" : "folder",
+      commandId: "latexEditingToolkit.openLocalProject",
+      commandArgs: [project.rootPath],
+      contextValue: project.missing ? "localProjectMissing" : "localProject",
+      resourceUri: vscode.Uri.file(project.rootPath)
+    };
   }
 
   private async workspaceNode(folder: vscode.WorkspaceFolder, isOnlyFolder: boolean): Promise<ToolkitTreeNode> {
@@ -563,8 +692,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       ]),
       this.groupNode(`theme:${folder.uri.toString()}`, "Theme", "symbol-color", [
         this.groupNode(`theme-presets:${folder.uri.toString()}`, "Presets", "symbol-misc", [
-          this.actionNode("pick-block-preset", "Block Preset", this.presetLabel(schema.block_presets, state.block_preset), "symbol-color", "latexEditingToolkit.pickBlockPreset", folderArg),
-          this.actionNode("pick-heading-toc-preset", "Heading/TOC Preset", this.presetLabel(schema.heading_toc_presets, state.heading_toc_preset), "list-flat", "latexEditingToolkit.pickHeadingTocPreset", folderArg),
+          this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
           this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg)
         ], vscode.TreeItemCollapsibleState.Expanded),
         this.groupNode(`theme-class-config:${folder.uri.toString()}`, "Class Rules", "symbol-class", schema.class_config.map((field) => (

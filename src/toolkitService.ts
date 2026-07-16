@@ -79,17 +79,24 @@ export class ToolkitService {
           const result = await this.splitter.unsplitCompileTarget(String(payload.compile_target ?? ""), Boolean(payload.dry_run), payload.delete_source !== false);
           return { ...(result.response as ResponseState), unsplit: result.unsplit };
         });
+      case "style-preset":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          this.state.applyStylePreset(current, String(payload.style_preset ?? current.style_preset));
+          await this.state.writeOverrideFiles(current);
+          return this.state.buildResponseState();
+        });
       case "block-preset":
         return this.runSerialized(async () => {
           const current = await this.state.loadState();
-          this.state.applyBlockPreset(current, String(payload.block_preset ?? current.block_preset));
+          this.state.applyBlockPreset(current, String(payload.block_preset ?? current.style_preset));
           await this.state.writeOverrideFiles(current);
           return this.state.buildResponseState();
         });
       case "heading-toc-preset":
         return this.runSerialized(async () => {
           const current = await this.state.loadState();
-          this.state.applyHeadingTocPreset(current, String(payload.heading_toc_preset ?? current.heading_toc_preset));
+          this.state.applyHeadingTocPreset(current, String(payload.heading_toc_preset ?? current.style_preset));
           await this.state.writeOverrideFiles(current);
           return this.state.buildResponseState();
         });

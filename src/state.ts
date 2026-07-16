@@ -1,10 +1,7 @@
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import {
-  BLOCK_COLOR_TOKENS,
-  BLOCK_PRESET_DEFINITIONS,
   BODY_FONT_SIZE_CONFIG,
-  BOLD_TEXT_PRESETS,
   CLASS_CONFIG_COMMANDS,
   CLASS_CONFIG_DEFAULTS,
   CLASS_CONFIG_IDS,
@@ -13,13 +10,12 @@ import {
   COLOR_GROUPS,
   COLOR_ORDER,
   COLOR_SET,
-  DOCUMENT_COLOR_TOKENS,
-  HEADING_TOC_PRESET_DEFINITIONS,
+  STYLE_PRESET_DEFINITIONS,
   STARTER_TEMPLATE_DEFINITIONS,
   TOGGLE_IDS,
   TOGGLE_SCHEMA
 } from "./schema";
-import type { PresetDefinition, PresetMeta, ResponseState, ToolkitState } from "./types";
+import type { PresetDefinition, PresetMeta, ResponseState, StylePresetDefinition, ToolkitState } from "./types";
 import {
   assertValidBodyFontSize,
   boolFromTex,
@@ -41,6 +37,8 @@ import {
 import { loadRecipeCatalog } from "./vscodeSettings";
 
 export class StateService {
+  private cachedThemeDefaults: Record<string, string> | undefined;
+
   constructor(private readonly rootDir: string) {}
 
   configPath(): string {
@@ -72,10 +70,8 @@ export class StateService {
         toggles: TOGGLE_SCHEMA,
         groups: COLOR_GROUPS,
         class_config: CLASS_CONFIG_SCHEMA,
-        block_presets: state.block_presets,
-        heading_toc_presets: state.heading_toc_presets,
+        style_presets: state.style_presets,
         body_font_size: BODY_FONT_SIZE_CONFIG,
-        bold_text_presets: BOLD_TEXT_PRESETS,
         starter_templates: starterTemplates,
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
         starter_default_output_target: "main.tex"
@@ -94,8 +90,8 @@ export class StateService {
 
   async loadState(): Promise<ToolkitState> {
     const themeDefaults = await this.parseThemeDefaults();
-    const blockCatalog = this.buildPresetCatalog(BLOCK_PRESET_DEFINITIONS, BLOCK_COLOR_TOKENS, themeDefaults);
-    const headingCatalog = this.buildPresetCatalog(HEADING_TOC_PRESET_DEFINITIONS, DOCUMENT_COLOR_TOKENS, themeDefaults);
+    this.cachedThemeDefaults = { ...themeDefaults };
+    const styleCatalog = this.buildStylePresetCatalog(themeDefaults);
     const compileTargets = await this.listCandidateTexFiles();
     const recipeCatalog = await loadRecipeCatalog(this.rootDir);
     const compileRecipes = recipeCatalog.recipes;
@@ -103,10 +99,8 @@ export class StateService {
     const state: ToolkitState = {
       toggles: await this.parseMainToggleDefaults(),
       colors: { ...themeDefaults },
-      block_preset: this.defaultPresetId(blockCatalog),
-      block_presets: this.presetMeta(blockCatalog),
-      heading_toc_preset: this.defaultPresetId(headingCatalog),
-      heading_toc_presets: this.presetMeta(headingCatalog),
+      style_preset: this.defaultPresetId(styleCatalog),
+      style_presets: this.presetMeta(styleCatalog),
       body_font_size_pt: BODY_FONT_SIZE_CONFIG.default,
       class_config: { ...CLASS_CONFIG_DEFAULTS },
       compile_target: defaultCompileTarget(compileTargets),
@@ -169,8 +163,29 @@ export class StateService {
       }
     }
 
-    if ("block_preset" in payload) normalized.block_preset = this.normalizePreset(String(payload.block_preset ?? ""), normalized.block_presets);
-    if ("heading_toc_preset" in payload) normalized.heading_toc_preset = this.normalizePreset(String(payload.heading_toc_preset ?? ""), normalized.heading_toc_presets);
+    let requestedStylePreset: string | undefined;
+    if ("style_preset" in payload) {
+      requestedStylePreset = this.normalizePreset(String(payload.style_preset ?? ""), normalized.style_presets);
+    } else if ("block_preset" in payload) {
+      requestedStylePreset = this.styleIdFromBlockPreset(String(payload.block_preset ?? ""));
+    } else if ("heading_toc_preset" in payload) {
+      requestedStylePreset = this.styleIdFromHeadingPreset(String(payload.heading_toc_preset ?? ""));
+    }
+    if (requestedStylePreset) {
+      normalized.style_preset = requestedStylePreset;
+      // A dedicated style-preset request applies the complete bundle. A
+      // regular save that also carries colors is an advanced/manual edit and
+      // must keep those explicit color values intact.
+      const hasExplicitColors = rawColors && typeof rawColors === "object" && !Array.isArray(rawColors)
+        && Object.keys(rawColors as Record<string, unknown>).length > 0;
+      if (!hasExplicitColors) {
+        const preset = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {})
+          .find((item) => item.id === requestedStylePreset);
+        if (preset) {
+          for (const token of COLOR_ORDER) normalized.colors[token] = preset.colors?.[token] ?? "#808080";
+        }
+      }
+    }
     if ("body_font_size_pt" in payload) normalized.body_font_size_pt = assertValidBodyFontSize(payload.body_font_size_pt);
 
     const rawClassConfig = payload.class_config;
@@ -227,8 +242,10 @@ export class StateService {
     const uiState = {
       toggles: state.toggles,
       colors: state.colors,
-      block_preset: state.block_preset,
-      heading_toc_preset: state.heading_toc_preset,
+      style_preset: state.style_preset,
+      // Keep legacy fields for older Toolkit versions reading this workspace cache.
+      block_preset: this.styleDefinition(state.style_preset).block_source,
+      heading_toc_preset: this.styleDefinition(state.style_preset).heading_source,
       body_font_size_pt: normalizeBodyFontSize(state.body_font_size_pt),
       class_config: this.normalizeClassConfigMap(state.class_config),
       compile_target: state.compile_target,
@@ -243,8 +260,7 @@ export class StateService {
   }
 
   async writeOverrideFiles(state: ToolkitState): Promise<void> {
-    state.block_preset = this.normalizePreset(state.block_preset, state.block_presets);
-    state.heading_toc_preset = this.normalizePreset(state.heading_toc_preset, state.heading_toc_presets);
+    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
     state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
     state.class_config = this.normalizeClassConfigMap(state.class_config);
     await this.refreshDerivedState(state);
@@ -288,29 +304,25 @@ export class StateService {
     }
   }
 
-  applyBlockPreset(state: ToolkitState, presetId: string): void {
-    const catalog = this.buildPresetCatalog(BLOCK_PRESET_DEFINITIONS, BLOCK_COLOR_TOKENS, state.colors);
+  applyStylePreset(state: ToolkitState, presetId: string): void {
+    const catalog = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {});
     const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
     const preset = catalog.find((item) => item.id === selected);
-    if (!preset) throw new Error(`Unknown block preset: ${presetId}`);
-    for (const [token, value] of Object.entries(preset.colors ?? {})) {
-      if (COLOR_SET.has(token)) state.colors[token] = value;
+    if (!preset) throw new Error(`Unknown style preset: ${presetId}`);
+    for (const token of COLOR_ORDER) {
+      state.colors[token] = preset.colors?.[token] ?? "#808080";
     }
-    if (selected !== "default") this.applySupportColorsForBlockPreset(state, preset.colors ?? {});
-    state.block_preset = selected;
-    state.block_presets = this.presetMeta(catalog);
+    state.style_preset = selected;
+    state.style_presets = this.presetMeta(catalog);
+  }
+
+  // Compatibility helpers for callers using the pre-unified API.
+  applyBlockPreset(state: ToolkitState, presetId: string): void {
+    this.applyStylePreset(state, this.styleIdFromBlockPreset(presetId));
   }
 
   applyHeadingTocPreset(state: ToolkitState, presetId: string): void {
-    const catalog = this.buildPresetCatalog(HEADING_TOC_PRESET_DEFINITIONS, DOCUMENT_COLOR_TOKENS, state.colors);
-    const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
-    const preset = catalog.find((item) => item.id === selected);
-    if (!preset) throw new Error(`Unknown heading/TOC preset: ${presetId}`);
-    for (const [token, value] of Object.entries(preset.colors ?? {})) {
-      if (COLOR_SET.has(token)) state.colors[token] = value;
-    }
-    state.heading_toc_preset = selected;
-    state.heading_toc_presets = this.presetMeta(catalog);
+    this.applyStylePreset(state, this.styleIdFromHeadingPreset(presetId));
   }
 
   async starterTemplateMeta(): Promise<PresetMeta[]> {
@@ -426,8 +438,11 @@ export class StateService {
           if (parsed && key in state.colors) state.colors[key] = parsed;
         }
       }
-      if (typeof raw.block_preset === "string") state.block_preset = this.normalizePreset(raw.block_preset, state.block_presets);
-      if (typeof raw.heading_toc_preset === "string") state.heading_toc_preset = this.normalizePreset(raw.heading_toc_preset, state.heading_toc_presets);
+      if (typeof raw.style_preset === "string") {
+        state.style_preset = this.normalizePreset(raw.style_preset, state.style_presets);
+      } else if (typeof raw.block_preset === "string") {
+        state.style_preset = this.styleIdFromBlockPreset(raw.block_preset);
+      }
       if ("body_font_size_pt" in raw) state.body_font_size_pt = normalizeBodyFontSize(raw.body_font_size_pt);
       if (raw.class_config && typeof raw.class_config === "object" && !Array.isArray(raw.class_config)) state.class_config = this.normalizeClassConfigMap(raw.class_config as Record<string, unknown>);
       if ("compile_target" in raw) state.compile_target = normalizeCompileTarget(this.rootDir, raw.compile_target, state.compile_targets);
@@ -489,11 +504,25 @@ export class StateService {
     state.compile_output_pdf = safeWorkspaceRel(this.rootDir, state.compile_output_pdf) || state.compile_output_pdf_expected || compileOutputPdfRelpath(state.compile_target);
   }
 
-  private buildPresetCatalog(definitions: PresetDefinition[], tokens: string[], defaults: Record<string, string>): PresetDefinition[] {
-    return definitions.map((definition) => ({
+  private buildStylePresetCatalog(_defaults: Record<string, string>): PresetDefinition[] {
+    return STYLE_PRESET_DEFINITIONS.map((definition) => ({
       ...definition,
-      colors: definition.colors ? { ...definition.colors } : Object.fromEntries(tokens.map((token) => [token, defaults[token] ?? "#808080"]))
+      colors: { ...definition.colors }
     }));
+  }
+
+  private styleDefinition(styleId: string): StylePresetDefinition {
+    return STYLE_PRESET_DEFINITIONS.find((item) => item.id === styleId) ?? STYLE_PRESET_DEFINITIONS[0];
+  }
+
+  private styleIdFromBlockPreset(presetId: string): string {
+    const normalized = presetId.trim();
+    return STYLE_PRESET_DEFINITIONS.find((item) => item.id === normalized || item.block_source === normalized)?.id ?? "default";
+  }
+
+  private styleIdFromHeadingPreset(presetId: string): string {
+    const normalized = presetId.trim();
+    return STYLE_PRESET_DEFINITIONS.find((item) => item.id === normalized || item.heading_source === normalized)?.id ?? "default";
   }
 
   private presetMeta(catalog: PresetDefinition[]): PresetMeta[] {
@@ -540,45 +569,6 @@ export class StateService {
     if (!value) return recipes[0]?.id ?? "";
     if (recipes.some((item) => item.id === value)) return value;
     throw new Error(`Unknown compile recipe: ${value}`);
-  }
-
-  private applySupportColorsForBlockPreset(state: ToolkitState, presetColors: Record<string, string>): void {
-    const derived: Record<string, string> = {
-      "inline-key-fg": "definition-accent",
-      "inline-term-bg": "definition-body-bg",
-      "inline-term-fg": "definition-title-fg",
-      "inline-warn-fg": "claim-accent",
-      "inline-todo-bg": "assumption-body-bg",
-      "inline-todo-fg": "assumption-title-fg",
-      "inline-code-bg": "fact-body-bg",
-      "inline-code-fg": "fact-title-fg",
-      "sidenote-fg": "note-title-fg",
-      "sidenote-accent": "note-accent",
-      "chapter-overview-bg": "note-bg",
-      "chapter-overview-title-bg": "note-title-bg",
-      "chapter-overview-title-fg": "note-title-fg",
-      "chapter-overview-accent": "note-accent",
-      "insight-bg": "example-bg",
-      "insight-label-fg": "example-label-fg",
-      "insight-accent": "example-accent",
-      "pitfall-bg": "claim-body-bg",
-      "pitfall-label-fg": "claim-title-fg",
-      "pitfall-accent": "claim-accent",
-      "intuition-bg": "lemma-body-bg",
-      "intuition-label-fg": "lemma-title-fg",
-      "intuition-accent": "lemma-accent",
-      "summary-bg": "fact-body-bg",
-      "summary-label-fg": "fact-title-fg",
-      "summary-accent": "fact-accent",
-      "question-bg": "assumption-body-bg",
-      "question-label-fg": "assumption-title-fg",
-      "question-accent": "assumption-accent"
-    };
-    for (const [target, source] of Object.entries(derived)) {
-      if (target in presetColors) continue;
-      const color = state.colors[source];
-      if (color) state.colors[target] = color;
-    }
   }
 
   private async coerceClassModeOnTargetSwitch(state: ToolkitState): Promise<void> {

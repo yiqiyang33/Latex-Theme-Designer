@@ -20,6 +20,40 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
+## Local Notes Registry
+
+The Activity Bar includes a `Local Notes` group that remembers projects created with
+`LaTeX Editing Toolkit: Create Project`, even when they live outside the current workspace.
+The registry is stored in the extension's local global state and is available after switching
+workspaces or restarting VS Code/Cursor.
+
+- Click a valid entry to open its project folder in the current window.
+- Missing project folders remain visible with a warning status.
+- Use `Relocate Local Project` on a missing entry to select its new folder. The selected folder
+  must contain `main.tex`.
+- Use `Forget Local Project` to remove an entry from the Activity Bar without deleting files.
+
+The extension does not scan arbitrary directories and does not automatically register files
+created with `Generate Starter In Workspace`.
+
+## Style Presets
+
+Toolkit now exposes one unified `Style Preset` selector instead of separate block,
+heading/TOC, and bold-color selectors. The five presets are `Default`, `Midnight`,
+`Meadow`, `Ember`, and `UChicago`.
+
+Applying a preset updates the complete visual token package together: chapter and section
+headings, TOC and page-header colors, theorem/definition/note/callout blocks, inline
+commands (`\\hl`, `\\key`, `\\term`, `\\warn`, `\\todo`, and `\\code`), sidenotes,
+chapter overviews, and `\\textbf`. `\\hl` remains a background highlight while `\\key`
+remains a bold rounded emphasis box; they share the selected preset's color system without
+losing their different semantics.
+
+The Colors panel still allows advanced per-token adjustments. Applying a Style Preset again
+intentionally restores every token in that preset's complete package. Older
+`block_preset`/`heading_toc_preset` entries in `theme.ui.json` are read automatically, with
+the legacy block value taking precedence, and are mirrored on the next save for compatibility.
+
 ## Workspace Files
 
 The extension reads and writes these project files:

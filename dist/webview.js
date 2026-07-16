@@ -86,7 +86,6 @@
     renderStarter();
     renderPresets();
     renderBodyFontSize();
-    renderBoldPresets();
     renderToggles();
     renderColors();
     renderTargets();
@@ -113,8 +112,7 @@
     byId("starterTemplateDesc").textContent = info?.description || "";
   }
   function renderPresets() {
-    renderPresetSelect("blockPresetSelect", "blockPresetDesc", model.schema.block_presets || [], model.state.block_preset);
-    renderPresetSelect("headingTocPresetSelect", "headingTocPresetDesc", model.schema.heading_toc_presets || [], model.state.heading_toc_preset);
+    renderPresetSelect("stylePresetSelect", "stylePresetDesc", model.schema.style_presets || [], model.state.style_preset);
   }
   function renderPresetSelect(selectId, descId, presets, selectedValue) {
     const select = byId(selectId);
@@ -130,22 +128,6 @@
     slider.value = String(bodyFontSize());
     byId("bodyFontSizeValue").textContent = `${Number(slider.value).toFixed(1)}pt`;
     byId("bodyFontSizeHelp").textContent = schema.help;
-  }
-  function renderBoldPresets() {
-    const box = byId("boldTextPresetBox");
-    box.innerHTML = "";
-    for (const preset of model.schema.bold_text_presets || []) {
-      const button = document.createElement("button");
-      button.className = "swatch-button";
-      button.title = preset.label;
-      button.style.background = preset.color;
-      button.dataset.active = color("theme-bold").toUpperCase() === String(preset.color).toUpperCase() ? "true" : "false";
-      button.addEventListener("click", () => {
-        model.state.colors["theme-bold"] = preset.color;
-        renderAll();
-      });
-      box.appendChild(button);
-    }
   }
   function renderToggles() {
     const box = byId("toggleBox");
@@ -412,14 +394,9 @@ ${output}`)) return;
       setStatus(result.message || "Checked VS Code settings.", "ok");
       renderAll();
     }));
-    byId("applyBlockPresetBtn").addEventListener("click", () => run(async () => {
-      model = await request("block-preset", { block_preset: byId("blockPresetSelect").value });
-      setStatus("Applied block preset.", "ok");
-      renderAll();
-    }));
-    byId("applyHeadingTocPresetBtn").addEventListener("click", () => run(async () => {
-      model = await request("heading-toc-preset", { heading_toc_preset: byId("headingTocPresetSelect").value });
-      setStatus("Applied heading/TOC preset.", "ok");
+    byId("applyStylePresetBtn").addEventListener("click", () => run(async () => {
+      model = await request("style-preset", { style_preset: byId("stylePresetSelect").value });
+      setStatus("Applied style preset.", "ok");
       renderAll();
     }));
     byId("bodyFontSizeSlider").addEventListener("input", () => {
@@ -474,16 +451,13 @@ ${output}`)) return;
         </section>
         <section>
           <h2>Presets</h2>
-          <div class="row"><select id="blockPresetSelect"></select><button id="applyBlockPresetBtn">Apply Block</button></div>
-          <p id="blockPresetDesc" class="hint"></p>
-          <div class="row"><select id="headingTocPresetSelect"></select><button id="applyHeadingTocPresetBtn">Apply Heading</button></div>
-          <p id="headingTocPresetDesc" class="hint"></p>
+          <div class="row"><select id="stylePresetSelect"></select><button id="applyStylePresetBtn">Apply Style</button></div>
+          <p id="stylePresetDesc" class="hint"></p>
         </section>
         <section>
           <h2>Body Text</h2>
           <div class="row"><input id="bodyFontSizeSlider" type="range"><code id="bodyFontSizeValue"></code></div>
           <p id="bodyFontSizeHelp" class="hint"></p>
-          <div id="boldTextPresetBox" class="swatch-grid"></div>
         </section>
         <section>
           <h2>Colors</h2>

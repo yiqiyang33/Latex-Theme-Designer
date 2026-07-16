@@ -1,4 +1,4 @@
-import type { ClassConfigSchemaItem, ColorGroup, PresetDefinition, ToggleSchemaItem } from "./types";
+import type { ClassConfigSchemaItem, ColorGroup, PresetDefinition, StylePresetDefinition, ToggleSchemaItem } from "./types";
 
 export const TOGGLE_SCHEMA: ToggleSchemaItem[] = [
   { id: "enable_heading_theme", command: "EnableHeadingTheme", label: "Heading Theme", help: "Style chapter/section/subsection headings." },
@@ -139,6 +139,49 @@ export const BOLD_TEXT_PRESETS = [
   { id: "forest", label: "Forest", color: "#4E7357" }
 ];
 
+const STYLE_PRESET_METADATA: Array<Omit<StylePresetDefinition, "colors">> = [
+  {
+    id: "default",
+    label: "Default",
+    description: "Balanced slate document colors with the built-in theorem and inline styles.",
+    block_source: "default",
+    heading_source: "default",
+    bold_color: "#334155"
+  },
+  {
+    id: "midnight",
+    label: "Midnight",
+    description: "Cool high-contrast blues for focused technical notes.",
+    block_source: "midnight",
+    heading_source: "inkstone",
+    bold_color: "#273B66"
+  },
+  {
+    id: "meadow",
+    label: "Meadow",
+    description: "Soft green-blue blocks with calm earth-tone accents.",
+    block_source: "meadow",
+    heading_source: "aurora",
+    bold_color: "#12727E"
+  },
+  {
+    id: "ember",
+    label: "Ember",
+    description: "Warm rust, amber, rose, and plum contrast.",
+    block_source: "ember",
+    heading_source: "sunset",
+    bold_color: "#A3422E"
+  },
+  {
+    id: "uchicago",
+    label: "UChicago",
+    description: "Maroon-forward colors with greystone contrast.",
+    block_source: "uchicago",
+    heading_source: "uchicago",
+    bold_color: "#800000"
+  }
+];
+
 export const DOCUMENT_COLOR_TOKENS = COLOR_ORDER.filter((token) => token.startsWith("theme-"));
 export const INLINE_COLOR_TOKENS = COLOR_ORDER.filter((token) => token.startsWith("inline-"));
 export const BLOCK_COLOR_TOKENS = COLOR_ORDER.filter((token) => !token.startsWith("theme-") && !INLINE_COLOR_TOKENS.includes(token));
@@ -247,3 +290,90 @@ export const HEADING_TOC_PRESET_DEFINITIONS: PresetDefinition[] = [
   { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } },
   { id: "uchicago", label: "UChicago", description: "University of Chicago maroon with greystone heading contrast.", colors: { "theme-chapter": "#800000", "theme-section": "#800000", "theme-subsection": "#737373", "theme-toc-title": "#800000", "theme-toc-chapter": "#800000", "theme-toc-section": "#737373", "theme-header-rule": "#A6A6A6" } }
 ];
+
+/**
+ * Canonical colors used by the Default style.  Keeping this package in the
+ * schema (rather than deriving it from the current workspace) makes applying
+ * Default deterministic and prevents colors from a previously selected style
+ * leaking into the next one.
+ */
+const DEFAULT_STYLE_COLORS: Record<string, string> = {
+  "theme-chapter": "#1F2937", "theme-section": "#334155", "theme-subsection": "#486581",
+  "theme-toc-title": "#1F2937", "theme-toc-chapter": "#334155", "theme-toc-section": "#486581", "theme-header-rule": "#94A3B8",
+  "theme-bold": "#334155",
+  "inline-key-fg": "#2F6F73", "inline-term-bg": "#EBF5F4", "inline-term-fg": "#245E62", "inline-warn-fg": "#8A5A24",
+  "inline-todo-bg": "#FFF4CF", "inline-todo-fg": "#6F5517", "inline-code-bg": "#F1F4F6", "inline-code-fg": "#2D3742",
+  "sidenote-fg": "#5A6570", "sidenote-accent": "#8AA0B2",
+  "chapter-overview-bg": "#F5F7FA", "chapter-overview-title-bg": "#E3EAF2", "chapter-overview-title-fg": "#2F4050", "chapter-overview-accent": "#6F879C",
+  "definition-body-bg": "#F4F8F7", "definition-title-bg": "#E1EEEC", "definition-title-fg": "#234A48", "definition-accent": "#5D8D87",
+  "theorem-body-bg": "#F3F7FB", "theorem-title-bg": "#DFEAF5", "theorem-title-fg": "#244761", "theorem-accent": "#5B7FA2",
+  "lemma-body-bg": "#F7F5FB", "lemma-title-bg": "#E8E2F1", "lemma-title-fg": "#463B5E", "lemma-accent": "#7A6B9A",
+  "corollary-body-bg": "#FBF7F1", "corollary-title-bg": "#F0E4D2", "corollary-title-fg": "#5B4730", "corollary-accent": "#9B7A4A",
+  "proposition-body-bg": "#F8F8F1", "proposition-title-bg": "#E9EAD8", "proposition-title-fg": "#4E5433", "proposition-accent": "#87905E",
+  "claim-body-bg": "#FBF4F4", "claim-title-bg": "#F0DEDE", "claim-title-fg": "#633F3F", "claim-accent": "#9C6A6A",
+  "fact-body-bg": "#F5F6FA", "fact-title-bg": "#E2E6F0", "fact-title-fg": "#34405C", "fact-accent": "#6B7898",
+  "assumption-body-bg": "#FBF8EF", "assumption-title-bg": "#EEE5CD", "assumption-title-fg": "#5F5133", "assumption-accent": "#9A8555",
+  "note-bg": "#F5F7FA", "note-title-bg": "#E4EBF2", "note-title-fg": "#2F4050", "note-accent": "#6F879C", "note-frame": "#D9E1EA",
+  "example-bg": "#F4F8F7", "example-label-fg": "#2C5A57", "example-accent": "#5D8D87",
+  "remark-bg": "#F5F7FA", "remark-label-fg": "#40576A", "remark-inline-fg": "#3F6F9F", "remark-accent": "#6F879C",
+  "assump-bg": "#FBF8EF", "assump-label-fg": "#5F5133", "assump-accent": "#9A8555",
+  "insight-bg": "#F1F8F6", "insight-label-fg": "#2E625B", "insight-accent": "#3F7D73",
+  "pitfall-bg": "#FBF4F4", "pitfall-label-fg": "#633F3F", "pitfall-accent": "#9C6A6A",
+  "intuition-bg": "#F7F5FB", "intuition-label-fg": "#463B5E", "intuition-accent": "#7A6B9A",
+  "summary-bg": "#F5F7FA", "summary-label-fg": "#40576A", "summary-accent": "#6F879C",
+  "question-bg": "#FBF8EF", "question-label-fg": "#5F5133", "question-accent": "#9A8555"
+};
+
+/** Support-token fallbacks used by block presets that predate the newer inline/callout tokens. */
+const STYLE_SUPPORT_COLOR_SOURCES: Record<string, string> = {
+  "inline-key-fg": "definition-accent",
+  "inline-term-bg": "definition-body-bg",
+  "inline-term-fg": "definition-title-fg",
+  "inline-warn-fg": "claim-accent",
+  "inline-todo-bg": "assumption-body-bg",
+  "inline-todo-fg": "assumption-title-fg",
+  "inline-code-bg": "fact-body-bg",
+  "inline-code-fg": "fact-title-fg",
+  "sidenote-fg": "note-title-fg",
+  "sidenote-accent": "note-accent",
+  "chapter-overview-bg": "note-bg",
+  "chapter-overview-title-bg": "note-title-bg",
+  "chapter-overview-title-fg": "note-title-fg",
+  "chapter-overview-accent": "note-accent",
+  "insight-bg": "example-bg",
+  "insight-label-fg": "example-label-fg",
+  "insight-accent": "example-accent",
+  "pitfall-bg": "claim-body-bg",
+  "pitfall-label-fg": "claim-title-fg",
+  "pitfall-accent": "claim-accent",
+  "intuition-bg": "lemma-body-bg",
+  "intuition-label-fg": "lemma-title-fg",
+  "intuition-accent": "lemma-accent",
+  "summary-bg": "fact-body-bg",
+  "summary-label-fg": "fact-title-fg",
+  "summary-accent": "fact-accent",
+  "question-bg": "assumption-body-bg",
+  "question-label-fg": "assumption-title-fg",
+  "question-accent": "assumption-accent"
+};
+
+/**
+ * Unified style catalog.  Every entry owns every token in COLOR_ORDER; the
+ * legacy block/heading catalogs are only used as source data and compatibility
+ * aliases, never as partial UI state.
+ */
+export const STYLE_PRESET_DEFINITIONS: StylePresetDefinition[] = STYLE_PRESET_METADATA.map((definition) => {
+  const block = BLOCK_PRESET_DEFINITIONS.find((item) => item.id === definition.block_source);
+  const heading = HEADING_TOC_PRESET_DEFINITIONS.find((item) => item.id === definition.heading_source);
+  const colors: Record<string, string> = { ...DEFAULT_STYLE_COLORS };
+  Object.assign(colors, block?.colors ?? {});
+  Object.assign(colors, heading?.colors ?? {});
+  if (definition.block_source !== "default") {
+    for (const [target, source] of Object.entries(STYLE_SUPPORT_COLOR_SOURCES)) {
+      if (!(target in (block?.colors ?? {})) && colors[source]) colors[target] = colors[source];
+    }
+  }
+  colors["theme-bold"] = definition.bold_color;
+  for (const token of COLOR_ORDER) colors[token] ??= DEFAULT_STYLE_COLORS[token] ?? "#808080";
+  return { ...definition, colors };
+});
