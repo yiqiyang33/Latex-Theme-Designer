@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { HistoryConflictError } from "../src/changeHistory";
+import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry } from "../src/projectRegistry";
@@ -15,6 +16,8 @@ import { TemplateService } from "../src/template";
 import { ToolkitService } from "../src/toolkitService";
 import type { LocalProjectStateStore, ToolkitState } from "../src/types";
 import { parseThemeColorDefaults } from "../src/utils";
+import { readWorkspaceUiState, updateWorkspaceUiState } from "../src/webview/uiState";
+import { buildStructureSummary } from "../src/webview/structureSummary";
 import { generateVscodeSettingsIfMissing, loadRecipeCatalog } from "../src/vscodeSettings";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -698,6 +701,7 @@ describe("TypeScript Toolkit migration", () => {
   it("ships the visual workbench, live style preview, and external PDF workflow without legacy controls", async () => {
     const source = await fs.readFile(path.join(repoRoot, "src", "webview", "index.ts"), "utf8");
     const styles = await fs.readFile(path.join(repoRoot, "src", "webview", "styles.css"), "utf8");
+    const uiStateSource = await fs.readFile(path.join(repoRoot, "src", "webview", "uiState.ts"), "utf8");
     const extension = await fs.readFile(path.join(repoRoot, "src", "extension.ts"), "utf8");
     const manifest = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
     expect(source).toContain("previewStylePresetId");
@@ -710,6 +714,13 @@ describe("TypeScript Toolkit migration", () => {
     expect(source).toContain('data-context-panel="style"');
     expect(source).toContain('request("pdf-status"');
     expect(source).toContain('request("open-pdf"');
+    expect(source).toContain('request("confirm-action"');
+    expect(source).not.toMatch(/\bconfirm\s*\(/);
+    expect(uiStateSource).toContain('version: 2');
+    expect(source).toContain("activeStructureTask");
+    expect(source).toContain('id="loadingState"');
+    expect(source).toContain('id="notice"');
+    expect(source).toContain('id="structureResultState"');
     expect(source).toContain("chapter-overview-bg");
     expect(source).toContain("sidenote-accent");
     expect(source).not.toContain('id="pdfFrame"');
@@ -728,17 +739,89 @@ describe("TypeScript Toolkit migration", () => {
     expect(styles).toMatch(/grid-template-columns:\s*\d+px minmax\(\d+px, 1fr\) minmax\(330px, \d+px\)/);
     expect(styles).toContain("@media (max-width: 1179px)");
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(styles).toContain(".loading-state");
+    expect(styles).toContain(".empty-state");
+    expect(styles).toContain(".inline-notice");
     expect(styles).not.toContain("iframe");
     expect(extension).toContain('request.command === "pdf-status"');
+    expect(extension).toContain('request.command === "confirm-action"');
+    expect(extension).toContain('request.command === "show-log"');
     expect(extension).not.toContain('request.command === "pdf-uri"');
     expect(extension).toContain('"Appearance"');
     expect(extension).toContain('"Project Tools"');
-    expect(manifest.version).toBe("0.4.0");
+    expect(manifest.version).toBe("0.4.1");
     expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();
     expect(manifest.contributes.menus["view/item/context"].every((item: any) => !String(item.group).startsWith("inline"))).toBe(true);
     const build = await fs.readFile(path.join(repoRoot, "esbuild.mjs"), "utf8");
     expect(build).toContain("dist/codicon.css");
     expect(build).toContain("dist/codicon.ttf");
+  });
+
+  it("defines fixed native confirmation copy for every destructive Webview action", () => {
+    expect(CONFIRM_ACTIONS).toEqual([
+      "starter-overwrite",
+      "upgrade-theme-assets",
+      "reset-overrides",
+      "clean-artifacts",
+      "unsplit-delete-source"
+    ]);
+    for (const action of CONFIRM_ACTIONS) {
+      expect(isConfirmAction(action)).toBe(true);
+      const spec = confirmationSpec(action, action === "upgrade-theme-assets" ? "default" : "main.tex");
+      expect(spec.message.length).toBeGreaterThan(10);
+      expect(spec.detail.length).toBeGreaterThan(10);
+      expect(spec.confirmLabel.length).toBeGreaterThan(2);
+    }
+    expect(isConfirmAction("arbitrary-action")).toBe(false);
+    expect(confirmationSpec("starter-overwrite", "notes.tex").detail).toContain("notes.tex");
+    expect(confirmationSpec("upgrade-theme-assets", "default").detail).toContain("Default color package");
+    expect(confirmationSpec("upgrade-theme-assets", "preserve").detail).toContain("preserved");
+  });
+
+  it("migrates Webview UI state from v1 while preserving per-workspace navigation", () => {
+    const legacy = {
+      version: 1,
+      workspaces: {
+        "/notes/a": { activeSection: "colors" },
+        "/notes/b": { activeSection: "build" }
+      }
+    };
+    expect(readWorkspaceUiState(legacy, "/notes/a")).toEqual({ activeSection: "colors", activeStructureTask: "split" });
+    const migrated = updateWorkspaceUiState(legacy, "/notes/a", "structure", "renumber");
+    expect(migrated).toEqual({
+      version: 2,
+      workspaces: {
+        "/notes/a": { activeSection: "structure", activeStructureTask: "renumber" },
+        "/notes/b": { activeSection: "build", activeStructureTask: "split" }
+      }
+    });
+    expect(readWorkspaceUiState(migrated, "/notes/a")).toEqual({ activeSection: "structure", activeStructureTask: "renumber" });
+    expect(readWorkspaceUiState({ version: 2, workspaces: { bad: { activeSection: "unknown", activeStructureTask: "bad" } } }, "bad"))
+      .toEqual({ activeSection: "style", activeStructureTask: "split" });
+  });
+
+  it("summarizes split, renumber, and merge results without double-counting deleted files", () => {
+    expect(buildStructureSummary("split", {
+      generated_subfile_targets: ["Sections/a.tex", "Sections/b.tex"],
+      updated_files: ["main.tex", "Sections/a.tex"],
+      warnings: ["Review appendix"]
+    })).toMatchObject({ created: 2, updated: 2, renamed: 0, deleted: 0, warnings: 1 });
+    expect(buildStructureSummary("renumber", {
+      renamed: { "Sections/a.tex": "Sections/01-a.tex" },
+      updated_files: ["main.tex"],
+      warnings: []
+    })).toMatchObject({ created: 0, updated: 1, renamed: 1, deleted: 0, warnings: 0 });
+    const merged = buildStructureSummary("unsplit", {
+      delete_source: true,
+      source_target: "Sections/01-a.tex",
+      updated_files: ["main.tex", "Sections/01-a.tex"],
+      warnings: []
+    });
+    expect(merged).toMatchObject({ created: 0, updated: 1, renamed: 0, deleted: 1, warnings: 0 });
+    expect(merged.entries).toEqual([
+      { kind: "Updated", value: "main.tex" },
+      { kind: "Deleted", value: "Sections/01-a.tex" }
+    ]);
   });
 
   it("splits a book root into subfiles and preserves appendix in root", async () => {

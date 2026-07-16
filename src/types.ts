@@ -1,5 +1,30 @@
 export type JsonObject = Record<string, unknown>;
 
+export type ConfirmAction =
+  | "starter-overwrite"
+  | "upgrade-theme-assets"
+  | "reset-overrides"
+  | "clean-artifacts"
+  | "unsplit-delete-source";
+
+export type NoticeKind = "success" | "warning" | "error";
+
+export interface ConfirmActionPayload {
+  action: ConfirmAction;
+  detail?: string;
+}
+
+export interface ConfirmActionResult {
+  confirmed: boolean;
+}
+
+export interface ToolkitNotice {
+  kind: NoticeKind;
+  message: string;
+  action?: "retry" | "show-log" | "open-diagnostics";
+  dismissible: boolean;
+}
+
 export interface LocalProjectStateStore {
   get<T>(key: string): T | undefined;
   update(key: string, value: unknown): Promise<void> | Thenable<void>;

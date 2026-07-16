@@ -1281,6 +1281,55 @@ function hashBuffer(value) {
   return (0, import_node_crypto.createHash)("sha256").update(value).digest("hex");
 }
 
+// src/confirmations.ts
+var CONFIRM_ACTIONS = [
+  "starter-overwrite",
+  "upgrade-theme-assets",
+  "reset-overrides",
+  "clean-artifacts",
+  "unsplit-delete-source"
+];
+function isConfirmAction(value) {
+  return typeof value === "string" && CONFIRM_ACTIONS.includes(value);
+}
+function confirmationSpec(action, detail = "") {
+  switch (action) {
+    case "starter-overwrite":
+      return {
+        message: "Overwrite the existing starter target?",
+        detail: detail ? `The existing file will be replaced:
+${detail}` : "The existing starter target will be replaced.",
+        confirmLabel: "Overwrite"
+      };
+    case "upgrade-theme-assets": {
+      const resetColors = detail === "default";
+      return {
+        message: "Upgrade Toolkit theme assets?",
+        detail: resetColors ? "The current assets will be backed up and replaced. The complete Default color package will replace current colors; compile and document settings are preserved." : "The current assets will be backed up and replaced. Existing colors and Toolkit settings will be preserved.",
+        confirmLabel: "Upgrade"
+      };
+    }
+    case "reset-overrides":
+      return {
+        message: "Reset all Toolkit overrides?",
+        detail: "This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, recipe, target, and status settings.",
+        confirmLabel: "Reset Overrides"
+      };
+    case "clean-artifacts":
+      return {
+        message: "Clean LaTeX build artifacts?",
+        detail: "Generated auxiliary build files in this workspace will be deleted. Source files and PDFs are preserved.",
+        confirmLabel: "Clean"
+      };
+    case "unsplit-delete-source":
+      return {
+        message: "Merge the selected unit and delete its source file?",
+        detail: "The unit body will be restored to the root target. The source subfile will be deleted after the merge.",
+        confirmLabel: "Merge and Delete"
+      };
+  }
+}
+
 // src/personalStyles.ts
 var import_node_crypto2 = require("node:crypto");
 init_schema();
@@ -4652,7 +4701,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     nodes.push(
-      this.groupNode(`build:${folder.uri.toString()}`, "Build", "run-all", [
+      this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.actionNode("pick-target", "Pick Target", `${state.compile_targets.length} found`, "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
@@ -4672,7 +4721,7 @@ var ToolkitTreeProvider = class {
           [folder.uri, toggle.id]
         )))
       ]),
-      this.groupNode(`document:${folder.uri.toString()}`, "Document", "symbol-class", [
+      this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
         this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
         this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => this.actionNode(
           `pick-class-config-${field.id}`,
@@ -4683,7 +4732,7 @@ var ToolkitTreeProvider = class {
           [folder.uri, field.id]
         )))
       ]),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
+      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
         this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
@@ -4741,7 +4790,7 @@ var ToolkitTreeProvider = class {
       id: `${id}:${String(commandArgs[0])}`,
       label,
       description,
-      tooltip: label,
+      tooltip: description ? `${label}: ${description}` : label,
       iconId,
       commandId,
       commandArgs,
@@ -4858,7 +4907,20 @@ var ToolkitPanel = class _ToolkitPanel {
     if (!request?.id || !request.command) return;
     try {
       let data;
-      if (request.command === "pdf-status") {
+      if (request.command === "confirm-action") {
+        const action = request.payload?.action;
+        if (!isConfirmAction(action)) throw new Error("Unknown Toolkit confirmation action.");
+        const spec = confirmationSpec(action, String(request.payload?.detail ?? ""));
+        const choice = await vscode.window.showWarningMessage(
+          spec.message,
+          { modal: true, detail: spec.detail },
+          spec.confirmLabel
+        );
+        data = { confirmed: choice === spec.confirmLabel };
+      } else if (request.command === "show-log") {
+        this.output.show(true);
+        data = { shown: true };
+      } else if (request.command === "pdf-status") {
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = this.service.resolvePdfPath(rawPath);
         let exists2 = false;

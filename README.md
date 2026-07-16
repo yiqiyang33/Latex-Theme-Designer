@@ -1,4 +1,4 @@
-# LaTeX Editing Toolkit 0.4.0
+# LaTeX Editing Toolkit 0.4.1
 
 VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and native editor PDF opening.
 
@@ -20,9 +20,10 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
-Version 0.4.0 reorganizes Toolkit as a responsive visual workbench with section navigation,
-task-focused controls, a richer live Style preview, bundled Codicons, and a quieter Activity Bar.
-The Webview no longer embeds PDFs: compile results open through the native VS Code/Cursor PDF viewer.
+Version 0.4.1 refines the responsive workbench with native confirmation dialogs, loading and empty
+states, quieter inline notices, persistent Structure task selection, structured operation results,
+and more consistent controls. The Webview does not embed PDFs: compile results open through the
+native VS Code/Cursor PDF viewer.
 
 ## Create Project Wizard
 

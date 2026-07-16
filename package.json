@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "yiqiyang33",
   "icon": "assets/latex-toolkit.png",
   "license": "MIT",

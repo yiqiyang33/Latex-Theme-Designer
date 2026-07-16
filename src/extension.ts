@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { HistoryConflictError, workspaceHistoryStorageRoot } from "./changeHistory";
+import { confirmationSpec, isConfirmAction } from "./confirmations";
 import { PersonalStyleRegistry } from "./personalStyles";
 import { LocalProjectRegistry } from "./projectRegistry";
 import { preflightCreateProject, runCreateProjectWorkflow } from "./projectWorkflow";
@@ -875,7 +876,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     nodes.push(
-      this.groupNode(`build:${folder.uri.toString()}`, "Build", "run-all", [
+      this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.actionNode("pick-target", "Pick Target", `${state.compile_targets.length} found`, "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
@@ -897,7 +898,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
           )
         )))
       ]),
-      this.groupNode(`document:${folder.uri.toString()}`, "Document", "symbol-class", [
+      this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
         this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
         this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => (
           this.actionNode(
@@ -910,7 +911,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
           )
         )))
       ]),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
+      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
         this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
@@ -972,7 +973,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       id: `${id}:${String(commandArgs[0])}`,
       label,
       description,
-      tooltip: label,
+      tooltip: description ? `${label}: ${description}` : label,
       iconId,
       commandId,
       commandArgs,
@@ -1099,7 +1100,20 @@ class ToolkitPanel {
     if (!request?.id || !request.command) return;
     try {
       let data: unknown;
-      if (request.command === "pdf-status") {
+      if (request.command === "confirm-action") {
+        const action = request.payload?.action;
+        if (!isConfirmAction(action)) throw new Error("Unknown Toolkit confirmation action.");
+        const spec = confirmationSpec(action, String(request.payload?.detail ?? ""));
+        const choice = await vscode.window.showWarningMessage(
+          spec.message,
+          { modal: true, detail: spec.detail },
+          spec.confirmLabel
+        );
+        data = { confirmed: choice === spec.confirmLabel };
+      } else if (request.command === "show-log") {
+        this.output.show(true);
+        data = { shown: true };
+      } else if (request.command === "pdf-status") {
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = this.service.resolvePdfPath(rawPath);
         let exists = false;

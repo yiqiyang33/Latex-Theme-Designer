@@ -1,12 +1,10 @@
+import type { ConfirmAction, ConfirmActionResult, ToolkitNotice } from "../types";
+import { readWorkspaceUiState, TOOLKIT_SECTIONS, updateWorkspaceUiState } from "./uiState";
+import type { StructureTask, ToolkitSection } from "./uiState";
+import { buildStructureSummary } from "./structureSummary";
+
 type ToolkitRequest = { id: string; command: string; payload?: Record<string, unknown> };
 type ToolkitResponse = { id: string; ok: boolean; data?: any; error?: string };
-type ToolkitSection = "style" | "build" | "document" | "colors" | "setup" | "structure" | "diagnostics";
-type StructureTask = "split" | "renumber" | "unsplit";
-
-interface ToolkitWebviewUiState {
-  version: 1;
-  workspaces: Record<string, { activeSection: ToolkitSection }>;
-}
 
 declare const acquireVsCodeApi: () => {
   postMessage(message: ToolkitRequest): void;
@@ -32,8 +30,10 @@ let lastSaveError: Error | null = null;
 let activeSection: ToolkitSection = "style";
 let activeStructureTask: StructureTask = "split";
 let pdfStatus = { path: "", exists: false, checking: true };
-
-const TOOLKIT_SECTIONS: ToolkitSection[] = ["style", "build", "document", "colors", "setup", "structure", "diagnostics"];
+let noticeTimer: number | undefined;
+let saveIdleTimer: number | undefined;
+let lastPersonalStyleMenuTrigger: HTMLElement | null = null;
+let lastCompileDurationMs: number | null = null;
 
 function request(command: string, payload: Record<string, unknown> = {}): Promise<any> {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -61,16 +61,63 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 function setStatus(message: string, kind = ""): void {
-  const el = byId<HTMLDivElement>("status");
-  el.textContent = message;
-  el.dataset.kind = kind;
+  if (!message) {
+    clearNotice();
+    return;
+  }
+  showNotice({
+    kind: kind === "error" ? "error" : kind === "ok" ? "success" : "warning",
+    message,
+    action: kind === "error" ? "show-log" : undefined,
+    dismissible: kind === "error"
+  });
 }
 
 function setSaveStatus(message: string, kind = ""): void {
+  if (saveIdleTimer !== undefined) window.clearTimeout(saveIdleTimer);
   const el = byId<HTMLSpanElement>("saveIndicator");
   el.textContent = message;
   el.dataset.kind = kind;
   byId<HTMLButtonElement>("retrySaveBtn").hidden = kind !== "error";
+  byId<HTMLButtonElement>("saveShowLogBtn").hidden = kind !== "error";
+  if (kind === "ok" && message !== "Saved") {
+    saveIdleTimer = window.setTimeout(() => {
+      el.textContent = "Saved";
+      saveIdleTimer = undefined;
+    }, 3000);
+  }
+}
+
+function showNotice(notice: ToolkitNotice): void {
+  if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+  const box = byId<HTMLDivElement>("notice");
+  const icon = byId<HTMLElement>("noticeIcon");
+  const message = byId("noticeMessage");
+  const action = byId<HTMLButtonElement>("noticeActionBtn");
+  const dismiss = byId<HTMLButtonElement>("dismissNoticeBtn");
+  box.hidden = false;
+  box.dataset.kind = notice.kind;
+  message.textContent = notice.message;
+  icon.className = `codicon codicon-${notice.kind === "success" ? "pass-filled" : notice.kind === "error" ? "error" : "info"}`;
+  action.hidden = !notice.action;
+  action.dataset.action = notice.action || "";
+  action.textContent = notice.action === "retry" ? "Retry" : notice.action === "open-diagnostics" ? "Open Diagnostics" : "Show Log";
+  dismiss.hidden = !notice.dismissible;
+  if (notice.kind === "success") {
+    noticeTimer = window.setTimeout(() => clearNotice(), 3000);
+  }
+}
+
+function clearNotice(): void {
+  if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+  noticeTimer = undefined;
+  const box = document.getElementById("notice");
+  if (box) box.hidden = true;
+}
+
+async function confirmAction(action: ConfirmAction, detail = ""): Promise<boolean> {
+  const result = await request("confirm-action", { action, detail }) as ConfirmActionResult;
+  return Boolean(result.confirmed);
 }
 
 function scheduleAutosave(delay = 0): void {
@@ -262,20 +309,25 @@ function renderPresets(): void {
   const presets = model.schema.style_presets || [];
   const grid = byId("stylePresetCards");
   grid.innerHTML = "";
-  const customized = isCurrentStyleCustomized();
+  const changes = styleChanges();
   for (const source of ["builtin", "personal"]) {
     const group = presets.filter((preset: any) => (preset.source || "builtin") === source);
-    if (source === "personal" && group.length === 0) continue;
     const heading = document.createElement("h3");
     heading.className = "preset-group-title";
     heading.textContent = source === "builtin" ? "Built-in Styles" : "My Styles";
     grid.appendChild(heading);
+    if (source === "personal" && group.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state compact";
+      empty.innerHTML = `<i class="codicon codicon-symbol-color" aria-hidden="true"></i><div><strong>No personal styles yet</strong><p>Customize a built-in style, then save it to My Styles.</p></div>`;
+      grid.appendChild(empty);
+      continue;
+    }
     const groupGrid = document.createElement("div");
     groupGrid.className = "style-card-grid";
-    for (const preset of group) groupGrid.appendChild(stylePresetCard(preset, customized));
+    for (const preset of group) groupGrid.appendChild(stylePresetCard(preset, changes.length));
     grid.appendChild(groupGrid);
   }
-  const changes = styleChanges();
   const summary = byId("customizedSummary");
   summary.textContent = changes.length > 0 ? `Customized from ${currentPreset()?.label || model.state.style_base_preset} · ${changes.length} change(s)` : "";
   summary.hidden = changes.length === 0;
@@ -284,9 +336,10 @@ function renderPresets(): void {
   byId<HTMLButtonElement>("updatePersonalStyleBtn").hidden = !(changes.length > 0 && current?.source === "personal");
 }
 
-function stylePresetCard(preset: any, customized: boolean): HTMLElement {
+function stylePresetCard(preset: any, customizedCount: number): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "style-card-wrap";
+  wrap.dataset.personal = String(preset.source === "personal");
   const card = document.createElement("button");
   const isApplied = preset.id === persistedState?.style_preset;
   const isDraft = preset.id === model.state.style_preset;
@@ -314,14 +367,14 @@ function stylePresetCard(preset: any, customized: boolean): HTMLElement {
   title.textContent = preset.label;
   const badges = document.createElement("span");
   badges.className = "preset-badges";
-  for (const [visible, text, className] of [
-    [isApplied, "Applied", ""],
-    [isDraft && customized, "Customized", "customized"]
+  for (const [visible, text, className, icon] of [
+    [isApplied, "Applied", "", "check"],
+    [isDraft && customizedCount > 0, `${customizedCount} changed`, "customized", "edit"]
   ] as const) {
     if (!visible) continue;
     const badge = document.createElement("span");
     badge.className = `preset-badge ${className}`.trim();
-    badge.textContent = text;
+    badge.innerHTML = `<i class="codicon codicon-${icon}" aria-hidden="true"></i><span>${text}</span>`;
     badges.appendChild(badge);
   }
   heading.append(title, badges);
@@ -362,6 +415,15 @@ function personalStyleMenu(preset: any): HTMLElement {
   summary.title = `Manage ${preset.label}`;
   summary.setAttribute("aria-label", `Manage ${preset.label}`);
   summary.innerHTML = `<i class="codicon codicon-ellipsis" aria-hidden="true"></i>`;
+  summary.addEventListener("click", () => {
+    lastPersonalStyleMenuTrigger = summary;
+    closePersonalStyleMenus(false, menu);
+  });
+  menu.addEventListener("toggle", () => {
+    if (!menu.open) return;
+    lastPersonalStyleMenuTrigger = summary;
+    closePersonalStyleMenus(false, menu);
+  });
   const actions = document.createElement("div");
   actions.className = "personal-style-actions";
   for (const [label, icon, command] of [
@@ -378,6 +440,14 @@ function personalStyleMenu(preset: any): HTMLElement {
   }
   menu.append(summary, actions);
   return menu;
+}
+
+function closePersonalStyleMenus(restoreFocus: boolean, except?: HTMLDetailsElement): void {
+  document.querySelectorAll<HTMLDetailsElement>(".personal-style-menu[open]").forEach((menu) => {
+    if (menu !== except) menu.open = false;
+  });
+  if (restoreFocus && lastPersonalStyleMenuTrigger?.isConnected) lastPersonalStyleMenuTrigger.focus();
+  if (restoreFocus) lastPersonalStyleMenuTrigger = null;
 }
 
 function isCurrentStyleCustomized(): boolean {
@@ -420,6 +490,7 @@ function renderConfigWarnings(): void {
   const warnings = model?.state?.config_warnings || [];
   const panel = byId<HTMLDetailsElement>("configWarnings");
   panel.hidden = warnings.length === 0;
+  byId("configHealthyState").hidden = warnings.length > 0;
   byId("configWarningSummary").textContent = warnings.length === 1 ? "1 configuration warning" : `${warnings.length} configuration warnings`;
   const list = byId<HTMLUListElement>("configWarningList");
   list.innerHTML = "";
@@ -453,10 +524,13 @@ function renderStyleDifferences(): void {
     for (const entry of entries) {
       const row = document.createElement("div");
       row.className = "style-diff-row";
-      row.innerHTML = `<span>${entry.label}<code>${entry.token}</code></span><span class="diff-color"><i style="background:${entry.baseline}"></i>${entry.baseline}</span><span>→</span><span class="diff-color"><i style="background:${entry.current}"></i>${entry.current}</span>`;
+      row.innerHTML = `<span class="diff-token" title="${entry.token}">${entry.label}<code>${entry.token}</code></span><span class="diff-color" title="Baseline ${entry.baseline}"><i style="background:${entry.baseline}"></i>${entry.baseline}</span><span aria-hidden="true">→</span><span class="diff-color" title="Current ${entry.current}"><i style="background:${entry.current}"></i>${entry.current}</span>`;
       const revert = document.createElement("button");
       revert.type = "button";
-      revert.textContent = "Revert";
+      revert.className = "icon-button";
+      revert.title = `Revert ${entry.token}`;
+      revert.setAttribute("aria-label", revert.title);
+      revert.innerHTML = `<i class="codicon codicon-discard" aria-hidden="true"></i>`;
       revert.addEventListener("click", () => {
         model.state.colors[entry.token] = entry.baseline;
         scheduleAutosave(0);
@@ -605,7 +679,18 @@ function renderBuildContext(): void {
   const description = byId("buildContextDescription");
   const open = byId<HTMLButtonElement>("openPdfBtn");
   const buildNavBadge = byId("navBuildBadge");
-  if (pdfStatus.checking) {
+  const targets = model.state.compile_targets || [];
+  const compile = byId<HTMLButtonElement>("compileBtn");
+  const noTargets = targets.length === 0;
+  byId("buildNoTargets").hidden = !noTargets;
+  compile.disabled = noTargets;
+  if (noTargets) {
+    badge.textContent = "No target";
+    badge.dataset.kind = "warning";
+    title.textContent = "No compile targets found";
+    description.textContent = "Add a local .tex target or generate a starter before compiling.";
+    open.disabled = true;
+  } else if (pdfStatus.checking) {
     badge.textContent = "Checking";
     badge.dataset.kind = "";
     title.textContent = "Checking PDF status…";
@@ -623,6 +708,12 @@ function renderBuildContext(): void {
     title.textContent = "PDF available";
     description.textContent = pdfStatus.path;
     open.disabled = false;
+  } else if (model.state.compile_last_success === true) {
+    badge.textContent = "Missing";
+    badge.dataset.kind = "warning";
+    title.textContent = "Generated PDF is missing";
+    description.textContent = "The last compile succeeded, but the expected PDF is no longer present.";
+    open.disabled = true;
   } else {
     badge.textContent = "Missing";
     badge.dataset.kind = "warning";
@@ -630,17 +721,25 @@ function renderBuildContext(): void {
     description.textContent = "Compile the selected target, then open it in the editor.";
     open.disabled = true;
   }
-  buildNavBadge.textContent = model.state.compile_last_success === false ? "!" : pdfStatus.exists ? "PDF" : "";
+  buildNavBadge.textContent = noTargets ? "0" : model.state.compile_last_success === false ? "!" : pdfStatus.exists ? "PDF" : "";
   buildNavBadge.hidden = !buildNavBadge.textContent;
   byId("buildContextPath").textContent = currentPdfPath();
   byId("buildContextRecipe").textContent = currentCompileLabel();
   byId("buildContextLastCompile").textContent = formatCompileTime(model.state.compile_last_compile_at);
+  byId("buildContextDuration").textContent = lastCompileDurationMs === null ? "Not measured" : formatDuration(lastCompileDurationMs);
+  byId<HTMLButtonElement>("openDiagnosticsBtn").hidden = model.state.compile_last_success !== false;
+  byId<HTMLButtonElement>("buildShowLogBtn").hidden = model.state.compile_last_success !== false;
 }
 
 function formatCompileTime(value: string): string {
   if (!value) return "Never compiled";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : `Last compiled ${date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`;
+}
+
+function formatDuration(value: number): string {
+  if (value < 1000) return `${Math.max(1, Math.round(value))} ms`;
+  return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
 }
 
 function renderRecipes(): void {
@@ -684,29 +783,40 @@ function renderSplitControls(): void {
 }
 
 function renderSplitResult(): void {
-  const box = byId("splitResult");
+  const box = byId<HTMLUListElement>("splitResult");
   const result = latestOperation === "split" ? latestSplit : latestOperation === "renumber" ? latestRenumber : latestOperation === "unsplit" ? latestUnsplit : null;
   if (!result) {
-    box.textContent = "No split run yet.";
+    byId("structureEmptyState").hidden = false;
+    byId("structureResultState").hidden = true;
+    byId("structureResultBadge").hidden = true;
+    box.innerHTML = "";
     byId("structureContextTitle").textContent = "No structure operation yet";
     byId("structureContextDescription").textContent = "Run a dry-run first to inspect planned file changes.";
     return;
   }
-  const lines = [`${latestOperation} ${result.success ? "succeeded" : "failed"}${result.dry_run ? " (dry run)" : ""}.`];
-  if (latestOperation === "split") {
-    lines.push(`generated: ${(result.generated_subfile_targets || []).length}`);
-    for (const item of result.generated_subfile_targets || []) lines.push(`- ${item}`);
+  byId("structureEmptyState").hidden = true;
+  byId("structureResultState").hidden = false;
+  const summary = buildStructureSummary(latestOperation as "split" | "renumber" | "unsplit", result);
+  byId("structureCreatedCount").textContent = String(summary.created);
+  byId("structureUpdatedCount").textContent = String(summary.updated);
+  byId("structureRenamedCount").textContent = String(summary.renamed);
+  byId("structureDeletedCount").textContent = String(summary.deleted);
+  byId("structureWarningCount").textContent = String(summary.warnings);
+  const badge = byId("structureResultBadge");
+  badge.hidden = false;
+  badge.textContent = result.success ? result.dry_run ? "Dry run" : "Completed" : "Failed";
+  badge.dataset.kind = result.success ? result.dry_run ? "warning" : "ok" : "error";
+  box.innerHTML = "";
+  for (const entry of summary.entries) {
+    const item = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = entry.kind;
+    const text = document.createElement("code");
+    text.textContent = entry.value;
+    item.append(label, text);
+    box.appendChild(item);
   }
-  if (latestOperation === "renumber") {
-    for (const [from, to] of Object.entries(result.renamed || {})) lines.push(`- ${from} -> ${to}`);
-  }
-  if (latestOperation === "unsplit") {
-    lines.push(`root: ${result.root_target}`);
-    lines.push(`source: ${result.source_target}`);
-  }
-  for (const item of result.updated_files || []) lines.push(`updated: ${item}`);
-  for (const item of result.warnings || []) lines.push(`warning: ${item}`);
-  box.textContent = lines.join("\n");
+  byId("structureFilesSummary").textContent = summary.entries.length === 1 ? "1 affected item" : `${summary.entries.length} affected items`;
   byId("structureContextTitle").textContent = `${latestOperation[0]?.toUpperCase() || ""}${latestOperation.slice(1)} ${result.success ? "completed" : "failed"}`;
   byId("structureContextDescription").textContent = result.dry_run
     ? "Dry run only; no project files were changed."
@@ -778,15 +888,34 @@ async function refreshPdfStatus(): Promise<void> {
 }
 
 async function loadState(): Promise<void> {
-  acceptServerModel(await request("state"));
-  setSaveStatus("Saved", "ok");
+  setLoadingState("loading");
+  try {
+    acceptServerModel(await request("state"));
+    setSaveStatus("Saved", "ok");
+    setLoadingState("ready");
+  } catch (err) {
+    setLoadingState("error", (err as Error).message);
+    throw err;
+  }
+}
+
+function setLoadingState(state: "loading" | "ready" | "error", message = ""): void {
+  const shell = byId("appShell");
+  const loading = byId("loadingState");
+  const error = byId("loadErrorState");
+  const workbench = byId("workbench");
+  shell.setAttribute("aria-busy", String(state === "loading"));
+  loading.hidden = state !== "loading";
+  error.hidden = state !== "error";
+  workbench.hidden = state !== "ready";
+  if (state === "error") byId("loadErrorMessage").textContent = message || "Toolkit state could not be loaded.";
 }
 
 async function bootstrapStarter(): Promise<void> {
   await flushAutosave();
   const output = byId<HTMLInputElement>("starterOutputTarget").value.trim();
   const overwrite = byId<HTMLInputElement>("starterOverwrite").checked;
-  if (overwrite && !confirm(`Overwrite target file if it already exists?\n\n${output}`)) return;
+  if (overwrite && !(await confirmAction("starter-overwrite", output))) return;
   const result = await request("template-bootstrap", {
     template_id: byId<HTMLSelectElement>("starterTemplateSelect").value,
     output_target: output,
@@ -800,10 +929,7 @@ async function bootstrapStarter(): Promise<void> {
 async function upgradeThemeAssets(): Promise<void> {
   await flushAutosave();
   const policy = byId<HTMLSelectElement>("upgradeColorPolicy").value === "default" ? "default" : "preserve";
-  const explanation = policy === "default"
-    ? "The complete Default color package will replace current colors. Compile, class, toggle, recipe, target, and status settings are preserved."
-    : "Current colors and all Toolkit settings will be preserved.";
-  if (!confirm(`Back up and replace theme.sty, theorems.tex, and commands.tex with the bundled extension versions?\n\n${explanation}`)) return;
+  if (!(await confirmAction("upgrade-theme-assets", policy))) return;
   const result = await request("upgrade-theme-assets", { color_policy: policy });
   acceptServerModel(await request("state", {}));
   setStatus(`Upgraded ${result.upgraded_files?.length || 0} theme asset(s) with ${policy === "default" ? "Default colors" : "colors preserved"}. Backup: ${result.backup_dir}.`, "ok");
@@ -812,6 +938,8 @@ async function upgradeThemeAssets(): Promise<void> {
 async function compilePdf(): Promise<void> {
   await flushAutosave();
   const compileButton = byId<HTMLButtonElement>("compileBtn");
+  const startedAt = performance.now();
+  lastCompileDurationMs = null;
   compileButton.disabled = true;
   compileButton.innerHTML = `<i class="codicon codicon-loading codicon-modifier-spin" aria-hidden="true"></i><span>Compiling…</span>`;
   setStatus("Compiling...", "");
@@ -833,8 +961,13 @@ async function compilePdf(): Promise<void> {
       persistedState.compile_last_compile_at = result.compile_last_compile_at;
       persistedState.compile_last_success = result.compile_last_success;
     }
-    setStatus(result.success ? "Compile succeeded." : "Compile failed.", result.success ? "ok" : "error");
-    if (!result.success) selectSection("diagnostics");
+    lastCompileDurationMs = performance.now() - startedAt;
+    if (result.success) {
+      showNotice({ kind: "success", message: `Compile succeeded in ${formatDuration(lastCompileDurationMs)}.`, dismissible: false });
+    } else {
+      showNotice({ kind: "error", message: "Compile failed. Review Diagnostics for the complete output.", action: "open-diagnostics", dismissible: true });
+      selectSection("diagnostics", true, true);
+    }
     renderAll();
   } finally {
     compileButton.disabled = false;
@@ -851,7 +984,8 @@ async function splitCurrent(): Promise<void> {
   });
   latestSplit = result.split;
   latestOperation = "split";
-  setStatus("Split finished.", "ok");
+  setStatus(result.split?.dry_run ? "Split dry run finished." : "Split finished.", "ok");
+  if (result.split && !result.split.success) selectSection("diagnostics", true, true);
   acceptServerModel(result);
 }
 
@@ -864,14 +998,15 @@ async function renumberCurrent(): Promise<void> {
   });
   latestRenumber = result.renumber;
   latestOperation = "renumber";
-  setStatus("Renumber finished.", "ok");
+  setStatus(result.renumber?.dry_run ? "Renumber dry run finished." : "Renumber finished.", "ok");
+  if (result.renumber && !result.renumber.success) selectSection("diagnostics", true, true);
   acceptServerModel(result);
 }
 
 async function unsplitCurrent(): Promise<void> {
   await flushAutosave();
   const deleteSource = byId<HTMLInputElement>("unsplitDeleteSource").checked;
-  if (deleteSource && !confirm("Merge selected unit back to root and delete the source file?")) return;
+  if (deleteSource && !(await confirmAction("unsplit-delete-source"))) return;
   const result = await request("unsplit", {
     compile_target: byId<HTMLSelectElement>("splitSourceSelect").value,
     dry_run: byId<HTMLInputElement>("splitDryRun").checked,
@@ -879,12 +1014,28 @@ async function unsplitCurrent(): Promise<void> {
   });
   latestUnsplit = result.unsplit;
   latestOperation = "unsplit";
-  setStatus("Merge finished.", "ok");
+  setStatus(result.unsplit?.dry_run ? "Merge dry run finished." : "Merge finished.", "ok");
+  if (result.unsplit && !result.unsplit.success) selectSection("diagnostics", true, true);
   acceptServerModel(result);
 }
 
 function wire(): void {
   wireNavigation();
+  byId("retryLoadBtn").addEventListener("click", () => { void loadState().catch(() => undefined); });
+  byId("loadShowLogBtn").addEventListener("click", () => { void request("show-log"); });
+  byId("saveShowLogBtn").addEventListener("click", () => { void request("show-log"); });
+  byId("dismissNoticeBtn").addEventListener("click", clearNotice);
+  byId("noticeActionBtn").addEventListener("click", () => {
+    const action = byId<HTMLButtonElement>("noticeActionBtn").dataset.action;
+    if (action === "open-diagnostics") selectSection("diagnostics", true, true);
+    else if (action === "show-log") void request("show-log");
+    else if (action === "retry") {
+      savePending = true;
+      void drainAutosave().catch(() => undefined);
+    }
+  });
+  byId("openDiagnosticsBtn").addEventListener("click", () => selectSection("diagnostics", true, true));
+  byId("buildShowLogBtn").addEventListener("click", () => { void request("show-log"); });
   byId("starterTemplateSelect").addEventListener("change", () => {
     starterTemplateSelection = byId<HTMLSelectElement>("starterTemplateSelect").value;
     renderStarterDescription();
@@ -957,13 +1108,13 @@ function wire(): void {
   });
   byId("resetBtn").addEventListener("click", () => run(async () => {
     await flushAutosave();
-    if (!confirm("Reset all Toolkit overrides?\n\nThis deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, recipe, target, and status settings.")) return;
+    if (!(await confirmAction("reset-overrides"))) return;
     acceptServerModel(await request("reset", {}));
     setStatus("Reset all Toolkit override files.", "ok");
   }));
   byId("cleanBtn").addEventListener("click", () => run(async () => {
     await flushAutosave();
-    if (!confirm("Clean LaTeX build artifacts in this workspace?")) return;
+    if (!(await confirmAction("clean-artifacts"))) return;
     const result = await request("clean", { dry_run: false });
     byId("logBox").textContent = [`Cleaned ${result.deleted_count || 0} file(s).`, ...(result.deleted_files || []), ...(result.errors || []).map((x: string) => `error: ${x}`)].join("\n");
     setStatus("Cleanup finished.", result.success ? "ok" : "error");
@@ -971,7 +1122,14 @@ function wire(): void {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       clearStylePreview();
-      document.querySelectorAll<HTMLDetailsElement>(".personal-style-menu[open]").forEach((menu) => { menu.open = false; });
+      closePersonalStyleMenus(true);
+      document.querySelectorAll<HTMLDetailsElement>(".overflow-menu[open]").forEach((menu) => { menu.open = false; });
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!(event.target as Element).closest(".personal-style-menu")) closePersonalStyleMenus(true);
+    if (!(event.target as Element).closest(".overflow-menu")) {
+      document.querySelectorAll<HTMLDetailsElement>(".overflow-menu[open]").forEach((menu) => { menu.open = false; });
     }
   });
 }
@@ -992,12 +1150,12 @@ async function run(fn: () => Promise<void>): Promise<void> {
 }
 
 function wireNavigation(): void {
-  const saved = vscode.getState() as ToolkitWebviewUiState | undefined;
   const workspace = workspaceStateKey();
-  const candidate = saved?.version === 1 ? saved.workspaces?.[workspace]?.activeSection : undefined;
-  activeSection = candidate && TOOLKIT_SECTIONS.includes(candidate) ? candidate : "style";
+  const saved = readWorkspaceUiState(vscode.getState(), workspace);
+  activeSection = saved.activeSection;
+  activeStructureTask = saved.activeStructureTask;
   document.querySelectorAll<HTMLButtonElement>("[data-section-target]").forEach((button) => {
-    button.addEventListener("click", () => selectSection(button.dataset.sectionTarget as ToolkitSection));
+    button.addEventListener("click", () => selectSection(button.dataset.sectionTarget as ToolkitSection, true, true));
     button.addEventListener("keydown", (event) => {
       const current = TOOLKIT_SECTIONS.indexOf(button.dataset.sectionTarget as ToolkitSection);
       let next = current;
@@ -1007,18 +1165,18 @@ function wireNavigation(): void {
       else if (event.key === "End") next = TOOLKIT_SECTIONS.length - 1;
       else return;
       event.preventDefault();
-      selectSection(TOOLKIT_SECTIONS[next]);
+      selectSection(TOOLKIT_SECTIONS[next], true, true);
       document.querySelector<HTMLButtonElement>(`[data-section-target="${TOOLKIT_SECTIONS[next]}"]`)?.focus();
     });
   });
   document.querySelectorAll<HTMLButtonElement>("[data-structure-task]").forEach((button) => {
     button.addEventListener("click", () => selectStructureTask(button.dataset.structureTask as StructureTask));
   });
-  selectStructureTask("split");
+  selectStructureTask(activeStructureTask, false);
   selectSection(activeSection, false);
 }
 
-function selectSection(section: ToolkitSection, persist = true): void {
+function selectSection(section: ToolkitSection, persist = true, focusPanel = false): void {
   activeSection = TOOLKIT_SECTIONS.includes(section) ? section : "style";
   document.querySelectorAll<HTMLElement>("[data-toolkit-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.toolkitPanel !== activeSection;
@@ -1031,9 +1189,17 @@ function selectSection(section: ToolkitSection, persist = true): void {
   });
   renderContextPanels();
   if (persist) persistNavigationState();
+  if (focusPanel) {
+    window.requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>(`[data-toolkit-panel="${activeSection}"] .section-heading h2`);
+      if (!heading) return;
+      heading.tabIndex = -1;
+      heading.focus();
+    });
+  }
 }
 
-function selectStructureTask(task: StructureTask): void {
+function selectStructureTask(task: StructureTask, persist = true): void {
   activeStructureTask = task;
   document.querySelectorAll<HTMLElement>("[data-structure-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.structurePanel !== activeStructureTask;
@@ -1043,6 +1209,7 @@ function selectStructureTask(task: StructureTask): void {
     button.dataset.active = String(selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  if (persist) persistNavigationState();
 }
 
 function renderContextPanels(): void {
@@ -1055,10 +1222,7 @@ function renderContextPanels(): void {
 }
 
 function persistNavigationState(): void {
-  const current = vscode.getState() as ToolkitWebviewUiState | undefined;
-  const workspaces = current?.version === 1 ? { ...(current.workspaces || {}) } : {};
-  workspaces[workspaceStateKey()] = { activeSection };
-  vscode.setState({ version: 1, workspaces } satisfies ToolkitWebviewUiState);
+  vscode.setState(updateWorkspaceUiState(vscode.getState(), workspaceStateKey(), activeSection, activeStructureTask));
 }
 
 function workspaceStateKey(): string {
@@ -1080,7 +1244,7 @@ function shell(): void {
   const workspaceName = escapeHtml(initial.workspaceName || "Workspace");
   const workspacePath = escapeHtml(initial.workspacePath || "");
   document.body.innerHTML = `
-    <main class="app-shell">
+    <main id="appShell" class="app-shell" aria-busy="true">
       <header class="topbar surface">
         <div class="project-identity">
           <span class="project-mark"><i class="codicon codicon-book" aria-hidden="true"></i></span>
@@ -1093,12 +1257,16 @@ function shell(): void {
         <div class="save-strip">
           <span id="saveIndicator">Loading…</span>
           <button id="retrySaveBtn" class="ghost-button" hidden><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Retry</span></button>
+          <button id="saveShowLogBtn" class="icon-button" hidden aria-label="Show Toolkit log" title="Show Toolkit log"><i class="codicon codicon-output" aria-hidden="true"></i></button>
           <span class="toolbar-divider" aria-hidden="true"></span>
           <button id="undoBtn" class="icon-button" disabled aria-label="Undo"><i class="codicon codicon-discard" aria-hidden="true"></i></button>
           <button id="redoBtn" class="icon-button" disabled aria-label="Redo"><i class="codicon codicon-redo" aria-hidden="true"></i></button>
         </div>
       </header>
-      <div class="workbench">
+      <div id="notice" class="inline-notice" role="status" hidden><i id="noticeIcon" class="codicon codicon-info" aria-hidden="true"></i><span id="noticeMessage"></span><button id="noticeActionBtn" class="notice-action" hidden></button><button id="dismissNoticeBtn" class="icon-button" aria-label="Dismiss notification" title="Dismiss"><i class="codicon codicon-close" aria-hidden="true"></i></button></div>
+      <section id="loadingState" class="loading-state" aria-label="Loading Toolkit"><div class="skeleton skeleton-title"></div><div class="skeleton-grid"><div class="skeleton skeleton-nav"></div><div class="skeleton skeleton-content"></div><div class="skeleton skeleton-context"></div></div></section>
+      <section id="loadErrorState" class="load-error empty-state" hidden><i class="codicon codicon-error" aria-hidden="true"></i><div><strong>Toolkit could not be loaded</strong><p id="loadErrorMessage"></p><div class="toolbar"><button id="retryLoadBtn" class="primary"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Retry</span></button><button id="loadShowLogBtn"><i class="codicon codicon-output" aria-hidden="true"></i><span>Show Log</span></button></div></div></section>
+      <div id="workbench" class="workbench" hidden>
         <nav class="workspace-nav surface" role="tablist" aria-label="Toolkit sections">
           <button data-section-target="style" role="tab"><i class="codicon codicon-symbol-color" aria-hidden="true"></i><span>Style</span></button>
           <button data-section-target="build" role="tab"><i class="codicon codicon-play" aria-hidden="true"></i><span>Build</span><small id="navBuildBadge" class="nav-badge" hidden></small></button>
@@ -1123,8 +1291,9 @@ function shell(): void {
           <section id="panelBuild" class="toolkit-panel" data-toolkit-panel="build" hidden>
             <header class="section-heading"><div><p class="eyebrow">Build</p><h2>Compile Configuration</h2><p class="hint">Choose the source and recipe used by the next explicit compile.</p></div></header>
             <div class="form-card"><label class="field"><span>Target</span><select id="targetSelect"></select></label><label class="field"><span>Recipe</span><select id="recipeSelect"></select></label><label class="toggle-row standalone"><span class="toggle-copy"><strong>Internal fallback</strong><small>Compile without the selected VS Code recipe.</small></span><span class="switch"><input id="useInternalFallback" type="checkbox"><span aria-hidden="true"></span></span></label><p id="compileHelp" class="hint"></p></div>
+            <div id="buildNoTargets" class="empty-state compact" hidden><i class="codicon codicon-file-code" aria-hidden="true"></i><div><strong>No compile targets</strong><p>Generate a starter or add a local .tex file to this workspace.</p></div></div>
             <div class="technical-details"><code id="targetInfo" class="meta"></code><code id="outputInfo" class="meta"></code></div>
-            <div class="secondary-actions"><button id="cleanBtn" class="ghost-button"><i class="codicon codicon-trash" aria-hidden="true"></i><span>Clean Build Artifacts</span></button></div>
+            <div class="secondary-actions"><details class="overflow-menu"><summary class="icon-button" aria-label="More build actions" title="More build actions"><i class="codicon codicon-ellipsis" aria-hidden="true"></i></summary><div class="overflow-menu-items"><button id="cleanBtn" class="menu-action"><i class="codicon codicon-trash" aria-hidden="true"></i><span>Clean Build Artifacts</span></button></div></details></div>
           </section>
 
           <section id="panelDocument" class="toolkit-panel" data-toolkit-panel="document" hidden>
@@ -1141,9 +1310,9 @@ function shell(): void {
 
           <section id="panelSetup" class="toolkit-panel" data-toolkit-panel="setup" hidden>
             <header class="section-heading"><div><p class="eyebrow">Workspace</p><h2>Project Setup</h2><p class="hint">Generate or safely upgrade Toolkit-managed project resources.</p></div></header>
-            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><div class="form-row"><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label><button id="generateTemplateBtn">Generate</button></div></div></article>
-            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-settings-gear" aria-hidden="true"></i></div><div><h3>VS Code Settings</h3><p class="hint">Generate the recommended LaTeX Workshop recipe and output-directory settings.</p><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button></div></article>
-            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-cloud-download" aria-hidden="true"></i></div><div><h3>Theme Assets</h3><p class="hint">Back up and replace bundled theme resources without changing colors by default.</p><div class="form-row"><label class="field compact-field"><span>Colors</span><select id="upgradeColorPolicy"><option value="preserve" selected>Preserve Colors</option><option value="default">Reset to Default</option></select></label><button id="upgradeThemeAssetsBtn">Upgrade Theme Assets</button></div></div></article>
+            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div class="action-card-body"><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Creates the selected target and missing Toolkit theme assets.</p><div class="form-row"><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label></div><div class="action-card-footer"><button id="generateTemplateBtn">Generate</button></div></div></article>
+            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-settings-gear" aria-hidden="true"></i></div><div class="action-card-body"><h3>VS Code Settings</h3><p class="hint">Generate the recommended LaTeX Workshop recipe and output-directory settings.</p><p class="affected-files"><i class="codicon codicon-file-code" aria-hidden="true"></i> Creates .vscode/settings.json only when it is missing.</p><div class="action-card-footer"><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button></div></div></article>
+            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-cloud-download" aria-hidden="true"></i></div><div class="action-card-body"><h3>Theme Assets</h3><p class="hint">Back up and replace bundled theme resources without changing colors by default.</p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Replaces theme.sty, theorems.tex, and commands.tex after backup.</p><div class="form-row"><label class="field compact-field"><span>Colors</span><select id="upgradeColorPolicy"><option value="preserve" selected>Preserve Colors</option><option value="default">Reset to Default</option></select></label></div><div class="action-card-footer"><button id="upgradeThemeAssetsBtn">Upgrade Theme Assets</button></div></div></article>
             <article class="danger-zone"><div><h3>Danger Zone</h3><p>Delete generated Toolkit overrides and configuration from this workspace.</p></div><button id="resetBtn" class="danger">Reset All Toolkit Overrides</button></article>
           </section>
 
@@ -1159,6 +1328,7 @@ function shell(): void {
           <section id="panelDiagnostics" class="toolkit-panel" data-toolkit-panel="diagnostics" hidden>
             <header class="section-heading"><div><p class="eyebrow">Diagnostics</p><h2>Warnings &amp; Log</h2><p class="hint">Configuration recovery details and the latest command output.</p></div></header>
             <details id="configWarnings" class="config-warnings" hidden open><summary id="configWarningSummary">Configuration warnings</summary><ul id="configWarningList"></ul></details>
+            <div id="configHealthyState" class="empty-state compact"><i class="codicon codicon-pass-filled" aria-hidden="true"></i><div><strong>No configuration warnings</strong><p>Toolkit state loaded without field-level recovery warnings.</p></div></div>
             <pre id="logBox" class="log">Compile output and operation details will appear here.</pre>
           </section>
         </section>
@@ -1173,13 +1343,12 @@ function shell(): void {
           <section class="context-panel" data-context-panel="build" hidden>
             <header class="context-heading"><div><p class="eyebrow">Build Status</p><h2 id="buildContextTitle">Checking PDF status…</h2></div><span id="buildStatusBadge" class="context-badge"></span></header>
             <p id="buildContextDescription" class="context-copy"></p>
-            <dl class="summary-list"><div><dt>PDF</dt><dd id="buildContextPath"></dd></div><div><dt>Mode</dt><dd id="buildContextRecipe"></dd></div><div><dt>History</dt><dd id="buildContextLastCompile"></dd></div></dl>
-            <div class="context-actions"><button id="compileBtn" class="primary"><i class="codicon codicon-play" aria-hidden="true"></i><span>Compile PDF</span></button><button id="openPdfBtn"><i class="codicon codicon-open-preview" aria-hidden="true"></i><span>Open PDF</span></button></div>
+            <dl class="summary-list"><div><dt>PDF</dt><dd id="buildContextPath"></dd></div><div><dt>Mode</dt><dd id="buildContextRecipe"></dd></div><div><dt>History</dt><dd id="buildContextLastCompile"></dd></div><div><dt>Duration</dt><dd id="buildContextDuration">Not measured</dd></div></dl>
+            <div class="context-actions"><button id="compileBtn" class="primary"><i class="codicon codicon-play" aria-hidden="true"></i><span>Compile PDF</span></button><button id="openPdfBtn"><i class="codicon codicon-open-preview" aria-hidden="true"></i><span>Open PDF</span></button><button id="openDiagnosticsBtn" class="ghost-button" hidden><i class="codicon codicon-warning" aria-hidden="true"></i><span>Open Diagnostics</span></button><button id="buildShowLogBtn" class="ghost-button" hidden><i class="codicon codicon-output" aria-hidden="true"></i><span>Show Log</span></button></div>
           </section>
           <section class="context-panel" data-context-panel="setup" hidden><header class="context-heading"><div><p class="eyebrow">Selected Starter</p><h2 id="setupContextTitle">Starter template</h2></div></header><p id="setupContextDescription" class="context-copy"></p><dl class="summary-list"><div><dt>Output</dt><dd>Toolkit-managed workspace files</dd></div><div><dt>Upgrade</dt><dd id="setupContextPolicy">Preserve current colors</dd></div></dl><div class="safety-note"><i class="codicon codicon-shield" aria-hidden="true"></i><p>Theme upgrades create backups first. Reset and overwrite actions still require confirmation.</p></div></section>
-          <section class="context-panel" data-context-panel="structure" hidden><header class="context-heading"><div><p class="eyebrow">Latest Result</p><h2 id="structureContextTitle">No structure operation yet</h2></div></header><p id="structureContextDescription" class="context-copy"></p><pre id="splitResult" class="result">No split run yet.</pre></section>
+          <section class="context-panel" data-context-panel="structure" hidden><header class="context-heading"><div><p class="eyebrow">Latest Result</p><h2 id="structureContextTitle">No structure operation yet</h2></div><span id="structureResultBadge" class="context-badge" hidden></span></header><p id="structureContextDescription" class="context-copy"></p><div id="structureEmptyState" class="empty-state compact"><i class="codicon codicon-list-tree" aria-hidden="true"></i><div><strong>No structure result</strong><p>Run a dry-run first to inspect planned file changes.</p></div></div><div id="structureResultState" hidden><div class="result-stats"><div><strong id="structureCreatedCount">0</strong><span>Created</span></div><div><strong id="structureUpdatedCount">0</strong><span>Updated</span></div><div><strong id="structureRenamedCount">0</strong><span>Renamed</span></div><div><strong id="structureDeletedCount">0</strong><span>Deleted</span></div><div><strong id="structureWarningCount">0</strong><span>Warnings</span></div></div><details class="result-details"><summary id="structureFilesSummary">Affected items</summary><ul id="splitResult" class="result-file-list"></ul></details></div></section>
           <section class="context-panel" data-context-panel="diagnostics" hidden><header class="context-heading"><div><p class="eyebrow">Configuration Health</p><h2 id="diagnosticsContextTitle">Loading diagnostics…</h2></div></header><p id="diagnosticsContextDescription" class="context-copy"></p><div class="safety-note"><i class="codicon codicon-output" aria-hidden="true"></i><p>Full extension logs are also available in the LaTeX Editing Toolkit Output channel.</p></div></section>
-          <div id="status" class="status" role="status"></div>
         </aside>
       </div>
     </main>`;
@@ -1187,4 +1356,4 @@ function shell(): void {
 
 shell();
 wire();
-run(loadState);
+void loadState().catch(() => undefined);
