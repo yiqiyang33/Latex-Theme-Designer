@@ -1,188 +1,186 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { HistoryConflictError, workspaceHistoryStorageRoot } from "./changeHistory";
+import { PersonalStyleRegistry } from "./personalStyles";
 import { LocalProjectRegistry } from "./projectRegistry";
+import { preflightCreateProject, runCreateProjectWorkflow } from "./projectWorkflow";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { ToolkitService } from "./toolkitService";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 
 let activePanel: ToolkitPanel | undefined;
+const toolkitServices = new Map<string, ToolkitService>();
+let personalStyles: PersonalStyleRegistry | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
+  const output = vscode.window.createOutputChannel("LaTeX Editing Toolkit");
   const projectRegistry = new LocalProjectRegistry(context.globalState);
+  personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
+  const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
 
   context.subscriptions.push(
+    output,
     treeProvider,
     vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
     vscode.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
-    vscode.commands.registerCommand("latexEditingToolkit.openToolkit", async (folderUri?: vscode.Uri) => {
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) treeProvider.refresh();
+    }),
+    command("latexEditingToolkit.openToolkit", async (folderUri?: vscode.Uri) => {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
-      activePanel = ToolkitPanel.createOrShow(context, folder);
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.createProject", async () => {
-      const target = await vscode.window.showOpenDialog({
-        canSelectFiles: false,
-        canSelectFolders: true,
-        canSelectMany: false,
-        openLabel: "Create Toolkit Project Here"
-      });
-      if (!target?.[0]) return;
-      if (target[0].scheme !== "file") {
-        vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
-        return;
-      }
-      const pickedTemplate = await vscode.window.showQuickPick(
-        STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
-          label: template.label,
-          description: template.id,
-          detail: template.description,
-          template
-        })),
-        { placeHolder: "Select starter template" }
-      );
-      if (!pickedTemplate) return;
-      const service = new ToolkitService(target[0].fsPath, context.extensionPath);
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, async () => {
-        await service.handle("initialize-workspace", {});
-        await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
-      });
-      await projectRegistry.add(target[0].fsPath, pickedTemplate.template.id);
-      vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
-      treeProvider.refresh();
-      await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });
+    command("latexEditingToolkit.createProject", async () => {
+      await createProjectWizard(context, projectRegistry, treeProvider, output);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
+    command("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
       await openLocalProject(projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.relocateLocalProject", async (projectPath?: unknown) => {
+    command("latexEditingToolkit.relocateLocalProject", async (projectPath?: unknown) => {
       await relocateLocalProject(projectRegistry, treeProvider, projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.removeLocalProject", async (projectPath?: unknown) => {
+    command("latexEditingToolkit.removeLocalProject", async (projectPath?: unknown) => {
       await removeLocalProject(projectRegistry, treeProvider, projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.refreshTree", () => {
+    command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.createStarterInWorkspace", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.undoLastChange", async (folderUri?: vscode.Uri) => {
+      await restoreLastToolkitChange(context, treeProvider, output, "undo", folderUri);
+    }),
+    command("latexEditingToolkit.redoLastChange", async (folderUri?: vscode.Uri) => {
+      await restoreLastToolkitChange(context, treeProvider, output, "redo", folderUri);
+    }),
+    command("latexEditingToolkit.createStarterInWorkspace", async (folderUri?: vscode.Uri) => {
       await createStarterInWorkspace(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickCompileTarget", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickCompileTarget", async (folderUri?: vscode.Uri) => {
       await pickCompileTarget(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickCompileRecipe", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickCompileRecipe", async (folderUri?: vscode.Uri) => {
       await pickCompileRecipe(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.toggleInternalFallback", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.toggleInternalFallback", async (folderUri?: vscode.Uri) => {
       await toggleInternalFallback(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.openCurrentPdf", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.openCurrentPdf", async (folderUri?: vscode.Uri) => {
       await openCurrentPdf(context, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.toggleThemeOption", async (folderUri?: vscode.Uri, toggleId?: string) => {
+    command("latexEditingToolkit.toggleThemeOption", async (folderUri?: vscode.Uri, toggleId?: string) => {
       await toggleThemeOption(context, treeProvider, folderUri, toggleId);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickClassConfig", async (folderUri?: vscode.Uri, fieldId?: string) => {
+    command("latexEditingToolkit.pickClassConfig", async (folderUri?: vscode.Uri, fieldId?: string) => {
       await pickClassConfig(context, treeProvider, folderUri, fieldId);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickStylePreset", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickStylePreset", async (folderUri?: vscode.Uri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
     // Legacy command aliases now use the unified style preset.
-    vscode.commands.registerCommand("latexEditingToolkit.pickBlockPreset", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickBlockPreset", async (folderUri?: vscode.Uri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickHeadingTocPreset", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickHeadingTocPreset", async (folderUri?: vscode.Uri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickBodyFontSize", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.pickBodyFontSize", async (folderUri?: vscode.Uri) => {
       await pickBodyFontSize(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.initializeWorkspace", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.initializeWorkspace", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
+      vscode.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3000);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const choice = await vscode.window.showWarningMessage(
-        "Upgrade workspace theme assets from the bundled extension template? Existing files will be backed up first.",
+        "Upgrade bundled theme assets? Existing files are backed up first. Preserve Colors keeps all current settings; Reset to Default only replaces the complete color/style package.",
         { modal: true },
-        "Upgrade + Reset Colors",
-        "Upgrade Assets Only"
+        "Preserve Colors",
+        "Reset to Default"
       );
       if (!choice) return;
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
-        () => service.handle("upgrade-theme-assets", { reset_color_overrides: choice === "Upgrade + Reset Colors" })
-      ) as { backup_dir?: string; upgraded_files?: string[]; reset_files?: string[] };
-      const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
+        () => service.handle("upgrade-theme-assets", { color_policy: choice === "Reset to Default" ? "default" : "preserve" })
+      ) as { backup_dir?: string; upgraded_files?: string[]; color_policy?: string; updated_override_files?: string[] };
+      const resetSuffix = result.updated_override_files?.length ? ` Updated ${result.updated_override_files.length} color state file(s).` : " Colors preserved.";
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
+      vscode.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3000);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.generateVscodeSettings", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {}) as { message?: string };
       treeProvider.refresh();
-      vscode.window.showInformationMessage(result.message ?? "VS Code settings checked.");
+      vscode.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.saveOverrides", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.saveOverrides", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: unknown };
       await service.handle("save", response.state as Record<string, unknown>);
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Saved LaTeX Toolkit overrides.");
+      vscode.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2000);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.resetOverrides", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.resetOverrides", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode.window.showWarningMessage("Delete theme.ui.json, theme.overrides.tex, and theme.colors.tex?", { modal: true }, "Delete");
-      if (ok !== "Delete") return;
+      const ok = await vscode.window.showWarningMessage(
+        "Reset all Toolkit overrides? This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, and status settings.",
+        { modal: true },
+        "Reset All"
+      );
+      if (ok !== "Reset All") return;
       await service.handle("reset", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Deleted LaTeX Toolkit override files.");
+      vscode.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.compilePdf", async (folderUri?: vscode.Uri) => {
-      const service = await serviceForCommand(context, folderUri);
-      if (!service) return;
-      const response = await service.handle("state", {}) as { state: Record<string, unknown> };
-      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => service.handle("compile", response.state));
-      const success = Boolean((result as { success?: boolean }).success);
+    command("latexEditingToolkit.compilePdf", async (folderUri?: vscode.Uri) => {
+      const scoped = await folderAndServiceForCommand(context, folderUri);
+      if (!scoped) return;
+      const response = await scoped.service.handle("state", {}) as { state: Record<string, unknown> };
+      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state)) as { success?: boolean; output?: string };
+      logCompileResult(output, scoped.folder.uri.fsPath, result);
+      const success = Boolean(result.success);
       treeProvider.refresh();
-      vscode.window.showInformationMessage(success ? "LaTeX compile succeeded." : "LaTeX compile failed. Open Toolkit for logs.");
+      if (success) vscode.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
+      else {
+        const action = await vscode.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
+        if (action === "Show Log") output.show(true);
+      }
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.cleanArtifacts", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.cleanArtifacts", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const ok = await vscode.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {}) as { deleted_count?: number; errors?: string[] };
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`);
+      vscode.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.splitCurrentTarget", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.splitCurrentTarget", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Split current LaTeX target.");
+      vscode.window.setStatusBarMessage("Split current LaTeX target.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.renumberUnits", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.renumberUnits", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Renumbered referenced units.");
+      vscode.window.setStatusBarMessage("Renumbered referenced units.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.unsplitUnit", async (folderUri?: vscode.Uri) => {
+    command("latexEditingToolkit.unsplitUnit", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {}) as { state: { compile_target?: string } };
@@ -190,7 +188,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Merged selected unit back to root.");
+      vscode.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
 }
@@ -198,6 +196,198 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   activePanel?.dispose();
   activePanel = undefined;
+  toolkitServices.clear();
+  personalStyles = undefined;
+}
+
+const RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
+
+async function createProjectWizard(
+  context: vscode.ExtensionContext,
+  registry: LocalProjectRegistry,
+  treeProvider: ToolkitTreeProvider,
+  output: vscode.OutputChannel
+): Promise<void> {
+  const recent = context.globalState.get<string[]>(RECENT_PROJECT_PARENTS_KEY) ?? [];
+  const suggested = new Set<string>();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme === "file") {
+      suggested.add(folder.uri.fsPath);
+      suggested.add(path.dirname(folder.uri.fsPath));
+    }
+  }
+  for (const item of recent) suggested.add(item);
+  const location = await vscode.window.showQuickPick(
+    [
+      ...[...suggested].map((folderPath) => ({ label: path.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      { label: "$(folder-opened) Browse…", description: "Choose another parent folder", folderPath: "" }
+    ],
+    { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
+  );
+  if (!location) return;
+  let parentPath = location.folderPath;
+  if (!parentPath) {
+    const selected = await vscode.window.showOpenDialog({
+      title: "Create Project (1/3): Choose Parent Folder",
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Use as Parent Folder"
+    });
+    if (!selected?.[0]) return;
+    if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
+    parentPath = selected[0].fsPath;
+  }
+
+  const projectName = await vscode.window.showInputBox({
+    title: "Create Project (2/3): Project Name",
+    prompt: `A new folder will be created inside ${parentPath}`,
+    value: "New Notes",
+    valueSelection: [0, "New Notes".length],
+    validateInput: (value) => {
+      const name = value.trim();
+      if (!name) return "Project name is required.";
+      if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
+      return undefined;
+    }
+  });
+  if (!projectName) return;
+
+  const pickedTemplate = await vscode.window.showQuickPick(
+    STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+      label: template.label,
+      description: template.id,
+      detail: template.description,
+      template
+    })),
+    { title: "Create Project (3/3): Template", placeHolder: "Choose the document structure" }
+  );
+  if (!pickedTemplate) return;
+
+  const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
+  if (!preflight.ok) {
+    const action = await vscode.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
+    output.appendLine(`[${new Date().toISOString()}] CREATE PROJECT PREFLIGHT`);
+    for (const error of preflight.errors) output.appendLine(`- ${error}`);
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+  if (preflight.targetExists && preflight.targetEmpty) {
+    const choice = await vscode.window.showWarningMessage(
+      `The folder '${preflight.rootPath}' already exists and is empty. Use it for the new project?`,
+      { modal: true },
+      "Use Empty Folder"
+    );
+    if (choice !== "Use Empty Folder") return;
+  }
+
+  const nextRecent = [parentPath, ...recent.filter((item) => path.normalize(item) !== path.normalize(parentPath))].slice(0, 8);
+  await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
+  const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
+    additionalStylePresets: personalStyles?.definitions() ?? []
+  });
+  try {
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => (
+      runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id)
+    ));
+  } catch (err) {
+    logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
+    const message = err instanceof Error ? err.message : String(err);
+    const action = await vscode.window.showErrorMessage(
+      `Project creation failed: ${message}. The folder may contain partially generated resources.`,
+      "Open Folder",
+      "Show Log"
+    );
+    if (action === "Open Folder") await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3000);
+  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+}
+
+async function restoreLastToolkitChange(
+  context: vscode.ExtensionContext,
+  treeProvider: ToolkitTreeProvider,
+  output: vscode.OutputChannel,
+  direction: "undo" | "redo",
+  folderUri?: vscode.Uri
+): Promise<void> {
+  const scoped = await folderAndServiceForCommand(context, folderUri);
+  if (!scoped) return;
+  const command = direction === "undo" ? "undo-last-change" : "redo-last-change";
+  try {
+    await scoped.service.handle(command, {});
+  } catch (err) {
+    if (!(err instanceof HistoryConflictError)) throw err;
+    const choice = await vscode.window.showWarningMessage(
+      `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
+      { modal: true },
+      "Show Conflicts",
+      "Force Restore"
+    );
+    if (choice === "Show Conflicts") {
+      output.appendLine(`[${new Date().toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
+      for (const conflict of err.conflicts) output.appendLine(`- ${conflict}`);
+      output.show(true);
+      return;
+    }
+    if (choice !== "Force Restore") return;
+    await scoped.service.handle(command, { force: true });
+  }
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
+  if (activePanel?.folder.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
+}
+
+function registerToolkitCommand<T extends unknown[]>(
+  output: vscode.OutputChannel,
+  commandId: string,
+  handler: (...args: T) => unknown
+): vscode.Disposable {
+  return vscode.commands.registerCommand(commandId, async (...args: unknown[]) => {
+    try {
+      return await handler(...args as T);
+    } catch (err) {
+      if (isUserCancellation(err)) return undefined;
+      const workspacePath = workspacePathFromArguments(args);
+      logToolkitError(output, commandId, workspacePath, err);
+      const message = err instanceof Error ? err.message : String(err);
+      const action = await vscode.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
+      if (action === "Show Log") output.show(true);
+      return undefined;
+    }
+  });
+}
+
+function isUserCancellation(err: unknown): boolean {
+  return err instanceof vscode.CancellationError || (err instanceof Error && /cancelled|canceled/i.test(err.message));
+}
+
+function workspacePathFromArguments(args: unknown[]): string {
+  for (const arg of args) {
+    if (arg instanceof vscode.Uri && arg.scheme === "file") return arg.fsPath;
+    const projectPath = localProjectPathFromArgument(arg);
+    if (projectPath) return projectPath;
+  }
+  return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
+}
+
+function logToolkitError(output: vscode.OutputChannel, commandId: string, workspacePath: string, err: unknown): void {
+  const error = err instanceof Error ? err : new Error(String(err));
+  output.appendLine(`[${new Date().toISOString()}] ERROR ${commandId}`);
+  output.appendLine(`Workspace: ${workspacePath}`);
+  output.appendLine(error.stack ?? error.message);
+  output.appendLine("");
+}
+
+function logCompileResult(output: vscode.OutputChannel, workspacePath: string, result: { success?: boolean; output?: string }): void {
+  output.appendLine(`[${new Date().toISOString()}] COMPILE ${result.success ? "SUCCESS" : "FAILED"}`);
+  output.appendLine(`Workspace: ${workspacePath}`);
+  output.appendLine(result.output?.trimEnd() || "(compiler returned no output)");
+  output.appendLine("");
 }
 
 async function selectWorkspaceFolder(preferredFolderUri?: vscode.Uri): Promise<vscode.WorkspaceFolder | undefined> {
@@ -227,7 +417,29 @@ async function serviceForCommand(context: vscode.ExtensionContext, preferredFold
 async function folderAndServiceForCommand(context: vscode.ExtensionContext, preferredFolderUri?: vscode.Uri): Promise<{ folder: vscode.WorkspaceFolder; service: ToolkitService } | undefined> {
   const folder = await selectWorkspaceFolder(preferredFolderUri);
   if (!folder) return undefined;
-  return { folder, service: new ToolkitService(folder.uri.fsPath, context.extensionPath) };
+  return { folder, service: toolkitService(context, folder.uri.fsPath) };
+}
+
+function toolkitService(context: vscode.ExtensionContext, rootPath: string): ToolkitService {
+  let canonical = path.resolve(rootPath);
+  try { canonical = fs.realpathSync.native(canonical); } catch { /* Missing roots are handled by the caller. */ }
+  const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
+  const existing = toolkitServices.get(key);
+  if (existing) {
+    existing.setAdditionalStylePresets(personalStyles?.definitions() ?? []);
+    return existing;
+  }
+  const service = new ToolkitService(rootPath, context.extensionPath, {
+    historyStorageDir: workspaceHistoryStorageRoot(context.globalStorageUri.fsPath, rootPath),
+    additionalStylePresets: personalStyles?.definitions() ?? []
+  });
+  toolkitServices.set(key, service);
+  return service;
+}
+
+function refreshPersonalStylesOnServices(registry: PersonalStyleRegistry): void {
+  const definitions = registry.definitions();
+  for (const service of toolkitServices.values()) service.setAdditionalStylePresets(definitions);
 }
 
 async function responseForCommand(context: vscode.ExtensionContext, preferredFolderUri?: vscode.Uri): Promise<{ folder: vscode.WorkspaceFolder; service: ToolkitService; response: ResponseState } | undefined> {
@@ -252,7 +464,7 @@ async function openLocalProject(projectPathArg: unknown): Promise<void> {
     return;
   }
   try {
-    if (!fs.statSync(projectPath).isDirectory()) throw new Error("not a directory");
+    if (!(await fs.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
     vscode.window.showWarningMessage(`Local note project not found: ${projectPath}`);
     return;
@@ -281,13 +493,9 @@ async function relocateLocalProject(
     vscode.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
     return;
   }
-  try {
-    const updated = await registry.relocate(oldPath, target[0].fsPath);
-    treeProvider.refresh();
-    vscode.window.showInformationMessage(`Relocated local note project to ${updated.rootPath}.`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`Could not relocate local note project: ${(err as Error).message}`);
-  }
+  const updated = await registry.relocate(oldPath, target[0].fsPath);
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
 }
 
 async function removeLocalProject(
@@ -300,7 +508,7 @@ async function removeLocalProject(
     vscode.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
-  const project = (await registry.list()).find((entry) => entry.rootPath === path.normalize(projectPath));
+  const project = await registry.find(projectPath);
   const label = project?.label ?? path.basename(path.normalize(projectPath));
   const choice = await vscode.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
@@ -310,7 +518,7 @@ async function removeLocalProject(
   if (choice !== "Forget") return;
   const removed = await registry.remove(projectPath);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.");
+  vscode.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
 }
 
 function localProjectPathFromArgument(value: unknown): string | undefined {
@@ -357,7 +565,7 @@ async function createStarterInWorkspace(context: vscode.ExtensionContext, treePr
     overwrite
   }) as { generated_target?: string };
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Generated ${result.generated_target ?? outputTarget}.`);
+  vscode.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
 }
 
 async function pickCompileTarget(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -378,7 +586,7 @@ async function pickCompileTarget(context: vscode.ExtensionContext, treeProvider:
   if (!picked) return;
   await scoped.service.handle("target", { compile_target: picked.label });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Compile target set to ${picked.label}.`);
+  vscode.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2000);
 }
 
 async function pickCompileRecipe(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -404,7 +612,7 @@ async function pickCompileRecipe(context: vscode.ExtensionContext, treeProvider:
     compile_use_internal_fallback: false
   });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Compile recipe set to ${picked.recipe.name}.`);
+  vscode.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2000);
 }
 
 async function toggleInternalFallback(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -416,7 +624,7 @@ async function toggleInternalFallback(context: vscode.ExtensionContext, treeProv
     compile_use_internal_fallback: next
   });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`);
+  vscode.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2000);
 }
 
 async function openCurrentPdf(context: vscode.ExtensionContext, folderUri?: vscode.Uri): Promise<void> {
@@ -440,7 +648,7 @@ async function toggleThemeOption(context: vscode.ExtensionContext, treeProvider:
   state.toggles[toggleId] = !state.toggles[toggleId];
   await scoped.service.handle("save", state as unknown as Record<string, unknown>);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`);
+  vscode.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2000);
 }
 
 async function pickClassConfig(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri, fieldId?: string): Promise<void> {
@@ -462,7 +670,7 @@ async function pickClassConfig(context: vscode.ExtensionContext, treeProvider: T
   state.class_config[field.id] = picked.option.value;
   await scoped.service.handle("save", state as unknown as Record<string, unknown>);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${field.label}: ${picked.option.label}.`);
+  vscode.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2000);
 }
 
 async function pickStylePreset(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -482,7 +690,7 @@ async function pickStylePreset(context: vscode.ExtensionContext, treeProvider: T
   if (!picked) return;
   await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Style preset: ${picked.preset.label}.`);
+  vscode.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2000);
 }
 
 async function pickBodyFontSize(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
@@ -507,7 +715,7 @@ async function pickBodyFontSize(context: vscode.ExtensionContext, treeProvider: 
   state.body_font_size_pt = picked.value;
   await scoped.service.handle("save", state as unknown as Record<string, unknown>);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${config.label}: ${picked.label}.`);
+  vscode.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2000);
 }
 
 function formatPointSize(value: number): string {
@@ -589,15 +797,6 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     } else {
       nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
     }
-    nodes.push({
-      id: "create-new-project",
-      label: "Create New Project",
-      description: "from template",
-      tooltip: "Create a LaTeX Toolkit project in a selected local folder.",
-      iconId: "new-folder",
-      commandId: "latexEditingToolkit.createProject",
-      contextValue: "createProject"
-    });
     return nodes;
   }
 
@@ -652,7 +851,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
 
   private async loadWorkspaceState(folder: vscode.WorkspaceFolder): Promise<ResponseState | Error> {
     try {
-      return await new ToolkitService(folder.uri.fsPath, this.context.extensionPath).handle("state", {}) as ResponseState;
+      return await toolkitService(this.context, folder.uri.fsPath).handle("state", {}) as ResponseState;
     } catch (err) {
       return err instanceof Error ? err : new Error(String(err));
     }
@@ -662,14 +861,23 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     const folderArg = [folder.uri];
     const state = response.state;
     const schema = response.schema;
-    return [
-      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", [
+    const statusChildren = [
         this.actionNode("status-target", "Target", state.compile_target || "select target", "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
         this.actionNode("status-recipe", "Recipe", this.compileRecipeDescription(state), "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
         this.actionNode("status-pdf", "PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.infoNode(`status-last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state)),
         this.infoNode(`status-class:${folder.uri.toString()}`, "Document Class", this.documentClassDescription(state), "symbol-class")
-      ], vscode.TreeItemCollapsibleState.Expanded),
+    ];
+    if (response.history?.canUndo) statusChildren.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
+    if (response.history?.canRedo) statusChildren.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
+    if (state.config_warnings.length > 0) {
+      statusChildren.push({
+        ...this.infoNode(`status-config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
+        tooltip: state.config_warnings.join("\n")
+      });
+    }
+    return [
+      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", statusChildren, vscode.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
         this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg),
         this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
@@ -715,8 +923,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
             [folder.uri, toggle.id]
           )
         )), vscode.TreeItemCollapsibleState.Expanded),
-        this.actionNode("save-overrides", "Save Overrides", "theme files", "save", "latexEditingToolkit.saveOverrides", folderArg),
-        this.actionNode("reset-overrides", "Reset Overrides", "delete generated files", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+        this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
       ])
     ];
   }
@@ -820,7 +1027,7 @@ class ToolkitPanel {
   private disposables: vscode.Disposable[] = [];
   private disposed = false;
 
-  static createOrShow(context: vscode.ExtensionContext, folder: vscode.WorkspaceFolder): ToolkitPanel {
+  static createOrShow(context: vscode.ExtensionContext, folder: vscode.WorkspaceFolder, output: vscode.OutputChannel, styleRegistry: PersonalStyleRegistry, onStateChanged: () => void): ToolkitPanel {
     if (activePanel) {
       if (activePanel.folder.uri.toString() === folder.uri.toString()) {
         activePanel.panel.reveal(vscode.ViewColumn.One);
@@ -841,15 +1048,18 @@ class ToolkitPanel {
         ]
       }
     );
-    return new ToolkitPanel(context, folder, panel);
+    return new ToolkitPanel(context, folder, panel, output, styleRegistry, onStateChanged);
   }
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly folder: vscode.WorkspaceFolder,
-    readonly panel: vscode.WebviewPanel
+    readonly folder: vscode.WorkspaceFolder,
+    readonly panel: vscode.WebviewPanel,
+    private readonly output: vscode.OutputChannel,
+    private readonly styleRegistry: PersonalStyleRegistry,
+    private readonly onStateChanged: () => void
   ) {
-    this.service = new ToolkitService(folder.uri.fsPath, context.extensionPath);
+    this.service = toolkitService(context, folder.uri.fsPath);
     this.panel.webview.html = this.html();
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message), null, this.disposables);
@@ -868,6 +1078,11 @@ class ToolkitPanel {
     this.disposables = [];
   }
 
+  async refreshState(): Promise<void> {
+    const data = await this.service.handle("state", {});
+    await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
+  }
+
   private async handleMessage(message: unknown): Promise<void> {
     const request = message as { id?: string; command?: string; payload?: Record<string, unknown> };
     if (!request?.id || !request.command) return;
@@ -882,11 +1097,95 @@ class ToolkitPanel {
         const pdfPath = await this.service.readPdfIfExists(rawPath);
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
         data = { opened: true };
+      } else if (request.command === "personal-style-save") {
+        const state = request.payload?.state;
+        if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
+        const label = await vscode.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? undefined : "Style name is required." });
+        if (!label) {
+          data = await this.service.handle("state", {});
+        } else {
+          const record = await this.styleRegistry.add(label, String(state.style_base_preset ?? state.style_preset ?? "default"), state.colors as Record<string, string>);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          data = await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
+        }
+      } else if (request.command === "personal-style-update") {
+        const state = request.payload?.state;
+        if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
+        await this.styleRegistry.update(String(request.payload?.style_id ?? state.style_preset ?? ""), state.colors as Record<string, string>);
+        refreshPersonalStylesOnServices(this.styleRegistry);
+        data = await this.service.handle("state", {});
+      } else if (request.command === "personal-style-rename") {
+        const id = String(request.payload?.style_id ?? "");
+        const current = this.styleRegistry.list().find((style) => style.id === id);
+        if (!current) throw new Error("Personal style not found.");
+        const label = await vscode.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? undefined : "Style name is required." });
+        if (label) await this.styleRegistry.rename(id, label);
+        refreshPersonalStylesOnServices(this.styleRegistry);
+        data = await this.service.handle("state", {});
+      } else if (request.command === "personal-style-delete") {
+        const id = String(request.payload?.style_id ?? "");
+        const current = this.styleRegistry.list().find((style) => style.id === id);
+        if (!current) throw new Error("Personal style not found.");
+        const confirmed = await vscode.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
+        if (confirmed !== "Delete Style") data = await this.service.handle("state", {});
+        else {
+          await this.styleRegistry.remove(id);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          const state = request.payload?.state;
+          data = isPlainRecord(state) && state.style_preset === id
+            ? await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } })
+            : await this.service.handle("state", {});
+        }
+      } else if (request.command === "personal-style-import") {
+        const picked = await vscode.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
+        if (!picked?.[0]) data = await this.service.handle("state", {});
+        else {
+          const raw = JSON.parse(await fs.promises.readFile(picked[0].fsPath, "utf8"));
+          const summary = await this.styleRegistry.importLibrary(raw);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          data = { ...(await this.service.handle("state", {}) as Record<string, unknown>), personal_style_import: summary };
+        }
+      } else if (request.command === "personal-style-export") {
+        const id = String(request.payload?.style_id ?? "");
+        const library = this.styleRegistry.exportLibrary();
+        const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
+        const target = await vscode.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode.Uri.file(path.join(this.folder.uri.fsPath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}\n`, "utf8");
+        data = { ...(await this.service.handle("state", {}) as Record<string, unknown>), exported: Boolean(target) };
+      } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
+        try {
+          data = await this.service.handle(request.command, request.payload ?? {});
+        } catch (err) {
+          if (!(err instanceof HistoryConflictError)) throw err;
+          const direction = request.command.startsWith("undo") ? "undo" : "redo";
+          const choice = await vscode.window.showWarningMessage(
+            `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
+            { modal: true },
+            "Show Conflicts",
+            "Force Restore"
+          );
+          if (choice === "Show Conflicts") {
+            this.output.appendLine(`[${new Date().toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
+            for (const conflict of err.conflicts) this.output.appendLine(`- ${conflict}`);
+            this.output.show(true);
+            data = await this.service.handle("state", {});
+          } else if (choice === "Force Restore") data = await this.service.handle(request.command, { force: true });
+          else data = await this.service.handle("state", {});
+        }
       } else {
         data = await this.service.handle(request.command, request.payload ?? {});
       }
+      if (request.command === "compile") {
+        logCompileResult(this.output, this.folder.uri.fsPath, data as { success?: boolean; output?: string });
+      }
+      if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete"].includes(request.command)) {
+        this.onStateChanged();
+      }
       await this.panel.webview.postMessage({ id: request.id, ok: true, data });
     } catch (err) {
+      logToolkitError(this.output, `webview:${request.command}`, this.folder.uri.fsPath, err);
       await this.panel.webview.postMessage({ id: request.id, ok: false, error: (err as Error).message });
     }
   }
@@ -921,4 +1220,8 @@ class ToolkitPanel {
 </body>
 </html>`;
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

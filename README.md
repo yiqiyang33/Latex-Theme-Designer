@@ -1,4 +1,4 @@
-# LaTeX Editing Toolkit
+# LaTeX Editing Toolkit 0.3.0
 
 VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and PDF preview from a webview panel.
 
@@ -20,6 +20,21 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
+Version 0.3.0 adds a three-step project wizard, automatic saving, persistent one-step Undo/Redo,
+global personal styles, style-difference inspection, and a progressively disclosed Toolkit UI.
+
+## Create Project Wizard
+
+`Create Project` now chooses a parent location, project name, and starter template. The extension
+creates the project folder automatically. It remembers recent parent locations and checks write
+access, project-name safety, template validity, and file conflicts before writing anything.
+
+- A missing target folder is created automatically.
+- An existing empty folder requires explicit confirmation.
+- A non-empty folder is rejected with a conflict summary.
+- Failed creation leaves partial resources available for inspection but does not register the
+  project in Local Notes.
+
 ## Local Notes Registry
 
 The Activity Bar includes a `Local Notes` group that remembers projects created with
@@ -32,6 +47,11 @@ workspaces or restarting VS Code/Cursor.
 - Use `Relocate Local Project` on a missing entry to select its new folder. The selected folder
   must contain `main.tex`.
 - Use `Forget Local Project` to remove an entry from the Activity Bar without deleting files.
+- The list refreshes when the VS Code/Cursor window regains focus, so folders moved or deleted
+  outside the editor are marked `Missing` without polling.
+- Existing folders are compared using their real path. Registering the same project through a
+  symbolic link or differently-cased macOS/Windows path updates the existing record instead of
+  creating a duplicate.
 
 The extension does not scan arbitrary directories and does not automatically register files
 created with `Generate Starter In Workspace`.
@@ -49,10 +69,62 @@ chapter overviews, and `\\textbf`. `\\hl` remains a background highlight while `
 remains a bold rounded emphasis box; they share the selected preset's color system without
 losing their different semantics.
 
-The Colors panel still allows advanced per-token adjustments. Applying a Style Preset again
+The Toolkit displays styles as keyboard-accessible cards. Hovering or focusing a card previews it;
+clicking applies its complete color package and saves automatically. A card shows `Customized`
+when any current color differs from its baseline.
+
+`View Changes` groups changed tokens and shows baseline/current swatches. Individual tokens or the
+whole style can be reverted. Customized colors can be saved into a global `My Styles` library.
+Personal styles are available in every workspace in the current VS Code/Cursor profile and can be
+renamed, updated, deleted, imported, or exported as JSON.
+
+The Colors panel still allows advanced per-token adjustments. Clicking a Style Preset again
 intentionally restores every token in that preset's complete package. Older
 `block_preset`/`heading_toc_preset` entries in `theme.ui.json` are read automatically, with
 the legacy block value taking precedence, and are mirrored on the next save for compatibility.
+
+## Automatic Saving and Undo
+
+There are no separate Apply Style, Apply Target, Apply Recipe, or Save Overrides steps in the main
+Toolkit. Toggles, class rules, targets, recipes, colors, body size, and styles save automatically.
+The header reports `Saving`, `Saved`, or `Could not save`, and failed drafts remain available for
+Retry instead of being discarded.
+
+Each project keeps one persistent Toolkit change with both Undo and Redo. Supported changes include
+settings, theme upgrades and resets, workspace initialization, VS Code settings generation,
+starters, Split, Renumber, and Unsplit. Compile, Clean, Local Notes registry operations, and whole
+project creation do not replace the Undo record. File conflicts caused by external edits are
+detected before restore and require explicit Force Restore.
+
+Undo history is stored in the extension's global storage rather than inside the LaTeX repository.
+
+## Safe Theme Asset Upgrades
+
+`Upgrade Workspace Theme Assets` always backs up files before replacing `theme.sty`,
+`theorems.tex`, and `commands.tex`. It offers two color policies:
+
+- `Preserve Colors` (default) upgrades only the bundled TeX assets and leaves
+  `theme.colors.tex`, `theme.ui.json`, `theme.overrides.tex`, and every Toolkit setting unchanged.
+- `Reset to Default` applies the complete Default color package while preserving toggles, body
+  size, class rules, compile target, recipe, fallback mode, and compile status. It rewrites only
+  color/style state in `theme.colors.tex` and `theme.ui.json`; `theme.overrides.tex` is untouched.
+
+Replacement uses temporary files and atomic renames. If any step fails, already-modified files
+are restored from the operation backup and files that did not previously exist are removed.
+
+## Configuration Recovery and Logs
+
+Configuration is loaded field by field. A broken JSON file or one invalid toggle, color, preset,
+font size, class option, target, recipe, or compile-status field no longer prevents the Toolkit
+from opening. Valid fields continue to load, invalid fields fall back locally, and warnings appear
+in the Activity Bar Status group and an expandable Toolkit warning panel. Warnings are diagnostic
+only and are not saved into `theme.ui.json`; the next successful automatic save writes normalized state.
+
+Extension commands share a `LaTeX Editing Toolkit` Output channel. Errors include timestamp,
+command, workspace, and stack information, and notifications offer `Show Log`. Compile output is
+also written there in full. If `Create Project` fails, the selected directory is not removed and
+is not added to Local Notes; it may contain partial generated resources and can be opened directly
+from the failure notification.
 
 ## Workspace Files
 
@@ -82,7 +154,10 @@ The default starter remains `book-minimal`.
 - Note-writing helpers from `commands.tex`.
 - Theme color, toggle, class mode, body font size, and compile target controls.
 - Built-in color presets, including UChicago maroon/greystone.
-- Safe workspace theme asset upgrade with local backups.
+- Global personal styles with difference inspection and JSON import/export.
+- Automatic saving with persistent one-step Undo and Redo.
+- Progressive Style, Build, Document Settings, Colors, Setup, Structure, and Diagnostics sections.
+- Transactional workspace theme asset upgrades with Preserve Colors as the safe default.
 - Internal fallback compile pipeline plus optional VS Code recipe mode.
 - Generate `.vscode/settings.json` for LaTeX Workshop-compatible recipes.
 - Clean build artifacts while preserving source files and PDFs.
@@ -105,9 +180,10 @@ xelatex main.tex
 xelatex main.tex
 ```
 
-## Reset Theme Overrides
+## Reset All Toolkit Overrides
 
-To reset generated theme overrides:
+`Reset All Toolkit Overrides` is intentionally destructive: it removes theme, class, toggle,
+compile, and status settings stored in all three generated files. The equivalent shell command is:
 
 ```bash
 rm -f theme.colors.tex theme.overrides.tex theme.ui.json

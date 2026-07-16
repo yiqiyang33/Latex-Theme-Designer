@@ -1,5 +1,7 @@
 {
   "block_preset": "default",
+  "style_preset": "default",
+  "style_base_preset": "default",
   "body_font_size_pt": 11,
   "class_config": {
     "theme_class_mode": "article",
@@ -15,7 +17,7 @@
     "theme-toc-chapter": "#334155",
     "theme-toc-section": "#486581",
     "theme-header-rule": "#94A3B8",
-    "theme-bold": "#3F6F9F",
+    "theme-bold": "#334155",
     "inline-key-fg": "#2F6F73",
     "inline-term-bg": "#EBF5F4",
     "inline-term-fg": "#245E62",

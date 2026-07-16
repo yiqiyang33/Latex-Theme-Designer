@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
-  "version": "0.1.7",
+  "version": "0.3.0",
   "publisher": "yiqiyang33",
   "icon": "assets/latex-toolkit.png",
   "license": "MIT",
@@ -31,6 +31,8 @@
     "onCommand:latexEditingToolkit.relocateLocalProject",
     "onCommand:latexEditingToolkit.removeLocalProject",
     "onCommand:latexEditingToolkit.refreshTree",
+    "onCommand:latexEditingToolkit.undoLastChange",
+    "onCommand:latexEditingToolkit.redoLastChange",
     "onCommand:latexEditingToolkit.createStarterInWorkspace",
     "onCommand:latexEditingToolkit.pickCompileTarget",
     "onCommand:latexEditingToolkit.pickCompileRecipe",
@@ -84,6 +86,16 @@
         "command": "latexEditingToolkit.refreshTree",
         "title": "LaTeX Editing Toolkit: Refresh Tree",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "latexEditingToolkit.undoLastChange",
+        "title": "LaTeX Editing Toolkit: Undo Last Change",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "latexEditingToolkit.redoLastChange",
+        "title": "LaTeX Editing Toolkit: Redo Last Change",
+        "icon": "$(redo)"
       },
       {
         "command": "latexEditingToolkit.createStarterInWorkspace",
@@ -152,11 +164,11 @@
       },
       {
         "command": "latexEditingToolkit.saveOverrides",
-        "title": "LaTeX Editing Toolkit: Save Overrides"
+        "title": "LaTeX Editing Toolkit: Save Overrides (Legacy)"
       },
       {
         "command": "latexEditingToolkit.resetOverrides",
-        "title": "LaTeX Editing Toolkit: Reset Overrides"
+        "title": "LaTeX Editing Toolkit: Reset All Toolkit Overrides"
       },
       {
         "command": "latexEditingToolkit.compilePdf",
@@ -221,6 +233,12 @@
           "when": "false"
         },
         {
+          "command": "latexEditingToolkit.undoLastChange"
+        },
+        {
+          "command": "latexEditingToolkit.redoLastChange"
+        },
+        {
           "command": "latexEditingToolkit.createStarterInWorkspace"
         },
         {
@@ -268,7 +286,8 @@
           "command": "latexEditingToolkit.generateVscodeSettings"
         },
         {
-          "command": "latexEditingToolkit.saveOverrides"
+          "command": "latexEditingToolkit.saveOverrides",
+          "when": "false"
         },
         {
           "command": "latexEditingToolkit.resetOverrides"

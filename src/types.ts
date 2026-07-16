@@ -5,6 +5,33 @@ export interface LocalProjectStateStore {
   update(key: string, value: unknown): Promise<void> | Thenable<void>;
 }
 
+export interface PersonalStyleRecord {
+  version: 1;
+  id: string;
+  label: string;
+  description: string;
+  basePresetId: string;
+  colors: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectDraft {
+  parentPath: string;
+  projectName: string;
+  templateId: string;
+}
+
+export interface CreateProjectPreflightResult {
+  ok: boolean;
+  rootPath: string;
+  targetExists: boolean;
+  targetEmpty: boolean;
+  errors: string[];
+  warnings: string[];
+  plannedFiles: string[];
+}
+
 export interface LocalNoteProject {
   id: string;
   rootPath: string;
@@ -65,7 +92,9 @@ export interface ToolkitState {
   toggles: Record<string, boolean>;
   colors: Record<string, string>;
   style_preset: string;
+  style_base_preset: string;
   style_presets: PresetMeta[];
+  config_warnings: string[];
   body_font_size_pt: number;
   class_config: Record<string, string>;
   compile_target: string;
@@ -88,7 +117,7 @@ export interface ToolkitSchema {
   toggles: ToggleSchemaItem[];
   groups: ColorGroup[];
   class_config: ClassConfigSchemaItem[];
-  style_presets: PresetMeta[];
+  style_presets: StylePresetSchema[];
   body_font_size: {
     id: "body_font_size_pt";
     label: string;
@@ -106,6 +135,7 @@ export interface ToolkitSchema {
 export interface ResponseState {
   state: ToolkitState;
   schema: ToolkitSchema;
+  history?: ToolkitHistoryState;
 }
 
 export interface PresetMeta {
@@ -114,16 +144,67 @@ export interface PresetMeta {
   description: string;
 }
 
-export interface PresetDefinition extends PresetMeta {
-  colors?: Record<string, string>;
-}
-
 export interface StylePresetDefinition extends PresetMeta {
   block_source: string;
   heading_source: string;
-  bold_color: string;
+  source?: "builtin" | "personal";
+  base_preset_id?: string;
+  editable?: boolean;
   /** Complete color-token package applied atomically by the Style Preset action. */
   colors: Record<string, string>;
+}
+
+export interface StylePresetSchema extends PresetMeta {
+  colors: Record<string, string>;
+  source: "builtin" | "personal";
+  base_preset_id: string;
+  editable: boolean;
+}
+
+export interface ToolkitEditableState {
+  toggles: Record<string, boolean>;
+  colors: Record<string, string>;
+  style_preset: string;
+  style_base_preset: string;
+  body_font_size_pt: number;
+  class_config: Record<string, string>;
+  compile_target: string;
+  compile_recipe: string;
+  compile_use_internal_fallback: boolean;
+}
+
+export interface ToolkitHistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  label: string;
+  createdAt: string;
+}
+
+export interface ToolkitSnapshotValue {
+  kind: "missing" | "file" | "directory" | "symlink";
+  content_base64?: string;
+  link_target?: string;
+  mode?: number;
+  fingerprint: string;
+}
+
+export interface ToolkitFileSnapshot {
+  path: string;
+  before: ToolkitSnapshotValue;
+  after: ToolkitSnapshotValue;
+}
+
+export interface ToolkitChangeRecord {
+  version: 1;
+  id: string;
+  rootPath: string;
+  command: string;
+  label: string;
+  createdAt: string;
+  state: "applied" | "undone";
+  beforeEditableState?: ToolkitEditableState;
+  afterEditableState?: ToolkitEditableState;
+  files: ToolkitFileSnapshot[];
 }
 
 export interface StarterTemplateMeta {
@@ -224,6 +305,15 @@ export interface UpgradeThemeAssetsResult {
   success: boolean;
   backup_dir: string;
   upgraded_files: string[];
+  color_policy: UpgradeColorPolicy;
+  updated_override_files: string[];
+  /** @deprecated Compatibility alias for older webviews. */
   reset_files: string[];
   skipped_missing_files: string[];
+}
+
+export type UpgradeColorPolicy = "preserve" | "default";
+
+export interface UpgradeThemeAssetsOptions {
+  colorPolicy: UpgradeColorPolicy;
 }

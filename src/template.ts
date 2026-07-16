@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
-import type { UpgradeThemeAssetsResult } from "./types";
+import type { UpgradeThemeAssetsOptions, UpgradeThemeAssetsResult } from "./types";
 import { exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
 
@@ -22,12 +23,17 @@ export class TemplateService {
     return { copied, vscode_settings: vscodeSettings };
   }
 
-  async upgradeThemeAssets(resetColorOverrides: boolean): Promise<UpgradeThemeAssetsResult> {
+  async upgradeThemeAssets(options: UpgradeThemeAssetsOptions = { colorPolicy: "preserve" }): Promise<UpgradeThemeAssetsResult> {
+    const colorPolicy = options.colorPolicy ?? "preserve";
+    if (colorPolicy !== "preserve" && colorPolicy !== "default") {
+      throw new Error(`Unknown upgrade color policy: ${String(colorPolicy)}`);
+    }
     const assetRoot = path.join(this.extensionDir, "assets", "template");
     const backupDir = path.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
     const upgradedFiles: string[] = [];
-    const resetFiles: string[] = [];
+    const updatedOverrideFiles: string[] = [];
     const skippedMissingFiles: string[] = [];
+    const assetReplacements: Array<{ file: string; source: string; target: string }> = [];
 
     for (const file of UPGRADE_THEME_ASSET_FILES) {
       const source = path.join(assetRoot, file);
@@ -37,31 +43,50 @@ export class TemplateService {
         skippedMissingFiles.push(file);
         continue;
       }
-      if (await exists(target)) await this.backupFile(target, backupDir);
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.copyFile(source, target);
-      upgradedFiles.push(file);
+      assetReplacements.push({ file, source, target });
     }
 
-    if (resetColorOverrides) {
-      for (const file of COLOR_OVERRIDE_FILES) {
-        const target = path.join(this.rootDir, file);
-        this.assertInsideWorkspace(target);
-        if (!(await exists(target))) {
-          skippedMissingFiles.push(file);
-          continue;
-        }
-        await this.backupFile(target, backupDir);
-        await fs.unlink(target);
-        resetFiles.push(file);
+    // Load before replacing theme.sty so malformed/legacy state is normalized against
+    // the user's current project, while non-color settings remain untouched.
+    const state = colorPolicy === "default" ? await this.stateService.loadState() : undefined;
+    const targets = assetReplacements.map((item) => item.target);
+    if (colorPolicy === "default") {
+      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path.join(this.rootDir, file)));
+    }
+    const existedBefore = new Map<string, boolean>();
+
+    await fs.mkdir(backupDir, { recursive: true });
+    for (const target of targets) {
+      this.assertInsideWorkspace(target);
+      const existed = await exists(target);
+      existedBefore.set(target, existed);
+      if (existed) await this.backupFile(target, backupDir);
+    }
+
+    try {
+      for (const { file, source, target } of assetReplacements) {
+        await this.replaceFileAtomic(source, target);
+        upgradedFiles.push(file);
       }
+
+      if (colorPolicy === "default" && state) {
+        this.stateService.applyStylePreset(state, "default");
+        await this.stateService.writeColorState(state);
+        updatedOverrideFiles.push(...COLOR_OVERRIDE_FILES);
+      }
+    } catch (err) {
+      const rollbackErrors = await this.rollbackTargets(targets, existedBefore, backupDir);
+      const suffix = rollbackErrors.length > 0 ? ` Rollback errors: ${rollbackErrors.join("; ")}` : "";
+      throw new Error(`Theme asset upgrade failed: ${(err as Error).message}.${suffix}`, { cause: err });
     }
 
     return {
       success: true,
       backup_dir: workspaceRel(this.rootDir, backupDir),
       upgraded_files: upgradedFiles,
-      reset_files: resetFiles,
+      color_policy: colorPolicy,
+      updated_override_files: updatedOverrideFiles,
+      reset_files: [...updatedOverrideFiles],
       skipped_missing_files: skippedMissingFiles
     };
   }
@@ -116,6 +141,39 @@ export class TemplateService {
     this.assertInsideWorkspace(backupPath);
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
     await fs.copyFile(source, backupPath);
+  }
+
+  private async replaceFileAtomic(source: string, target: string): Promise<void> {
+    const tempPath = `${target}.tmp-${process.pid}-${randomUUID()}`;
+    this.assertInsideWorkspace(target);
+    this.assertInsideWorkspace(tempPath);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    try {
+      await fs.copyFile(source, tempPath);
+      await fs.rename(tempPath, target);
+    } catch (err) {
+      await fs.unlink(tempPath).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private async rollbackTargets(targets: string[], existedBefore: Map<string, boolean>, backupDir: string): Promise<string[]> {
+    const errors: string[] = [];
+    for (const target of [...targets].reverse()) {
+      try {
+        if (existedBefore.get(target)) {
+          const backupPath = path.join(backupDir, workspaceRel(this.rootDir, target));
+          await this.replaceFileAtomic(backupPath, target);
+        } else {
+          await fs.unlink(target).catch((err: NodeJS.ErrnoException) => {
+            if (err.code !== "ENOENT") throw err;
+          });
+        }
+      } catch (err) {
+        errors.push(`${workspaceRel(this.rootDir, target)}: ${(err as Error).message}`);
+      }
+    }
+    return errors;
   }
 
   private assertInsideWorkspace(absPath: string): void {

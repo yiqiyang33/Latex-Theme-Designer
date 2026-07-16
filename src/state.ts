@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import {
@@ -15,7 +16,7 @@ import {
   TOGGLE_IDS,
   TOGGLE_SCHEMA
 } from "./schema";
-import type { PresetDefinition, PresetMeta, ResponseState, StylePresetDefinition, ToolkitState } from "./types";
+import type { PresetMeta, ResponseState, StylePresetDefinition, StylePresetSchema, ToolkitState } from "./types";
 import {
   assertValidBodyFontSize,
   boolFromTex,
@@ -37,9 +38,15 @@ import {
 import { loadRecipeCatalog } from "./vscodeSettings";
 
 export class StateService {
-  private cachedThemeDefaults: Record<string, string> | undefined;
+  private additionalStylePresets: StylePresetDefinition[];
 
-  constructor(private readonly rootDir: string) {}
+  constructor(private readonly rootDir: string, additionalStylePresets: StylePresetDefinition[] = []) {
+    this.additionalStylePresets = additionalStylePresets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
+  }
+
+  setAdditionalStylePresets(presets: StylePresetDefinition[]): void {
+    this.additionalStylePresets = presets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
+  }
 
   configPath(): string {
     return path.join(this.rootDir, "theme.ui.json");
@@ -70,7 +77,7 @@ export class StateService {
         toggles: TOGGLE_SCHEMA,
         groups: COLOR_GROUPS,
         class_config: CLASS_CONFIG_SCHEMA,
-        style_presets: state.style_presets,
+        style_presets: this.stylePresetSchema(),
         body_font_size: BODY_FONT_SIZE_CONFIG,
         starter_templates: starterTemplates,
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
@@ -79,19 +86,27 @@ export class StateService {
     };
   }
 
-  async parseThemeDefaults(): Promise<Record<string, string>> {
+  async parseThemeDefaults(warnings: string[] = []): Promise<Record<string, string>> {
     if (!(await exists(this.themePath()))) {
       const fallback: Record<string, string> = {};
       for (const token of COLOR_ORDER) fallback[token] = "#808080";
+      warnings.push("theme.sty is missing; placeholder colors are being used.");
       return fallback;
     }
-    return parseThemeColorDefaults(this.themePath(), COLOR_ORDER);
+    try {
+      return await parseThemeColorDefaults(this.themePath(), COLOR_ORDER);
+    } catch (err) {
+      const fallback: Record<string, string> = {};
+      for (const token of COLOR_ORDER) fallback[token] = "#808080";
+      warnings.push(`Could not read theme.sty colors: ${(err as Error).message}`);
+      return fallback;
+    }
   }
 
   async loadState(): Promise<ToolkitState> {
-    const themeDefaults = await this.parseThemeDefaults();
-    this.cachedThemeDefaults = { ...themeDefaults };
-    const styleCatalog = this.buildStylePresetCatalog(themeDefaults);
+    const configWarnings: string[] = [];
+    const themeDefaults = await this.parseThemeDefaults(configWarnings);
+    const styleCatalog = this.buildStylePresetCatalog();
     const compileTargets = await this.listCandidateTexFiles();
     const recipeCatalog = await loadRecipeCatalog(this.rootDir);
     const compileRecipes = recipeCatalog.recipes;
@@ -100,7 +115,9 @@ export class StateService {
       toggles: await this.parseMainToggleDefaults(),
       colors: { ...themeDefaults },
       style_preset: this.defaultPresetId(styleCatalog),
+      style_base_preset: this.defaultPresetId(styleCatalog),
       style_presets: this.presetMeta(styleCatalog),
+      config_warnings: configWarnings,
       body_font_size_pt: BODY_FONT_SIZE_CONFIG.default,
       class_config: { ...CLASS_CONFIG_DEFAULTS },
       compile_target: defaultCompileTarget(compileTargets),
@@ -121,7 +138,7 @@ export class StateService {
 
     await this.mergePersistedState(state);
     await this.mergeOverrideFiles(state);
-    this.finishNormalization(state, recipeCatalog);
+    this.finishNormalization(state);
     await this.refreshDerivedState(state);
     state.compile_output_pdf = safeWorkspaceRel(this.rootDir, state.compile_output_pdf) || state.compile_output_pdf_expected || compileOutputPdfRelpath(state.compile_target);
     return state;
@@ -163,28 +180,15 @@ export class StateService {
       }
     }
 
-    let requestedStylePreset: string | undefined;
     if ("style_preset" in payload) {
-      requestedStylePreset = this.normalizePreset(String(payload.style_preset ?? ""), normalized.style_presets);
+      normalized.style_preset = this.normalizePreset(String(payload.style_preset ?? ""), normalized.style_presets);
+      normalized.style_base_preset = this.styleDefinition(normalized.style_preset).base_preset_id ?? normalized.style_preset;
     } else if ("block_preset" in payload) {
-      requestedStylePreset = this.styleIdFromBlockPreset(String(payload.block_preset ?? ""));
+      normalized.style_preset = this.styleIdFromBlockPreset(String(payload.block_preset ?? ""));
+      normalized.style_base_preset = normalized.style_preset;
     } else if ("heading_toc_preset" in payload) {
-      requestedStylePreset = this.styleIdFromHeadingPreset(String(payload.heading_toc_preset ?? ""));
-    }
-    if (requestedStylePreset) {
-      normalized.style_preset = requestedStylePreset;
-      // A dedicated style-preset request applies the complete bundle. A
-      // regular save that also carries colors is an advanced/manual edit and
-      // must keep those explicit color values intact.
-      const hasExplicitColors = rawColors && typeof rawColors === "object" && !Array.isArray(rawColors)
-        && Object.keys(rawColors as Record<string, unknown>).length > 0;
-      if (!hasExplicitColors) {
-        const preset = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {})
-          .find((item) => item.id === requestedStylePreset);
-        if (preset) {
-          for (const token of COLOR_ORDER) normalized.colors[token] = preset.colors?.[token] ?? "#808080";
-        }
-      }
+      normalized.style_preset = this.styleIdFromHeadingPreset(String(payload.heading_toc_preset ?? ""));
+      normalized.style_base_preset = normalized.style_preset;
     }
     if ("body_font_size_pt" in payload) normalized.body_font_size_pt = assertValidBodyFontSize(payload.body_font_size_pt);
 
@@ -243,6 +247,7 @@ export class StateService {
       toggles: state.toggles,
       colors: state.colors,
       style_preset: state.style_preset,
+      style_base_preset: state.style_base_preset,
       // Keep legacy fields for older Toolkit versions reading this workspace cache.
       block_preset: this.styleDefinition(state.style_preset).block_source,
       heading_toc_preset: this.styleDefinition(state.style_preset).heading_source,
@@ -256,16 +261,41 @@ export class StateService {
       compile_last_compile_at: state.compile_last_compile_at,
       compile_last_success: state.compile_last_success
     };
-    await fs.writeFile(this.configPath(), `${JSON.stringify(uiState, null, 2)}\n`, "utf8");
+    await this.writeFileAtomic(this.configPath(), `${JSON.stringify(uiState, null, 2)}\n`);
   }
 
   async writeOverrideFiles(state: ToolkitState): Promise<void> {
-    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
-    state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
-    state.class_config = this.normalizeClassConfigMap(state.class_config);
-    await this.refreshDerivedState(state);
+    await this.prepareStateForWrite(state);
     await this.persistUiState(state);
+    await this.writeToggleOverrideFile(state);
+    await this.writeColorOverrideFile(state);
+  }
 
+  async writeColorState(state: ToolkitState): Promise<void> {
+    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
+    for (const token of COLOR_ORDER) {
+      const parsed = parseHexColor(state.colors[token] ?? "");
+      if (!parsed) throw new Error(`Invalid hex color for ${token}: ${String(state.colors[token])}`);
+      state.colors[token] = parsed;
+    }
+    let uiState: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.configPath(), "utf8"));
+      if (this.isRecord(parsed)) uiState = parsed;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT" && !(err instanceof SyntaxError)) throw err;
+    }
+    uiState.colors = { ...state.colors };
+    uiState.style_preset = state.style_preset;
+    uiState.style_base_preset = state.style_base_preset;
+    uiState.block_preset = this.styleDefinition(state.style_preset).block_source;
+    uiState.heading_toc_preset = this.styleDefinition(state.style_preset).heading_source;
+    await this.writeFileAtomic(this.configPath(), `${JSON.stringify(uiState, null, 2)}\n`);
+    await this.writeColorOverrideFile(state);
+    state.config_warnings = [];
+  }
+
+  async writeToggleOverrideFile(state: ToolkitState): Promise<void> {
     const toggleLines = [
       "% Auto-generated by LaTeX Editing Toolkit VS Code extension",
       "% Delete this file to return to defaults in main.tex."
@@ -279,8 +309,10 @@ export class StateService {
     }
     toggleLines.push("", "% Base body font size in pt.");
     toggleLines.push(`\\def\\ThemeBodyFontSizePt{${formatBodyFontSize(state.body_font_size_pt)}}`);
-    await fs.writeFile(this.toggleOverridePath(), `${toggleLines.join("\n")}\n`, "utf8");
+    await this.writeFileAtomic(this.toggleOverridePath(), `${toggleLines.join("\n")}\n`);
+  }
 
+  async writeColorOverrideFile(state: ToolkitState): Promise<void> {
     const colorLines = [
       "% Auto-generated by LaTeX Editing Toolkit VS Code extension",
       "% Delete this file to return to defaults in theme.sty."
@@ -291,7 +323,15 @@ export class StateService {
       colorLines.push(`\\definecolor{${alias}}{HTML}{${hex}}`);
       colorLines.push(`\\colorlet{${token}}{${alias}}`);
     }
-    await fs.writeFile(this.colorOverridePath(), `${colorLines.join("\n")}\n`, "utf8");
+    await this.writeFileAtomic(this.colorOverridePath(), `${colorLines.join("\n")}\n`);
+  }
+
+  private async prepareStateForWrite(state: ToolkitState): Promise<void> {
+    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
+    state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
+    state.class_config = this.normalizeClassConfigMap(state.class_config);
+    state.config_warnings = [];
+    await this.refreshDerivedState(state);
   }
 
   async deleteOverrideFiles(): Promise<void> {
@@ -305,14 +345,15 @@ export class StateService {
   }
 
   applyStylePreset(state: ToolkitState, presetId: string): void {
-    const catalog = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {});
+    const catalog = this.buildStylePresetCatalog();
     const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
     const preset = catalog.find((item) => item.id === selected);
     if (!preset) throw new Error(`Unknown style preset: ${presetId}`);
     for (const token of COLOR_ORDER) {
-      state.colors[token] = preset.colors?.[token] ?? "#808080";
+      state.colors[token] = preset.colors[token] ?? "#808080";
     }
     state.style_preset = selected;
+    state.style_base_preset = preset.base_preset_id ?? preset.id;
     state.style_presets = this.presetMeta(catalog);
   }
 
@@ -427,36 +468,123 @@ export class StateService {
   }
 
   private async mergePersistedState(state: ToolkitState): Promise<void> {
+    let raw: Record<string, unknown>;
     try {
-      const raw = JSON.parse(await fs.readFile(this.configPath(), "utf8")) as Record<string, unknown>;
-      if (raw.toggles && typeof raw.toggles === "object" && !Array.isArray(raw.toggles)) {
-        for (const [key, value] of Object.entries(raw.toggles)) if (key in state.toggles) state.toggles[key] = Boolean(value);
+      const parsed = JSON.parse(await fs.readFile(this.configPath(), "utf8"));
+      if (!this.isRecord(parsed)) {
+        this.addWarning(state, "theme.ui.json must contain a JSON object; defaults were used.");
+        return;
       }
-      if (raw.colors && typeof raw.colors === "object" && !Array.isArray(raw.colors)) {
-        for (const [key, value] of Object.entries(raw.colors)) {
-          const parsed = parseHexColor(String(value));
-          if (parsed && key in state.colors) state.colors[key] = parsed;
-        }
-      }
-      if (typeof raw.style_preset === "string") {
-        state.style_preset = this.normalizePreset(raw.style_preset, state.style_presets);
-      } else if (typeof raw.block_preset === "string") {
-        state.style_preset = this.styleIdFromBlockPreset(raw.block_preset);
-      }
-      if ("body_font_size_pt" in raw) state.body_font_size_pt = normalizeBodyFontSize(raw.body_font_size_pt);
-      if (raw.class_config && typeof raw.class_config === "object" && !Array.isArray(raw.class_config)) state.class_config = this.normalizeClassConfigMap(raw.class_config as Record<string, unknown>);
-      if ("compile_target" in raw) state.compile_target = normalizeCompileTarget(this.rootDir, raw.compile_target, state.compile_targets);
-      if ("compile_recipe" in raw) state.compile_recipe = this.normalizeCompileRecipe(raw.compile_recipe, state.compile_recipes);
-      if (typeof raw.compile_use_internal_fallback === "boolean") state.compile_use_internal_fallback = raw.compile_use_internal_fallback;
-      if (typeof raw.compile_output_pdf === "string") state.compile_output_pdf = raw.compile_output_pdf;
-      if (typeof raw.compile_output_pdf_expected === "string") state.compile_output_pdf_expected = raw.compile_output_pdf_expected;
-      if (typeof raw.compile_last_compile_at === "string") state.compile_last_compile_at = raw.compile_last_compile_at;
-      if (typeof raw.compile_last_success === "boolean") state.compile_last_success = raw.compile_last_success;
+      raw = parsed;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        // Malformed UI cache should not block a workspace.
+        this.addWarning(state, `Could not read theme.ui.json: ${(err as Error).message}`);
+      }
+      return;
+    }
+
+    if (this.isRecord(raw.toggles)) {
+      for (const [key, value] of Object.entries(raw.toggles)) {
+        if (!(key in state.toggles)) continue;
+        if (typeof value === "boolean") state.toggles[key] = value;
+        else if (typeof value === "string") {
+          const parsed = boolFromTex(value);
+          if (parsed === null) this.addWarning(state, `Ignored invalid toggle '${key}' in theme.ui.json.`);
+          else state.toggles[key] = parsed;
+        } else {
+          this.addWarning(state, `Ignored invalid toggle '${key}' in theme.ui.json.`);
+        }
+      }
+    } else if (raw.toggles !== undefined) {
+      this.addWarning(state, "Ignored invalid toggles in theme.ui.json.");
+    }
+
+    if (this.isRecord(raw.colors)) {
+      for (const [key, value] of Object.entries(raw.colors)) {
+        if (!(key in state.colors)) continue;
+        const parsed = parseHexColor(String(value));
+        if (parsed) state.colors[key] = parsed;
+        else this.addWarning(state, `Ignored invalid color '${key}' in theme.ui.json.`);
+      }
+    } else if (raw.colors !== undefined) {
+      this.addWarning(state, "Ignored invalid colors in theme.ui.json.");
+    }
+
+    if (typeof raw.style_preset === "string") {
+      try {
+        state.style_preset = this.normalizePreset(raw.style_preset, state.style_presets);
+        state.style_base_preset = this.styleDefinition(state.style_preset).base_preset_id ?? state.style_preset;
+      } catch {
+        const fallback = typeof raw.style_base_preset === "string" && this.isKnownBuiltInPreset(raw.style_base_preset)
+          ? raw.style_base_preset
+          : "default";
+        state.style_preset = fallback;
+        state.style_base_preset = fallback;
+        this.addWarning(state, `Personal style '${raw.style_preset}' is unavailable; saved colors were preserved using '${fallback}' as the base.`);
+      }
+    } else if (raw.style_preset !== undefined) {
+      this.addWarning(state, "Ignored invalid style_preset in theme.ui.json.");
+    } else if (typeof raw.block_preset === "string") {
+      if (this.isKnownBlockPreset(raw.block_preset)) {
+        state.style_preset = this.styleIdFromBlockPreset(raw.block_preset);
+        state.style_base_preset = state.style_preset;
+      } else {
+        this.addWarning(state, `Ignored unknown legacy block preset '${raw.block_preset}'.`);
       }
     }
+
+    if ("body_font_size_pt" in raw) {
+      try {
+        state.body_font_size_pt = assertValidBodyFontSize(raw.body_font_size_pt);
+      } catch {
+        this.addWarning(state, "Ignored invalid body_font_size_pt in theme.ui.json.");
+      }
+    }
+
+    if (this.isRecord(raw.class_config)) {
+      for (const field of CLASS_CONFIG_IDS) {
+        if (!(field in raw.class_config)) continue;
+        try {
+          state.class_config[field] = this.validateClassConfigValue(field, raw.class_config[field]);
+        } catch {
+          this.addWarning(state, `Ignored invalid class config '${field}'.`);
+        }
+      }
+    } else if (raw.class_config !== undefined) {
+      this.addWarning(state, "Ignored invalid class_config in theme.ui.json.");
+    }
+
+    if ("compile_target" in raw) {
+      try {
+        state.compile_target = normalizeCompileTarget(this.rootDir, raw.compile_target, state.compile_targets);
+      } catch {
+        this.addWarning(state, `Ignored unavailable compile target '${String(raw.compile_target)}'.`);
+      }
+    }
+    if ("compile_recipe" in raw) {
+      try {
+        if (state.compile_recipes.length === 0 && String(raw.compile_recipe ?? "").trim()) {
+          throw new Error("No compile recipes are available.");
+        }
+        state.compile_recipe = this.normalizeCompileRecipe(raw.compile_recipe, state.compile_recipes);
+      } catch {
+        this.addWarning(state, `Ignored unavailable compile recipe '${String(raw.compile_recipe)}'.`);
+      }
+    }
+    if ("compile_use_internal_fallback" in raw) {
+      const value = raw.compile_use_internal_fallback;
+      const parsed = typeof value === "boolean" ? value : typeof value === "string" ? boolFromTex(value) : null;
+      if (parsed === null) this.addWarning(state, "Ignored invalid compile_use_internal_fallback in theme.ui.json.");
+      else state.compile_use_internal_fallback = parsed;
+    }
+    if (typeof raw.compile_output_pdf === "string") state.compile_output_pdf = raw.compile_output_pdf;
+    else if (raw.compile_output_pdf !== undefined) this.addWarning(state, "Ignored invalid compile_output_pdf in theme.ui.json.");
+    if (typeof raw.compile_output_pdf_expected === "string") state.compile_output_pdf_expected = raw.compile_output_pdf_expected;
+    else if (raw.compile_output_pdf_expected !== undefined) this.addWarning(state, "Ignored invalid compile_output_pdf_expected in theme.ui.json.");
+    if (typeof raw.compile_last_compile_at === "string") state.compile_last_compile_at = raw.compile_last_compile_at;
+    else if (raw.compile_last_compile_at !== undefined) this.addWarning(state, "Ignored invalid compile_last_compile_at in theme.ui.json.");
+    if (typeof raw.compile_last_success === "boolean" || raw.compile_last_success === null) state.compile_last_success = raw.compile_last_success;
+    else if (raw.compile_last_success !== undefined) this.addWarning(state, "Ignored invalid compile_last_success in theme.ui.json.");
   }
 
   private async mergeOverrideFiles(state: ToolkitState): Promise<void> {
@@ -469,12 +597,26 @@ export class StateService {
       for (const field of CLASS_CONFIG_IDS) {
         const command = CLASS_CONFIG_COMMANDS[field];
         const matches = Array.from(text.matchAll(new RegExp(`\\\\def\\\\${command}\\{([^}]+)\\}`, "g")));
-        if (matches.length > 0) state.class_config[field] = this.normalizeClassConfigValue(field, matches.at(-1)?.[1]);
+        if (matches.length > 0) {
+          try {
+            state.class_config[field] = this.validateClassConfigValue(field, matches.at(-1)?.[1]);
+          } catch {
+            this.addWarning(state, `Ignored invalid class config '${field}' in theme.overrides.tex.`);
+          }
+        }
       }
       const fontMatch = Array.from(text.matchAll(/\\def\\ThemeBodyFontSizePt\{([^}]+)\}/g));
-      if (fontMatch.length > 0) state.body_font_size_pt = normalizeBodyFontSize(fontMatch.at(-1)?.[1]);
+      if (fontMatch.length > 0) {
+        try {
+          state.body_font_size_pt = assertValidBodyFontSize(fontMatch.at(-1)?.[1]);
+        } catch {
+          this.addWarning(state, "Ignored invalid body font size in theme.overrides.tex.");
+        }
+      }
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.addWarning(state, `Could not read theme.overrides.tex: ${(err as Error).message}`);
+      }
     }
 
     try {
@@ -490,13 +632,16 @@ export class StateService {
         const defined = defines.get(mapped);
         const parsed = defined ?? parseHexColor(mapped);
         if (parsed) state.colors[token] = parsed;
+        else this.addWarning(state, `Ignored invalid color mapping for '${token}' in theme.colors.tex.`);
       }
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.addWarning(state, `Could not read theme.colors.tex: ${(err as Error).message}`);
+      }
     }
   }
 
-  private finishNormalization(state: ToolkitState, _recipeCatalog: unknown): void {
+  private finishNormalization(state: ToolkitState): void {
     for (const key of TOGGLE_IDS) state.toggles[key] = Boolean(state.toggles[key]);
     for (const key of COLOR_ORDER) state.colors[key] = parseHexColor(state.colors[key] ?? "") ?? "#808080";
     state.class_config = this.normalizeClassConfigMap(state.class_config);
@@ -504,15 +649,63 @@ export class StateService {
     state.compile_output_pdf = safeWorkspaceRel(this.rootDir, state.compile_output_pdf) || state.compile_output_pdf_expected || compileOutputPdfRelpath(state.compile_target);
   }
 
-  private buildStylePresetCatalog(_defaults: Record<string, string>): PresetDefinition[] {
-    return STYLE_PRESET_DEFINITIONS.map((definition) => ({
+  private buildStylePresetCatalog(): StylePresetDefinition[] {
+    return this.allStylePresetDefinitions().map((definition) => ({
       ...definition,
       colors: { ...definition.colors }
     }));
   }
 
+  private stylePresetSchema(): StylePresetSchema[] {
+    return this.allStylePresetDefinitions().map(({ id, label, description, colors, source, base_preset_id, editable }) => ({
+      id,
+      label,
+      description,
+      colors: { ...colors },
+      source: source ?? "builtin",
+      base_preset_id: base_preset_id ?? id,
+      editable: editable ?? false
+    }));
+  }
+
+  private addWarning(state: ToolkitState, message: string): void {
+    if (!state.config_warnings.includes(message)) state.config_warnings.push(message);
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  private isKnownBlockPreset(raw: string): boolean {
+    const value = raw.trim();
+    return STYLE_PRESET_DEFINITIONS.some((preset) => preset.id === value || preset.block_source === value);
+  }
+
+  private isKnownBuiltInPreset(raw: string): boolean {
+    return STYLE_PRESET_DEFINITIONS.some((preset) => preset.id === raw.trim());
+  }
+
+  private allStylePresetDefinitions(): StylePresetDefinition[] {
+    return [
+      ...STYLE_PRESET_DEFINITIONS.map((preset) => ({ ...preset, source: "builtin" as const, base_preset_id: preset.id, editable: false })),
+      ...this.additionalStylePresets
+    ];
+  }
+
+  private async writeFileAtomic(targetPath: string, text: string): Promise<void> {
+    const tempPath = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    try {
+      await fs.writeFile(tempPath, text, "utf8");
+      await fs.rename(tempPath, targetPath);
+    } catch (err) {
+      await fs.unlink(tempPath).catch(() => undefined);
+      throw err;
+    }
+  }
+
   private styleDefinition(styleId: string): StylePresetDefinition {
-    return STYLE_PRESET_DEFINITIONS.find((item) => item.id === styleId) ?? STYLE_PRESET_DEFINITIONS[0];
+    return this.allStylePresetDefinitions().find((item) => item.id === styleId) ?? STYLE_PRESET_DEFINITIONS[0];
   }
 
   private styleIdFromBlockPreset(presetId: string): string {
@@ -525,11 +718,11 @@ export class StateService {
     return STYLE_PRESET_DEFINITIONS.find((item) => item.id === normalized || item.heading_source === normalized)?.id ?? "default";
   }
 
-  private presetMeta(catalog: PresetDefinition[]): PresetMeta[] {
+  private presetMeta(catalog: StylePresetDefinition[]): PresetMeta[] {
     return catalog.map(({ id, label, description }) => ({ id, label, description }));
   }
 
-  private defaultPresetId(catalog: PresetDefinition[]): string {
+  private defaultPresetId(catalog: StylePresetDefinition[]): string {
     return catalog.some((item) => item.id === "default") ? "default" : catalog[0]?.id ?? "";
   }
 
@@ -571,7 +764,7 @@ export class StateService {
     throw new Error(`Unknown compile recipe: ${value}`);
   }
 
-  private async coerceClassModeOnTargetSwitch(state: ToolkitState): Promise<void> {
+  async coerceClassModeOnTargetSwitch(state: ToolkitState): Promise<void> {
     const mode = this.normalizeClassConfigValue("theme_class_mode", state.class_config.theme_class_mode);
     if (mode !== "book" && mode !== "article") return;
     const detected = await this.detectTargetDocumentClass(state.compile_target);

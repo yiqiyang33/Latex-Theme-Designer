@@ -21,4 +21,4 @@ jobs:
         run: npm ci
 
       - name: Run extension test suite
-        run: npm test
+        run: npm run package

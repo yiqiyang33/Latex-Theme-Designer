@@ -3,13 +3,17 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BLOCK_PRESET_DEFINITIONS, CLASS_CONFIG_DEFAULTS, COLOR_ORDER, HEADING_TOC_PRESET_DEFINITIONS, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
+import { HistoryConflictError } from "../src/changeHistory";
+import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry } from "../src/projectRegistry";
+import { PersonalStyleRegistry } from "../src/personalStyles";
+import { preflightCreateProject, runCreateProjectWorkflow } from "../src/projectWorkflow";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
 import { TemplateService } from "../src/template";
-import type { LocalProjectStateStore } from "../src/types";
+import { ToolkitService } from "../src/toolkitService";
+import type { LocalProjectStateStore, ToolkitState } from "../src/types";
 import { parseThemeColorDefaults } from "../src/utils";
 import { generateVscodeSettingsIfMissing, loadRecipeCatalog } from "../src/vscodeSettings";
 
@@ -57,9 +61,12 @@ describe("TypeScript Toolkit migration", () => {
       ["uchicago", "uchicago"]
     ]);
     expect(STYLE_PRESET_DEFINITIONS).toHaveLength(5);
+    const boldColors: Record<string, string> = {
+      default: "#334155", midnight: "#273B66", meadow: "#12727E", ember: "#A3422E", uchicago: "#800000"
+    };
     for (const preset of STYLE_PRESET_DEFINITIONS) {
       expect(Object.keys(preset.colors).sort()).toEqual([...COLOR_ORDER].sort());
-      expect(preset.colors["theme-bold"]).toBe(preset.bold_color);
+      expect(preset.colors["theme-bold"]).toBe(boldColors[preset.id]);
     }
   });
 
@@ -100,7 +107,7 @@ describe("TypeScript Toolkit migration", () => {
     expect(state.colors["theme-bold"]).toBe("#334155");
   });
 
-  it("normalizes a style-only payload to the complete bundle while preserving explicit color edits", async () => {
+  it("keeps ordinary save normalization separate from complete preset application", async () => {
     const root = await tempWorkspace();
     await copyBaseAssets(root);
     const service = new StateService(root);
@@ -108,8 +115,8 @@ describe("TypeScript Toolkit migration", () => {
 
     const applied = await service.normalizePayload({ style_preset: "uchicago" }, state);
     expect(applied.style_preset).toBe("uchicago");
-    expect(applied.colors["theme-bold"]).toBe("#800000");
-    expect(applied.colors["inline-key-fg"]).toBe("#800000");
+    expect(applied.colors["theme-bold"]).toBe(state.colors["theme-bold"]);
+    expect(applied.colors["inline-key-fg"]).toBe(state.colors["inline-key-fg"]);
 
     const edited = await service.normalizePayload({ style_preset: "uchicago", colors: { "inline-key-fg": "#123456" } }, state);
     expect(edited.style_preset).toBe("uchicago");
@@ -137,6 +144,74 @@ describe("TypeScript Toolkit migration", () => {
     expect(persisted.heading_toc_preset).toBe("uchicago");
   });
 
+  it("applies legacy block and heading requests as complete unified styles", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    const service = new ToolkitService(root, repoRoot);
+
+    const ember = await service.handle("block-preset", { block_preset: "ember" }) as { state: ToolkitState };
+    expect(ember.state.style_preset).toBe("ember");
+    expect(ember.state.colors["theme-section"]).toBe("#A3422E");
+    expect(ember.state.colors["inline-key-fg"]).toBe("#9A4B33");
+
+    const midnight = await service.handle("heading-toc-preset", { heading_toc_preset: "inkstone" }) as { state: ToolkitState };
+    expect(midnight.state.style_preset).toBe("midnight");
+    expect(midnight.state.colors["theorem-accent"]).toBe("#1B7286");
+    expect(midnight.state.colors["theme-bold"]).toBe("#273B66");
+  });
+
+  it("loads malformed configuration field by field and exposes non-persistent warnings", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await generateVscodeSettingsIfMissing(root);
+    await fs.writeFile(path.join(root, "theme.ui.json"), JSON.stringify({
+      toggles: { enable_block_shadow: "false", enable_heading_theme: "not-a-boolean" },
+      colors: { "inline-key-fg": "#123456", "inline-term-bg": "not-a-color" },
+      style_preset: "unknown-style",
+      body_font_size_pt: 99,
+      class_config: { theme_class_mode: "book", theme_heading_chapter_mode: "sometimes" },
+      compile_target: "missing.tex",
+      compile_recipe: "missing-recipe",
+      compile_use_internal_fallback: "false",
+      compile_last_success: "yes",
+      future_field: { preservedByFutureVersion: true }
+    }), "utf8");
+
+    const service = new StateService(root);
+    const state = await service.loadState();
+    expect(state.toggles.enable_block_shadow).toBe(false);
+    expect(state.toggles.enable_heading_theme).toBe(true);
+    expect(state.colors["inline-key-fg"]).toBe("#123456");
+    expect(state.style_preset).toBe("default");
+    expect(state.body_font_size_pt).toBe(10);
+    expect(state.class_config.theme_class_mode).toBe("book");
+    expect(state.compile_target).toBe("main.tex");
+    expect(state.compile_use_internal_fallback).toBe(false);
+    expect(state.config_warnings.join("\n")).toContain("enable_heading_theme");
+    expect(state.config_warnings.join("\n")).toContain("inline-term-bg");
+    expect(state.config_warnings.join("\n")).toContain("unknown-style");
+    expect(state.config_warnings.join("\n")).toContain("missing.tex");
+    expect(state.config_warnings.join("\n")).toContain("missing-recipe");
+
+    await service.writeOverrideFiles(state);
+    const persisted = JSON.parse(await fs.readFile(path.join(root, "theme.ui.json"), "utf8"));
+    expect(persisted.config_warnings).toBeUndefined();
+    expect(state.config_warnings).toEqual([]);
+  });
+
+  it("recovers from broken theme.ui.json without making Toolkit state unavailable", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{article}\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.ui.json"), "{ broken json", "utf8");
+    const state = await new StateService(root).loadState();
+    expect(state.compile_target).toBe("main.tex");
+    expect(state.style_preset).toBe("default");
+    expect(state.config_warnings.join("\n")).toContain("Could not read theme.ui.json");
+  });
+
   it("registers local note projects globally and deduplicates normalized paths", async () => {
     const store = new MemoryProjectStateStore();
     const registry = new LocalProjectRegistry(store);
@@ -154,6 +229,56 @@ describe("TypeScript Toolkit migration", () => {
     expect(duplicate.id).toBe(first.id);
     expect(projects.find((entry) => entry.id === first.id)?.templateId).toBe("article-minimal");
     expect(projects.every((entry) => entry.missing === false)).toBe(true);
+  });
+
+  it("serializes concurrent registry changes without losing unrelated projects", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const firstRoot = await tempWorkspace();
+    const secondRoot = await tempWorkspace();
+    await Promise.all([
+      registry.add(firstRoot, "book-minimal"),
+      registry.add(secondRoot, "article-minimal"),
+      registry.remove(firstRoot)
+    ]);
+    const projects = await registry.list();
+    expect(projects.map((entry) => entry.rootPath)).toEqual([path.normalize(secondRoot)]);
+    expect(await registry.find(secondRoot)).toMatchObject({ templateId: "article-minimal", missing: false });
+  });
+
+  it.runIf(process.platform !== "win32")("deduplicates symlinked project paths while preserving the original display record", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const realRoot = await tempWorkspace();
+    const linkParent = await tempWorkspace();
+    const linkedRoot = path.join(linkParent, "linked-note");
+    await fs.writeFile(path.join(realRoot, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await fs.symlink(realRoot, linkedRoot, "dir");
+
+    const first = await registry.add(realRoot, "book-minimal");
+    const duplicate = await registry.add(linkedRoot, "article-minimal");
+    const projects = await registry.list();
+    expect(projects).toHaveLength(1);
+    expect(duplicate.id).toBe(first.id);
+    expect(projects[0]?.rootPath).toBe(path.normalize(realRoot));
+    expect(projects[0]?.createdAt).toBe(first.createdAt);
+    expect(projects[0]?.templateId).toBe("article-minimal");
+    expect((await registry.find(linkedRoot))?.id).toBe(first.id);
+  });
+
+  it("cleans corrupt and canonical duplicate registry entries by keeping the newest timestamp", async () => {
+    const store = new MemoryProjectStateStore();
+    const root = await tempWorkspace();
+    await store.update(LOCAL_PROJECTS_STATE_KEY, [
+      null,
+      { id: "old", rootPath: root, label: "Old", templateId: "book-minimal", createdAt: "2024-01-01T00:00:00.000Z" },
+      { id: "new", root_path: path.join(root, "."), template_id: "article-minimal", created_at: "2025-01-01T00:00:00.000Z" }
+    ]);
+    const registry = new LocalProjectRegistry(store);
+    const projects = await registry.list();
+    expect(projects).toHaveLength(1);
+    expect(projects[0]?.id).toBe("new");
+    expect(store.get<unknown[]>(LOCAL_PROJECTS_STATE_KEY)).toHaveLength(1);
   });
 
   it("keeps missing projects until they are explicitly removed", async () => {
@@ -204,17 +329,105 @@ describe("TypeScript Toolkit migration", () => {
     await expect(registry.add("https://example.com/note", "book-minimal")).rejects.toThrow("absolute local path");
   });
 
-  it("parses theme color defaults from theme.sty", async () => {
-    const defaults = await parseThemeColorDefaults(path.join(repoRoot, "theme.sty"), COLOR_ORDER);
-    expect(defaults["theme-bold"]).toBe("#3F6F9F");
-    expect(defaults["definition-body-bg"]).toMatch(/^#[0-9A-F]{6}$/);
-    expect(defaults["question-accent"]).toMatch(/^#[0-9A-F]{6}$/);
+  it("registers a created project only after assets and main.tex succeed", async () => {
+    const calls: string[] = [];
+    const service = {
+      async handle(command: string): Promise<unknown> {
+        calls.push(command);
+        if (command === "template-bootstrap") throw new Error("starter failed");
+        return {};
+      }
+    };
+    let registrations = 0;
+    const registry = {
+      async add(): Promise<any> {
+        registrations += 1;
+        return {};
+      }
+    };
+    await expect(runCreateProjectWorkflow(service, registry, "/tmp/note", "book-minimal")).rejects.toThrow("starter failed");
+    expect(calls).toEqual(["initialize-workspace", "template-bootstrap"]);
+    expect(registrations).toBe(0);
   });
 
-  it("exposes UChicago block and heading presets", () => {
-    expect(BLOCK_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["theorem-accent"]).toBe("#800000");
-    expect(BLOCK_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["inline-key-fg"]).toBe("#800000");
-    expect(HEADING_TOC_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")?.colors?.["theme-chapter"]).toBe("#800000");
+  it("preflights an automatically-created project folder and rejects non-empty or invalid targets", async () => {
+    const parent = await tempWorkspace();
+    const fresh = await preflightCreateProject({ parentPath: parent, projectName: "New Notes", templateId: "book-minimal" }, repoRoot);
+    expect(fresh.ok).toBe(true);
+    expect(fresh.rootPath).toBe(path.join(parent, "New Notes"));
+    expect(fresh.targetExists).toBe(false);
+
+    await fs.mkdir(fresh.rootPath);
+    const empty = await preflightCreateProject({ parentPath: parent, projectName: "New Notes", templateId: "book-minimal" }, repoRoot);
+    expect(empty.ok).toBe(true);
+    expect(empty.targetEmpty).toBe(true);
+
+    await fs.writeFile(path.join(fresh.rootPath, "existing.txt"), "occupied", "utf8");
+    const occupied = await preflightCreateProject({ parentPath: parent, projectName: "New Notes", templateId: "book-minimal" }, repoRoot);
+    expect(occupied.ok).toBe(false);
+    expect(occupied.errors.join(" ")).toContain("not empty");
+    expect((await preflightCreateProject({ parentPath: parent, projectName: "../escape", templateId: "book-minimal" }, repoRoot)).ok).toBe(false);
+  });
+
+  it("stores complete personal styles globally and falls back without changing project colors", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new PersonalStyleRegistry(store);
+    const base = STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago")!;
+    const saved = await registry.add("My Maroon", "uchicago", base.colors);
+    expect(saved.id).toMatch(/^personal:/);
+    expect(registry.definitions()[0]).toMatchObject({ source: "personal", base_preset_id: "uchicago", editable: true });
+
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    const withLibrary = new StateService(root, registry.definitions());
+    const state = await withLibrary.loadState();
+    withLibrary.applyStylePreset(state, saved.id);
+    state.colors["inline-key-fg"] = "#123456";
+    await withLibrary.writeOverrideFiles(state);
+
+    const withoutLibrary = await new StateService(root).loadState();
+    expect(withoutLibrary.style_preset).toBe("uchicago");
+    expect(withoutLibrary.style_base_preset).toBe("uchicago");
+    expect(withoutLibrary.colors["inline-key-fg"]).toBe("#123456");
+    expect(withoutLibrary.config_warnings.join(" ")).toContain("unavailable");
+  });
+
+  it("imports personal style libraries with validation and reports skipped entries", async () => {
+    const registry = new PersonalStyleRegistry(new MemoryProjectStateStore());
+    const result = await registry.importLibrary({
+      version: 1,
+      styles: [
+        {
+          version: 1,
+          id: "personal:imported",
+          label: "Imported",
+          description: "Imported style",
+          basePresetId: "default",
+          colors: STYLE_PRESET_DEFINITIONS[0].colors,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        { version: 1, id: "personal:broken", label: "Broken", basePresetId: "default", colors: {} }
+      ]
+    });
+    expect(result).toEqual({ imported: 1, skipped: 1 });
+    expect(registry.list()).toHaveLength(1);
+  });
+
+  it("parses theme color defaults from theme.sty", async () => {
+    const defaults = await parseThemeColorDefaults(path.join(repoRoot, "theme.sty"), COLOR_ORDER);
+    expect(defaults["theme-bold"]).toBe("#334155");
+    expect(defaults["definition-body-bg"]).toMatch(/^#[0-9A-F]{6}$/);
+    expect(defaults["question-accent"]).toMatch(/^#[0-9A-F]{6}$/);
+    expect(defaults).toEqual(STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "default")?.colors);
+  });
+
+  it("exposes UChicago as one complete style preset", () => {
+    const uchicago = STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "uchicago");
+    expect(uchicago?.colors["theorem-accent"]).toBe("#800000");
+    expect(uchicago?.colors["inline-key-fg"]).toBe("#800000");
+    expect(uchicago?.colors["theme-chapter"]).toBe("#800000");
   });
 
   it("renders inline helpers through theme-aware box styling", async () => {
@@ -272,6 +485,27 @@ describe("TypeScript Toolkit migration", () => {
     expect(response.state.compile_targets).toContain("notes.tex");
   });
 
+  it("undoes and redoes workspace initialization and starter generation", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    await service.handle("initialize-workspace", {});
+    await expect(fs.access(path.join(root, "theme.sty"))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(root, ".vscode", "settings.json"))).resolves.toBeUndefined();
+    await service.handle("undo-last-change", {});
+    await expect(fs.access(path.join(root, "theme.sty"))).rejects.toThrow();
+    await expect(fs.access(path.join(root, ".vscode", "settings.json"))).rejects.toThrow();
+    await service.handle("redo-last-change", {});
+    await expect(fs.access(path.join(root, "theme.sty"))).resolves.toBeUndefined();
+
+    await service.handle("template-bootstrap", { template_id: "article-minimal", output_target: "notes.tex", overwrite: false });
+    await expect(fs.access(path.join(root, "notes.tex"))).resolves.toBeUndefined();
+    await service.handle("undo-last-change", {});
+    await expect(fs.access(path.join(root, "notes.tex"))).rejects.toThrow();
+    await service.handle("redo-last-change", {});
+    await expect(fs.access(path.join(root, "notes.tex"))).resolves.toBeUndefined();
+  });
+
   it("exposes and creates the homework assignment starter", async () => {
     const root = await tempWorkspace();
     const state = new StateService(root);
@@ -304,7 +538,7 @@ describe("TypeScript Toolkit migration", () => {
     await expect(fs.access(path.join(root, "templates", "homework-assignment.tex"))).resolves.toBeUndefined();
   });
 
-  it("backs up and upgrades workspace theme assets, optionally resetting color overrides", async () => {
+  it("backs up and upgrades workspace theme assets while resetting only the color package", async () => {
     const root = await tempWorkspace();
     const state = new StateService(root);
     const service = new TemplateService(root, repoRoot, state);
@@ -312,20 +546,170 @@ describe("TypeScript Toolkit migration", () => {
     await fs.writeFile(path.join(root, "theorems.tex"), "% old theorems\n", "utf8");
     await fs.writeFile(path.join(root, "commands.tex"), "% old commands\n", "utf8");
     await fs.writeFile(path.join(root, "theme.colors.tex"), "% old colors\n", "utf8");
-    await fs.writeFile(path.join(root, "theme.ui.json"), "{\"colors\":{}}\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.overrides.tex"), "% existing class and toggle overrides\n", "utf8");
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.ui.json"), JSON.stringify({
+      colors: { "theme-bold": "#123456" },
+      toggles: { enable_block_shadow: false },
+      class_config: { theme_class_mode: "book" },
+      body_font_size_pt: 11.5,
+      compile_target: "main.tex",
+      compile_use_internal_fallback: false,
+      compile_last_compile_at: "2026-07-16T12:00:00Z",
+      compile_last_success: true,
+      future_field: { keep: true }
+    }), "utf8");
 
-    const result = await service.upgradeThemeAssets(true);
+    const result = await service.upgradeThemeAssets({ colorPolicy: "default" });
     const upgradedTheme = await fs.readFile(path.join(root, "theme.sty"), "utf8");
     const backupTheme = await fs.readFile(path.join(root, result.backup_dir, "theme.sty"), "utf8");
     const backupColors = await fs.readFile(path.join(root, result.backup_dir, "theme.colors.tex"), "utf8");
 
     expect(result.upgraded_files).toEqual(["theme.sty", "theorems.tex", "commands.tex"]);
-    expect(result.reset_files).toEqual(["theme.colors.tex", "theme.ui.json"]);
+    expect(result.color_policy).toBe("default");
+    expect(result.updated_override_files).toEqual(["theme.colors.tex", "theme.ui.json"]);
     expect(upgradedTheme).toContain("\\ProvidesPackage{theme}");
     expect(backupTheme).toBe("% old theme\n");
     expect(backupColors).toBe("% old colors\n");
-    await expect(fs.access(path.join(root, "theme.colors.tex"))).rejects.toThrow();
+    const persisted = JSON.parse(await fs.readFile(path.join(root, "theme.ui.json"), "utf8"));
+    expect(persisted.colors["theme-bold"]).toBe("#334155");
+    expect(persisted.toggles.enable_block_shadow).toBe(false);
+    expect(persisted.class_config.theme_class_mode).toBe("book");
+    expect(persisted.body_font_size_pt).toBe(11.5);
+    expect(persisted.compile_target).toBe("main.tex");
+    expect(persisted.compile_use_internal_fallback).toBe(false);
+    expect(persisted.compile_last_success).toBe(true);
+    expect(persisted.future_field).toEqual({ keep: true });
+    expect(await fs.readFile(path.join(root, "theme.overrides.tex"), "utf8")).toBe("% existing class and toggle overrides\n");
+    await expect(fs.access(path.join(root, "theme.colors.tex"))).resolves.toBeUndefined();
+  });
+
+  it("preserves every existing config file when upgrading assets with Preserve Colors", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    const stateService = new StateService(root);
+    const state = await stateService.loadState();
+    stateService.applyStylePreset(state, "uchicago");
+    state.toggles.enable_block_shadow = false;
+    state.class_config.theme_class_mode = "book";
+    state.compile_use_internal_fallback = false;
+    await stateService.writeOverrideFiles(state);
+    await fs.writeFile(path.join(root, "theme.sty"), "% old theme\n", "utf8");
+    const beforeColors = await fs.readFile(path.join(root, "theme.colors.tex"), "utf8");
+    const beforeUi = await fs.readFile(path.join(root, "theme.ui.json"), "utf8");
+    const beforeToggles = await fs.readFile(path.join(root, "theme.overrides.tex"), "utf8");
+
+    const result = await new TemplateService(root, repoRoot, stateService).upgradeThemeAssets({ colorPolicy: "preserve" });
+    expect(result.color_policy).toBe("preserve");
+    expect(result.updated_override_files).toEqual([]);
+    expect(await fs.readFile(path.join(root, "theme.colors.tex"), "utf8")).toBe(beforeColors);
+    expect(await fs.readFile(path.join(root, "theme.ui.json"), "utf8")).toBe(beforeUi);
+    expect(await fs.readFile(path.join(root, "theme.overrides.tex"), "utf8")).toBe(beforeToggles);
+  });
+
+  it("maps the legacy reset_color_overrides upgrade payload to the new policies", async () => {
+    const root = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{article}\n", "utf8");
+    const service = new ToolkitService(root, repoRoot);
+    const preserve = await service.handle("upgrade-theme-assets", { reset_color_overrides: false }) as { color_policy: string };
+    const reset = await service.handle("upgrade-theme-assets", { reset_color_overrides: true }) as { color_policy: string };
+    expect(preserve.color_policy).toBe("preserve");
+    expect(reset.color_policy).toBe("default");
+  });
+
+  it("rolls back replaced and newly-created theme assets when a reset write fails", async () => {
+    class FailingStateService extends StateService {
+      override async writeColorState(_state: ToolkitState): Promise<void> {
+        throw new Error("simulated color write failure");
+      }
+    }
+    const root = await tempWorkspace();
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    await fs.writeFile(path.join(root, "theme.sty"), "% original theme\n", "utf8");
+    await fs.writeFile(path.join(root, "commands.tex"), "% original commands\n", "utf8");
+    const service = new TemplateService(root, repoRoot, new FailingStateService(root));
+    await expect(service.upgradeThemeAssets({ colorPolicy: "default" })).rejects.toThrow("simulated color write failure");
+    expect(await fs.readFile(path.join(root, "theme.sty"), "utf8")).toBe("% original theme\n");
+    expect(await fs.readFile(path.join(root, "commands.tex"), "utf8")).toBe("% original commands\n");
+    await expect(fs.access(path.join(root, "theorems.tex"))).rejects.toThrow();
     await expect(fs.access(path.join(root, "theme.ui.json"))).rejects.toThrow();
+    await expect(fs.access(path.join(root, "theme.colors.tex"))).rejects.toThrow();
+  });
+
+  it("autosaves editable state with persistent one-step undo and redo while preserving compile status", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    const initial = await service.handle("state", {}) as { state: ToolkitState };
+    const draft = structuredClone(initial.state);
+    draft.colors["inline-key-fg"] = "#123456";
+    const saved = await service.handle("autosave", { revision: 7, state: draft }) as { revision: number; history: { canUndo: boolean } };
+    expect(saved.revision).toBe(7);
+    expect(saved.history.canUndo).toBe(true);
+
+    const compiled = await service.state.loadState();
+    await service.state.applyCompileResult(compiled, true, "main.pdf");
+    await service.state.persistUiState(compiled);
+    const undone = await service.handle("undo-last-change", {}) as { state: ToolkitState; history: { canRedo: boolean } };
+    expect(undone.state.colors["inline-key-fg"]).not.toBe("#123456");
+    expect(undone.state.compile_last_success).toBe(true);
+    expect(undone.history.canRedo).toBe(true);
+    const redone = await service.handle("redo-last-change", {}) as { state: ToolkitState };
+    expect(redone.state.colors["inline-key-fg"]).toBe("#123456");
+  });
+
+  it("detects external editable-state conflicts before undo", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{article}\n", "utf8");
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    const response = await service.handle("state", {}) as { state: ToolkitState };
+    const draft = structuredClone(response.state);
+    draft.body_font_size_pt = 11;
+    await service.handle("autosave", { revision: 1, state: draft });
+    const external = await service.state.loadState();
+    external.colors["theme-bold"] = "#654321";
+    await service.state.writeOverrideFiles(external);
+    await expect(service.handle("undo-last-change", {})).rejects.toBeInstanceOf(HistoryConflictError);
+    await expect(service.handle("undo-last-change", { force: true })).resolves.toBeDefined();
+  });
+
+  it("restores deleted override files through file-based undo and redo", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{book}\n", "utf8");
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    const state = await service.state.loadState();
+    await service.state.writeOverrideFiles(state);
+    await service.handle("reset", {});
+    await expect(fs.access(path.join(root, "theme.ui.json"))).rejects.toThrow();
+    await service.handle("undo-last-change", {});
+    await expect(fs.access(path.join(root, "theme.ui.json"))).resolves.toBeUndefined();
+    await service.handle("redo-last-change", {});
+    await expect(fs.access(path.join(root, "theme.ui.json"))).rejects.toThrow();
+  });
+
+  it("ships autosave, hover preview, personal styles, and progressive sections without Apply or Save buttons", async () => {
+    const source = await fs.readFile(path.join(repoRoot, "src", "webview", "index.ts"), "utf8");
+    expect(source).toContain("previewStylePresetId");
+    expect(source).toContain('request("autosave"');
+    expect(source).toContain('className = "style-card"');
+    expect(source).toContain('setAttribute("aria-pressed"');
+    expect(source).toContain('addEventListener("mouseenter"');
+    expect(source).not.toContain('id="stylePresetSelect"');
+    expect(source).not.toContain('id="applyStylePresetBtn"');
+    expect(source).not.toContain('id="applyTargetBtn"');
+    expect(source).not.toContain('id="applyRecipeBtn"');
+    expect(source).not.toContain('id="saveBtn"');
+    expect(source).toContain('id="sectionStyle"');
+    expect(source).toContain("Save as Personal Style");
+    expect(source).toContain('id="upgradeColorPolicy"');
   });
 
   it("splits a book root into subfiles and preserves appendix in root", async () => {
@@ -352,6 +736,24 @@ describe("TypeScript Toolkit migration", () => {
     expect(rewritten).toContain("\\appendix");
     expect(unit).toContain("\\chapter{Main Part}");
     expect(unit).not.toContain("\\appendix");
+  });
+
+  it("undoes and redoes split-created files and the root rewrite", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    const original = ["\\documentclass{book}", "\\begin{document}", "\\chapter{Intro}", "Body.", "\\end{document}", ""].join("\n");
+    await fs.writeFile(path.join(root, "main.tex"), original, "utf8");
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    const result = await service.handle("split", { compile_target: "main.tex", sections_dir: "Sections" }) as { split: { generated_subfile_targets: string[] } };
+    const generated = path.join(root, result.split.generated_subfile_targets[0]);
+    await expect(fs.access(generated)).resolves.toBeUndefined();
+    await service.handle("undo-last-change", {});
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe(original);
+    await expect(fs.access(generated)).rejects.toThrow();
+    await service.handle("redo-last-change", {});
+    await expect(fs.access(generated)).resolves.toBeUndefined();
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toContain("\\subfile");
   });
 
   it("renumbers referenced units and merges a subfile back to root", async () => {
@@ -382,6 +784,28 @@ describe("TypeScript Toolkit migration", () => {
     expect(unsplit.source_target).toBe("Sections/01-intro.tex");
     expect(rootText).toContain("\\chapter{Intro}");
     await expect(fs.access(path.join(root, "Sections", "01-intro.tex"))).rejects.toThrow();
+  });
+
+  it("undoes renumber and unsplit filesystem changes", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.mkdir(path.join(root, "Sections"));
+    await fs.writeFile(path.join(root, "main.tex"), ["\\documentclass{book}", "\\usepackage{subfiles}", "\\begin{document}", "\\subfile{Sections/intro}", "\\end{document}", ""].join("\n"), "utf8");
+    await fs.writeFile(path.join(root, "Sections", "intro.tex"), ["\\documentclass[../main.tex]{subfiles}", "\\begin{document}", "\\chapter{Intro}", "Body.", "\\end{document}", ""].join("\n"), "utf8");
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    await service.handle("renumber", { compile_target: "main.tex", mode: "add" });
+    await expect(fs.access(path.join(root, "Sections", "01-intro.tex"))).resolves.toBeUndefined();
+    await service.handle("undo-last-change", {});
+    await expect(fs.access(path.join(root, "Sections", "intro.tex"))).resolves.toBeUndefined();
+    await service.handle("redo-last-change", {});
+    await expect(fs.access(path.join(root, "Sections", "01-intro.tex"))).resolves.toBeUndefined();
+
+    await service.handle("unsplit", { compile_target: "Sections/01-intro.tex", delete_source: true });
+    await expect(fs.access(path.join(root, "Sections", "01-intro.tex"))).rejects.toThrow();
+    await service.handle("undo-last-change", {});
+    await expect(fs.access(path.join(root, "Sections", "01-intro.tex"))).resolves.toBeUndefined();
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toContain("\\subfile{Sections/01-intro}");
   });
 
   it("cleans root build artifacts while preserving PDFs", async () => {

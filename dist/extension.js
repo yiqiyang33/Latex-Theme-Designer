@@ -30,11 +30,487 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// src/stylePresets.ts
+var STYLE_PRESET_DEFINITIONS;
+var init_stylePresets = __esm({
+  "src/stylePresets.ts"() {
+    "use strict";
+    STYLE_PRESET_DEFINITIONS = [
+      {
+        id: "default",
+        label: "Default",
+        description: "Balanced slate document colors with the built-in theorem and inline styles.",
+        block_source: "default",
+        heading_source: "default",
+        colors: {
+          "theme-chapter": "#1F2937",
+          "theme-section": "#334155",
+          "theme-subsection": "#486581",
+          "theme-toc-title": "#1F2937",
+          "theme-toc-chapter": "#334155",
+          "theme-toc-section": "#486581",
+          "theme-header-rule": "#94A3B8",
+          "theme-bold": "#334155",
+          "inline-key-fg": "#2F6F73",
+          "inline-term-bg": "#EBF5F4",
+          "inline-term-fg": "#245E62",
+          "inline-warn-fg": "#8A5A24",
+          "inline-todo-bg": "#FFF4CF",
+          "inline-todo-fg": "#6F5517",
+          "inline-code-bg": "#F1F4F6",
+          "inline-code-fg": "#2D3742",
+          "sidenote-fg": "#5A6570",
+          "sidenote-accent": "#8AA0B2",
+          "chapter-overview-bg": "#F5F7FA",
+          "chapter-overview-title-bg": "#E3EAF2",
+          "chapter-overview-title-fg": "#2F4050",
+          "chapter-overview-accent": "#6F879C",
+          "definition-body-bg": "#F4F8F7",
+          "definition-title-bg": "#E1EEEC",
+          "definition-title-fg": "#234A48",
+          "definition-accent": "#5D8D87",
+          "theorem-body-bg": "#F3F7FB",
+          "theorem-title-bg": "#DFEAF5",
+          "theorem-title-fg": "#244761",
+          "theorem-accent": "#5B7FA2",
+          "lemma-body-bg": "#F7F5FB",
+          "lemma-title-bg": "#E8E2F1",
+          "lemma-title-fg": "#463B5E",
+          "lemma-accent": "#7A6B9A",
+          "corollary-body-bg": "#FBF7F1",
+          "corollary-title-bg": "#F0E4D2",
+          "corollary-title-fg": "#5B4730",
+          "corollary-accent": "#9B7A4A",
+          "proposition-body-bg": "#F8F8F1",
+          "proposition-title-bg": "#E9EAD8",
+          "proposition-title-fg": "#4E5433",
+          "proposition-accent": "#87905E",
+          "claim-body-bg": "#FBF4F4",
+          "claim-title-bg": "#F0DEDE",
+          "claim-title-fg": "#633F3F",
+          "claim-accent": "#9C6A6A",
+          "fact-body-bg": "#F5F6FA",
+          "fact-title-bg": "#E2E6F0",
+          "fact-title-fg": "#34405C",
+          "fact-accent": "#6B7898",
+          "assumption-body-bg": "#FBF8EF",
+          "assumption-title-bg": "#EEE5CD",
+          "assumption-title-fg": "#5F5133",
+          "assumption-accent": "#9A8555",
+          "note-bg": "#F5F7FA",
+          "note-title-bg": "#E4EBF2",
+          "note-title-fg": "#2F4050",
+          "note-accent": "#6F879C",
+          "note-frame": "#D9E1EA",
+          "example-bg": "#F4F8F7",
+          "example-label-fg": "#2C5A57",
+          "example-accent": "#5D8D87",
+          "remark-bg": "#F5F7FA",
+          "remark-label-fg": "#40576A",
+          "remark-inline-fg": "#3F6F9F",
+          "remark-accent": "#6F879C",
+          "assump-bg": "#FBF8EF",
+          "assump-label-fg": "#5F5133",
+          "assump-accent": "#9A8555",
+          "insight-bg": "#F1F8F6",
+          "insight-label-fg": "#2E625B",
+          "insight-accent": "#3F7D73",
+          "pitfall-bg": "#FBF4F4",
+          "pitfall-label-fg": "#633F3F",
+          "pitfall-accent": "#9C6A6A",
+          "intuition-bg": "#F7F5FB",
+          "intuition-label-fg": "#463B5E",
+          "intuition-accent": "#7A6B9A",
+          "summary-bg": "#F5F7FA",
+          "summary-label-fg": "#40576A",
+          "summary-accent": "#6F879C",
+          "question-bg": "#FBF8EF",
+          "question-label-fg": "#5F5133",
+          "question-accent": "#9A8555"
+        }
+      },
+      {
+        id: "midnight",
+        label: "Midnight",
+        description: "Cool high-contrast blues for focused technical notes.",
+        block_source: "midnight",
+        heading_source: "inkstone",
+        colors: {
+          "theme-chapter": "#1F2A44",
+          "theme-section": "#273B66",
+          "theme-subsection": "#35589A",
+          "theme-toc-title": "#1E2D53",
+          "theme-toc-chapter": "#243A6A",
+          "theme-toc-section": "#4465A8",
+          "theme-header-rule": "#1B2948",
+          "theme-bold": "#273B66",
+          "inline-key-fg": "#2952A3",
+          "inline-term-bg": "#EAF2FF",
+          "inline-term-fg": "#0F2A5F",
+          "inline-warn-fg": "#9A4155",
+          "inline-todo-bg": "#FFF8E8",
+          "inline-todo-fg": "#5E4A14",
+          "inline-code-bg": "#F1F0F8",
+          "inline-code-fg": "#2D234A",
+          "sidenote-fg": "#1B2562",
+          "sidenote-accent": "#3342A8",
+          "chapter-overview-bg": "#EEF2FF",
+          "chapter-overview-title-bg": "#CFD7FF",
+          "chapter-overview-title-fg": "#1B2562",
+          "chapter-overview-accent": "#3342A8",
+          "definition-body-bg": "#EAF2FF",
+          "definition-title-bg": "#C8DAFF",
+          "definition-title-fg": "#0F2A5F",
+          "definition-accent": "#2952A3",
+          "theorem-body-bg": "#E6F9FF",
+          "theorem-title-bg": "#B8EBF7",
+          "theorem-title-fg": "#0D4A5A",
+          "theorem-accent": "#1B7286",
+          "lemma-body-bg": "#F5ECFF",
+          "lemma-title-bg": "#DEC8F8",
+          "lemma-title-fg": "#45226E",
+          "lemma-accent": "#6A3CA0",
+          "corollary-body-bg": "#FFF4E5",
+          "corollary-title-bg": "#F9D7A8",
+          "corollary-title-fg": "#6B3D00",
+          "corollary-accent": "#A65A00",
+          "proposition-body-bg": "#F7F8E8",
+          "proposition-title-bg": "#E6E9B5",
+          "proposition-title-fg": "#5C5E1A",
+          "proposition-accent": "#8A8D2B",
+          "claim-body-bg": "#FFF1F3",
+          "claim-title-bg": "#F8CDD5",
+          "claim-title-fg": "#612532",
+          "claim-accent": "#9A4155",
+          "fact-body-bg": "#F1F0F8",
+          "fact-title-bg": "#D5D1EB",
+          "fact-title-fg": "#2D234A",
+          "fact-accent": "#5A4E88",
+          "assumption-body-bg": "#FFF8E8",
+          "assumption-title-bg": "#F2E2B5",
+          "assumption-title-fg": "#5E4A14",
+          "assumption-accent": "#927320",
+          "note-bg": "#EEF2FF",
+          "note-title-bg": "#CFD7FF",
+          "note-title-fg": "#1B2562",
+          "note-accent": "#3342A8",
+          "note-frame": "#B8C3FF",
+          "example-bg": "#E8FAFA",
+          "example-label-fg": "#0F6E70",
+          "example-accent": "#19989B",
+          "remark-bg": "#F0F4FF",
+          "remark-label-fg": "#233B88",
+          "remark-inline-fg": "#2B4AB0",
+          "remark-accent": "#3D56C2",
+          "assump-bg": "#FFF9E9",
+          "assump-label-fg": "#6B5B1F",
+          "assump-accent": "#A0801A",
+          "insight-bg": "#E8FAFA",
+          "insight-label-fg": "#0F6E70",
+          "insight-accent": "#19989B",
+          "pitfall-bg": "#FFF1F3",
+          "pitfall-label-fg": "#612532",
+          "pitfall-accent": "#9A4155",
+          "intuition-bg": "#F5ECFF",
+          "intuition-label-fg": "#45226E",
+          "intuition-accent": "#6A3CA0",
+          "summary-bg": "#F1F0F8",
+          "summary-label-fg": "#2D234A",
+          "summary-accent": "#5A4E88",
+          "question-bg": "#FFF8E8",
+          "question-label-fg": "#5E4A14",
+          "question-accent": "#927320"
+        }
+      },
+      {
+        id: "meadow",
+        label: "Meadow",
+        description: "Soft green-blue blocks with calm earth-tone accents.",
+        block_source: "meadow",
+        heading_source: "aurora",
+        colors: {
+          "theme-chapter": "#0E5A61",
+          "theme-section": "#12727E",
+          "theme-subsection": "#2F94A3",
+          "theme-toc-title": "#0F6169",
+          "theme-toc-chapter": "#107681",
+          "theme-toc-section": "#2C8D99",
+          "theme-header-rule": "#0D4A50",
+          "theme-bold": "#12727E",
+          "inline-key-fg": "#2F7A55",
+          "inline-term-bg": "#ECF8F1",
+          "inline-term-fg": "#1E4A34",
+          "inline-warn-fg": "#A14C43",
+          "inline-todo-bg": "#FFF9EA",
+          "inline-todo-fg": "#64531B",
+          "inline-code-bg": "#F3F2FA",
+          "inline-code-fg": "#342A59",
+          "sidenote-fg": "#1F4A3D",
+          "sidenote-accent": "#2F7C64",
+          "chapter-overview-bg": "#EEF8F5",
+          "chapter-overview-title-bg": "#D4ECE4",
+          "chapter-overview-title-fg": "#1F4A3D",
+          "chapter-overview-accent": "#2F7C64",
+          "definition-body-bg": "#ECF8F1",
+          "definition-title-bg": "#CDECDC",
+          "definition-title-fg": "#1E4A34",
+          "definition-accent": "#2F7A55",
+          "theorem-body-bg": "#ECF7F9",
+          "theorem-title-bg": "#CBE9F0",
+          "theorem-title-fg": "#174452",
+          "theorem-accent": "#2B7084",
+          "lemma-body-bg": "#F2F0FA",
+          "lemma-title-bg": "#DCCFF3",
+          "lemma-title-fg": "#3F2D66",
+          "lemma-accent": "#6945A6",
+          "corollary-body-bg": "#FFF6E9",
+          "corollary-title-bg": "#F8DBB3",
+          "corollary-title-fg": "#6A4210",
+          "corollary-accent": "#A0631C",
+          "proposition-body-bg": "#F6F7E9",
+          "proposition-title-bg": "#E2E7BD",
+          "proposition-title-fg": "#4B5421",
+          "proposition-accent": "#748233",
+          "claim-body-bg": "#FFF1F0",
+          "claim-title-bg": "#F9D3CF",
+          "claim-title-fg": "#6A2F2A",
+          "claim-accent": "#A14C43",
+          "fact-body-bg": "#F3F2FA",
+          "fact-title-bg": "#DCD6F0",
+          "fact-title-fg": "#342A59",
+          "fact-accent": "#5B4B8C",
+          "assumption-body-bg": "#FFF9EA",
+          "assumption-title-bg": "#F4E5BF",
+          "assumption-title-fg": "#64531B",
+          "assumption-accent": "#9A7A29",
+          "note-bg": "#EEF8F5",
+          "note-title-bg": "#D4ECE4",
+          "note-title-fg": "#1F4A3D",
+          "note-accent": "#2F7C64",
+          "note-frame": "#B8DDD1",
+          "example-bg": "#EBFAF6",
+          "example-label-fg": "#1F6D5F",
+          "example-accent": "#2D9E8A",
+          "remark-bg": "#EEF4FB",
+          "remark-label-fg": "#294A78",
+          "remark-inline-fg": "#2F5A90",
+          "remark-accent": "#3E6FB0",
+          "assump-bg": "#F9FCEB",
+          "assump-label-fg": "#5E6827",
+          "assump-accent": "#8B9A33",
+          "insight-bg": "#EBFAF6",
+          "insight-label-fg": "#1F6D5F",
+          "insight-accent": "#2D9E8A",
+          "pitfall-bg": "#FFF1F0",
+          "pitfall-label-fg": "#6A2F2A",
+          "pitfall-accent": "#A14C43",
+          "intuition-bg": "#F2F0FA",
+          "intuition-label-fg": "#3F2D66",
+          "intuition-accent": "#6945A6",
+          "summary-bg": "#F3F2FA",
+          "summary-label-fg": "#342A59",
+          "summary-accent": "#5B4B8C",
+          "question-bg": "#FFF9EA",
+          "question-label-fg": "#64531B",
+          "question-accent": "#9A7A29"
+        }
+      },
+      {
+        id: "ember",
+        label: "Ember",
+        description: "Warm rust, amber, rose, and plum contrast.",
+        block_source: "ember",
+        heading_source: "sunset",
+        colors: {
+          "theme-chapter": "#8A2E3B",
+          "theme-section": "#A3422E",
+          "theme-subsection": "#C26C2A",
+          "theme-toc-title": "#7A2A36",
+          "theme-toc-chapter": "#954137",
+          "theme-toc-section": "#B66232",
+          "theme-header-rule": "#6F2D33",
+          "theme-bold": "#A3422E",
+          "inline-key-fg": "#9A4B33",
+          "inline-term-bg": "#FFF3EE",
+          "inline-term-fg": "#5F2D1F",
+          "inline-warn-fg": "#A44C33",
+          "inline-todo-bg": "#FFF8EF",
+          "inline-todo-fg": "#6A4C20",
+          "inline-code-bg": "#F2F3FD",
+          "inline-code-fg": "#2C356D",
+          "sidenote-fg": "#3F2A66",
+          "sidenote-accent": "#6243A3",
+          "chapter-overview-bg": "#F8F2FF",
+          "chapter-overview-title-bg": "#E4D7F9",
+          "chapter-overview-title-fg": "#3F2A66",
+          "chapter-overview-accent": "#6243A3",
+          "definition-body-bg": "#FFF3EE",
+          "definition-title-bg": "#F7D4C7",
+          "definition-title-fg": "#5F2D1F",
+          "definition-accent": "#9A4B33",
+          "theorem-body-bg": "#FFF7EC",
+          "theorem-title-bg": "#F8DEB9",
+          "theorem-title-fg": "#664110",
+          "theorem-accent": "#A56A1E",
+          "lemma-body-bg": "#F9F0FF",
+          "lemma-title-bg": "#E7D2F6",
+          "lemma-title-fg": "#4F2D67",
+          "lemma-accent": "#7B49A2",
+          "corollary-body-bg": "#FFF1F4",
+          "corollary-title-bg": "#F8CFD8",
+          "corollary-title-fg": "#652536",
+          "corollary-accent": "#A0455C",
+          "proposition-body-bg": "#FDF5E9",
+          "proposition-title-bg": "#F0DDBD",
+          "proposition-title-fg": "#5F481F",
+          "proposition-accent": "#967034",
+          "claim-body-bg": "#FFF0EB",
+          "claim-title-bg": "#F8CEC0",
+          "claim-title-fg": "#6A2C1D",
+          "claim-accent": "#A44C33",
+          "fact-body-bg": "#F2F3FD",
+          "fact-title-bg": "#D8DCF7",
+          "fact-title-fg": "#2C356D",
+          "fact-accent": "#4657B5",
+          "assumption-body-bg": "#FFF8EF",
+          "assumption-title-bg": "#F5E3C6",
+          "assumption-title-fg": "#6A4C20",
+          "assumption-accent": "#A7782D",
+          "note-bg": "#F8F2FF",
+          "note-title-bg": "#E4D7F9",
+          "note-title-fg": "#3F2A66",
+          "note-accent": "#6243A3",
+          "note-frame": "#CDBBEA",
+          "example-bg": "#FFF9EF",
+          "example-label-fg": "#7A4B13",
+          "example-accent": "#B4711A",
+          "remark-bg": "#FFF2F1",
+          "remark-label-fg": "#7A3030",
+          "remark-inline-fg": "#A04242",
+          "remark-accent": "#C55A50",
+          "assump-bg": "#FFF8E9",
+          "assump-label-fg": "#6C5A20",
+          "assump-accent": "#A58625",
+          "insight-bg": "#FFF9EF",
+          "insight-label-fg": "#7A4B13",
+          "insight-accent": "#B4711A",
+          "pitfall-bg": "#FFF0EB",
+          "pitfall-label-fg": "#6A2C1D",
+          "pitfall-accent": "#A44C33",
+          "intuition-bg": "#F9F0FF",
+          "intuition-label-fg": "#4F2D67",
+          "intuition-accent": "#7B49A2",
+          "summary-bg": "#F2F3FD",
+          "summary-label-fg": "#2C356D",
+          "summary-accent": "#4657B5",
+          "question-bg": "#FFF8EF",
+          "question-label-fg": "#6A4C20",
+          "question-accent": "#A7782D"
+        }
+      },
+      {
+        id: "uchicago",
+        label: "UChicago",
+        description: "Maroon-forward colors with greystone contrast.",
+        block_source: "uchicago",
+        heading_source: "uchicago",
+        colors: {
+          "theme-chapter": "#800000",
+          "theme-section": "#800000",
+          "theme-subsection": "#737373",
+          "theme-toc-title": "#800000",
+          "theme-toc-chapter": "#800000",
+          "theme-toc-section": "#737373",
+          "theme-header-rule": "#A6A6A6",
+          "theme-bold": "#800000",
+          "inline-key-fg": "#800000",
+          "inline-term-bg": "#F6F4F2",
+          "inline-term-fg": "#800000",
+          "inline-warn-fg": "#800000",
+          "inline-todo-bg": "#F8F1F0",
+          "inline-todo-fg": "#800000",
+          "inline-code-bg": "#F2F2F2",
+          "inline-code-fg": "#4A4A4A",
+          "sidenote-fg": "#737373",
+          "sidenote-accent": "#800000",
+          "chapter-overview-bg": "#F7F6F5",
+          "chapter-overview-title-bg": "#D9D9D9",
+          "chapter-overview-title-fg": "#800000",
+          "chapter-overview-accent": "#800000",
+          "definition-body-bg": "#F7F6F5",
+          "definition-title-bg": "#E5DEDA",
+          "definition-title-fg": "#800000",
+          "definition-accent": "#800000",
+          "theorem-body-bg": "#F6F4F2",
+          "theorem-title-bg": "#E6DAD7",
+          "theorem-title-fg": "#800000",
+          "theorem-accent": "#800000",
+          "lemma-body-bg": "#F7F7F7",
+          "lemma-title-bg": "#D9D9D9",
+          "lemma-title-fg": "#4A4A4A",
+          "lemma-accent": "#737373",
+          "corollary-body-bg": "#FAF7F5",
+          "corollary-title-bg": "#E8DDD8",
+          "corollary-title-fg": "#6A1B1B",
+          "corollary-accent": "#800000",
+          "proposition-body-bg": "#F7F7F7",
+          "proposition-title-bg": "#E0E0E0",
+          "proposition-title-fg": "#4D4D4D",
+          "proposition-accent": "#737373",
+          "claim-body-bg": "#FBF5F5",
+          "claim-title-bg": "#E8D6D6",
+          "claim-title-fg": "#800000",
+          "claim-accent": "#800000",
+          "fact-body-bg": "#F6F6F6",
+          "fact-title-bg": "#D9D9D9",
+          "fact-title-fg": "#4B4B4B",
+          "fact-accent": "#A6A6A6",
+          "assumption-body-bg": "#FAF8F4",
+          "assumption-title-bg": "#E3DDD4",
+          "assumption-title-fg": "#5A4738",
+          "assumption-accent": "#737373",
+          "note-bg": "#F6F6F6",
+          "note-title-bg": "#D9D9D9",
+          "note-title-fg": "#4A4A4A",
+          "note-accent": "#800000",
+          "note-frame": "#A6A6A6",
+          "example-bg": "#F7F6F5",
+          "example-label-fg": "#800000",
+          "example-accent": "#800000",
+          "remark-bg": "#F7F7F7",
+          "remark-label-fg": "#4A4A4A",
+          "remark-inline-fg": "#800000",
+          "remark-accent": "#737373",
+          "assump-bg": "#FAF8F4",
+          "assump-label-fg": "#5A4738",
+          "assump-accent": "#737373",
+          "insight-bg": "#F7F6F5",
+          "insight-label-fg": "#800000",
+          "insight-accent": "#800000",
+          "pitfall-bg": "#FBF5F5",
+          "pitfall-label-fg": "#800000",
+          "pitfall-accent": "#800000",
+          "intuition-bg": "#F7F7F7",
+          "intuition-label-fg": "#4A4A4A",
+          "intuition-accent": "#737373",
+          "summary-bg": "#F6F6F6",
+          "summary-label-fg": "#4A4A4A",
+          "summary-accent": "#A6A6A6",
+          "question-bg": "#FAF8F4",
+          "question-label-fg": "#5A4738",
+          "question-accent": "#737373"
+        }
+      }
+    ];
+  }
+});
+
 // src/schema.ts
-var TOGGLE_SCHEMA, CLASS_CONFIG_SCHEMA, COLOR_GROUPS, COLOR_ORDER, COLOR_SET, TOGGLE_IDS, CLASS_CONFIG_IDS, CLASS_CONFIG_COMMANDS, CLASS_CONFIG_DEFAULTS, CLASS_CONFIG_VALID_OPTIONS, BODY_FONT_SIZE_CONFIG, STYLE_PRESET_METADATA, DOCUMENT_COLOR_TOKENS, INLINE_COLOR_TOKENS, BLOCK_COLOR_TOKENS, STARTER_TEMPLATE_DEFINITIONS, CHAPTER_CLASS_NAMES, BLOCK_PRESET_DEFINITIONS, HEADING_TOC_PRESET_DEFINITIONS, DEFAULT_STYLE_COLORS, STYLE_SUPPORT_COLOR_SOURCES, STYLE_PRESET_DEFINITIONS;
+var TOGGLE_SCHEMA, CLASS_CONFIG_SCHEMA, COLOR_GROUPS, COLOR_ORDER, COLOR_SET, TOGGLE_IDS, CLASS_CONFIG_IDS, CLASS_CONFIG_COMMANDS, CLASS_CONFIG_DEFAULTS, CLASS_CONFIG_VALID_OPTIONS, BODY_FONT_SIZE_CONFIG, STARTER_TEMPLATE_DEFINITIONS, CHAPTER_CLASS_NAMES;
 var init_schema = __esm({
   "src/schema.ts"() {
     "use strict";
+    init_stylePresets();
     TOGGLE_SCHEMA = [
       { id: "enable_heading_theme", command: "EnableHeadingTheme", label: "Heading Theme", help: "Style chapter/section/subsection headings." },
       { id: "enable_toc_theme", command: "EnableTOCTheme", label: "TOC Theme", help: "Style table of contents typography and spacing." },
@@ -203,444 +679,12 @@ var init_schema = __esm({
       step: 0.5,
       default: 10
     };
-    STYLE_PRESET_METADATA = [
-      {
-        id: "default",
-        label: "Default",
-        description: "Balanced slate document colors with the built-in theorem and inline styles.",
-        block_source: "default",
-        heading_source: "default",
-        bold_color: "#334155"
-      },
-      {
-        id: "midnight",
-        label: "Midnight",
-        description: "Cool high-contrast blues for focused technical notes.",
-        block_source: "midnight",
-        heading_source: "inkstone",
-        bold_color: "#273B66"
-      },
-      {
-        id: "meadow",
-        label: "Meadow",
-        description: "Soft green-blue blocks with calm earth-tone accents.",
-        block_source: "meadow",
-        heading_source: "aurora",
-        bold_color: "#12727E"
-      },
-      {
-        id: "ember",
-        label: "Ember",
-        description: "Warm rust, amber, rose, and plum contrast.",
-        block_source: "ember",
-        heading_source: "sunset",
-        bold_color: "#A3422E"
-      },
-      {
-        id: "uchicago",
-        label: "UChicago",
-        description: "Maroon-forward colors with greystone contrast.",
-        block_source: "uchicago",
-        heading_source: "uchicago",
-        bold_color: "#800000"
-      }
-    ];
-    DOCUMENT_COLOR_TOKENS = COLOR_ORDER.filter((token) => token.startsWith("theme-"));
-    INLINE_COLOR_TOKENS = COLOR_ORDER.filter((token) => token.startsWith("inline-"));
-    BLOCK_COLOR_TOKENS = COLOR_ORDER.filter((token) => !token.startsWith("theme-") && !INLINE_COLOR_TOKENS.includes(token));
     STARTER_TEMPLATE_DEFINITIONS = [
       { id: "book-minimal", label: "Book Minimal", description: "Minimal book starter wired to theme.sty and theorem blocks.", filename: "book-minimal.tex" },
       { id: "article-minimal", label: "Article Minimal", description: "Minimal article starter wired to theme.sty and theorem blocks.", filename: "article-minimal.tex" },
       { id: "homework-assignment", label: "Homework Assignment", description: "Formal homework starter with problem, part, and solution environments.", filename: "homework-assignment.tex" }
     ];
     CHAPTER_CLASS_NAMES = /* @__PURE__ */ new Set(["book", "report", "memoir", "scrbook", "scrreprt", "ctexbook", "ctexrep", "bxjsbook"]);
-    BLOCK_PRESET_DEFINITIONS = [
-      { id: "default", label: "Default", description: "Current built-in theorem/callout palette from theme.sty." },
-      {
-        id: "midnight",
-        label: "Midnight",
-        description: "Cool, high-contrast palette for theorem and callout blocks.",
-        colors: {
-          "definition-body-bg": "#EAF2FF",
-          "definition-title-bg": "#C8DAFF",
-          "definition-title-fg": "#0F2A5F",
-          "definition-accent": "#2952A3",
-          "theorem-body-bg": "#E6F9FF",
-          "theorem-title-bg": "#B8EBF7",
-          "theorem-title-fg": "#0D4A5A",
-          "theorem-accent": "#1B7286",
-          "lemma-body-bg": "#F5ECFF",
-          "lemma-title-bg": "#DEC8F8",
-          "lemma-title-fg": "#45226E",
-          "lemma-accent": "#6A3CA0",
-          "corollary-body-bg": "#FFF4E5",
-          "corollary-title-bg": "#F9D7A8",
-          "corollary-title-fg": "#6B3D00",
-          "corollary-accent": "#A65A00",
-          "proposition-body-bg": "#F7F8E8",
-          "proposition-title-bg": "#E6E9B5",
-          "proposition-title-fg": "#5C5E1A",
-          "proposition-accent": "#8A8D2B",
-          "claim-body-bg": "#FFF1F3",
-          "claim-title-bg": "#F8CDD5",
-          "claim-title-fg": "#612532",
-          "claim-accent": "#9A4155",
-          "fact-body-bg": "#F1F0F8",
-          "fact-title-bg": "#D5D1EB",
-          "fact-title-fg": "#2D234A",
-          "fact-accent": "#5A4E88",
-          "assumption-body-bg": "#FFF8E8",
-          "assumption-title-bg": "#F2E2B5",
-          "assumption-title-fg": "#5E4A14",
-          "assumption-accent": "#927320",
-          "note-bg": "#EEF2FF",
-          "note-title-bg": "#CFD7FF",
-          "note-title-fg": "#1B2562",
-          "note-accent": "#3342A8",
-          "note-frame": "#B8C3FF",
-          "example-bg": "#E8FAFA",
-          "example-label-fg": "#0F6E70",
-          "example-accent": "#19989B",
-          "remark-bg": "#F0F4FF",
-          "remark-label-fg": "#233B88",
-          "remark-inline-fg": "#2B4AB0",
-          "remark-accent": "#3D56C2",
-          "assump-bg": "#FFF9E9",
-          "assump-label-fg": "#6B5B1F",
-          "assump-accent": "#A0801A"
-        }
-      },
-      {
-        id: "meadow",
-        label: "Meadow",
-        description: "Soft green-blue palette with calm earth-tone accents.",
-        colors: {
-          "definition-body-bg": "#ECF8F1",
-          "definition-title-bg": "#CDECDC",
-          "definition-title-fg": "#1E4A34",
-          "definition-accent": "#2F7A55",
-          "theorem-body-bg": "#ECF7F9",
-          "theorem-title-bg": "#CBE9F0",
-          "theorem-title-fg": "#174452",
-          "theorem-accent": "#2B7084",
-          "lemma-body-bg": "#F2F0FA",
-          "lemma-title-bg": "#DCCFF3",
-          "lemma-title-fg": "#3F2D66",
-          "lemma-accent": "#6945A6",
-          "corollary-body-bg": "#FFF6E9",
-          "corollary-title-bg": "#F8DBB3",
-          "corollary-title-fg": "#6A4210",
-          "corollary-accent": "#A0631C",
-          "proposition-body-bg": "#F6F7E9",
-          "proposition-title-bg": "#E2E7BD",
-          "proposition-title-fg": "#4B5421",
-          "proposition-accent": "#748233",
-          "claim-body-bg": "#FFF1F0",
-          "claim-title-bg": "#F9D3CF",
-          "claim-title-fg": "#6A2F2A",
-          "claim-accent": "#A14C43",
-          "fact-body-bg": "#F3F2FA",
-          "fact-title-bg": "#DCD6F0",
-          "fact-title-fg": "#342A59",
-          "fact-accent": "#5B4B8C",
-          "assumption-body-bg": "#FFF9EA",
-          "assumption-title-bg": "#F4E5BF",
-          "assumption-title-fg": "#64531B",
-          "assumption-accent": "#9A7A29",
-          "note-bg": "#EEF8F5",
-          "note-title-bg": "#D4ECE4",
-          "note-title-fg": "#1F4A3D",
-          "note-accent": "#2F7C64",
-          "note-frame": "#B8DDD1",
-          "example-bg": "#EBFAF6",
-          "example-label-fg": "#1F6D5F",
-          "example-accent": "#2D9E8A",
-          "remark-bg": "#EEF4FB",
-          "remark-label-fg": "#294A78",
-          "remark-inline-fg": "#2F5A90",
-          "remark-accent": "#3E6FB0",
-          "assump-bg": "#F9FCEB",
-          "assump-label-fg": "#5E6827",
-          "assump-accent": "#8B9A33"
-        }
-      },
-      {
-        id: "ember",
-        label: "Ember",
-        description: "Warm sunset palette with rose, amber, and plum contrast.",
-        colors: {
-          "definition-body-bg": "#FFF3EE",
-          "definition-title-bg": "#F7D4C7",
-          "definition-title-fg": "#5F2D1F",
-          "definition-accent": "#9A4B33",
-          "theorem-body-bg": "#FFF7EC",
-          "theorem-title-bg": "#F8DEB9",
-          "theorem-title-fg": "#664110",
-          "theorem-accent": "#A56A1E",
-          "lemma-body-bg": "#F9F0FF",
-          "lemma-title-bg": "#E7D2F6",
-          "lemma-title-fg": "#4F2D67",
-          "lemma-accent": "#7B49A2",
-          "corollary-body-bg": "#FFF1F4",
-          "corollary-title-bg": "#F8CFD8",
-          "corollary-title-fg": "#652536",
-          "corollary-accent": "#A0455C",
-          "proposition-body-bg": "#FDF5E9",
-          "proposition-title-bg": "#F0DDBD",
-          "proposition-title-fg": "#5F481F",
-          "proposition-accent": "#967034",
-          "claim-body-bg": "#FFF0EB",
-          "claim-title-bg": "#F8CEC0",
-          "claim-title-fg": "#6A2C1D",
-          "claim-accent": "#A44C33",
-          "fact-body-bg": "#F2F3FD",
-          "fact-title-bg": "#D8DCF7",
-          "fact-title-fg": "#2C356D",
-          "fact-accent": "#4657B5",
-          "assumption-body-bg": "#FFF8EF",
-          "assumption-title-bg": "#F5E3C6",
-          "assumption-title-fg": "#6A4C20",
-          "assumption-accent": "#A7782D",
-          "note-bg": "#F8F2FF",
-          "note-title-bg": "#E4D7F9",
-          "note-title-fg": "#3F2A66",
-          "note-accent": "#6243A3",
-          "note-frame": "#CDBBEA",
-          "example-bg": "#FFF9EF",
-          "example-label-fg": "#7A4B13",
-          "example-accent": "#B4711A",
-          "remark-bg": "#FFF2F1",
-          "remark-label-fg": "#7A3030",
-          "remark-inline-fg": "#A04242",
-          "remark-accent": "#C55A50",
-          "assump-bg": "#FFF8E9",
-          "assump-label-fg": "#6C5A20",
-          "assump-accent": "#A58625"
-        }
-      },
-      {
-        id: "uchicago",
-        label: "UChicago",
-        description: "Maroon-forward palette with greystone neutrals for University of Chicago styled notes.",
-        colors: {
-          "inline-key-fg": "#800000",
-          "inline-term-bg": "#F6F4F2",
-          "inline-term-fg": "#800000",
-          "inline-warn-fg": "#800000",
-          "inline-todo-bg": "#F8F1F0",
-          "inline-todo-fg": "#800000",
-          "inline-code-bg": "#F2F2F2",
-          "inline-code-fg": "#4A4A4A",
-          "sidenote-fg": "#737373",
-          "sidenote-accent": "#800000",
-          "chapter-overview-bg": "#F7F6F5",
-          "chapter-overview-title-bg": "#D9D9D9",
-          "chapter-overview-title-fg": "#800000",
-          "chapter-overview-accent": "#800000",
-          "definition-body-bg": "#F7F6F5",
-          "definition-title-bg": "#E5DEDA",
-          "definition-title-fg": "#800000",
-          "definition-accent": "#800000",
-          "theorem-body-bg": "#F6F4F2",
-          "theorem-title-bg": "#E6DAD7",
-          "theorem-title-fg": "#800000",
-          "theorem-accent": "#800000",
-          "lemma-body-bg": "#F7F7F7",
-          "lemma-title-bg": "#D9D9D9",
-          "lemma-title-fg": "#4A4A4A",
-          "lemma-accent": "#737373",
-          "corollary-body-bg": "#FAF7F5",
-          "corollary-title-bg": "#E8DDD8",
-          "corollary-title-fg": "#6A1B1B",
-          "corollary-accent": "#800000",
-          "proposition-body-bg": "#F7F7F7",
-          "proposition-title-bg": "#E0E0E0",
-          "proposition-title-fg": "#4D4D4D",
-          "proposition-accent": "#737373",
-          "claim-body-bg": "#FBF5F5",
-          "claim-title-bg": "#E8D6D6",
-          "claim-title-fg": "#800000",
-          "claim-accent": "#800000",
-          "fact-body-bg": "#F6F6F6",
-          "fact-title-bg": "#D9D9D9",
-          "fact-title-fg": "#4B4B4B",
-          "fact-accent": "#A6A6A6",
-          "assumption-body-bg": "#FAF8F4",
-          "assumption-title-bg": "#E3DDD4",
-          "assumption-title-fg": "#5A4738",
-          "assumption-accent": "#737373",
-          "note-bg": "#F6F6F6",
-          "note-title-bg": "#D9D9D9",
-          "note-title-fg": "#4A4A4A",
-          "note-accent": "#800000",
-          "note-frame": "#A6A6A6",
-          "example-bg": "#F7F6F5",
-          "example-label-fg": "#800000",
-          "example-accent": "#800000",
-          "remark-bg": "#F7F7F7",
-          "remark-label-fg": "#4A4A4A",
-          "remark-inline-fg": "#800000",
-          "remark-accent": "#737373",
-          "assump-bg": "#FAF8F4",
-          "assump-label-fg": "#5A4738",
-          "assump-accent": "#737373",
-          "insight-bg": "#F7F6F5",
-          "insight-label-fg": "#800000",
-          "insight-accent": "#800000",
-          "pitfall-bg": "#FBF5F5",
-          "pitfall-label-fg": "#800000",
-          "pitfall-accent": "#800000",
-          "intuition-bg": "#F7F7F7",
-          "intuition-label-fg": "#4A4A4A",
-          "intuition-accent": "#737373",
-          "summary-bg": "#F6F6F6",
-          "summary-label-fg": "#4A4A4A",
-          "summary-accent": "#A6A6A6",
-          "question-bg": "#FAF8F4",
-          "question-label-fg": "#5A4738",
-          "question-accent": "#737373"
-        }
-      }
-    ];
-    HEADING_TOC_PRESET_DEFINITIONS = [
-      { id: "default", label: "Default", description: "Current built-in heading/TOC palette from theme.sty." },
-      { id: "inkstone", label: "Inkstone", description: "Deep indigo heading palette with restrained TOC contrast.", colors: { "theme-chapter": "#1F2A44", "theme-section": "#273B66", "theme-subsection": "#35589A", "theme-toc-title": "#1E2D53", "theme-toc-chapter": "#243A6A", "theme-toc-section": "#4465A8", "theme-header-rule": "#1B2948" } },
-      { id: "aurora", label: "Aurora", description: "Cool teal-forward scheme for modern notes and reports.", colors: { "theme-chapter": "#0E5A61", "theme-section": "#12727E", "theme-subsection": "#2F94A3", "theme-toc-title": "#0F6169", "theme-toc-chapter": "#107681", "theme-toc-section": "#2C8D99", "theme-header-rule": "#0D4A50" } },
-      { id: "sunset", label: "Sunset", description: "Warm rust and amber hierarchy for chapter and TOC headings.", colors: { "theme-chapter": "#8A2E3B", "theme-section": "#A3422E", "theme-subsection": "#C26C2A", "theme-toc-title": "#7A2A36", "theme-toc-chapter": "#954137", "theme-toc-section": "#B66232", "theme-header-rule": "#6F2D33" } },
-      { id: "uchicago", label: "UChicago", description: "University of Chicago maroon with greystone heading contrast.", colors: { "theme-chapter": "#800000", "theme-section": "#800000", "theme-subsection": "#737373", "theme-toc-title": "#800000", "theme-toc-chapter": "#800000", "theme-toc-section": "#737373", "theme-header-rule": "#A6A6A6" } }
-    ];
-    DEFAULT_STYLE_COLORS = {
-      "theme-chapter": "#1F2937",
-      "theme-section": "#334155",
-      "theme-subsection": "#486581",
-      "theme-toc-title": "#1F2937",
-      "theme-toc-chapter": "#334155",
-      "theme-toc-section": "#486581",
-      "theme-header-rule": "#94A3B8",
-      "theme-bold": "#334155",
-      "inline-key-fg": "#2F6F73",
-      "inline-term-bg": "#EBF5F4",
-      "inline-term-fg": "#245E62",
-      "inline-warn-fg": "#8A5A24",
-      "inline-todo-bg": "#FFF4CF",
-      "inline-todo-fg": "#6F5517",
-      "inline-code-bg": "#F1F4F6",
-      "inline-code-fg": "#2D3742",
-      "sidenote-fg": "#5A6570",
-      "sidenote-accent": "#8AA0B2",
-      "chapter-overview-bg": "#F5F7FA",
-      "chapter-overview-title-bg": "#E3EAF2",
-      "chapter-overview-title-fg": "#2F4050",
-      "chapter-overview-accent": "#6F879C",
-      "definition-body-bg": "#F4F8F7",
-      "definition-title-bg": "#E1EEEC",
-      "definition-title-fg": "#234A48",
-      "definition-accent": "#5D8D87",
-      "theorem-body-bg": "#F3F7FB",
-      "theorem-title-bg": "#DFEAF5",
-      "theorem-title-fg": "#244761",
-      "theorem-accent": "#5B7FA2",
-      "lemma-body-bg": "#F7F5FB",
-      "lemma-title-bg": "#E8E2F1",
-      "lemma-title-fg": "#463B5E",
-      "lemma-accent": "#7A6B9A",
-      "corollary-body-bg": "#FBF7F1",
-      "corollary-title-bg": "#F0E4D2",
-      "corollary-title-fg": "#5B4730",
-      "corollary-accent": "#9B7A4A",
-      "proposition-body-bg": "#F8F8F1",
-      "proposition-title-bg": "#E9EAD8",
-      "proposition-title-fg": "#4E5433",
-      "proposition-accent": "#87905E",
-      "claim-body-bg": "#FBF4F4",
-      "claim-title-bg": "#F0DEDE",
-      "claim-title-fg": "#633F3F",
-      "claim-accent": "#9C6A6A",
-      "fact-body-bg": "#F5F6FA",
-      "fact-title-bg": "#E2E6F0",
-      "fact-title-fg": "#34405C",
-      "fact-accent": "#6B7898",
-      "assumption-body-bg": "#FBF8EF",
-      "assumption-title-bg": "#EEE5CD",
-      "assumption-title-fg": "#5F5133",
-      "assumption-accent": "#9A8555",
-      "note-bg": "#F5F7FA",
-      "note-title-bg": "#E4EBF2",
-      "note-title-fg": "#2F4050",
-      "note-accent": "#6F879C",
-      "note-frame": "#D9E1EA",
-      "example-bg": "#F4F8F7",
-      "example-label-fg": "#2C5A57",
-      "example-accent": "#5D8D87",
-      "remark-bg": "#F5F7FA",
-      "remark-label-fg": "#40576A",
-      "remark-inline-fg": "#3F6F9F",
-      "remark-accent": "#6F879C",
-      "assump-bg": "#FBF8EF",
-      "assump-label-fg": "#5F5133",
-      "assump-accent": "#9A8555",
-      "insight-bg": "#F1F8F6",
-      "insight-label-fg": "#2E625B",
-      "insight-accent": "#3F7D73",
-      "pitfall-bg": "#FBF4F4",
-      "pitfall-label-fg": "#633F3F",
-      "pitfall-accent": "#9C6A6A",
-      "intuition-bg": "#F7F5FB",
-      "intuition-label-fg": "#463B5E",
-      "intuition-accent": "#7A6B9A",
-      "summary-bg": "#F5F7FA",
-      "summary-label-fg": "#40576A",
-      "summary-accent": "#6F879C",
-      "question-bg": "#FBF8EF",
-      "question-label-fg": "#5F5133",
-      "question-accent": "#9A8555"
-    };
-    STYLE_SUPPORT_COLOR_SOURCES = {
-      "inline-key-fg": "definition-accent",
-      "inline-term-bg": "definition-body-bg",
-      "inline-term-fg": "definition-title-fg",
-      "inline-warn-fg": "claim-accent",
-      "inline-todo-bg": "assumption-body-bg",
-      "inline-todo-fg": "assumption-title-fg",
-      "inline-code-bg": "fact-body-bg",
-      "inline-code-fg": "fact-title-fg",
-      "sidenote-fg": "note-title-fg",
-      "sidenote-accent": "note-accent",
-      "chapter-overview-bg": "note-bg",
-      "chapter-overview-title-bg": "note-title-bg",
-      "chapter-overview-title-fg": "note-title-fg",
-      "chapter-overview-accent": "note-accent",
-      "insight-bg": "example-bg",
-      "insight-label-fg": "example-label-fg",
-      "insight-accent": "example-accent",
-      "pitfall-bg": "claim-body-bg",
-      "pitfall-label-fg": "claim-title-fg",
-      "pitfall-accent": "claim-accent",
-      "intuition-bg": "lemma-body-bg",
-      "intuition-label-fg": "lemma-title-fg",
-      "intuition-accent": "lemma-accent",
-      "summary-bg": "fact-body-bg",
-      "summary-label-fg": "fact-title-fg",
-      "summary-accent": "fact-accent",
-      "question-bg": "assumption-body-bg",
-      "question-label-fg": "assumption-title-fg",
-      "question-accent": "assumption-accent"
-    };
-    STYLE_PRESET_DEFINITIONS = STYLE_PRESET_METADATA.map((definition) => {
-      const block = BLOCK_PRESET_DEFINITIONS.find((item) => item.id === definition.block_source);
-      const heading = HEADING_TOC_PRESET_DEFINITIONS.find((item) => item.id === definition.heading_source);
-      const colors = { ...DEFAULT_STYLE_COLORS };
-      Object.assign(colors, block?.colors ?? {});
-      Object.assign(colors, heading?.colors ?? {});
-      if (definition.block_source !== "default") {
-        for (const [target, source] of Object.entries(STYLE_SUPPORT_COLOR_SOURCES)) {
-          if (!(target in (block?.colors ?? {})) && colors[source]) colors[target] = colors[source];
-        }
-      }
-      colors["theme-bold"] = definition.bold_color;
-      for (const token of COLOR_ORDER) colors[token] ??= DEFAULT_STYLE_COLORS[token] ?? "#808080";
-      return { ...definition, colors };
-    });
   }
 });
 
@@ -680,7 +724,7 @@ __export(utils_exports, {
 });
 async function exists(filePath) {
   try {
-    await import_node_fs2.promises.access(filePath);
+    await import_node_fs.promises.access(filePath);
     return true;
   } catch {
     return false;
@@ -688,7 +732,7 @@ async function exists(filePath) {
 }
 async function statOrNull(filePath) {
   try {
-    return await import_node_fs2.promises.stat(filePath);
+    return await import_node_fs.promises.stat(filePath);
   } catch {
     return null;
   }
@@ -697,25 +741,25 @@ function toPosixPath(value) {
   return value.replace(/\\/g, "/");
 }
 function isSubpath(child, parent) {
-  const childResolved = path2.resolve(child);
-  const parentResolved = path2.resolve(parent);
-  const relative3 = path2.relative(parentResolved, childResolved);
-  return relative3 === "" || !!relative3 && !relative3.startsWith("..") && !path2.isAbsolute(relative3);
+  const childResolved = path.resolve(child);
+  const parentResolved = path.resolve(parent);
+  const relative3 = path.relative(parentResolved, childResolved);
+  return relative3 === "" || !!relative3 && !relative3.startsWith("..") && !path.isAbsolute(relative3);
 }
 function workspaceRel(rootDir, absolutePath) {
   if (!isSubpath(absolutePath, rootDir)) {
     throw new Error(`Path is outside workspace: ${absolutePath}`);
   }
-  return toPosixPath(path2.relative(rootDir, absolutePath));
+  return toPosixPath(path.relative(rootDir, absolutePath));
 }
 function resolveWorkspacePath(rootDir, relPath, mustStayInside = true) {
-  if (path2.isAbsolute(relPath)) {
+  if (path.isAbsolute(relPath)) {
     if (mustStayInside && !isSubpath(relPath, rootDir)) {
       throw new Error(`Path is outside workspace: ${relPath}`);
     }
-    return path2.resolve(relPath);
+    return path.resolve(relPath);
   }
-  const resolved = path2.resolve(rootDir, relPath);
+  const resolved = path.resolve(rootDir, relPath);
   if (mustStayInside && !isSubpath(resolved, rootDir)) {
     throw new Error(`Path is outside workspace: ${relPath}`);
   }
@@ -791,16 +835,16 @@ function extractDocumentclassDeclaration(text) {
   return { className: rawClass, options: (match[1] ?? "").trim() };
 }
 async function extractDocumentclassName(texPath, rootDir, visited = /* @__PURE__ */ new Set()) {
-  const resolved = path2.resolve(texPath);
+  const resolved = path.resolve(texPath);
   if (visited.has(resolved)) return "";
   visited.add(resolved);
-  const text = await import_node_fs2.promises.readFile(resolved, "utf8");
+  const text = await import_node_fs.promises.readFile(resolved, "utf8");
   const declaration = extractDocumentclassDeclaration(text);
   if (!declaration) return "";
   if (declaration.className !== "subfiles") return declaration.className;
   const parentRef = declaration.options.split(",")[0]?.trim();
   if (!parentRef) return declaration.className;
-  const parent = path2.resolve(path2.dirname(resolved), parentRef);
+  const parent = path.resolve(path.dirname(resolved), parentRef);
   if (!isSubpath(parent, rootDir) || !await exists(parent)) return declaration.className;
   return extractDocumentclassName(parent, rootDir, visited);
 }
@@ -838,10 +882,10 @@ function matchesGlob(relPath, basename8, pattern) {
 async function listFilesRecursive(rootDir) {
   const out = [];
   async function walk(dir) {
-    const entries = await import_node_fs2.promises.readdir(dir, { withFileTypes: true });
+    const entries = await import_node_fs.promises.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name.startsWith(".") || IGNORE_DIR_NAMES.has(entry.name)) continue;
-      const abs = path2.join(dir, entry.name);
+      const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(abs);
       } else if (entry.isFile()) {
@@ -857,9 +901,9 @@ async function listTexCandidates(rootDir) {
   const all = await listFilesRecursive(rootDir);
   for (const abs of all) {
     if (!abs.endsWith(".tex")) continue;
-    if (IGNORE_TEX_FILENAMES.has(path2.basename(abs))) continue;
+    if (IGNORE_TEX_FILENAMES.has(path.basename(abs))) continue;
     try {
-      const text = await import_node_fs2.promises.readFile(abs, "utf8");
+      const text = await import_node_fs.promises.readFile(abs, "utf8");
       if (extractDocumentclassDeclaration(text)) {
         candidates.push(workspaceRel(rootDir, abs));
       }
@@ -892,7 +936,7 @@ function compileOutputPdfRelpath(compileTarget) {
   return toPosixPath(compileTarget).replace(/\.tex$/i, ".pdf");
 }
 async function parseThemeColorDefaults(themePath, colorOrder) {
-  const text = await import_node_fs2.promises.readFile(themePath, "utf8");
+  const text = await import_node_fs.promises.readFile(themePath, "utf8");
   const defines = {};
   for (const match of text.matchAll(/\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}/g)) {
     defines[match[1]] = `#${match[2].toUpperCase()}`;
@@ -936,12 +980,12 @@ async function parseThemeColorDefaults(themePath, colorOrder) {
 function fileUrl(filePath) {
   return (0, import_node_url.pathToFileURL)(filePath).toString();
 }
-var import_node_fs2, path2, import_node_url, IGNORE_TEX_FILENAMES, IGNORE_DIR_NAMES, BASE_COLORS;
+var import_node_fs, path, import_node_url, IGNORE_TEX_FILENAMES, IGNORE_DIR_NAMES, BASE_COLORS;
 var init_utils = __esm({
   "src/utils.ts"() {
     "use strict";
-    import_node_fs2 = require("node:fs");
-    path2 = __toESM(require("node:path"));
+    import_node_fs = require("node:fs");
+    path = __toESM(require("node:path"));
     import_node_url = require("node:url");
     init_schema();
     IGNORE_TEX_FILENAMES = /* @__PURE__ */ new Set(["theme.colors.tex", "theme.overrides.tex"]);
@@ -973,14 +1017,465 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs10 = __toESM(require("node:fs"));
-var path10 = __toESM(require("node:path"));
+var fs12 = __toESM(require("node:fs"));
+var path12 = __toESM(require("node:path"));
 var vscode = __toESM(require("vscode"));
 
-// src/projectRegistry.ts
+// src/changeHistory.ts
 var import_node_crypto = require("node:crypto");
-var import_node_fs = require("node:fs");
-var path = __toESM(require("node:path"));
+var import_node_fs2 = require("node:fs");
+var path2 = __toESM(require("node:path"));
+init_utils();
+var HistoryConflictError = class extends Error {
+  constructor(conflicts) {
+    super(`Files or settings changed after the recorded operation: ${conflicts.join(", ")}`);
+    this.conflicts = conflicts;
+    this.name = "HistoryConflictError";
+  }
+  conflicts;
+};
+var ChangeHistoryService = class {
+  constructor(rootDir, storageDir, stateService) {
+    this.rootDir = rootDir;
+    this.storageDir = storageDir;
+    this.stateService = stateService;
+  }
+  rootDir;
+  storageDir;
+  stateService;
+  queue = Promise.resolve();
+  async historyState() {
+    const record = await this.readRecord();
+    return {
+      canUndo: record?.state === "applied",
+      canRedo: record?.state === "undone",
+      label: record?.label ?? "",
+      createdAt: record?.createdAt ?? ""
+    };
+  }
+  runStateChange(command, label, task, enabled = true) {
+    if (!this.storageDir || !enabled) return task();
+    return this.runSerialized(async () => {
+      const before = this.editableState(await this.stateService.loadState());
+      const configTargets = this.normalizePaths(["theme.ui.json", "theme.overrides.tex", "theme.colors.tex"]);
+      const beforeFiles = await this.captureValues(configTargets);
+      try {
+        const result = await task();
+        const after = this.editableState(await this.stateService.loadState());
+        await this.commit({ command, label, beforeEditableState: before, afterEditableState: after, files: [] });
+        return result;
+      } catch (err) {
+        await this.restoreValues(configTargets.map((target, index) => ({ target, value: beforeFiles[index] }))).catch(() => void 0);
+        throw err;
+      }
+    });
+  }
+  runFileChange(command, label, paths, task, enabled = true) {
+    if (!this.storageDir || !enabled) return task();
+    return this.runSerialized(async () => {
+      const targets = this.normalizePaths(paths);
+      const before = await this.captureValues(targets);
+      try {
+        const result = await task();
+        const after = await this.captureValues(targets);
+        const files = targets.map((target, index) => ({
+          path: workspaceRel(this.rootDir, target),
+          before: before[index],
+          after: after[index]
+        }));
+        await this.commit({ command, label, files });
+        return result;
+      } catch (err) {
+        await this.restoreValues(targets.map((target, index) => ({ target, value: before[index] }))).catch(() => void 0);
+        throw err;
+      }
+    });
+  }
+  undo(force = false) {
+    return this.runSerialized(async () => this.restoreDirection("undo", force));
+  }
+  redo(force = false) {
+    return this.runSerialized(async () => this.restoreDirection("redo", force));
+  }
+  async restoreDirection(direction, force) {
+    const record = await this.readRecord();
+    if (!record) throw new Error("No Toolkit change is available to restore.");
+    if (direction === "undo" && record.state !== "applied") throw new Error("The last Toolkit change is already undone.");
+    if (direction === "redo" && record.state !== "undone") throw new Error("No Toolkit change is available to redo.");
+    const expectedState = direction === "undo" ? record.afterEditableState : record.beforeEditableState;
+    const restoreState = direction === "undo" ? record.beforeEditableState : record.afterEditableState;
+    const conflicts = [];
+    if (expectedState) {
+      const current = this.editableState(await this.stateService.loadState());
+      if (JSON.stringify(current) !== JSON.stringify(expectedState)) conflicts.push("Toolkit settings");
+    }
+    for (const file of record.files) {
+      const target = path2.resolve(this.rootDir, file.path);
+      const current = await this.captureValue(target);
+      const expected = direction === "undo" ? file.after : file.before;
+      if (current.fingerprint !== expected.fingerprint) conflicts.push(file.path);
+    }
+    if (conflicts.length > 0 && !force) throw new HistoryConflictError(conflicts);
+    if (restoreState) {
+      await this.restoreEditableState(restoreState);
+      const actual = this.editableState(await this.stateService.loadState());
+      if (direction === "undo") record.beforeEditableState = actual;
+      else record.afterEditableState = actual;
+    }
+    if (record.files.length > 0) {
+      await this.restoreValues(record.files.map((file) => ({
+        target: path2.resolve(this.rootDir, file.path),
+        value: direction === "undo" ? file.before : file.after
+      })));
+    }
+    record.state = direction === "undo" ? "undone" : "applied";
+    await this.writeRecord(record);
+    return this.historyState();
+  }
+  editableState(state) {
+    return {
+      toggles: { ...state.toggles },
+      colors: { ...state.colors },
+      style_preset: state.style_preset,
+      style_base_preset: state.style_base_preset,
+      body_font_size_pt: state.body_font_size_pt,
+      class_config: { ...state.class_config },
+      compile_target: state.compile_target,
+      compile_recipe: state.compile_recipe,
+      compile_use_internal_fallback: state.compile_use_internal_fallback
+    };
+  }
+  async restoreEditableState(snapshot) {
+    const current = await this.stateService.loadState();
+    current.toggles = { ...snapshot.toggles };
+    current.colors = { ...snapshot.colors };
+    current.style_preset = current.style_presets.some((preset) => preset.id === snapshot.style_preset) ? snapshot.style_preset : snapshot.style_base_preset;
+    current.style_base_preset = snapshot.style_base_preset;
+    current.body_font_size_pt = snapshot.body_font_size_pt;
+    current.class_config = { ...snapshot.class_config };
+    current.compile_target = snapshot.compile_target;
+    current.compile_recipe = snapshot.compile_recipe;
+    current.compile_use_internal_fallback = snapshot.compile_use_internal_fallback;
+    await this.stateService.writeOverrideFiles(current);
+  }
+  async captureValues(targets) {
+    return Promise.all(targets.map((target) => this.captureValue(target)));
+  }
+  async captureValue(target) {
+    try {
+      const stat = await import_node_fs2.promises.lstat(target);
+      if (stat.isSymbolicLink()) {
+        const link = await import_node_fs2.promises.readlink(target);
+        return { kind: "symlink", link_target: link, mode: stat.mode, fingerprint: hash(`symlink:${link}`) };
+      }
+      if (stat.isDirectory()) {
+        const entries = (await import_node_fs2.promises.readdir(target)).sort();
+        return { kind: "directory", mode: stat.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
+      }
+      if (stat.isFile()) {
+        const content = await import_node_fs2.promises.readFile(target);
+        return { kind: "file", content_base64: content.toString("base64"), mode: stat.mode, fingerprint: hashBuffer(content) };
+      }
+      return { kind: "missing", fingerprint: hash("missing") };
+    } catch (err) {
+      if (err.code === "ENOENT") return { kind: "missing", fingerprint: hash("missing") };
+      throw err;
+    }
+  }
+  async restoreValues(entries) {
+    for (const { target, value } of entries.filter((entry) => entry.value.kind === "directory")) {
+      await import_node_fs2.promises.mkdir(target, { recursive: true });
+      if (value.mode !== void 0) await import_node_fs2.promises.chmod(target, value.mode).catch(() => void 0);
+    }
+    for (const { target, value } of entries.filter((entry) => entry.value.kind === "file" || entry.value.kind === "symlink")) {
+      await import_node_fs2.promises.mkdir(path2.dirname(target), { recursive: true });
+      await import_node_fs2.promises.rm(target, { recursive: true, force: true });
+      if (value.kind === "file") {
+        const temp = `${target}.restore-${(0, import_node_crypto.randomUUID)()}`;
+        await import_node_fs2.promises.writeFile(temp, Buffer.from(value.content_base64 ?? "", "base64"));
+        await import_node_fs2.promises.rename(temp, target);
+        if (value.mode !== void 0) await import_node_fs2.promises.chmod(target, value.mode).catch(() => void 0);
+      } else {
+        await import_node_fs2.promises.symlink(value.link_target ?? "", target);
+      }
+    }
+    const missing = entries.filter((entry) => entry.value.kind === "missing");
+    for (const { target } of missing) {
+      try {
+        const stat = await import_node_fs2.promises.lstat(target);
+        if (!stat.isDirectory()) await import_node_fs2.promises.unlink(target);
+      } catch (err) {
+        const code = err.code;
+        if (code !== "ENOENT") throw err;
+      }
+    }
+    for (const { target } of [...missing].reverse()) {
+      try {
+        if ((await import_node_fs2.promises.lstat(target)).isDirectory()) await import_node_fs2.promises.rmdir(target);
+      } catch (err) {
+        const code = err.code;
+        if (code !== "ENOENT" && code !== "ENOTEMPTY") throw err;
+      }
+    }
+  }
+  normalizePaths(rawPaths) {
+    const unique = /* @__PURE__ */ new Set();
+    for (const raw of rawPaths) {
+      const target = path2.isAbsolute(raw) ? path2.resolve(raw) : path2.resolve(this.rootDir, raw);
+      if (!isSubpath(target, this.rootDir)) throw new Error(`History target is outside workspace: ${raw}`);
+      unique.add(target);
+    }
+    return [...unique];
+  }
+  async commit(input) {
+    await this.writeRecord({
+      version: 1,
+      id: (0, import_node_crypto.randomUUID)(),
+      rootPath: this.rootDir,
+      command: input.command,
+      label: input.label,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      state: "applied",
+      beforeEditableState: input.beforeEditableState,
+      afterEditableState: input.afterEditableState,
+      files: input.files
+    });
+  }
+  manifestPath() {
+    return this.storageDir ? path2.join(this.storageDir, "last-change.json") : void 0;
+  }
+  async readRecord() {
+    const manifest = this.manifestPath();
+    if (!manifest) return void 0;
+    try {
+      const parsed = JSON.parse(await import_node_fs2.promises.readFile(manifest, "utf8"));
+      return parsed?.version === 1 && parsed.rootPath === this.rootDir ? parsed : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  async writeRecord(record) {
+    const manifest = this.manifestPath();
+    if (!manifest) return;
+    await import_node_fs2.promises.mkdir(path2.dirname(manifest), { recursive: true });
+    const temp = `${manifest}.tmp-${(0, import_node_crypto.randomUUID)()}`;
+    await import_node_fs2.promises.writeFile(temp, `${JSON.stringify(record)}
+`, "utf8");
+    await import_node_fs2.promises.rename(temp, manifest);
+  }
+  runSerialized(task) {
+    const next = this.queue.then(task, task);
+    this.queue = next.catch(() => void 0);
+    return next;
+  }
+};
+function workspaceHistoryStorageRoot(globalStoragePath, rootPath) {
+  const resolved = path2.resolve(rootPath);
+  const canonical = process.platform === "win32" || process.platform === "darwin" ? resolved.toLocaleLowerCase() : resolved;
+  return path2.join(globalStoragePath, "history", (0, import_node_crypto.createHash)("sha256").update(canonical).digest("hex"));
+}
+function hash(value) {
+  return (0, import_node_crypto.createHash)("sha256").update(value).digest("hex");
+}
+function hashBuffer(value) {
+  return (0, import_node_crypto.createHash)("sha256").update(value).digest("hex");
+}
+
+// src/personalStyles.ts
+var import_node_crypto2 = require("node:crypto");
+init_schema();
+init_utils();
+var PERSONAL_STYLES_STATE_KEY = "latexEditingToolkit.personalStyles.v1";
+var PersonalStyleRegistry = class {
+  constructor(store) {
+    this.store = store;
+  }
+  store;
+  queue = Promise.resolve();
+  list() {
+    const raw = this.store.get(PERSONAL_STYLES_STATE_KEY);
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const item of raw) {
+      const parsed = this.parseRecord(item);
+      if (!parsed || seen.has(parsed.id)) continue;
+      seen.add(parsed.id);
+      out.push(parsed);
+    }
+    return out.sort((left, right) => left.label.localeCompare(right.label));
+  }
+  definitions() {
+    return this.list().map((record) => {
+      const base = STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === record.basePresetId) ?? STYLE_PRESET_DEFINITIONS[0];
+      return {
+        id: record.id,
+        label: record.label,
+        description: record.description,
+        block_source: base.block_source,
+        heading_source: base.heading_source,
+        source: "personal",
+        base_preset_id: base.id,
+        editable: true,
+        colors: { ...record.colors }
+      };
+    });
+  }
+  add(label, basePresetId, colors) {
+    return this.runSerialized(async () => {
+      const normalizedLabel = label.trim();
+      this.assertLabelAvailable(normalizedLabel, this.list());
+      const base = this.validateBasePreset(basePresetId);
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const record = {
+        version: 1,
+        id: `personal:${(0, import_node_crypto2.randomUUID)()}`,
+        label: normalizedLabel,
+        description: `Personal style based on ${base.label}`,
+        basePresetId: base.id,
+        colors: this.validateColors(colors),
+        createdAt: now,
+        updatedAt: now
+      };
+      await this.write([...this.list(), record]);
+      return record;
+    });
+  }
+  update(id, colors) {
+    return this.runSerialized(async () => {
+      const records = this.list();
+      const current = records.find((record) => record.id === id);
+      if (!current) throw new Error("Personal style not found.");
+      const updated = { ...current, colors: this.validateColors(colors), updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+      await this.write(records.map((record) => record.id === id ? updated : record));
+      return updated;
+    });
+  }
+  rename(id, label) {
+    return this.runSerialized(async () => {
+      const records = this.list();
+      const current = records.find((record) => record.id === id);
+      if (!current) throw new Error("Personal style not found.");
+      const updated = {
+        ...current,
+        label: label.trim(),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      this.assertLabelAvailable(updated.label, records.filter((record) => record.id !== id));
+      await this.write(records.map((record) => record.id === id ? updated : record));
+      return updated;
+    });
+  }
+  remove(id) {
+    return this.runSerialized(async () => {
+      const records = this.list();
+      const removed = records.find((record) => record.id === id);
+      if (!removed) return void 0;
+      await this.write(records.filter((record) => record.id !== id));
+      return removed;
+    });
+  }
+  importLibrary(raw) {
+    return this.runSerialized(async () => {
+      const envelope = isRecord(raw) && raw.version === 1 && Array.isArray(raw.styles) ? raw.styles : [];
+      const records = this.list();
+      let imported = 0;
+      let skipped = 0;
+      for (const item of envelope) {
+        const parsed = this.parseRecord(item);
+        if (!parsed) {
+          skipped += 1;
+          continue;
+        }
+        const index = records.findIndex((record) => record.id === parsed.id);
+        if (index >= 0) records[index] = { ...parsed, label: this.uniqueLabel(parsed.label, records.filter((_, itemIndex) => itemIndex !== index)) };
+        else records.push({ ...parsed, label: this.uniqueLabel(parsed.label, records) });
+        imported += 1;
+      }
+      await this.write(records);
+      return { imported, skipped };
+    });
+  }
+  exportLibrary() {
+    return { version: 1, styles: this.list() };
+  }
+  parseRecord(raw) {
+    if (!isRecord(raw) || raw.version !== 1 || typeof raw.id !== "string" || !raw.id.startsWith("personal:")) return void 0;
+    if (typeof raw.label !== "string" || !raw.label.trim() || typeof raw.basePresetId !== "string") return void 0;
+    let colors;
+    try {
+      colors = this.validateColors(isRecord(raw.colors) ? Object.fromEntries(Object.entries(raw.colors).map(([key, value]) => [key, String(value)])) : {});
+      this.validateBasePreset(raw.basePresetId);
+    } catch {
+      return void 0;
+    }
+    const createdAt = validDate(raw.createdAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
+    const updatedAt = validDate(raw.updatedAt) ?? createdAt;
+    return {
+      version: 1,
+      id: raw.id,
+      label: raw.label.trim(),
+      description: typeof raw.description === "string" && raw.description.trim() ? raw.description.trim() : `Personal style based on ${raw.basePresetId}`,
+      basePresetId: raw.basePresetId,
+      colors,
+      createdAt,
+      updatedAt
+    };
+  }
+  validateColors(raw) {
+    if (Object.keys(raw).length !== COLOR_ORDER.length || COLOR_ORDER.some((token) => !(token in raw))) {
+      throw new Error("Personal style must contain every Toolkit color token.");
+    }
+    const colors = {};
+    for (const token of COLOR_ORDER) {
+      const parsed = parseHexColor(raw[token]);
+      if (!parsed) throw new Error(`Invalid color for ${token}.`);
+      colors[token] = parsed;
+    }
+    return colors;
+  }
+  validateBasePreset(id) {
+    const base = STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === id);
+    if (!base) throw new Error(`Unknown built-in base style: ${id}.`);
+    return base;
+  }
+  uniqueLabel(raw, records) {
+    const base = raw.trim();
+    if (!base) throw new Error("Personal style name is required.");
+    const used = new Set(records.map((record) => record.label.toLocaleLowerCase()));
+    if (!used.has(base.toLocaleLowerCase())) return base;
+    let index = 2;
+    while (used.has(`${base} (Imported ${index})`.toLocaleLowerCase())) index += 1;
+    return `${base} (Imported ${index})`;
+  }
+  assertLabelAvailable(label, records) {
+    if (!label) throw new Error("Personal style name is required.");
+    if (records.some((record) => record.label.toLocaleLowerCase() === label.toLocaleLowerCase())) {
+      throw new Error(`A personal style named '${label}' already exists.`);
+    }
+  }
+  async write(records) {
+    await this.store.update(PERSONAL_STYLES_STATE_KEY, records);
+  }
+  runSerialized(task) {
+    const next = this.queue.then(task, task);
+    this.queue = next.catch(() => void 0);
+    return next;
+  }
+};
+function validDate(raw) {
+  if (typeof raw !== "string") return void 0;
+  const timestamp = Date.parse(raw);
+  return Number.isNaN(timestamp) ? void 0 : new Date(timestamp).toISOString();
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/projectRegistry.ts
+var import_node_crypto3 = require("node:crypto");
+var import_node_fs3 = require("node:fs");
+var path3 = __toESM(require("node:path"));
 var LOCAL_PROJECTS_STATE_KEY = "latexEditingToolkit.localProjects";
 var LocalProjectRegistry = class {
   constructor(store, stateKey = LOCAL_PROJECTS_STATE_KEY) {
@@ -989,101 +1484,149 @@ var LocalProjectRegistry = class {
   }
   store;
   stateKey;
-  async list() {
-    const entries = this.readEntries();
-    const statuses = await Promise.all(entries.map(async (entry) => ({
-      ...entry,
-      missing: !await this.isDirectory(entry.rootPath)
-    })));
-    return statuses.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  queue = Promise.resolve();
+  list() {
+    return this.runSerialized(async () => {
+      const entries = await this.readCleanEntries();
+      const statuses = await Promise.all(entries.map(async (entry) => ({
+        ...entry,
+        missing: !await this.isDirectory(entry.rootPath)
+      })));
+      return statuses.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    });
   }
-  async add(rootPath, templateId) {
-    const normalizedPath = normalizeProjectPath(rootPath);
-    const entries = this.readEntries();
-    const existing = entries.find((entry2) => sameProjectPath(entry2.rootPath, normalizedPath));
-    const entry = existing ? {
-      ...existing,
-      rootPath: normalizedPath,
-      label: path.basename(normalizedPath),
-      templateId: String(templateId || existing.templateId || "unknown")
-    } : {
-      id: (0, import_node_crypto.randomUUID)(),
-      rootPath: normalizedPath,
-      label: path.basename(normalizedPath),
-      templateId: String(templateId || "unknown"),
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    const next = existing ? entries.map((item) => sameProjectPath(item.rootPath, normalizedPath) ? entry : item) : [...entries, entry];
-    await this.writeEntries(next);
-    return entry;
+  add(rootPath, templateId) {
+    return this.runSerialized(async () => {
+      const normalizedPath = normalizeProjectPath(rootPath);
+      const targetKey = await this.canonicalPathKey(normalizedPath);
+      const entries = await this.readCleanEntries();
+      const existing = await this.findByCanonicalKey(entries, targetKey);
+      const entry = existing ? {
+        ...existing,
+        // Preserve the original id, timestamp, and user-facing path. A symlink or
+        // differently-cased path must not make an existing note appear recreated.
+        templateId: String(templateId || existing.templateId || "unknown")
+      } : {
+        id: (0, import_node_crypto3.randomUUID)(),
+        rootPath: normalizedPath,
+        label: path3.basename(normalizedPath),
+        templateId: String(templateId || "unknown"),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const next = existing ? entries.map((item) => item.id === existing.id ? entry : item) : [...entries, entry];
+      await this.writeEntries(next);
+      return entry;
+    });
   }
-  async remove(rootPath) {
-    const normalizedPath = normalizeProjectPath(rootPath);
-    const entries = this.readEntries();
-    const next = entries.filter((entry) => !sameProjectPath(entry.rootPath, normalizedPath));
-    if (next.length === entries.length) return false;
-    await this.writeEntries(next);
-    return true;
+  find(rootPath) {
+    return this.runSerialized(async () => {
+      const normalizedPath = normalizeProjectPath(rootPath);
+      const targetKey = await this.canonicalPathKey(normalizedPath);
+      const entries = await this.readCleanEntries();
+      const entry = await this.findByCanonicalKey(entries, targetKey);
+      return entry ? { ...entry, missing: !await this.isDirectory(entry.rootPath) } : void 0;
+    });
   }
-  async relocate(oldRootPath, newRootPath) {
-    const oldPath = normalizeProjectPath(oldRootPath);
-    const newPath = normalizeProjectPath(newRootPath);
-    if (!await this.isDirectory(newPath)) throw new Error("The selected location is not a local directory.");
-    if (!await this.isRegularFile(path.join(newPath, "main.tex"))) {
-      throw new Error("The selected directory does not contain main.tex.");
-    }
-    const entries = this.readEntries();
-    const current = entries.find((entry) => sameProjectPath(entry.rootPath, oldPath));
-    if (!current) throw new Error("The local note project is no longer registered.");
-    const duplicate = entries.find((entry) => entry.id !== current.id && sameProjectPath(entry.rootPath, newPath));
-    if (duplicate) throw new Error(`The selected directory is already registered as '${duplicate.label}'.`);
-    const updated = {
-      ...current,
-      rootPath: newPath,
-      label: path.basename(newPath)
-    };
-    await this.writeEntries(entries.map((entry) => entry.id === current.id ? updated : entry));
-    return updated;
+  remove(rootPath) {
+    return this.runSerialized(async () => {
+      const normalizedPath = normalizeProjectPath(rootPath);
+      const targetKey = await this.canonicalPathKey(normalizedPath);
+      const entries = await this.readCleanEntries();
+      const current = await this.findByCanonicalKey(entries, targetKey);
+      if (!current) return false;
+      await this.writeEntries(entries.filter((entry) => entry.id !== current.id));
+      return true;
+    });
   }
-  readEntries() {
+  relocate(oldRootPath, newRootPath) {
+    return this.runSerialized(async () => {
+      const oldPath = normalizeProjectPath(oldRootPath);
+      const newPath = normalizeProjectPath(newRootPath);
+      if (!await this.isDirectory(newPath)) throw new Error("The selected location is not a local directory.");
+      if (!await this.isRegularFile(path3.join(newPath, "main.tex"))) {
+        throw new Error("The selected directory does not contain main.tex.");
+      }
+      const oldKey = await this.canonicalPathKey(oldPath);
+      const newKey = await this.canonicalPathKey(newPath);
+      const entries = await this.readCleanEntries();
+      const current = await this.findByCanonicalKey(entries, oldKey);
+      if (!current) throw new Error("The local note project is no longer registered.");
+      const duplicate = await this.findByCanonicalKey(entries.filter((entry) => entry.id !== current.id), newKey);
+      if (duplicate) throw new Error(`The selected directory is already registered as '${duplicate.label}'.`);
+      const updated = {
+        ...current,
+        rootPath: newPath,
+        label: path3.basename(newPath)
+      };
+      await this.writeEntries(entries.map((entry) => entry.id === current.id ? updated : entry));
+      return updated;
+    });
+  }
+  async readCleanEntries() {
     const raw = this.store.get(this.stateKey);
-    if (!Array.isArray(raw)) return [];
-    const entries = [];
-    const seen = /* @__PURE__ */ new Set();
+    if (!Array.isArray(raw)) {
+      if (raw !== void 0) await this.writeEntries([]);
+      return [];
+    }
+    const parsed = [];
     for (const item of raw) {
-      if (!isRecord(item)) continue;
+      if (!isRecord2(item)) continue;
       const rawRootPath = typeof item.rootPath === "string" ? item.rootPath : item.root_path;
       const rootPath = typeof rawRootPath === "string" ? safeNormalizeProjectPath(rawRootPath) : void 0;
       if (!rootPath) continue;
-      const key = projectPathKey(rootPath);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      entries.push({
+      parsed.push({
         id: typeof item.id === "string" && item.id ? item.id : legacyProjectId(rootPath),
         rootPath,
-        label: typeof item.label === "string" && item.label ? item.label : path.basename(rootPath),
+        label: typeof item.label === "string" && item.label ? item.label : path3.basename(rootPath),
         templateId: typeof item.templateId === "string" && item.templateId ? item.templateId : typeof item.template_id === "string" && item.template_id ? item.template_id : "unknown",
-        createdAt: typeof item.createdAt === "string" && !Number.isNaN(Date.parse(item.createdAt)) ? item.createdAt : typeof item.created_at === "string" && !Number.isNaN(Date.parse(item.created_at)) ? item.created_at : (/* @__PURE__ */ new Date(0)).toISOString()
+        createdAt: validTimestamp(item.createdAt) ?? validTimestamp(item.created_at) ?? (/* @__PURE__ */ new Date(0)).toISOString()
       });
     }
-    return entries;
+    const byCanonicalPath = /* @__PURE__ */ new Map();
+    for (const entry of parsed) {
+      const key = await this.canonicalPathKey(entry.rootPath);
+      const previous = byCanonicalPath.get(key);
+      if (!previous || entry.createdAt >= previous.createdAt) byCanonicalPath.set(key, entry);
+    }
+    const cleaned = [...byCanonicalPath.values()];
+    if (JSON.stringify(cleaned) !== JSON.stringify(raw)) await this.writeEntries(cleaned);
+    return cleaned;
+  }
+  async findByCanonicalKey(entries, targetKey) {
+    for (const entry of entries) {
+      if (await this.canonicalPathKey(entry.rootPath) === targetKey) return entry;
+    }
+    return void 0;
+  }
+  async canonicalPathKey(value) {
+    let canonical = path3.normalize(value);
+    try {
+      canonical = path3.normalize(await import_node_fs3.promises.realpath(canonical));
+    } catch {
+    }
+    return caseFoldPath(canonical);
   }
   async writeEntries(entries) {
     await this.store.update(this.stateKey, entries);
   }
   async isDirectory(target) {
     try {
-      return (await import_node_fs.promises.stat(target)).isDirectory();
+      return (await import_node_fs3.promises.stat(target)).isDirectory();
     } catch {
       return false;
     }
   }
   async isRegularFile(target) {
     try {
-      return (await import_node_fs.promises.stat(target)).isFile();
+      return (await import_node_fs3.promises.stat(target)).isFile();
     } catch {
       return false;
     }
+  }
+  runSerialized(task) {
+    const next = this.queue.then(task, task);
+    this.queue = next.catch(() => void 0);
+    return next;
   }
 };
 function normalizeProjectPath(rawPath) {
@@ -1093,37 +1636,120 @@ function normalizeProjectPath(rawPath) {
 }
 function safeNormalizeProjectPath(rawPath) {
   const value = String(rawPath || "").trim();
-  if (!value || !path.isAbsolute(value)) return void 0;
-  return path.normalize(value);
+  if (!value || !path3.isAbsolute(value)) return void 0;
+  return path3.normalize(value);
 }
-function sameProjectPath(left, right) {
-  return projectPathKey(left) === projectPathKey(right);
-}
-function projectPathKey(value) {
-  const normalized = path.normalize(value);
+function caseFoldPath(value) {
+  const normalized = path3.normalize(value);
   return process.platform === "win32" || process.platform === "darwin" ? normalized.toLowerCase() : normalized;
 }
 function legacyProjectId(rootPath) {
-  return `legacy-${(0, import_node_crypto.createHash)("sha1").update(projectPathKey(rootPath)).digest("hex").slice(0, 16)}`;
+  return `legacy-${(0, import_node_crypto3.createHash)("sha1").update(caseFoldPath(rootPath)).digest("hex").slice(0, 16)}`;
 }
-function isRecord(value) {
+function validTimestamp(value) {
+  if (typeof value !== "string") return void 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? void 0 : new Date(parsed).toISOString();
+}
+function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// src/projectWorkflow.ts
+var import_node_fs4 = require("node:fs");
+var path4 = __toESM(require("node:path"));
+init_schema();
+init_utils();
+async function runCreateProjectWorkflow(service, registry, rootPath, templateId) {
+  await import_node_fs4.promises.mkdir(rootPath, { recursive: true });
+  await service.handle("initialize-workspace", {});
+  await service.handle("template-bootstrap", {
+    template_id: templateId,
+    output_target: "main.tex",
+    overwrite: false
+  });
+  await registry.add(rootPath, templateId);
+}
+var WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+async function preflightCreateProject(draft, extensionDir) {
+  const errors = [];
+  const warnings = [];
+  const parentPath = path4.resolve(String(draft.parentPath || ""));
+  const projectName = String(draft.projectName || "").trim();
+  const template = STARTER_TEMPLATE_DEFINITIONS.find((item) => item.id === draft.templateId);
+  if (!path4.isAbsolute(String(draft.parentPath || ""))) errors.push("Parent location must be an absolute local path.");
+  if (!projectName) errors.push("Project name is required.");
+  if (projectName === "." || projectName === "..") errors.push("Project name cannot be '.' or '..'.");
+  if (/[\\/\0]/.test(projectName)) errors.push("Project name cannot contain path separators or NUL characters.");
+  if (WINDOWS_RESERVED_NAME.test(projectName)) errors.push("Project name is reserved by Windows.");
+  const rootPath = path4.resolve(parentPath, projectName || "New Notes");
+  if (path4.dirname(rootPath) !== path4.normalize(parentPath)) errors.push("Project path must remain directly inside the selected parent folder.");
+  try {
+    const stat = await import_node_fs4.promises.stat(parentPath);
+    if (!stat.isDirectory()) errors.push("Selected parent location is not a directory.");
+    else await import_node_fs4.promises.access(parentPath, import_node_fs4.constants.W_OK);
+  } catch (err) {
+    errors.push(`Parent location is not writable: ${err.message}`);
+  }
+  let targetExists = false;
+  let targetEmpty = false;
+  try {
+    const stat = await import_node_fs4.promises.lstat(rootPath);
+    targetExists = true;
+    if (!stat.isDirectory()) errors.push("A non-directory item already exists at the project path.");
+    else {
+      const entries = await import_node_fs4.promises.readdir(rootPath);
+      targetEmpty = entries.length === 0;
+      if (targetEmpty) warnings.push("The project folder already exists and is empty.");
+      else errors.push(`Project folder is not empty: ${entries.slice(0, 5).join(", ")}${entries.length > 5 ? ` and ${entries.length - 5} more` : ""}.`);
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") errors.push(`Could not inspect project path: ${err.message}`);
+  }
+  if (!template) errors.push(`Unknown starter template: ${draft.templateId}.`);
+  else {
+    try {
+      const source = path4.join(extensionDir, "assets", "template", "templates", template.filename);
+      const text = await import_node_fs4.promises.readFile(source, "utf8");
+      if (!extractDocumentclassDeclaration(text)) errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
+    } catch (err) {
+      errors.push(`Starter template is unavailable: ${err.message}`);
+    }
+  }
+  return {
+    ok: errors.length === 0,
+    rootPath,
+    targetExists,
+    targetEmpty,
+    errors,
+    warnings,
+    plannedFiles: [
+      "main.tex",
+      "theme.sty",
+      "theorems.tex",
+      "commands.tex",
+      "references.bib",
+      ".vscode/settings.json",
+      "Fig/",
+      "templates/"
+    ]
+  };
 }
 
 // src/extension.ts
 init_schema();
 
 // src/toolkitService.ts
-var import_node_fs9 = require("node:fs");
-var path9 = __toESM(require("node:path"));
+var import_node_fs11 = require("node:fs");
+var path11 = __toESM(require("node:path"));
 
 // src/cleanup.ts
-var import_node_fs4 = require("node:fs");
-var path4 = __toESM(require("node:path"));
+var import_node_fs6 = require("node:fs");
+var path6 = __toESM(require("node:path"));
 
 // src/vscodeSettings.ts
-var import_node_fs3 = require("node:fs");
-var path3 = __toESM(require("node:path"));
+var import_node_fs5 = require("node:fs");
+var path5 = __toESM(require("node:path"));
 init_utils();
 function toolkitVscodeSettingsTemplate() {
   return {
@@ -1192,9 +1818,9 @@ function toolkitVscodeSettingsTemplate() {
   };
 }
 async function loadVscodeSettings(rootDir) {
-  const settingsPath = path3.join(rootDir, ".vscode", "settings.json");
+  const settingsPath = path5.join(rootDir, ".vscode", "settings.json");
   try {
-    const text = await import_node_fs3.promises.readFile(settingsPath, "utf8");
+    const text = await import_node_fs5.promises.readFile(settingsPath, "utf8");
     if (!text.trim()) return {};
     const parsed = parseJsonc(text);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -1320,16 +1946,16 @@ async function loadRecipeCatalog(rootDir) {
   return catalog;
 }
 async function generateVscodeSettingsIfMissing(rootDir) {
-  const settingsPath = path3.join(rootDir, ".vscode", "settings.json");
+  const settingsPath = path5.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat = await import_node_fs3.promises.stat(settingsPath);
+    const stat = await import_node_fs5.promises.stat(settingsPath);
     if (stat.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
-  await import_node_fs3.promises.mkdir(path3.dirname(settingsPath), { recursive: true });
-  await import_node_fs3.promises.writeFile(settingsPath, `${JSON.stringify(toolkitVscodeSettingsTemplate(), null, 2)}
+  await import_node_fs5.promises.mkdir(path5.dirname(settingsPath), { recursive: true });
+  await import_node_fs5.promises.writeFile(settingsPath, `${JSON.stringify(toolkitVscodeSettingsTemplate(), null, 2)}
 `, "utf8");
   return { generated: true, generated_path: ".vscode/settings.json", message: "Generated .vscode/settings.json." };
 }
@@ -1424,18 +2050,18 @@ var CleanupService = class {
     const scope = /* @__PURE__ */ new Set();
     const errors = [];
     const walk = async (dir) => {
-      const entries = await import_node_fs4.promises.readdir(dir, { withFileTypes: true });
+      const entries = await import_node_fs6.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "__pycache__"].includes(entry.name)) continue;
-        const abs = path4.join(dir, entry.name);
+        const abs = path6.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walk(abs);
         } else if (entry.isFile() && entry.name.endsWith(".tex")) {
           try {
-            const text = await import_node_fs4.promises.readFile(abs, "utf8");
+            const text = await import_node_fs6.promises.readFile(abs, "utf8");
             const declaration = extractDocumentclassDeclaration(text);
-            if (declaration?.className === "subfiles" && path4.dirname(abs) !== this.rootDir) {
-              scope.add(workspaceRel(this.rootDir, path4.dirname(abs)));
+            if (declaration?.className === "subfiles" && path6.dirname(abs) !== this.rootDir) {
+              scope.add(workspaceRel(this.rootDir, path6.dirname(abs)));
             }
           } catch (err) {
             errors.push(`Failed to inspect documentclass for ${safeWorkspaceRel(this.rootDir, abs)}: ${err.message}`);
@@ -1452,20 +2078,20 @@ var CleanupService = class {
     const errors = [];
     const normalizedScope = scopeDirs.map((scope) => scope || ".").filter(Boolean);
     for (const scope of normalizedScope) {
-      const scopeAbs = path4.resolve(this.rootDir, scope);
+      const scopeAbs = path6.resolve(this.rootDir, scope);
       if (!isSubpath(scopeAbs, this.rootDir) || !await exists(scopeAbs)) continue;
       const files = await this.listScopeFiles(scopeAbs, recursiveAll);
       for (const abs of files) {
-        const relToScope = safeWorkspaceRel(scopeAbs, abs) || path4.basename(abs);
+        const relToScope = safeWorkspaceRel(scopeAbs, abs) || path6.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename8 = path4.basename(abs);
+        const basename8 = path6.basename(abs);
         if (!patterns.some((pattern) => matchesGlob(relToScope, basename8, pattern))) continue;
         if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename8, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
         try {
-          if (!dryRun) await import_node_fs4.promises.unlink(abs);
+          if (!dryRun) await import_node_fs6.promises.unlink(abs);
           deleted.push(workspaceRelative);
         } catch (err) {
           errors.push(`Failed to delete ${workspaceRelative}: ${err.message}`);
@@ -1477,9 +2103,9 @@ var CleanupService = class {
   async listScopeFiles(scopeAbs, recursive) {
     const out = [];
     const walk = async (dir) => {
-      for (const entry of await import_node_fs4.promises.readdir(dir, { withFileTypes: true })) {
+      for (const entry of await import_node_fs6.promises.readdir(dir, { withFileTypes: true })) {
         if (entry.name.startsWith(".") || ["node_modules", ".git"].includes(entry.name)) continue;
-        const abs = path4.join(dir, entry.name);
+        const abs = path6.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (recursive) await walk(abs);
         } else if (entry.isFile()) {
@@ -1494,12 +2120,12 @@ var CleanupService = class {
     const removed = [];
     const errors = [];
     for (const scope of scopeDirs) {
-      const scopeAbs = path4.resolve(this.rootDir, scope);
+      const scopeAbs = path6.resolve(this.rootDir, scope);
       const dirs = [];
       const collect = async (dir) => {
-        for (const entry of await import_node_fs4.promises.readdir(dir, { withFileTypes: true })) {
+        for (const entry of await import_node_fs6.promises.readdir(dir, { withFileTypes: true })) {
           if (entry.isDirectory()) {
-            const abs = path4.join(dir, entry.name);
+            const abs = path6.join(dir, entry.name);
             dirs.push(abs);
             await collect(abs);
           }
@@ -1509,9 +2135,9 @@ var CleanupService = class {
       dirs.sort((a, b) => b.length - a.length);
       for (const dir of dirs) {
         try {
-          const entries = await import_node_fs4.promises.readdir(dir);
+          const entries = await import_node_fs6.promises.readdir(dir);
           if (entries.length === 0) {
-            if (!dryRun) await import_node_fs4.promises.rmdir(dir);
+            if (!dryRun) await import_node_fs6.promises.rmdir(dir);
             removed.push(workspaceRel(this.rootDir, dir));
           }
         } catch (err) {
@@ -1525,8 +2151,8 @@ var CleanupService = class {
 
 // src/compile.ts
 var import_node_child_process = require("node:child_process");
-var import_node_fs5 = require("node:fs");
-var path5 = __toESM(require("node:path"));
+var import_node_fs7 = require("node:fs");
+var path7 = __toESM(require("node:path"));
 init_utils();
 var COMMAND_TIMEOUT_MS = 12e4;
 var SUBFILE_PATTERN = /\\subfile(?:\[[^\]]*\])?\{([^}]+)\}/g;
@@ -1539,12 +2165,12 @@ var CompileService = class {
   stateService;
   resolveContext(compileTarget) {
     if (!compileTarget) throw new Error("No compile target selected.");
-    const targetAbs = path5.resolve(this.rootDir, compileTarget);
+    const targetAbs = path7.resolve(this.rootDir, compileTarget);
     if (!isSubpath(targetAbs, this.rootDir)) throw new Error(`Compile target is outside workspace: ${compileTarget}`);
-    const compileCwd = path5.dirname(targetAbs);
-    const docfile = path5.basename(targetAbs);
-    const docstem = path5.basename(targetAbs, path5.extname(targetAbs));
-    const defaultPdfAbs = path5.join(compileCwd, `${docstem}.pdf`);
+    const compileCwd = path7.dirname(targetAbs);
+    const docfile = path7.basename(targetAbs);
+    const docstem = path7.basename(targetAbs, path7.extname(targetAbs));
+    const defaultPdfAbs = path7.join(compileCwd, `${docstem}.pdf`);
     return {
       targetRel: toPosixPath(compileTarget),
       targetAbs,
@@ -1585,7 +2211,7 @@ var CompileService = class {
   }
   async compileTexTarget(compileTarget, recipeId, useInternalFallback) {
     const ctx = this.resolveContext(compileTarget);
-    const targetStat = await import_node_fs5.promises.stat(ctx.targetAbs).catch(() => null);
+    const targetStat = await import_node_fs7.promises.stat(ctx.targetAbs).catch(() => null);
     if (!targetStat?.isFile()) throw new Error(`Compile target does not exist: ${compileTarget}`);
     const preflight = await this.preflight(ctx);
     if (preflight) return preflight;
@@ -1658,7 +2284,7 @@ var CompileService = class {
     const visited = /* @__PURE__ */ new Set();
     const visiting = /* @__PURE__ */ new Set();
     const walk = async (filePath, chain) => {
-      const resolved = path5.resolve(filePath);
+      const resolved = path7.resolve(filePath);
       if (visiting.has(resolved)) {
         issues.push(`Recursive subfile cycle detected: ${[...chain, resolved].map((item) => safeWorkspaceRel(this.rootDir, item) || item).join(" -> ")}`);
         return;
@@ -1668,7 +2294,7 @@ var CompileService = class {
       visiting.add(resolved);
       let text = "";
       try {
-        text = stripTexComments(await import_node_fs5.promises.readFile(resolved, "utf8"));
+        text = stripTexComments(await import_node_fs7.promises.readFile(resolved, "utf8"));
       } catch (err) {
         issues.push(`Failed to read source file: ${safeWorkspaceRel(this.rootDir, resolved)} (${err.message})`);
         visiting.delete(resolved);
@@ -1677,7 +2303,7 @@ var CompileService = class {
       for (const match of text.matchAll(SUBFILE_PATTERN)) {
         const raw = match[1].trim();
         const withExt = raw.endsWith(".tex") ? raw : `${raw}.tex`;
-        const target = path5.isAbsolute(withExt) ? withExt : path5.resolve(path5.dirname(resolved), withExt);
+        const target = path7.isAbsolute(withExt) ? withExt : path7.resolve(path7.dirname(resolved), withExt);
         const sourceRel = safeWorkspaceRel(this.rootDir, resolved) || resolved;
         const targetRel = safeWorkspaceRel(this.rootDir, target) || target;
         if (target === resolved) {
@@ -1707,7 +2333,7 @@ var CompileService = class {
     return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
   }
   replaceRecipeTokens(value, ctx, outdir) {
-    return value.replace(/%DOCFILE%/g, ctx.docfile).replace(/%DOC%/g, ctx.targetAbs).replace(/%DOC_EXT%/g, ctx.docfile).replace(/%DOCFILE_EXT%/g, ctx.docfile).replace(/%DOCFILE_NOEXT%/g, ctx.docstem).replace(/%DOC_NOEXT%/g, path5.join(ctx.compileCwd, ctx.docstem)).replace(/%OUTDIR%/g, outdir || ".");
+    return value.replace(/%DOCFILE%/g, ctx.docfile).replace(/%DOC%/g, ctx.targetAbs).replace(/%DOC_EXT%/g, ctx.docfile).replace(/%DOCFILE_EXT%/g, ctx.docfile).replace(/%DOCFILE_NOEXT%/g, ctx.docstem).replace(/%DOC_NOEXT%/g, path7.join(ctx.compileCwd, ctx.docstem)).replace(/%OUTDIR%/g, outdir || ".");
   }
   extractOutdir(args) {
     for (let i = 0; i < args.length; i += 1) {
@@ -1721,17 +2347,17 @@ var CompileService = class {
   }
   resolvePdfPathForOutdir(ctx, outdir) {
     const replaced = this.replaceRecipeTokens(outdir, ctx, ".");
-    const outAbs = path5.isAbsolute(replaced) ? path5.resolve(replaced) : path5.resolve(ctx.compileCwd, replaced);
+    const outAbs = path7.isAbsolute(replaced) ? path7.resolve(replaced) : path7.resolve(ctx.compileCwd, replaced);
     if (!isSubpath(outAbs, this.rootDir)) return ctx.defaultPdfRel;
-    return workspaceRel(this.rootDir, path5.join(outAbs, `${ctx.docstem}.pdf`));
+    return workspaceRel(this.rootDir, path7.join(outAbs, `${ctx.docstem}.pdf`));
   }
   async finalizeCompileOutput(ctx, logs, expectedPdfRel) {
     let pdfRel = expectedPdfRel;
-    const expectedAbs = path5.resolve(this.rootDir, expectedPdfRel);
+    const expectedAbs = path7.resolve(this.rootDir, expectedPdfRel);
     if (!await exists(expectedAbs) && await exists(ctx.defaultPdfAbs)) {
       pdfRel = ctx.defaultPdfRel;
     }
-    const pdfAbs = path5.resolve(this.rootDir, pdfRel);
+    const pdfAbs = path7.resolve(this.rootDir, pdfRel);
     if (!await exists(pdfAbs)) {
       logs.push("");
       logs.push(`[output] Expected PDF not found: ${pdfRel}`);
@@ -1749,7 +2375,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve9) => {
+    return new Promise((resolve11) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -1768,22 +2394,22 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve9({ code: 127, output: `${output}
+        resolve11({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve9({ code: code ?? 1, output });
+        resolve11({ code: code ?? 1, output });
       });
     });
   }
   async resolveBinary(command) {
-    if (path5.isAbsolute(command) || command.includes(path5.sep)) return await exists(command) ? command : null;
-    const paths = (process.env.PATH ?? "").split(path5.delimiter);
+    if (path7.isAbsolute(command) || command.includes(path7.sep)) return await exists(command) ? command : null;
+    const paths = (process.env.PATH ?? "").split(path7.delimiter);
     const candidates = process.platform === "win32" ? [`${command}.exe`, `${command}.cmd`, command] : [command];
     for (const dir of paths) {
       for (const candidate of candidates) {
-        const abs = path5.join(dir, candidate);
+        const abs = path7.join(dir, candidate);
         if (await exists(abs)) return abs;
       }
     }
@@ -1792,8 +2418,8 @@ ${err.message}` });
 };
 
 // src/splitter.ts
-var import_node_fs6 = require("node:fs");
-var path6 = __toESM(require("node:path"));
+var import_node_fs8 = require("node:fs");
+var path8 = __toESM(require("node:path"));
 init_utils();
 var BEGIN_DOCUMENT_PATTERN = /\\begin\s*\{document\}/;
 var END_DOCUMENT_PATTERN = /\\end\s*\{document\}/;
@@ -1810,32 +2436,32 @@ var SplitterService = class {
   async splitCompileTarget(compileTarget, dryRun = false, sectionsDir = "Sections") {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.splitTexFile(path6.resolve(this.rootDir, target), sectionsDir, dryRun);
+    const result = await this.splitTexFile(path8.resolve(this.rootDir, target), sectionsDir, dryRun);
     return { response: await this.stateService.buildResponseState(), split: result };
   }
   async renumberCompileTarget(compileTarget, mode, dryRun = false) {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.renumberReferences(path6.resolve(this.rootDir, target), mode, dryRun);
+    const result = await this.renumberReferences(path8.resolve(this.rootDir, target), mode, dryRun);
     return { response: await this.stateService.buildResponseState(), renumber: result };
   }
   async unsplitCompileTarget(compileTarget, dryRun = false, deleteSource = true) {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.unsplitOneUnit(path6.resolve(this.rootDir, target), dryRun, deleteSource);
+    const result = await this.unsplitOneUnit(path8.resolve(this.rootDir, target), dryRun, deleteSource);
     return { response: await this.stateService.buildResponseState(), unsplit: result };
   }
   async splitTexFile(rootTexPath, sectionsDirRaw = "Sections", dryRun = false) {
-    const rootAbs = path6.resolve(rootTexPath);
+    const rootAbs = path8.resolve(rootTexPath);
     if (!isSubpath(rootAbs, this.rootDir)) throw new Error("Split target is outside workspace.");
-    const originalText = await import_node_fs6.promises.readFile(rootAbs, "utf8");
+    const originalText = await import_node_fs8.promises.readFile(rootAbs, "utf8");
     const declaration = extractDocumentclassDeclaration(originalText);
     if (!declaration) throw new Error("Split source must contain a \\documentclass declaration.");
     if (declaration.className === "subfiles") throw new Error("Split source must be a root target, not a subfiles unit.");
     const splitCommand = isChapterCapableClass(declaration.className) ? "chapter" : "section";
     const bounds = this.findBodyBounds(originalText);
     const body = originalText.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path6.dirname(rootAbs), body);
+    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
     const anchors = this.findTopLevelAnchors(body, splitCommand);
     const chunks = this.computeChunks(body, anchors, refs);
     const appendixStart = this.firstAppendixStart(body);
@@ -1864,7 +2490,7 @@ var SplitterService = class {
       };
     }
     const sectionsRel = this.normalizeSectionsDir(sectionsDirRaw);
-    const sectionsAbs = path6.resolve(path6.dirname(rootAbs), sectionsRel);
+    const sectionsAbs = path8.resolve(path8.dirname(rootAbs), sectionsRel);
     if (!isSubpath(sectionsAbs, this.rootDir)) throw new Error("Sections directory is outside workspace.");
     const seenSlugs = /* @__PURE__ */ new Map();
     const units = [];
@@ -1874,10 +2500,10 @@ var SplitterService = class {
       const slug = this.stableSlug(chunk.anchor.title, seenSlugs);
       let unitPath;
       do {
-        unitPath = path6.join(sectionsAbs, `${String(index).padStart(2, "0")}-${slug}.tex`);
+        unitPath = path8.join(sectionsAbs, `${String(index).padStart(2, "0")}-${slug}.tex`);
         index += 1;
       } while (await exists(unitPath));
-      const ref = this.relativeTexReference(path6.dirname(rootAbs), unitPath);
+      const ref = this.relativeTexReference(path8.dirname(rootAbs), unitPath);
       units.push({ path: workspaceRel(this.rootDir, unitPath), title: chunk.anchor.title, reference: ref });
       replacements.push({ start: chunk.anchor.start, end: chunk.end, text: `\\subfile{${ref.replace(/\.tex$/i, "")}}
 ` });
@@ -1889,13 +2515,13 @@ var SplitterService = class {
     const backupPath = await this.nextBackupPath(rootAbs);
     const updatedFiles = [workspaceRel(this.rootDir, rootAbs), ...units.map((unit) => unit.path)];
     if (!dryRun) {
-      await import_node_fs6.promises.mkdir(sectionsAbs, { recursive: true });
-      await import_node_fs6.promises.copyFile(rootAbs, backupPath);
-      await import_node_fs6.promises.writeFile(rootAbs, rewritten, "utf8");
+      await import_node_fs8.promises.mkdir(sectionsAbs, { recursive: true });
+      await import_node_fs8.promises.copyFile(rootAbs, backupPath);
+      await import_node_fs8.promises.writeFile(rootAbs, rewritten, "utf8");
       for (const unit of units) {
-        const unitAbs = path6.resolve(this.rootDir, unit.path);
+        const unitAbs = path8.resolve(this.rootDir, unit.path);
         const chunk = newChunks[units.indexOf(unit)];
-        await import_node_fs6.promises.writeFile(unitAbs, this.buildSubfileUnitText(rootAbs, unitAbs, body.slice(chunk.anchor.start, chunk.end)), "utf8");
+        await import_node_fs8.promises.writeFile(unitAbs, this.buildSubfileUnitText(rootAbs, unitAbs, body.slice(chunk.anchor.start, chunk.end)), "utf8");
       }
     }
     return {
@@ -1916,19 +2542,19 @@ var SplitterService = class {
   }
   async renumberReferences(rootTexPath, modeRaw, dryRun = false) {
     const mode = modeRaw === "remove" ? "remove" : "add";
-    const rootAbs = path6.resolve(rootTexPath);
-    const text = await import_node_fs6.promises.readFile(rootAbs, "utf8");
+    const rootAbs = path8.resolve(rootTexPath);
+    const text = await import_node_fs8.promises.readFile(rootAbs, "utf8");
     const bounds = this.findBodyBounds(text);
     const body = text.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path6.dirname(rootAbs), body);
+    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
     const renameMap = /* @__PURE__ */ new Map();
     const replacements = [];
     const warnings = [];
     let counter = 1;
     for (const ref of refs) {
-      const ext = path6.extname(ref.path);
-      const dir = path6.dirname(ref.path);
-      const stem = path6.basename(ref.path, ext);
+      const ext = path8.extname(ref.path);
+      const dir = path8.dirname(ref.path);
+      const stem = path8.basename(ref.path, ext);
       const match = NUMERIC_PREFIX_PATTERN.exec(stem);
       let newStem;
       if (mode === "add") {
@@ -1937,21 +2563,21 @@ var SplitterService = class {
       } else {
         newStem = match ? match[2] : stem;
       }
-      const newPath = path6.join(dir, `${newStem}${ext || ".tex"}`);
+      const newPath = path8.join(dir, `${newStem}${ext || ".tex"}`);
       if (newPath !== ref.path) {
         if (await exists(newPath)) {
           warnings.push(`Skipped rename because target exists: ${workspaceRel(this.rootDir, newPath)}`);
           continue;
         }
         renameMap.set(ref.path, newPath);
-        const newRef = this.relativeTexReference(path6.dirname(rootAbs), newPath).replace(/\.tex$/i, "");
+        const newRef = this.relativeTexReference(path8.dirname(rootAbs), newPath).replace(/\.tex$/i, "");
         replacements.push({ start: ref.start, end: ref.end, text: `\\${ref.macro}{${newRef}}` });
       }
     }
     const rewritten = `${text.slice(0, bounds.bodyStart)}${this.applyReplacements(body, replacements)}${text.slice(bounds.bodyEnd)}`;
     if (!dryRun) {
-      for (const [from, to] of renameMap) await import_node_fs6.promises.rename(from, to);
-      if (replacements.length > 0) await import_node_fs6.promises.writeFile(rootAbs, rewritten, "utf8");
+      for (const [from, to] of renameMap) await import_node_fs8.promises.rename(from, to);
+      if (replacements.length > 0) await import_node_fs8.promises.writeFile(rootAbs, rewritten, "utf8");
     }
     return {
       success: true,
@@ -1964,19 +2590,19 @@ var SplitterService = class {
     };
   }
   async unsplitOneUnit(unitPath, dryRun = false, deleteSource = true) {
-    const unitAbs = path6.resolve(unitPath);
-    const unitText = await import_node_fs6.promises.readFile(unitAbs, "utf8");
+    const unitAbs = path8.resolve(unitPath);
+    const unitText = await import_node_fs8.promises.readFile(unitAbs, "utf8");
     const declaration = extractDocumentclassDeclaration(unitText);
     if (!declaration || declaration.className !== "subfiles") throw new Error("Selected target is not a subfiles unit.");
     const parentRef = declaration.options.split(",")[0]?.trim();
     if (!parentRef) throw new Error("Subfiles unit is missing parent root reference.");
-    const rootAbs = path6.resolve(path6.dirname(unitAbs), parentRef);
+    const rootAbs = path8.resolve(path8.dirname(unitAbs), parentRef);
     if (!isSubpath(rootAbs, this.rootDir)) throw new Error("Parent root is outside workspace.");
-    const rootText = await import_node_fs6.promises.readFile(rootAbs, "utf8");
+    const rootText = await import_node_fs8.promises.readFile(rootAbs, "utf8");
     const bounds = this.findBodyBounds(rootText);
     const body = rootText.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path6.dirname(rootAbs), body);
-    const matching = refs.find((ref) => path6.resolve(ref.path) === unitAbs);
+    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
+    const matching = refs.find((ref) => path8.resolve(ref.path) === unitAbs);
     if (!matching) throw new Error("Could not find matching \\subfile reference in parent root.");
     const unitBody = this.extractUnitBody(unitText);
     const replacement = unitBody.endsWith("\n") ? unitBody : `${unitBody}
@@ -1984,9 +2610,9 @@ var SplitterService = class {
     const newBody = `${body.slice(0, matching.start)}${replacement}${body.slice(matching.end)}`;
     const updated = [workspaceRel(this.rootDir, rootAbs)];
     if (!dryRun) {
-      await import_node_fs6.promises.writeFile(rootAbs, `${rootText.slice(0, bounds.bodyStart)}${newBody}${rootText.slice(bounds.bodyEnd)}`, "utf8");
+      await import_node_fs8.promises.writeFile(rootAbs, `${rootText.slice(0, bounds.bodyStart)}${newBody}${rootText.slice(bounds.bodyEnd)}`, "utf8");
       if (deleteSource) {
-        await import_node_fs6.promises.unlink(unitAbs);
+        await import_node_fs8.promises.unlink(unitAbs);
         updated.push(workspaceRel(this.rootDir, unitAbs));
       }
     }
@@ -2038,7 +2664,7 @@ var SplitterService = class {
       const macro = match[1];
       const ref = match[2].trim();
       let target = ref.endsWith(".tex") ? ref : `${ref}.tex`;
-      target = path6.isAbsolute(target) ? target : path6.resolve(baseDir, target);
+      target = path8.isAbsolute(target) ? target : path8.resolve(baseDir, target);
       refs.push({ macro, ref, start: match.index ?? 0, end: (match.index ?? 0) + match[0].length, path: target });
     }
     return refs;
@@ -2049,7 +2675,7 @@ var SplitterService = class {
   highestExistingPrefix(refs) {
     let highest = 0;
     for (const ref of refs) {
-      const stem = path6.basename(ref.path, path6.extname(ref.path));
+      const stem = path8.basename(ref.path, path8.extname(ref.path));
       const match = NUMERIC_PREFIX_PATTERN.exec(stem);
       if (match) highest = Math.max(highest, Number(match[1]));
     }
@@ -2098,7 +2724,7 @@ var SplitterService = class {
     return value;
   }
   relativeTexReference(rootDir, targetTexPath) {
-    return toPosixPath(path6.relative(rootDir, targetTexPath)).replace(/\.tex$/i, "");
+    return toPosixPath(path8.relative(rootDir, targetTexPath)).replace(/\.tex$/i, "");
   }
   injectSubfilesPackage(preamblePlusBegin) {
     if (/\\usepackage(?:\[[^\]]*\])?\{subfiles\}/.test(preamblePlusBegin)) {
@@ -2119,7 +2745,7 @@ ${preamblePlusBegin.slice(insertAt)}`;
     return result;
   }
   buildSubfileUnitText(rootAbs, unitAbs, content) {
-    const rootRel = toPosixPath(path6.relative(path6.dirname(unitAbs), rootAbs));
+    const rootRel = toPosixPath(path8.relative(path8.dirname(unitAbs), rootAbs));
     const body = content.trimStart();
     return `\\documentclass[${rootRel}]{subfiles}
 \\begin{document}
@@ -2134,30 +2760,35 @@ ${body.trimEnd()}
 };
 
 // src/state.ts
-var import_node_fs7 = require("node:fs");
-var path7 = __toESM(require("node:path"));
+var import_node_crypto4 = require("node:crypto");
+var import_node_fs9 = require("node:fs");
+var path9 = __toESM(require("node:path"));
 init_schema();
 init_utils();
 var StateService = class {
-  constructor(rootDir) {
+  constructor(rootDir, additionalStylePresets = []) {
     this.rootDir = rootDir;
+    this.additionalStylePresets = additionalStylePresets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
   }
   rootDir;
-  cachedThemeDefaults;
+  additionalStylePresets;
+  setAdditionalStylePresets(presets) {
+    this.additionalStylePresets = presets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
+  }
   configPath() {
-    return path7.join(this.rootDir, "theme.ui.json");
+    return path9.join(this.rootDir, "theme.ui.json");
   }
   toggleOverridePath() {
-    return path7.join(this.rootDir, "theme.overrides.tex");
+    return path9.join(this.rootDir, "theme.overrides.tex");
   }
   colorOverridePath() {
-    return path7.join(this.rootDir, "theme.colors.tex");
+    return path9.join(this.rootDir, "theme.colors.tex");
   }
   themePath() {
-    return path7.join(this.rootDir, "theme.sty");
+    return path9.join(this.rootDir, "theme.sty");
   }
   mainTexPath() {
-    return path7.join(this.rootDir, "main.tex");
+    return path9.join(this.rootDir, "main.tex");
   }
   async buildResponseState() {
     const state = await this.loadState();
@@ -2168,7 +2799,7 @@ var StateService = class {
         toggles: TOGGLE_SCHEMA,
         groups: COLOR_GROUPS,
         class_config: CLASS_CONFIG_SCHEMA,
-        style_presets: state.style_presets,
+        style_presets: this.stylePresetSchema(),
         body_font_size: BODY_FONT_SIZE_CONFIG,
         starter_templates: starterTemplates,
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
@@ -2176,18 +2807,26 @@ var StateService = class {
       }
     };
   }
-  async parseThemeDefaults() {
+  async parseThemeDefaults(warnings = []) {
     if (!await exists(this.themePath())) {
       const fallback = {};
       for (const token of COLOR_ORDER) fallback[token] = "#808080";
+      warnings.push("theme.sty is missing; placeholder colors are being used.");
       return fallback;
     }
-    return parseThemeColorDefaults(this.themePath(), COLOR_ORDER);
+    try {
+      return await parseThemeColorDefaults(this.themePath(), COLOR_ORDER);
+    } catch (err) {
+      const fallback = {};
+      for (const token of COLOR_ORDER) fallback[token] = "#808080";
+      warnings.push(`Could not read theme.sty colors: ${err.message}`);
+      return fallback;
+    }
   }
   async loadState() {
-    const themeDefaults = await this.parseThemeDefaults();
-    this.cachedThemeDefaults = { ...themeDefaults };
-    const styleCatalog = this.buildStylePresetCatalog(themeDefaults);
+    const configWarnings = [];
+    const themeDefaults = await this.parseThemeDefaults(configWarnings);
+    const styleCatalog = this.buildStylePresetCatalog();
     const compileTargets = await this.listCandidateTexFiles();
     const recipeCatalog = await loadRecipeCatalog(this.rootDir);
     const compileRecipes = recipeCatalog.recipes;
@@ -2195,7 +2834,9 @@ var StateService = class {
       toggles: await this.parseMainToggleDefaults(),
       colors: { ...themeDefaults },
       style_preset: this.defaultPresetId(styleCatalog),
+      style_base_preset: this.defaultPresetId(styleCatalog),
       style_presets: this.presetMeta(styleCatalog),
+      config_warnings: configWarnings,
       body_font_size_pt: BODY_FONT_SIZE_CONFIG.default,
       class_config: { ...CLASS_CONFIG_DEFAULTS },
       compile_target: defaultCompileTarget(compileTargets),
@@ -2215,7 +2856,7 @@ var StateService = class {
     };
     await this.mergePersistedState(state);
     await this.mergeOverrideFiles(state);
-    this.finishNormalization(state, recipeCatalog);
+    this.finishNormalization(state);
     await this.refreshDerivedState(state);
     state.compile_output_pdf = safeWorkspaceRel(this.rootDir, state.compile_output_pdf) || state.compile_output_pdf_expected || compileOutputPdfRelpath(state.compile_target);
     return state;
@@ -2253,23 +2894,15 @@ var StateService = class {
         }
       }
     }
-    let requestedStylePreset;
     if ("style_preset" in payload) {
-      requestedStylePreset = this.normalizePreset(String(payload.style_preset ?? ""), normalized.style_presets);
+      normalized.style_preset = this.normalizePreset(String(payload.style_preset ?? ""), normalized.style_presets);
+      normalized.style_base_preset = this.styleDefinition(normalized.style_preset).base_preset_id ?? normalized.style_preset;
     } else if ("block_preset" in payload) {
-      requestedStylePreset = this.styleIdFromBlockPreset(String(payload.block_preset ?? ""));
+      normalized.style_preset = this.styleIdFromBlockPreset(String(payload.block_preset ?? ""));
+      normalized.style_base_preset = normalized.style_preset;
     } else if ("heading_toc_preset" in payload) {
-      requestedStylePreset = this.styleIdFromHeadingPreset(String(payload.heading_toc_preset ?? ""));
-    }
-    if (requestedStylePreset) {
-      normalized.style_preset = requestedStylePreset;
-      const hasExplicitColors = rawColors && typeof rawColors === "object" && !Array.isArray(rawColors) && Object.keys(rawColors).length > 0;
-      if (!hasExplicitColors) {
-        const preset = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {}).find((item) => item.id === requestedStylePreset);
-        if (preset) {
-          for (const token of COLOR_ORDER) normalized.colors[token] = preset.colors?.[token] ?? "#808080";
-        }
-      }
+      normalized.style_preset = this.styleIdFromHeadingPreset(String(payload.heading_toc_preset ?? ""));
+      normalized.style_base_preset = normalized.style_preset;
     }
     if ("body_font_size_pt" in payload) normalized.body_font_size_pt = assertValidBodyFontSize(payload.body_font_size_pt);
     const rawClassConfig = payload.class_config;
@@ -2322,6 +2955,7 @@ var StateService = class {
       toggles: state.toggles,
       colors: state.colors,
       style_preset: state.style_preset,
+      style_base_preset: state.style_base_preset,
       // Keep legacy fields for older Toolkit versions reading this workspace cache.
       block_preset: this.styleDefinition(state.style_preset).block_source,
       heading_toc_preset: this.styleDefinition(state.style_preset).heading_source,
@@ -2335,15 +2969,40 @@ var StateService = class {
       compile_last_compile_at: state.compile_last_compile_at,
       compile_last_success: state.compile_last_success
     };
-    await import_node_fs7.promises.writeFile(this.configPath(), `${JSON.stringify(uiState, null, 2)}
-`, "utf8");
+    await this.writeFileAtomic(this.configPath(), `${JSON.stringify(uiState, null, 2)}
+`);
   }
   async writeOverrideFiles(state) {
-    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
-    state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
-    state.class_config = this.normalizeClassConfigMap(state.class_config);
-    await this.refreshDerivedState(state);
+    await this.prepareStateForWrite(state);
     await this.persistUiState(state);
+    await this.writeToggleOverrideFile(state);
+    await this.writeColorOverrideFile(state);
+  }
+  async writeColorState(state) {
+    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
+    for (const token of COLOR_ORDER) {
+      const parsed = parseHexColor(state.colors[token] ?? "");
+      if (!parsed) throw new Error(`Invalid hex color for ${token}: ${String(state.colors[token])}`);
+      state.colors[token] = parsed;
+    }
+    let uiState = {};
+    try {
+      const parsed = JSON.parse(await import_node_fs9.promises.readFile(this.configPath(), "utf8"));
+      if (this.isRecord(parsed)) uiState = parsed;
+    } catch (err) {
+      if (err.code !== "ENOENT" && !(err instanceof SyntaxError)) throw err;
+    }
+    uiState.colors = { ...state.colors };
+    uiState.style_preset = state.style_preset;
+    uiState.style_base_preset = state.style_base_preset;
+    uiState.block_preset = this.styleDefinition(state.style_preset).block_source;
+    uiState.heading_toc_preset = this.styleDefinition(state.style_preset).heading_source;
+    await this.writeFileAtomic(this.configPath(), `${JSON.stringify(uiState, null, 2)}
+`);
+    await this.writeColorOverrideFile(state);
+    state.config_warnings = [];
+  }
+  async writeToggleOverrideFile(state) {
     const toggleLines = [
       "% Auto-generated by LaTeX Editing Toolkit VS Code extension",
       "% Delete this file to return to defaults in main.tex."
@@ -2357,8 +3016,10 @@ var StateService = class {
     }
     toggleLines.push("", "% Base body font size in pt.");
     toggleLines.push(`\\def\\ThemeBodyFontSizePt{${formatBodyFontSize(state.body_font_size_pt)}}`);
-    await import_node_fs7.promises.writeFile(this.toggleOverridePath(), `${toggleLines.join("\n")}
-`, "utf8");
+    await this.writeFileAtomic(this.toggleOverridePath(), `${toggleLines.join("\n")}
+`);
+  }
+  async writeColorOverrideFile(state) {
     const colorLines = [
       "% Auto-generated by LaTeX Editing Toolkit VS Code extension",
       "% Delete this file to return to defaults in theme.sty."
@@ -2369,27 +3030,35 @@ var StateService = class {
       colorLines.push(`\\definecolor{${alias}}{HTML}{${hex}}`);
       colorLines.push(`\\colorlet{${token}}{${alias}}`);
     }
-    await import_node_fs7.promises.writeFile(this.colorOverridePath(), `${colorLines.join("\n")}
-`, "utf8");
+    await this.writeFileAtomic(this.colorOverridePath(), `${colorLines.join("\n")}
+`);
+  }
+  async prepareStateForWrite(state) {
+    state.style_preset = this.normalizePreset(state.style_preset, state.style_presets);
+    state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
+    state.class_config = this.normalizeClassConfigMap(state.class_config);
+    state.config_warnings = [];
+    await this.refreshDerivedState(state);
   }
   async deleteOverrideFiles() {
     for (const file of [this.configPath(), this.toggleOverridePath(), this.colorOverridePath()]) {
       try {
-        await import_node_fs7.promises.unlink(file);
+        await import_node_fs9.promises.unlink(file);
       } catch (err) {
         if (err.code !== "ENOENT") throw err;
       }
     }
   }
   applyStylePreset(state, presetId) {
-    const catalog = this.buildStylePresetCatalog(this.cachedThemeDefaults ?? {});
+    const catalog = this.buildStylePresetCatalog();
     const selected = this.normalizePreset(presetId, this.presetMeta(catalog));
     const preset = catalog.find((item) => item.id === selected);
     if (!preset) throw new Error(`Unknown style preset: ${presetId}`);
     for (const token of COLOR_ORDER) {
-      state.colors[token] = preset.colors?.[token] ?? "#808080";
+      state.colors[token] = preset.colors[token] ?? "#808080";
     }
     state.style_preset = selected;
+    state.style_base_preset = preset.base_preset_id ?? preset.id;
     state.style_presets = this.presetMeta(catalog);
   }
   // Compatibility helpers for callers using the pre-unified API.
@@ -2400,20 +3069,20 @@ var StateService = class {
     this.applyStylePreset(state, this.styleIdFromHeadingPreset(presetId));
   }
   async starterTemplateMeta() {
-    const templateDir = path7.join(this.rootDir, "templates");
-    const assetTemplateDir = path7.resolve(__dirname, "..", "assets", "template", "templates");
+    const templateDir = path9.join(this.rootDir, "templates");
+    const assetTemplateDir = path9.resolve(__dirname, "..", "assets", "template", "templates");
     const out = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path7.join(templateDir, entry.filename)) || await exists(path7.join(assetTemplateDir, entry.filename))) {
+      if (await exists(path9.join(templateDir, entry.filename)) || await exists(path9.join(assetTemplateDir, entry.filename))) {
         out.push({ id: entry.id, label: entry.label, description: entry.description });
       }
     }
     return out;
   }
   async templateSourcePath(filename) {
-    const workspaceTemplate = path7.join(this.rootDir, "templates", filename);
+    const workspaceTemplate = path9.join(this.rootDir, "templates", filename);
     if (await exists(workspaceTemplate)) return workspaceTemplate;
-    return path7.resolve(__dirname, "..", "assets", "template", "templates", filename);
+    return path9.resolve(__dirname, "..", "assets", "template", "templates", filename);
   }
   async refreshDerivedState(state) {
     state.compile_recipe_name = state.compile_recipes.find((item) => item.id === state.compile_recipe)?.name ?? "";
@@ -2434,18 +3103,18 @@ var StateService = class {
       const catalog = await loadRecipeCatalog(this.rootDir);
       const recipe = catalog.recipes.find((item) => item.id === state.compile_recipe);
       if (!recipe) return compileOutputPdfRelpath(state.compile_target);
-      const targetAbs = path7.resolve(this.rootDir, state.compile_target);
-      const targetDir = path7.dirname(targetAbs);
-      const stem = path7.basename(targetAbs, ".tex");
+      const targetAbs = path9.resolve(this.rootDir, state.compile_target);
+      const targetDir = path9.dirname(targetAbs);
+      const stem = path9.basename(targetAbs, ".tex");
       for (const toolName of recipe.tools) {
         const tool = catalog.tools[toolName];
         if (!tool) continue;
         const outdir = this.extractRecipeOutdir(tool.args);
         if (!outdir) continue;
-        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path7.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
-        const outAbs = path7.isAbsolute(normalizedOutdir) ? path7.resolve(normalizedOutdir) : path7.resolve(targetDir, normalizedOutdir);
+        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path9.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
+        const outAbs = path9.isAbsolute(normalizedOutdir) ? path9.resolve(normalizedOutdir) : path9.resolve(targetDir, normalizedOutdir);
         if (!isSubpath(outAbs, this.rootDir)) return compileOutputPdfRelpath(state.compile_target);
-        return workspaceRel(this.rootDir, path7.join(outAbs, `${stem}.pdf`));
+        return workspaceRel(this.rootDir, path9.join(outAbs, `${stem}.pdf`));
       }
     } catch {
       return compileOutputPdfRelpath(state.compile_target);
@@ -2465,7 +3134,7 @@ var StateService = class {
   async detectTargetDocumentClass(targetRel) {
     if (!targetRel) return "";
     try {
-      const abs = path7.resolve(this.rootDir, targetRel);
+      const abs = path9.resolve(this.rootDir, targetRel);
       return await extractDocumentclassName(abs, this.rootDir);
     } catch {
       return "";
@@ -2475,7 +3144,7 @@ var StateService = class {
     const defaults = {};
     let text = "";
     try {
-      text = await import_node_fs7.promises.readFile(this.mainTexPath(), "utf8");
+      text = await import_node_fs9.promises.readFile(this.mainTexPath(), "utf8");
     } catch {
     }
     for (const entry of TOGGLE_SCHEMA) {
@@ -2490,39 +3159,119 @@ var StateService = class {
     return defaults;
   }
   async mergePersistedState(state) {
+    let raw;
     try {
-      const raw = JSON.parse(await import_node_fs7.promises.readFile(this.configPath(), "utf8"));
-      if (raw.toggles && typeof raw.toggles === "object" && !Array.isArray(raw.toggles)) {
-        for (const [key, value] of Object.entries(raw.toggles)) if (key in state.toggles) state.toggles[key] = Boolean(value);
+      const parsed = JSON.parse(await import_node_fs9.promises.readFile(this.configPath(), "utf8"));
+      if (!this.isRecord(parsed)) {
+        this.addWarning(state, "theme.ui.json must contain a JSON object; defaults were used.");
+        return;
       }
-      if (raw.colors && typeof raw.colors === "object" && !Array.isArray(raw.colors)) {
-        for (const [key, value] of Object.entries(raw.colors)) {
-          const parsed = parseHexColor(String(value));
-          if (parsed && key in state.colors) state.colors[key] = parsed;
-        }
-      }
-      if (typeof raw.style_preset === "string") {
-        state.style_preset = this.normalizePreset(raw.style_preset, state.style_presets);
-      } else if (typeof raw.block_preset === "string") {
-        state.style_preset = this.styleIdFromBlockPreset(raw.block_preset);
-      }
-      if ("body_font_size_pt" in raw) state.body_font_size_pt = normalizeBodyFontSize(raw.body_font_size_pt);
-      if (raw.class_config && typeof raw.class_config === "object" && !Array.isArray(raw.class_config)) state.class_config = this.normalizeClassConfigMap(raw.class_config);
-      if ("compile_target" in raw) state.compile_target = normalizeCompileTarget(this.rootDir, raw.compile_target, state.compile_targets);
-      if ("compile_recipe" in raw) state.compile_recipe = this.normalizeCompileRecipe(raw.compile_recipe, state.compile_recipes);
-      if (typeof raw.compile_use_internal_fallback === "boolean") state.compile_use_internal_fallback = raw.compile_use_internal_fallback;
-      if (typeof raw.compile_output_pdf === "string") state.compile_output_pdf = raw.compile_output_pdf;
-      if (typeof raw.compile_output_pdf_expected === "string") state.compile_output_pdf_expected = raw.compile_output_pdf_expected;
-      if (typeof raw.compile_last_compile_at === "string") state.compile_last_compile_at = raw.compile_last_compile_at;
-      if (typeof raw.compile_last_success === "boolean") state.compile_last_success = raw.compile_last_success;
+      raw = parsed;
     } catch (err) {
       if (err.code !== "ENOENT") {
+        this.addWarning(state, `Could not read theme.ui.json: ${err.message}`);
+      }
+      return;
+    }
+    if (this.isRecord(raw.toggles)) {
+      for (const [key, value] of Object.entries(raw.toggles)) {
+        if (!(key in state.toggles)) continue;
+        if (typeof value === "boolean") state.toggles[key] = value;
+        else if (typeof value === "string") {
+          const parsed = boolFromTex(value);
+          if (parsed === null) this.addWarning(state, `Ignored invalid toggle '${key}' in theme.ui.json.`);
+          else state.toggles[key] = parsed;
+        } else {
+          this.addWarning(state, `Ignored invalid toggle '${key}' in theme.ui.json.`);
+        }
+      }
+    } else if (raw.toggles !== void 0) {
+      this.addWarning(state, "Ignored invalid toggles in theme.ui.json.");
+    }
+    if (this.isRecord(raw.colors)) {
+      for (const [key, value] of Object.entries(raw.colors)) {
+        if (!(key in state.colors)) continue;
+        const parsed = parseHexColor(String(value));
+        if (parsed) state.colors[key] = parsed;
+        else this.addWarning(state, `Ignored invalid color '${key}' in theme.ui.json.`);
+      }
+    } else if (raw.colors !== void 0) {
+      this.addWarning(state, "Ignored invalid colors in theme.ui.json.");
+    }
+    if (typeof raw.style_preset === "string") {
+      try {
+        state.style_preset = this.normalizePreset(raw.style_preset, state.style_presets);
+        state.style_base_preset = this.styleDefinition(state.style_preset).base_preset_id ?? state.style_preset;
+      } catch {
+        const fallback = typeof raw.style_base_preset === "string" && this.isKnownBuiltInPreset(raw.style_base_preset) ? raw.style_base_preset : "default";
+        state.style_preset = fallback;
+        state.style_base_preset = fallback;
+        this.addWarning(state, `Personal style '${raw.style_preset}' is unavailable; saved colors were preserved using '${fallback}' as the base.`);
+      }
+    } else if (raw.style_preset !== void 0) {
+      this.addWarning(state, "Ignored invalid style_preset in theme.ui.json.");
+    } else if (typeof raw.block_preset === "string") {
+      if (this.isKnownBlockPreset(raw.block_preset)) {
+        state.style_preset = this.styleIdFromBlockPreset(raw.block_preset);
+        state.style_base_preset = state.style_preset;
+      } else {
+        this.addWarning(state, `Ignored unknown legacy block preset '${raw.block_preset}'.`);
       }
     }
+    if ("body_font_size_pt" in raw) {
+      try {
+        state.body_font_size_pt = assertValidBodyFontSize(raw.body_font_size_pt);
+      } catch {
+        this.addWarning(state, "Ignored invalid body_font_size_pt in theme.ui.json.");
+      }
+    }
+    if (this.isRecord(raw.class_config)) {
+      for (const field of CLASS_CONFIG_IDS) {
+        if (!(field in raw.class_config)) continue;
+        try {
+          state.class_config[field] = this.validateClassConfigValue(field, raw.class_config[field]);
+        } catch {
+          this.addWarning(state, `Ignored invalid class config '${field}'.`);
+        }
+      }
+    } else if (raw.class_config !== void 0) {
+      this.addWarning(state, "Ignored invalid class_config in theme.ui.json.");
+    }
+    if ("compile_target" in raw) {
+      try {
+        state.compile_target = normalizeCompileTarget(this.rootDir, raw.compile_target, state.compile_targets);
+      } catch {
+        this.addWarning(state, `Ignored unavailable compile target '${String(raw.compile_target)}'.`);
+      }
+    }
+    if ("compile_recipe" in raw) {
+      try {
+        if (state.compile_recipes.length === 0 && String(raw.compile_recipe ?? "").trim()) {
+          throw new Error("No compile recipes are available.");
+        }
+        state.compile_recipe = this.normalizeCompileRecipe(raw.compile_recipe, state.compile_recipes);
+      } catch {
+        this.addWarning(state, `Ignored unavailable compile recipe '${String(raw.compile_recipe)}'.`);
+      }
+    }
+    if ("compile_use_internal_fallback" in raw) {
+      const value = raw.compile_use_internal_fallback;
+      const parsed = typeof value === "boolean" ? value : typeof value === "string" ? boolFromTex(value) : null;
+      if (parsed === null) this.addWarning(state, "Ignored invalid compile_use_internal_fallback in theme.ui.json.");
+      else state.compile_use_internal_fallback = parsed;
+    }
+    if (typeof raw.compile_output_pdf === "string") state.compile_output_pdf = raw.compile_output_pdf;
+    else if (raw.compile_output_pdf !== void 0) this.addWarning(state, "Ignored invalid compile_output_pdf in theme.ui.json.");
+    if (typeof raw.compile_output_pdf_expected === "string") state.compile_output_pdf_expected = raw.compile_output_pdf_expected;
+    else if (raw.compile_output_pdf_expected !== void 0) this.addWarning(state, "Ignored invalid compile_output_pdf_expected in theme.ui.json.");
+    if (typeof raw.compile_last_compile_at === "string") state.compile_last_compile_at = raw.compile_last_compile_at;
+    else if (raw.compile_last_compile_at !== void 0) this.addWarning(state, "Ignored invalid compile_last_compile_at in theme.ui.json.");
+    if (typeof raw.compile_last_success === "boolean" || raw.compile_last_success === null) state.compile_last_success = raw.compile_last_success;
+    else if (raw.compile_last_success !== void 0) this.addWarning(state, "Ignored invalid compile_last_success in theme.ui.json.");
   }
   async mergeOverrideFiles(state) {
     try {
-      const text = await import_node_fs7.promises.readFile(this.toggleOverridePath(), "utf8");
+      const text = await import_node_fs9.promises.readFile(this.toggleOverridePath(), "utf8");
       for (const entry of TOGGLE_SCHEMA) {
         const matches = Array.from(text.matchAll(new RegExp(`\\\\${entry.command}(true|false)`, "g")));
         if (matches.length > 0) state.toggles[entry.id] = boolFromTex(matches.at(-1)?.[1] ?? "") ?? state.toggles[entry.id];
@@ -2530,15 +3279,29 @@ var StateService = class {
       for (const field of CLASS_CONFIG_IDS) {
         const command = CLASS_CONFIG_COMMANDS[field];
         const matches = Array.from(text.matchAll(new RegExp(`\\\\def\\\\${command}\\{([^}]+)\\}`, "g")));
-        if (matches.length > 0) state.class_config[field] = this.normalizeClassConfigValue(field, matches.at(-1)?.[1]);
+        if (matches.length > 0) {
+          try {
+            state.class_config[field] = this.validateClassConfigValue(field, matches.at(-1)?.[1]);
+          } catch {
+            this.addWarning(state, `Ignored invalid class config '${field}' in theme.overrides.tex.`);
+          }
+        }
       }
       const fontMatch = Array.from(text.matchAll(/\\def\\ThemeBodyFontSizePt\{([^}]+)\}/g));
-      if (fontMatch.length > 0) state.body_font_size_pt = normalizeBodyFontSize(fontMatch.at(-1)?.[1]);
+      if (fontMatch.length > 0) {
+        try {
+          state.body_font_size_pt = assertValidBodyFontSize(fontMatch.at(-1)?.[1]);
+        } catch {
+          this.addWarning(state, "Ignored invalid body font size in theme.overrides.tex.");
+        }
+      }
     } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+      if (err.code !== "ENOENT") {
+        this.addWarning(state, `Could not read theme.overrides.tex: ${err.message}`);
+      }
     }
     try {
-      const text = await import_node_fs7.promises.readFile(this.colorOverridePath(), "utf8");
+      const text = await import_node_fs9.promises.readFile(this.colorOverridePath(), "utf8");
       const defines = /* @__PURE__ */ new Map();
       for (const match of text.matchAll(/\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}/g)) {
         defines.set(match[1], `#${match[2].toUpperCase()}`);
@@ -2550,26 +3313,70 @@ var StateService = class {
         const defined = defines.get(mapped);
         const parsed = defined ?? parseHexColor(mapped);
         if (parsed) state.colors[token] = parsed;
+        else this.addWarning(state, `Ignored invalid color mapping for '${token}' in theme.colors.tex.`);
       }
     } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+      if (err.code !== "ENOENT") {
+        this.addWarning(state, `Could not read theme.colors.tex: ${err.message}`);
+      }
     }
   }
-  finishNormalization(state, _recipeCatalog) {
+  finishNormalization(state) {
     for (const key of TOGGLE_IDS) state.toggles[key] = Boolean(state.toggles[key]);
     for (const key of COLOR_ORDER) state.colors[key] = parseHexColor(state.colors[key] ?? "") ?? "#808080";
     state.class_config = this.normalizeClassConfigMap(state.class_config);
     state.body_font_size_pt = normalizeBodyFontSize(state.body_font_size_pt);
     state.compile_output_pdf = safeWorkspaceRel(this.rootDir, state.compile_output_pdf) || state.compile_output_pdf_expected || compileOutputPdfRelpath(state.compile_target);
   }
-  buildStylePresetCatalog(_defaults) {
-    return STYLE_PRESET_DEFINITIONS.map((definition) => ({
+  buildStylePresetCatalog() {
+    return this.allStylePresetDefinitions().map((definition) => ({
       ...definition,
       colors: { ...definition.colors }
     }));
   }
+  stylePresetSchema() {
+    return this.allStylePresetDefinitions().map(({ id, label, description, colors, source, base_preset_id, editable }) => ({
+      id,
+      label,
+      description,
+      colors: { ...colors },
+      source: source ?? "builtin",
+      base_preset_id: base_preset_id ?? id,
+      editable: editable ?? false
+    }));
+  }
+  addWarning(state, message) {
+    if (!state.config_warnings.includes(message)) state.config_warnings.push(message);
+  }
+  isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+  isKnownBlockPreset(raw) {
+    const value = raw.trim();
+    return STYLE_PRESET_DEFINITIONS.some((preset) => preset.id === value || preset.block_source === value);
+  }
+  isKnownBuiltInPreset(raw) {
+    return STYLE_PRESET_DEFINITIONS.some((preset) => preset.id === raw.trim());
+  }
+  allStylePresetDefinitions() {
+    return [
+      ...STYLE_PRESET_DEFINITIONS.map((preset) => ({ ...preset, source: "builtin", base_preset_id: preset.id, editable: false })),
+      ...this.additionalStylePresets
+    ];
+  }
+  async writeFileAtomic(targetPath, text) {
+    const tempPath = `${targetPath}.tmp-${process.pid}-${(0, import_node_crypto4.randomUUID)()}`;
+    await import_node_fs9.promises.mkdir(path9.dirname(targetPath), { recursive: true });
+    try {
+      await import_node_fs9.promises.writeFile(tempPath, text, "utf8");
+      await import_node_fs9.promises.rename(tempPath, targetPath);
+    } catch (err) {
+      await import_node_fs9.promises.unlink(tempPath).catch(() => void 0);
+      throw err;
+    }
+  }
   styleDefinition(styleId) {
-    return STYLE_PRESET_DEFINITIONS.find((item) => item.id === styleId) ?? STYLE_PRESET_DEFINITIONS[0];
+    return this.allStylePresetDefinitions().find((item) => item.id === styleId) ?? STYLE_PRESET_DEFINITIONS[0];
   }
   styleIdFromBlockPreset(presetId) {
     const normalized = presetId.trim();
@@ -2630,12 +3437,12 @@ var StateService = class {
   }
 };
 async function copyDirectory(src, dest) {
-  await import_node_fs7.promises.mkdir(dest, { recursive: true });
-  for (const entry of await import_node_fs7.promises.readdir(src, { withFileTypes: true })) {
-    const srcPath = path7.join(src, entry.name);
-    const destPath = path7.join(dest, entry.name);
+  await import_node_fs9.promises.mkdir(dest, { recursive: true });
+  for (const entry of await import_node_fs9.promises.readdir(src, { withFileTypes: true })) {
+    const srcPath = path9.join(src, entry.name);
+    const destPath = path9.join(dest, entry.name);
     if (entry.isDirectory()) await copyDirectory(srcPath, destPath);
-    else if (entry.isFile()) await import_node_fs7.promises.copyFile(srcPath, destPath);
+    else if (entry.isFile()) await import_node_fs9.promises.copyFile(srcPath, destPath);
   }
 }
 async function copyMissingDirectory(src, dest, relLabel, copied) {
@@ -2644,38 +3451,39 @@ async function copyMissingDirectory(src, dest, relLabel, copied) {
     copied.push(`${relLabel}/`);
     return;
   }
-  for (const entry of await import_node_fs7.promises.readdir(src, { withFileTypes: true })) {
-    const source = path7.join(src, entry.name);
-    const target = path7.join(dest, entry.name);
+  for (const entry of await import_node_fs9.promises.readdir(src, { withFileTypes: true })) {
+    const source = path9.join(src, entry.name);
+    const target = path9.join(dest, entry.name);
     if (await exists(target)) continue;
     if (entry.isDirectory()) {
       await copyDirectory(source, target);
       copied.push(`${relLabel}/${entry.name}/`);
     } else if (entry.isFile()) {
-      await import_node_fs7.promises.copyFile(source, target);
+      await import_node_fs9.promises.copyFile(source, target);
       copied.push(`${relLabel}/${entry.name}`);
     }
   }
 }
 async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
-  const assetRoot = path7.join(extensionDir, "assets", "template");
+  const assetRoot = path9.join(extensionDir, "assets", "template");
   const copied = [];
   const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
   for (const file of files) {
-    const target = path7.join(rootDir, file);
+    const target = path9.join(rootDir, file);
     if (!await exists(target)) {
-      await import_node_fs7.promises.copyFile(path7.join(assetRoot, file), target);
+      await import_node_fs9.promises.copyFile(path9.join(assetRoot, file), target);
       copied.push(file);
     }
   }
-  await copyMissingDirectory(path7.join(assetRoot, "Fig"), path7.join(rootDir, "Fig"), "Fig", copied);
-  await copyMissingDirectory(path7.join(assetRoot, "templates"), path7.join(rootDir, "templates"), "templates", copied);
-  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path7.join(rootDir, item)));
+  await copyMissingDirectory(path9.join(assetRoot, "Fig"), path9.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(path9.join(assetRoot, "templates"), path9.join(rootDir, "templates"), "templates", copied);
+  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path9.join(rootDir, item)));
 }
 
 // src/template.ts
-var import_node_fs8 = require("node:fs");
-var path8 = __toESM(require("node:path"));
+var import_node_crypto5 = require("node:crypto");
+var import_node_fs10 = require("node:fs");
+var path10 = __toESM(require("node:path"));
 init_schema();
 init_utils();
 var UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
@@ -2694,43 +3502,62 @@ var TemplateService = class {
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
   }
-  async upgradeThemeAssets(resetColorOverrides) {
-    const assetRoot = path8.join(this.extensionDir, "assets", "template");
-    const backupDir = path8.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
+  async upgradeThemeAssets(options = { colorPolicy: "preserve" }) {
+    const colorPolicy = options.colorPolicy ?? "preserve";
+    if (colorPolicy !== "preserve" && colorPolicy !== "default") {
+      throw new Error(`Unknown upgrade color policy: ${String(colorPolicy)}`);
+    }
+    const assetRoot = path10.join(this.extensionDir, "assets", "template");
+    const backupDir = path10.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
     const upgradedFiles = [];
-    const resetFiles = [];
+    const updatedOverrideFiles = [];
     const skippedMissingFiles = [];
+    const assetReplacements = [];
     for (const file of UPGRADE_THEME_ASSET_FILES) {
-      const source = path8.join(assetRoot, file);
-      const target = path8.join(this.rootDir, file);
+      const source = path10.join(assetRoot, file);
+      const target = path10.join(this.rootDir, file);
       this.assertInsideWorkspace(target);
       if (!await exists(source)) {
         skippedMissingFiles.push(file);
         continue;
       }
-      if (await exists(target)) await this.backupFile(target, backupDir);
-      await import_node_fs8.promises.mkdir(path8.dirname(target), { recursive: true });
-      await import_node_fs8.promises.copyFile(source, target);
-      upgradedFiles.push(file);
+      assetReplacements.push({ file, source, target });
     }
-    if (resetColorOverrides) {
-      for (const file of COLOR_OVERRIDE_FILES) {
-        const target = path8.join(this.rootDir, file);
-        this.assertInsideWorkspace(target);
-        if (!await exists(target)) {
-          skippedMissingFiles.push(file);
-          continue;
-        }
-        await this.backupFile(target, backupDir);
-        await import_node_fs8.promises.unlink(target);
-        resetFiles.push(file);
+    const state = colorPolicy === "default" ? await this.stateService.loadState() : void 0;
+    const targets = assetReplacements.map((item) => item.target);
+    if (colorPolicy === "default") {
+      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path10.join(this.rootDir, file)));
+    }
+    const existedBefore = /* @__PURE__ */ new Map();
+    await import_node_fs10.promises.mkdir(backupDir, { recursive: true });
+    for (const target of targets) {
+      this.assertInsideWorkspace(target);
+      const existed = await exists(target);
+      existedBefore.set(target, existed);
+      if (existed) await this.backupFile(target, backupDir);
+    }
+    try {
+      for (const { file, source, target } of assetReplacements) {
+        await this.replaceFileAtomic(source, target);
+        upgradedFiles.push(file);
       }
+      if (colorPolicy === "default" && state) {
+        this.stateService.applyStylePreset(state, "default");
+        await this.stateService.writeColorState(state);
+        updatedOverrideFiles.push(...COLOR_OVERRIDE_FILES);
+      }
+    } catch (err) {
+      const rollbackErrors = await this.rollbackTargets(targets, existedBefore, backupDir);
+      const suffix = rollbackErrors.length > 0 ? ` Rollback errors: ${rollbackErrors.join("; ")}` : "";
+      throw new Error(`Theme asset upgrade failed: ${err.message}.${suffix}`, { cause: err });
     }
     return {
       success: true,
       backup_dir: workspaceRel(this.rootDir, backupDir),
       upgraded_files: upgradedFiles,
-      reset_files: resetFiles,
+      color_policy: colorPolicy,
+      updated_override_files: updatedOverrideFiles,
+      reset_files: [...updatedOverrideFiles],
       skipped_missing_files: skippedMissingFiles
     };
   }
@@ -2739,18 +3566,18 @@ var TemplateService = class {
     const normalizedTarget = this.normalizeOutputTarget(outputTarget);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === String(templateId || "").trim()) ?? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal") ?? STARTER_TEMPLATE_DEFINITIONS[0];
     if (!template) throw new Error("No starter templates available.");
-    const targetAbs = path8.resolve(this.rootDir, normalizedTarget);
+    const targetAbs = path10.resolve(this.rootDir, normalizedTarget);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat = await import_node_fs8.promises.stat(targetAbs);
+      const stat = await import_node_fs10.promises.stat(targetAbs);
       if (stat.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
-    const text = await import_node_fs8.promises.readFile(source, "utf8");
+    const text = await import_node_fs10.promises.readFile(source, "utf8");
     if (!extractDocumentclassDeclaration(text)) throw new Error(`Starter template is missing a valid \\documentclass declaration: ${template.filename}`);
-    await import_node_fs8.promises.mkdir(path8.dirname(targetAbs), { recursive: true });
-    await import_node_fs8.promises.writeFile(targetAbs, text, "utf8");
+    await import_node_fs10.promises.mkdir(path10.dirname(targetAbs), { recursive: true });
+    await import_node_fs10.promises.writeFile(targetAbs, text, "utf8");
     const state = await this.stateService.loadState();
     state.compile_targets = await this.stateService.listCandidateTexFiles();
     state.compile_target = normalizeCompileTarget(this.rootDir, normalizedTarget, state.compile_targets);
@@ -2765,23 +3592,54 @@ var TemplateService = class {
   normalizeOutputTarget(raw) {
     let target = String(raw ?? "").trim() || "main.tex";
     target = toPosixPath(target);
-    if (path8.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
-    if (!path8.extname(target)) target += ".tex";
-    if (path8.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
-    const resolved = path8.resolve(this.rootDir, target);
+    if (path10.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
+    if (!path10.extname(target)) target += ".tex";
+    if (path10.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
+    const resolved = path10.resolve(this.rootDir, target);
     if (!isSubpath(resolved, this.rootDir)) throw new Error("Output target is outside workspace.");
     return workspaceRel(this.rootDir, resolved);
   }
   async backupFile(source, backupDir) {
     this.assertInsideWorkspace(source);
     const rel = workspaceRel(this.rootDir, source);
-    const backupPath = path8.join(backupDir, rel);
+    const backupPath = path10.join(backupDir, rel);
     this.assertInsideWorkspace(backupPath);
-    await import_node_fs8.promises.mkdir(path8.dirname(backupPath), { recursive: true });
-    await import_node_fs8.promises.copyFile(source, backupPath);
+    await import_node_fs10.promises.mkdir(path10.dirname(backupPath), { recursive: true });
+    await import_node_fs10.promises.copyFile(source, backupPath);
+  }
+  async replaceFileAtomic(source, target) {
+    const tempPath = `${target}.tmp-${process.pid}-${(0, import_node_crypto5.randomUUID)()}`;
+    this.assertInsideWorkspace(target);
+    this.assertInsideWorkspace(tempPath);
+    await import_node_fs10.promises.mkdir(path10.dirname(target), { recursive: true });
+    try {
+      await import_node_fs10.promises.copyFile(source, tempPath);
+      await import_node_fs10.promises.rename(tempPath, target);
+    } catch (err) {
+      await import_node_fs10.promises.unlink(tempPath).catch(() => void 0);
+      throw err;
+    }
+  }
+  async rollbackTargets(targets, existedBefore, backupDir) {
+    const errors = [];
+    for (const target of [...targets].reverse()) {
+      try {
+        if (existedBefore.get(target)) {
+          const backupPath = path10.join(backupDir, workspaceRel(this.rootDir, target));
+          await this.replaceFileAtomic(backupPath, target);
+        } else {
+          await import_node_fs10.promises.unlink(target).catch((err) => {
+            if (err.code !== "ENOENT") throw err;
+          });
+        }
+      } catch (err) {
+        errors.push(`${workspaceRel(this.rootDir, target)}: ${err.message}`);
+      }
+    }
+    return errors;
   }
   assertInsideWorkspace(absPath) {
-    if (!isSubpath(path8.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
+    if (!isSubpath(path10.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
   }
   timestamp() {
     return (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(".", "-");
@@ -2789,15 +3647,17 @@ var TemplateService = class {
 };
 
 // src/toolkitService.ts
+init_utils();
 var ToolkitService = class {
-  constructor(rootDir, extensionDir) {
+  constructor(rootDir, extensionDir, options = {}) {
     this.rootDir = rootDir;
     this.extensionDir = extensionDir;
-    this.state = new StateService(rootDir);
+    this.state = new StateService(rootDir, options.additionalStylePresets ?? []);
     this.compile = new CompileService(rootDir, this.state);
     this.cleanup = new CleanupService(rootDir);
     this.splitter = new SplitterService(rootDir, this.state);
     this.template = new TemplateService(rootDir, extensionDir, this.state);
+    this.history = new ChangeHistoryService(rootDir, options.historyStorageDir, this.state);
   }
   rootDir;
   extensionDir;
@@ -2806,85 +3666,136 @@ var ToolkitService = class {
   cleanup;
   splitter;
   template;
+  history;
   queue = Promise.resolve();
+  setAdditionalStylePresets(presets) {
+    this.state.setAdditionalStylePresets(presets);
+  }
   async handle(command, payload = {}) {
     switch (command) {
       case "state":
-        return this.state.buildResponseState();
+        return this.responseWithHistory(await this.state.buildResponseState());
+      case "history-state":
+        return this.history.historyState();
+      case "undo-last-change":
+        return this.runSerialized(async () => {
+          await this.history.undo(Boolean(payload.force));
+          return this.responseWithHistory(await this.state.buildResponseState());
+        });
+      case "redo-last-change":
+        return this.runSerialized(async () => {
+          await this.history.redo(Boolean(payload.force));
+          return this.responseWithHistory(await this.state.buildResponseState());
+        });
+      case "autosave":
       case "save":
         return this.runSerialized(async () => {
-          const normalized = await this.state.normalizePayload(payload);
-          await this.state.writeOverrideFiles(normalized);
-          return this.state.buildResponseState();
+          const rawState = command === "autosave" && isRecord3(payload.state) ? payload.state : payload;
+          const result = await this.history.runStateChange(command, "Edit Toolkit settings", async () => {
+            const current = await this.state.loadState();
+            const normalized = await this.state.normalizePayload(rawState, current);
+            if (normalized.compile_target !== current.compile_target) await this.state.coerceClassModeOnTargetSwitch(normalized);
+            await this.state.writeOverrideFiles(normalized);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return { ...await this.responseWithHistory(result), revision: Number(payload.revision ?? 0) };
         });
       case "target":
-        return this.runSerialized(async () => {
+        return this.runStateMutation(command, "Change compile target", payload, async () => {
           const current = await this.state.loadState();
           const normalized = await this.state.normalizePayload(payload, current);
           await this.state.applyCompilePreferences(current, { compile_target: normalized.compile_target });
-          await this.state.persistUiState(current);
+          await this.state.writeOverrideFiles(current);
           return this.state.buildResponseState();
         });
       case "compile-config":
-        return this.runSerialized(async () => {
+        return this.runStateMutation(command, "Change compile recipe", payload, async () => {
           const current = await this.state.loadState();
           const normalized = await this.state.normalizePayload(payload, current);
           await this.state.applyCompilePreferences(current, {
             compile_recipe: normalized.compile_recipe,
             compile_use_internal_fallback: normalized.compile_use_internal_fallback
           });
-          await this.state.persistUiState(current);
+          await this.state.writeOverrideFiles(current);
           return this.state.buildResponseState();
         });
       case "template-bootstrap":
         return this.runSerialized(async () => {
-          const result = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite));
-          return { ...result.response, generated_target: result.generated_target, overwrote_existing: result.overwrote_existing };
+          const output = this.template.normalizeOutputTarget(payload.output_target);
+          const paths = [...this.workspaceAssetPaths(), output, "theme.ui.json", ".vscode/settings.json"];
+          const result = await this.history.runFileChange(command, "Generate starter", paths, async () => {
+            const created = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite));
+            return { ...created.response, generated_target: created.generated_target, overwrote_existing: created.overwrote_existing };
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
         });
       case "vscode-settings-generate":
-        return this.runSerialized(async () => {
+        return this.runFileMutation(command, "Generate VS Code settings", [".vscode", ".vscode/settings.json"], payload, async () => {
           const generated = await generateVscodeSettingsIfMissing(this.rootDir);
           return { ...await this.state.buildResponseState(), ...generated };
         });
-      case "split":
-      case "split-preview":
+      case "split-preview": {
         return this.runSerialized(async () => {
-          const result = await this.splitter.splitCompileTarget(String(payload.compile_target ?? ""), command === "split-preview" ? true : Boolean(payload.dry_run), String(payload.sections_dir ?? "Sections"));
+          const result = await this.splitter.splitCompileTarget(String(payload.compile_target ?? ""), true, String(payload.sections_dir ?? "Sections"));
           return { ...result.response, split: result.split };
+        });
+      }
+      case "split":
+        return this.runSerialized(async () => {
+          if (Boolean(payload.dry_run)) {
+            const result2 = await this.splitter.splitCompileTarget(String(payload.compile_target ?? ""), true, String(payload.sections_dir ?? "Sections"));
+            return { ...result2.response, split: result2.split };
+          }
+          const target = String(payload.compile_target ?? "");
+          const preview = await this.splitter.splitCompileTarget(target, true, String(payload.sections_dir ?? "Sections"));
+          const backup = await this.nextSplitBackupPath(path11.resolve(this.rootDir, target));
+          const generated = preview.split.generated_subfile_targets;
+          const paths = [target, backup, ...generated, ...new Set(generated.map((item) => path11.dirname(item)))];
+          const result = await this.history.runFileChange(command, "Split LaTeX target", paths, async () => {
+            const changed = await this.splitter.splitCompileTarget(target, false, String(payload.sections_dir ?? "Sections"));
+            return { ...changed.response, split: changed.split };
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
         });
       case "renumber":
         return this.runSerialized(async () => {
-          const result = await this.splitter.renumberCompileTarget(String(payload.compile_target ?? ""), String(payload.mode ?? "add"), Boolean(payload.dry_run));
-          return { ...result.response, renumber: result.renumber };
+          if (Boolean(payload.dry_run)) {
+            const result2 = await this.splitter.renumberCompileTarget(String(payload.compile_target ?? ""), String(payload.mode ?? "add"), true);
+            return { ...result2.response, renumber: result2.renumber };
+          }
+          const target = String(payload.compile_target ?? "");
+          const mode = String(payload.mode ?? "add");
+          const preview = await this.splitter.renumberCompileTarget(target, mode, true);
+          const paths = [target, ...Object.keys(preview.renumber.renamed), ...Object.values(preview.renumber.renamed)];
+          const result = await this.history.runFileChange(command, "Renumber LaTeX units", paths, async () => {
+            const changed = await this.splitter.renumberCompileTarget(target, mode, false);
+            return { ...changed.response, renumber: changed.renumber };
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
         });
       case "unsplit":
         return this.runSerialized(async () => {
-          const result = await this.splitter.unsplitCompileTarget(String(payload.compile_target ?? ""), Boolean(payload.dry_run), payload.delete_source !== false);
-          return { ...result.response, unsplit: result.unsplit };
+          if (Boolean(payload.dry_run)) {
+            const result2 = await this.splitter.unsplitCompileTarget(String(payload.compile_target ?? ""), true, payload.delete_source !== false);
+            return { ...result2.response, unsplit: result2.unsplit };
+          }
+          const target = String(payload.compile_target ?? "");
+          const preview = await this.splitter.unsplitCompileTarget(target, true, payload.delete_source !== false);
+          const paths = [preview.unsplit.root_target, preview.unsplit.source_target];
+          const result = await this.history.runFileChange(command, "Merge LaTeX unit", paths, async () => {
+            const changed = await this.splitter.unsplitCompileTarget(target, false, payload.delete_source !== false);
+            return { ...changed.response, unsplit: changed.unsplit };
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
         });
       case "style-preset":
-        return this.runSerialized(async () => {
-          const current = await this.state.loadState();
-          this.state.applyStylePreset(current, String(payload.style_preset ?? current.style_preset));
-          await this.state.writeOverrideFiles(current);
-          return this.state.buildResponseState();
-        });
+        return this.runPresetMutation(command, "Change style", String(payload.style_preset ?? ""), payload, (state, preset) => this.state.applyStylePreset(state, preset));
       case "block-preset":
-        return this.runSerialized(async () => {
-          const current = await this.state.loadState();
-          this.state.applyBlockPreset(current, String(payload.block_preset ?? current.style_preset));
-          await this.state.writeOverrideFiles(current);
-          return this.state.buildResponseState();
-        });
+        return this.runPresetMutation(command, "Change style", String(payload.block_preset ?? ""), payload, (state, preset) => this.state.applyBlockPreset(state, preset));
       case "heading-toc-preset":
-        return this.runSerialized(async () => {
-          const current = await this.state.loadState();
-          this.state.applyHeadingTocPreset(current, String(payload.heading_toc_preset ?? current.style_preset));
-          await this.state.writeOverrideFiles(current);
-          return this.state.buildResponseState();
-        });
+        return this.runPresetMutation(command, "Change style", String(payload.heading_toc_preset ?? ""), payload, (state, preset) => this.state.applyHeadingTocPreset(state, preset));
       case "reset":
-        return this.runSerialized(async () => {
+        return this.runFileMutation(command, "Reset Toolkit overrides", ["theme.ui.json", "theme.overrides.tex", "theme.colors.tex"], payload, async () => {
           await this.state.deleteOverrideFiles();
           return this.state.buildResponseState();
         });
@@ -2893,9 +3804,13 @@ var ToolkitService = class {
       case "compile":
         return this.runSerialized(async () => this.compile.compileFromPayload(payload));
       case "initialize-workspace":
-        return this.runSerialized(async () => this.template.initializeWorkspace());
+        return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace());
       case "upgrade-theme-assets":
-        return this.runSerialized(async () => this.template.upgradeThemeAssets(Boolean(payload.reset_color_overrides)));
+        return this.runFileMutation(command, "Upgrade theme assets", ["theme.sty", "theorems.tex", "commands.tex", "theme.colors.tex", "theme.ui.json"], payload, async () => {
+          const explicitPolicy = payload.color_policy;
+          const colorPolicy = explicitPolicy === "default" || explicitPolicy === "preserve" ? explicitPolicy : payload.reset_color_overrides === true ? "default" : "preserve";
+          return this.template.upgradeThemeAssets({ colorPolicy });
+        });
       case "pdf-uri":
         return this.resolvePdfPath(String(payload.path ?? ""));
       default:
@@ -2904,17 +3819,57 @@ var ToolkitService = class {
   }
   resolvePdfPath(rawPath) {
     const rel = rawPath.trim() || "main.pdf";
-    const resolved = path9.resolve(this.rootDir, rel);
+    const resolved = path11.resolve(this.rootDir, rel);
     if (!resolved.endsWith(".pdf")) throw new Error("PDF path must end with .pdf.");
-    if (!resolved.startsWith(path9.resolve(this.rootDir) + path9.sep) && resolved !== path9.resolve(this.rootDir)) {
-      throw new Error("PDF path is outside workspace.");
-    }
+    if (!resolved.startsWith(path11.resolve(this.rootDir) + path11.sep) && resolved !== path11.resolve(this.rootDir)) throw new Error("PDF path is outside workspace.");
     return resolved;
   }
   async readPdfIfExists(rawPath) {
     const pdf = this.resolvePdfPath(rawPath);
-    await import_node_fs9.promises.access(pdf);
+    await import_node_fs11.promises.access(pdf);
     return pdf;
+  }
+  async runStateMutation(command, label, payload, task) {
+    return this.runSerialized(async () => this.responseWithHistory(await this.history.runStateChange(command, label, task, payload.record_history !== false)));
+  }
+  async runFileMutation(command, label, paths, payload, task) {
+    return this.runSerialized(async () => this.responseWithHistory(await this.history.runFileChange(command, label, paths, task, payload.record_history !== false)));
+  }
+  async runPresetMutation(command, label, preset, payload, apply) {
+    return this.runStateMutation(command, label, payload, async () => {
+      const current = await this.state.loadState();
+      apply(current, preset || current.style_preset);
+      await this.state.writeOverrideFiles(current);
+      return this.state.buildResponseState();
+    });
+  }
+  async responseWithHistory(value) {
+    const history = await this.history.historyState();
+    if (isRecord3(value)) return { ...value, history };
+    return { value, history };
+  }
+  workspaceAssetPaths() {
+    return [
+      "theme.sty",
+      "theorems.tex",
+      "commands.tex",
+      "references.bib",
+      "Fig",
+      "Fig/cover.png",
+      "templates",
+      "templates/book-minimal.tex",
+      "templates/article-minimal.tex",
+      "templates/homework-assignment.tex"
+    ];
+  }
+  async nextSplitBackupPath(rootAbs) {
+    let candidate = `${rootAbs}.bak`;
+    let index = 1;
+    while (await exists(candidate)) {
+      candidate = `${rootAbs}.bak.${index}`;
+      index += 1;
+    }
+    return candidate;
   }
   runSerialized(task) {
     const next = this.queue.then(task, task);
@@ -2922,183 +3877,181 @@ var ToolkitService = class {
     return next;
   }
 };
+function isRecord3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 // src/extension.ts
 var activePanel;
+var toolkitServices = /* @__PURE__ */ new Map();
+var personalStyles;
 function activate(context) {
+  const output = vscode.window.createOutputChannel("LaTeX Editing Toolkit");
   const projectRegistry = new LocalProjectRegistry(context.globalState);
+  personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
+  const command = (id, handler) => registerToolkitCommand(output, id, handler);
   context.subscriptions.push(
+    output,
     treeProvider,
     vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
     vscode.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
-    vscode.commands.registerCommand("latexEditingToolkit.openToolkit", async (folderUri) => {
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) treeProvider.refresh();
+    }),
+    command("latexEditingToolkit.openToolkit", async (folderUri) => {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
-      activePanel = ToolkitPanel.createOrShow(context, folder);
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.createProject", async () => {
-      const target = await vscode.window.showOpenDialog({
-        canSelectFiles: false,
-        canSelectFolders: true,
-        canSelectMany: false,
-        openLabel: "Create Toolkit Project Here"
-      });
-      if (!target?.[0]) return;
-      if (target[0].scheme !== "file") {
-        vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
-        return;
-      }
-      const pickedTemplate = await vscode.window.showQuickPick(
-        STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
-          label: template.label,
-          description: template.id,
-          detail: template.description,
-          template
-        })),
-        { placeHolder: "Select starter template" }
-      );
-      if (!pickedTemplate) return;
-      const service = new ToolkitService(target[0].fsPath, context.extensionPath);
-      await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, async () => {
-        await service.handle("initialize-workspace", {});
-        await service.handle("template-bootstrap", { template_id: pickedTemplate.template.id, output_target: "main.tex", overwrite: false });
-      });
-      await projectRegistry.add(target[0].fsPath, pickedTemplate.template.id);
-      vscode.window.showInformationMessage(`Created LaTeX Toolkit project in ${target[0].fsPath}.`);
-      treeProvider.refresh();
-      await vscode.commands.executeCommand("vscode.openFolder", target[0], { forceNewWindow: false });
+    command("latexEditingToolkit.createProject", async () => {
+      await createProjectWizard(context, projectRegistry, treeProvider, output);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.openLocalProject", async (projectPath) => {
+    command("latexEditingToolkit.openLocalProject", async (projectPath) => {
       await openLocalProject(projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.relocateLocalProject", async (projectPath) => {
+    command("latexEditingToolkit.relocateLocalProject", async (projectPath) => {
       await relocateLocalProject(projectRegistry, treeProvider, projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.removeLocalProject", async (projectPath) => {
+    command("latexEditingToolkit.removeLocalProject", async (projectPath) => {
       await removeLocalProject(projectRegistry, treeProvider, projectPath);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.refreshTree", () => {
+    command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.createStarterInWorkspace", async (folderUri) => {
+    command("latexEditingToolkit.undoLastChange", async (folderUri) => {
+      await restoreLastToolkitChange(context, treeProvider, output, "undo", folderUri);
+    }),
+    command("latexEditingToolkit.redoLastChange", async (folderUri) => {
+      await restoreLastToolkitChange(context, treeProvider, output, "redo", folderUri);
+    }),
+    command("latexEditingToolkit.createStarterInWorkspace", async (folderUri) => {
       await createStarterInWorkspace(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickCompileTarget", async (folderUri) => {
+    command("latexEditingToolkit.pickCompileTarget", async (folderUri) => {
       await pickCompileTarget(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickCompileRecipe", async (folderUri) => {
+    command("latexEditingToolkit.pickCompileRecipe", async (folderUri) => {
       await pickCompileRecipe(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.toggleInternalFallback", async (folderUri) => {
+    command("latexEditingToolkit.toggleInternalFallback", async (folderUri) => {
       await toggleInternalFallback(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.openCurrentPdf", async (folderUri) => {
+    command("latexEditingToolkit.openCurrentPdf", async (folderUri) => {
       await openCurrentPdf(context, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.toggleThemeOption", async (folderUri, toggleId) => {
+    command("latexEditingToolkit.toggleThemeOption", async (folderUri, toggleId) => {
       await toggleThemeOption(context, treeProvider, folderUri, toggleId);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickClassConfig", async (folderUri, fieldId) => {
+    command("latexEditingToolkit.pickClassConfig", async (folderUri, fieldId) => {
       await pickClassConfig(context, treeProvider, folderUri, fieldId);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickStylePreset", async (folderUri) => {
+    command("latexEditingToolkit.pickStylePreset", async (folderUri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
     // Legacy command aliases now use the unified style preset.
-    vscode.commands.registerCommand("latexEditingToolkit.pickBlockPreset", async (folderUri) => {
+    command("latexEditingToolkit.pickBlockPreset", async (folderUri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickHeadingTocPreset", async (folderUri) => {
+    command("latexEditingToolkit.pickHeadingTocPreset", async (folderUri) => {
       await pickStylePreset(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.pickBodyFontSize", async (folderUri) => {
+    command("latexEditingToolkit.pickBodyFontSize", async (folderUri) => {
       await pickBodyFontSize(context, treeProvider, folderUri);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.initializeWorkspace", async (folderUri) => {
+    command("latexEditingToolkit.initializeWorkspace", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`);
+      vscode.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
+    command("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const choice = await vscode.window.showWarningMessage(
-        "Upgrade workspace theme assets from the bundled extension template? Existing files will be backed up first.",
+        "Upgrade bundled theme assets? Existing files are backed up first. Preserve Colors keeps all current settings; Reset to Default only replaces the complete color/style package.",
         { modal: true },
-        "Upgrade + Reset Colors",
-        "Upgrade Assets Only"
+        "Preserve Colors",
+        "Reset to Default"
       );
       if (!choice) return;
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
-        () => service.handle("upgrade-theme-assets", { reset_color_overrides: choice === "Upgrade + Reset Colors" })
+        () => service.handle("upgrade-theme-assets", { color_policy: choice === "Reset to Default" ? "default" : "preserve" })
       );
-      const resetSuffix = result.reset_files?.length ? ` Reset ${result.reset_files.length} color override file(s).` : "";
+      const resetSuffix = result.updated_override_files?.length ? ` Updated ${result.updated_override_files.length} color state file(s).` : " Colors preserved.";
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s). Backup: ${result.backup_dir}.${resetSuffix}`);
+      vscode.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
+    command("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage(result.message ?? "VS Code settings checked.");
+      vscode.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.saveOverrides", async (folderUri) => {
+    command("latexEditingToolkit.saveOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("save", response.state);
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Saved LaTeX Toolkit overrides.");
+      vscode.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.resetOverrides", async (folderUri) => {
+    command("latexEditingToolkit.resetOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode.window.showWarningMessage("Delete theme.ui.json, theme.overrides.tex, and theme.colors.tex?", { modal: true }, "Delete");
-      if (ok !== "Delete") return;
+      const ok = await vscode.window.showWarningMessage(
+        "Reset all Toolkit overrides? This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, and status settings.",
+        { modal: true },
+        "Reset All"
+      );
+      if (ok !== "Reset All") return;
       await service.handle("reset", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Deleted LaTeX Toolkit override files.");
+      vscode.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.compilePdf", async (folderUri) => {
-      const service = await serviceForCommand(context, folderUri);
-      if (!service) return;
-      const response = await service.handle("state", {});
-      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => service.handle("compile", response.state));
+    command("latexEditingToolkit.compilePdf", async (folderUri) => {
+      const scoped = await folderAndServiceForCommand(context, folderUri);
+      if (!scoped) return;
+      const response = await scoped.service.handle("state", {});
+      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
+      logCompileResult(output, scoped.folder.uri.fsPath, result);
       const success = Boolean(result.success);
       treeProvider.refresh();
-      vscode.window.showInformationMessage(success ? "LaTeX compile succeeded." : "LaTeX compile failed. Open Toolkit for logs.");
+      if (success) vscode.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
+      else {
+        const action = await vscode.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
+        if (action === "Show Log") output.show(true);
+      }
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
+    command("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const ok = await vscode.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {});
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`);
+      vscode.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
+    command("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Split current LaTeX target.");
+      vscode.window.setStatusBarMessage("Split current LaTeX target.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.renumberUnits", async (folderUri) => {
+    command("latexEditingToolkit.renumberUnits", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Renumbered referenced units.");
+      vscode.window.setStatusBarMessage("Renumbered referenced units.", 2500);
     }),
-    vscode.commands.registerCommand("latexEditingToolkit.unsplitUnit", async (folderUri) => {
+    command("latexEditingToolkit.unsplitUnit", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
@@ -3106,13 +4059,176 @@ function activate(context) {
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
       treeProvider.refresh();
-      vscode.window.showInformationMessage("Merged selected unit back to root.");
+      vscode.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
 }
 function deactivate() {
   activePanel?.dispose();
   activePanel = void 0;
+  toolkitServices.clear();
+  personalStyles = void 0;
+}
+var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
+async function createProjectWizard(context, registry, treeProvider, output) {
+  const recent = context.globalState.get(RECENT_PROJECT_PARENTS_KEY) ?? [];
+  const suggested = /* @__PURE__ */ new Set();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme === "file") {
+      suggested.add(folder.uri.fsPath);
+      suggested.add(path12.dirname(folder.uri.fsPath));
+    }
+  }
+  for (const item of recent) suggested.add(item);
+  const location = await vscode.window.showQuickPick(
+    [
+      ...[...suggested].map((folderPath) => ({ label: path12.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
+    ],
+    { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
+  );
+  if (!location) return;
+  let parentPath = location.folderPath;
+  if (!parentPath) {
+    const selected = await vscode.window.showOpenDialog({
+      title: "Create Project (1/3): Choose Parent Folder",
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "Use as Parent Folder"
+    });
+    if (!selected?.[0]) return;
+    if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
+    parentPath = selected[0].fsPath;
+  }
+  const projectName = await vscode.window.showInputBox({
+    title: "Create Project (2/3): Project Name",
+    prompt: `A new folder will be created inside ${parentPath}`,
+    value: "New Notes",
+    valueSelection: [0, "New Notes".length],
+    validateInput: (value) => {
+      const name = value.trim();
+      if (!name) return "Project name is required.";
+      if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
+      return void 0;
+    }
+  });
+  if (!projectName) return;
+  const pickedTemplate = await vscode.window.showQuickPick(
+    STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+      label: template.label,
+      description: template.id,
+      detail: template.description,
+      template
+    })),
+    { title: "Create Project (3/3): Template", placeHolder: "Choose the document structure" }
+  );
+  if (!pickedTemplate) return;
+  const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
+  if (!preflight.ok) {
+    const action = await vscode.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
+    output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE PROJECT PREFLIGHT`);
+    for (const error of preflight.errors) output.appendLine(`- ${error}`);
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+  if (preflight.targetExists && preflight.targetEmpty) {
+    const choice = await vscode.window.showWarningMessage(
+      `The folder '${preflight.rootPath}' already exists and is empty. Use it for the new project?`,
+      { modal: true },
+      "Use Empty Folder"
+    );
+    if (choice !== "Use Empty Folder") return;
+  }
+  const nextRecent = [parentPath, ...recent.filter((item) => path12.normalize(item) !== path12.normalize(parentPath))].slice(0, 8);
+  await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
+  const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
+    additionalStylePresets: personalStyles?.definitions() ?? []
+  });
+  try {
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id));
+  } catch (err) {
+    logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
+    const message = err instanceof Error ? err.message : String(err);
+    const action = await vscode.window.showErrorMessage(
+      `Project creation failed: ${message}. The folder may contain partially generated resources.`,
+      "Open Folder",
+      "Show Log"
+    );
+    if (action === "Open Folder") await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
+  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+}
+async function restoreLastToolkitChange(context, treeProvider, output, direction, folderUri) {
+  const scoped = await folderAndServiceForCommand(context, folderUri);
+  if (!scoped) return;
+  const command = direction === "undo" ? "undo-last-change" : "redo-last-change";
+  try {
+    await scoped.service.handle(command, {});
+  } catch (err) {
+    if (!(err instanceof HistoryConflictError)) throw err;
+    const choice = await vscode.window.showWarningMessage(
+      `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
+      { modal: true },
+      "Show Conflicts",
+      "Force Restore"
+    );
+    if (choice === "Show Conflicts") {
+      output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
+      for (const conflict of err.conflicts) output.appendLine(`- ${conflict}`);
+      output.show(true);
+      return;
+    }
+    if (choice !== "Force Restore") return;
+    await scoped.service.handle(command, { force: true });
+  }
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
+  if (activePanel?.folder.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
+}
+function registerToolkitCommand(output, commandId, handler) {
+  return vscode.commands.registerCommand(commandId, async (...args) => {
+    try {
+      return await handler(...args);
+    } catch (err) {
+      if (isUserCancellation(err)) return void 0;
+      const workspacePath = workspacePathFromArguments(args);
+      logToolkitError(output, commandId, workspacePath, err);
+      const message = err instanceof Error ? err.message : String(err);
+      const action = await vscode.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
+      if (action === "Show Log") output.show(true);
+      return void 0;
+    }
+  });
+}
+function isUserCancellation(err) {
+  return err instanceof vscode.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
+}
+function workspacePathFromArguments(args) {
+  for (const arg of args) {
+    if (arg instanceof vscode.Uri && arg.scheme === "file") return arg.fsPath;
+    const projectPath = localProjectPathFromArgument(arg);
+    if (projectPath) return projectPath;
+  }
+  return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
+}
+function logToolkitError(output, commandId, workspacePath, err) {
+  const error = err instanceof Error ? err : new Error(String(err));
+  output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ERROR ${commandId}`);
+  output.appendLine(`Workspace: ${workspacePath}`);
+  output.appendLine(error.stack ?? error.message);
+  output.appendLine("");
+}
+function logCompileResult(output, workspacePath, result) {
+  output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] COMPILE ${result.success ? "SUCCESS" : "FAILED"}`);
+  output.appendLine(`Workspace: ${workspacePath}`);
+  output.appendLine(result.output?.trimEnd() || "(compiler returned no output)");
+  output.appendLine("");
 }
 async function selectWorkspaceFolder(preferredFolderUri) {
   const folders = vscode.workspace.workspaceFolders ?? [];
@@ -3139,7 +4255,30 @@ async function serviceForCommand(context, preferredFolderUri) {
 async function folderAndServiceForCommand(context, preferredFolderUri) {
   const folder = await selectWorkspaceFolder(preferredFolderUri);
   if (!folder) return void 0;
-  return { folder, service: new ToolkitService(folder.uri.fsPath, context.extensionPath) };
+  return { folder, service: toolkitService(context, folder.uri.fsPath) };
+}
+function toolkitService(context, rootPath) {
+  let canonical = path12.resolve(rootPath);
+  try {
+    canonical = fs12.realpathSync.native(canonical);
+  } catch {
+  }
+  const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
+  const existing = toolkitServices.get(key);
+  if (existing) {
+    existing.setAdditionalStylePresets(personalStyles?.definitions() ?? []);
+    return existing;
+  }
+  const service = new ToolkitService(rootPath, context.extensionPath, {
+    historyStorageDir: workspaceHistoryStorageRoot(context.globalStorageUri.fsPath, rootPath),
+    additionalStylePresets: personalStyles?.definitions() ?? []
+  });
+  toolkitServices.set(key, service);
+  return service;
+}
+function refreshPersonalStylesOnServices(registry) {
+  const definitions = registry.definitions();
+  for (const service of toolkitServices.values()) service.setAdditionalStylePresets(definitions);
 }
 async function responseForCommand(context, preferredFolderUri) {
   const scoped = await folderAndServiceForCommand(context, preferredFolderUri);
@@ -3160,7 +4299,7 @@ async function openLocalProject(projectPathArg) {
     return;
   }
   try {
-    if (!fs10.statSync(projectPath).isDirectory()) throw new Error("not a directory");
+    if (!(await fs12.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
     vscode.window.showWarningMessage(`Local note project not found: ${projectPath}`);
     return;
@@ -3184,13 +4323,9 @@ async function relocateLocalProject(registry, treeProvider, projectPathArg) {
     vscode.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
     return;
   }
-  try {
-    const updated = await registry.relocate(oldPath, target[0].fsPath);
-    treeProvider.refresh();
-    vscode.window.showInformationMessage(`Relocated local note project to ${updated.rootPath}.`);
-  } catch (err) {
-    vscode.window.showErrorMessage(`Could not relocate local note project: ${err.message}`);
-  }
+  const updated = await registry.relocate(oldPath, target[0].fsPath);
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
 }
 async function removeLocalProject(registry, treeProvider, projectPathArg) {
   const projectPath = localProjectPathFromArgument(projectPathArg);
@@ -3198,8 +4333,8 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
     vscode.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
-  const project = (await registry.list()).find((entry) => entry.rootPath === path10.normalize(projectPath));
-  const label = project?.label ?? path10.basename(path10.normalize(projectPath));
+  const project = await registry.find(projectPath);
+  const label = project?.label ?? path12.basename(path12.normalize(projectPath));
   const choice = await vscode.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
     { modal: true },
@@ -3208,7 +4343,7 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
   if (choice !== "Forget") return;
   const removed = await registry.remove(projectPath);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.");
+  vscode.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
 }
 function localProjectPathFromArgument(value) {
   if (typeof value === "string") return value;
@@ -3242,7 +4377,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs10.existsSync(path10.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs12.existsSync(path12.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -3253,7 +4388,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     overwrite
   });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Generated ${result.generated_target ?? outputTarget}.`);
+  vscode.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
 }
 async function pickCompileTarget(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3273,7 +4408,7 @@ async function pickCompileTarget(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("target", { compile_target: picked.label });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Compile target set to ${picked.label}.`);
+  vscode.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
 }
 async function pickCompileRecipe(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3298,7 +4433,7 @@ async function pickCompileRecipe(context, treeProvider, folderUri) {
     compile_use_internal_fallback: false
   });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Compile recipe set to ${picked.recipe.name}.`);
+  vscode.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
 }
 async function toggleInternalFallback(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3309,7 +4444,7 @@ async function toggleInternalFallback(context, treeProvider, folderUri) {
     compile_use_internal_fallback: next
   });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`);
+  vscode.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
 }
 async function openCurrentPdf(context, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3331,7 +4466,7 @@ async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
   state.toggles[toggleId] = !state.toggles[toggleId];
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`);
+  vscode.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
 }
 async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3352,7 +4487,7 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   state.class_config[field.id] = picked.option.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${field.label}: ${picked.option.label}.`);
+  vscode.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
 }
 async function pickStylePreset(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3371,7 +4506,7 @@ async function pickStylePreset(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`Style preset: ${picked.preset.label}.`);
+  vscode.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
 }
 async function pickBodyFontSize(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -3395,7 +4530,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
   state.body_font_size_pt = picked.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.showInformationMessage(`${config.label}: ${picked.label}.`);
+  vscode.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
 }
 function formatPointSize(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -3454,15 +4589,6 @@ var ToolkitTreeProvider = class {
     } else {
       nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
     }
-    nodes.push({
-      id: "create-new-project",
-      label: "Create New Project",
-      description: "from template",
-      tooltip: "Create a LaTeX Toolkit project in a selected local folder.",
-      iconId: "new-folder",
-      commandId: "latexEditingToolkit.createProject",
-      contextValue: "createProject"
-    });
     return nodes;
   }
   async localNotesNode() {
@@ -3493,7 +4619,7 @@ var ToolkitTreeProvider = class {
     };
   }
   async workspaceNode(folder, isOnlyFolder) {
-    const description = isOnlyFolder ? path10.dirname(folder.uri.fsPath) : folder.uri.fsPath;
+    const description = isOnlyFolder ? path12.dirname(folder.uri.fsPath) : folder.uri.fsPath;
     const response = await this.loadWorkspaceState(folder);
     return {
       id: `workspace:${folder.uri.toString()}`,
@@ -3509,7 +4635,7 @@ var ToolkitTreeProvider = class {
   }
   async loadWorkspaceState(folder) {
     try {
-      return await new ToolkitService(folder.uri.fsPath, this.context.extensionPath).handle("state", {});
+      return await toolkitService(this.context, folder.uri.fsPath).handle("state", {});
     } catch (err) {
       return err instanceof Error ? err : new Error(String(err));
     }
@@ -3518,14 +4644,23 @@ var ToolkitTreeProvider = class {
     const folderArg = [folder.uri];
     const state = response.state;
     const schema = response.schema;
+    const statusChildren = [
+      this.actionNode("status-target", "Target", state.compile_target || "select target", "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
+      this.actionNode("status-recipe", "Recipe", this.compileRecipeDescription(state), "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
+      this.actionNode("status-pdf", "PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
+      this.infoNode(`status-last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state)),
+      this.infoNode(`status-class:${folder.uri.toString()}`, "Document Class", this.documentClassDescription(state), "symbol-class")
+    ];
+    if (response.history?.canUndo) statusChildren.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
+    if (response.history?.canRedo) statusChildren.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
+    if (state.config_warnings.length > 0) {
+      statusChildren.push({
+        ...this.infoNode(`status-config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
+        tooltip: state.config_warnings.join("\n")
+      });
+    }
     return [
-      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", [
-        this.actionNode("status-target", "Target", state.compile_target || "select target", "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
-        this.actionNode("status-recipe", "Recipe", this.compileRecipeDescription(state), "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
-        this.actionNode("status-pdf", "PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
-        this.infoNode(`status-last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state)),
-        this.infoNode(`status-class:${folder.uri.toString()}`, "Document Class", this.documentClassDescription(state), "symbol-class")
-      ], vscode.TreeItemCollapsibleState.Expanded),
+      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", statusChildren, vscode.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
         this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg),
         this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
@@ -3567,8 +4702,7 @@ var ToolkitTreeProvider = class {
           "latexEditingToolkit.toggleThemeOption",
           [folder.uri, toggle.id]
         )), vscode.TreeItemCollapsibleState.Expanded),
-        this.actionNode("save-overrides", "Save Overrides", "theme files", "save", "latexEditingToolkit.saveOverrides", folderArg),
-        this.actionNode("reset-overrides", "Reset Overrides", "delete generated files", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+        this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
       ])
     ];
   }
@@ -3656,11 +4790,14 @@ var ToolkitTreeProvider = class {
   }
 };
 var ToolkitPanel = class _ToolkitPanel {
-  constructor(context, folder, panel) {
+  constructor(context, folder, panel, output, styleRegistry, onStateChanged) {
     this.context = context;
     this.folder = folder;
     this.panel = panel;
-    this.service = new ToolkitService(folder.uri.fsPath, context.extensionPath);
+    this.output = output;
+    this.styleRegistry = styleRegistry;
+    this.onStateChanged = onStateChanged;
+    this.service = toolkitService(context, folder.uri.fsPath);
     this.panel.webview.html = this.html();
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message), null, this.disposables);
@@ -3668,10 +4805,13 @@ var ToolkitPanel = class _ToolkitPanel {
   context;
   folder;
   panel;
+  output;
+  styleRegistry;
+  onStateChanged;
   service;
   disposables = [];
   disposed = false;
-  static createOrShow(context, folder) {
+  static createOrShow(context, folder, output, styleRegistry, onStateChanged) {
     if (activePanel) {
       if (activePanel.folder.uri.toString() === folder.uri.toString()) {
         activePanel.panel.reveal(vscode.ViewColumn.One);
@@ -3687,12 +4827,12 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.file(path10.join(context.extensionPath, "dist")),
+          vscode.Uri.file(path12.join(context.extensionPath, "dist")),
           vscode.Uri.file(folder.uri.fsPath)
         ]
       }
     );
-    return new _ToolkitPanel(context, folder, panel);
+    return new _ToolkitPanel(context, folder, panel, output, styleRegistry, onStateChanged);
   }
   dispose() {
     if (this.disposed) return;
@@ -3704,6 +4844,10 @@ var ToolkitPanel = class _ToolkitPanel {
     }
     for (const disposable of this.disposables) disposable.dispose();
     this.disposables = [];
+  }
+  async refreshState() {
+    const data = await this.service.handle("state", {});
+    await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
   }
   async handleMessage(message) {
     const request = message;
@@ -3719,18 +4863,101 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = await this.service.readPdfIfExists(rawPath);
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
         data = { opened: true };
+      } else if (request.command === "personal-style-save") {
+        const state = request.payload?.state;
+        if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
+        const label = await vscode.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        if (!label) {
+          data = await this.service.handle("state", {});
+        } else {
+          const record = await this.styleRegistry.add(label, String(state.style_base_preset ?? state.style_preset ?? "default"), state.colors);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          data = await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
+        }
+      } else if (request.command === "personal-style-update") {
+        const state = request.payload?.state;
+        if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
+        await this.styleRegistry.update(String(request.payload?.style_id ?? state.style_preset ?? ""), state.colors);
+        refreshPersonalStylesOnServices(this.styleRegistry);
+        data = await this.service.handle("state", {});
+      } else if (request.command === "personal-style-rename") {
+        const id = String(request.payload?.style_id ?? "");
+        const current = this.styleRegistry.list().find((style) => style.id === id);
+        if (!current) throw new Error("Personal style not found.");
+        const label = await vscode.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        if (label) await this.styleRegistry.rename(id, label);
+        refreshPersonalStylesOnServices(this.styleRegistry);
+        data = await this.service.handle("state", {});
+      } else if (request.command === "personal-style-delete") {
+        const id = String(request.payload?.style_id ?? "");
+        const current = this.styleRegistry.list().find((style) => style.id === id);
+        if (!current) throw new Error("Personal style not found.");
+        const confirmed = await vscode.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
+        if (confirmed !== "Delete Style") data = await this.service.handle("state", {});
+        else {
+          await this.styleRegistry.remove(id);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          const state = request.payload?.state;
+          data = isPlainRecord(state) && state.style_preset === id ? await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } }) : await this.service.handle("state", {});
+        }
+      } else if (request.command === "personal-style-import") {
+        const picked = await vscode.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
+        if (!picked?.[0]) data = await this.service.handle("state", {});
+        else {
+          const raw = JSON.parse(await fs12.promises.readFile(picked[0].fsPath, "utf8"));
+          const summary = await this.styleRegistry.importLibrary(raw);
+          refreshPersonalStylesOnServices(this.styleRegistry);
+          data = { ...await this.service.handle("state", {}), personal_style_import: summary };
+        }
+      } else if (request.command === "personal-style-export") {
+        const id = String(request.payload?.style_id ?? "");
+        const library = this.styleRegistry.exportLibrary();
+        const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
+        const target = await vscode.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode.Uri.file(path12.join(this.folder.uri.fsPath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs12.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+`, "utf8");
+        data = { ...await this.service.handle("state", {}), exported: Boolean(target) };
+      } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
+        try {
+          data = await this.service.handle(request.command, request.payload ?? {});
+        } catch (err) {
+          if (!(err instanceof HistoryConflictError)) throw err;
+          const direction = request.command.startsWith("undo") ? "undo" : "redo";
+          const choice = await vscode.window.showWarningMessage(
+            `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
+            { modal: true },
+            "Show Conflicts",
+            "Force Restore"
+          );
+          if (choice === "Show Conflicts") {
+            this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
+            for (const conflict of err.conflicts) this.output.appendLine(`- ${conflict}`);
+            this.output.show(true);
+            data = await this.service.handle("state", {});
+          } else if (choice === "Force Restore") data = await this.service.handle(request.command, { force: true });
+          else data = await this.service.handle("state", {});
+        }
       } else {
         data = await this.service.handle(request.command, request.payload ?? {});
       }
+      if (request.command === "compile") {
+        logCompileResult(this.output, this.folder.uri.fsPath, data);
+      }
+      if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete"].includes(request.command)) {
+        this.onStateChanged();
+      }
       await this.panel.webview.postMessage({ id: request.id, ok: true, data });
     } catch (err) {
+      logToolkitError(this.output, `webview:${request.command}`, this.folder.uri.fsPath, err);
       await this.panel.webview.postMessage({ id: request.id, ok: false, error: err.message });
     }
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode.Uri.file(path10.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode.Uri.file(path10.join(this.context.extensionPath, "dist", "webview.css")));
+    const scriptUri = webview.asWebviewUri(vscode.Uri.file(path12.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode.Uri.file(path12.join(this.context.extensionPath, "dist", "webview.css")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -3741,7 +4968,7 @@ var ToolkitPanel = class _ToolkitPanel {
       `font-src ${webview.cspSource}`
     ].join("; ");
     const initial = JSON.stringify({ workspaceName: this.folder.name, workspacePath: this.folder.uri.fsPath });
-    const cssExists = fs10.existsSync(path10.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs12.existsSync(path12.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -3758,6 +4985,9 @@ var ToolkitPanel = class _ToolkitPanel {
 </html>`;
   }
 };
+function isPlainRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   activate,
