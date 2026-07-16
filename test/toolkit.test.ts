@@ -695,21 +695,50 @@ describe("TypeScript Toolkit migration", () => {
     await expect(fs.access(path.join(root, "theme.ui.json"))).rejects.toThrow();
   });
 
-  it("ships autosave, hover preview, personal styles, and progressive sections without Apply or Save buttons", async () => {
+  it("ships the visual workbench, live style preview, and external PDF workflow without legacy controls", async () => {
     const source = await fs.readFile(path.join(repoRoot, "src", "webview", "index.ts"), "utf8");
+    const styles = await fs.readFile(path.join(repoRoot, "src", "webview", "styles.css"), "utf8");
+    const extension = await fs.readFile(path.join(repoRoot, "src", "extension.ts"), "utf8");
+    const manifest = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
     expect(source).toContain("previewStylePresetId");
     expect(source).toContain('request("autosave"');
     expect(source).toContain('className = "style-card"');
+    expect(source).toContain('className = "style-miniature"');
     expect(source).toContain('setAttribute("aria-pressed"');
     expect(source).toContain('addEventListener("mouseenter"');
+    expect(source).toContain('data-section-target="style"');
+    expect(source).toContain('data-context-panel="style"');
+    expect(source).toContain('request("pdf-status"');
+    expect(source).toContain('request("open-pdf"');
+    expect(source).toContain("chapter-overview-bg");
+    expect(source).toContain("sidenote-accent");
+    expect(source).not.toContain('id="pdfFrame"');
+    expect(source).not.toContain("refreshPdf()");
+    expect(source).not.toContain('request("pdf-uri"');
+    expect(source).not.toContain("<iframe");
     expect(source).not.toContain('id="stylePresetSelect"');
     expect(source).not.toContain('id="applyStylePresetBtn"');
     expect(source).not.toContain('id="applyTargetBtn"');
     expect(source).not.toContain('id="applyRecipeBtn"');
     expect(source).not.toContain('id="saveBtn"');
-    expect(source).toContain('id="sectionStyle"');
+    expect(source).not.toContain('class="major-section"');
     expect(source).toContain("Save as Personal Style");
     expect(source).toContain('id="upgradeColorPolicy"');
+    expect(styles).toContain(".workbench {");
+    expect(styles).toMatch(/grid-template-columns:\s*\d+px minmax\(\d+px, 1fr\) minmax\(330px, \d+px\)/);
+    expect(styles).toContain("@media (max-width: 1179px)");
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(styles).not.toContain("iframe");
+    expect(extension).toContain('request.command === "pdf-status"');
+    expect(extension).not.toContain('request.command === "pdf-uri"');
+    expect(extension).toContain('"Appearance"');
+    expect(extension).toContain('"Project Tools"');
+    expect(manifest.version).toBe("0.4.0");
+    expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();
+    expect(manifest.contributes.menus["view/item/context"].every((item: any) => !String(item.group).startsWith("inline"))).toBe(true);
+    const build = await fs.readFile(path.join(repoRoot, "esbuild.mjs"), "utf8");
+    expect(build).toContain("dist/codicon.css");
+    expect(build).toContain("dist/codicon.ttf");
   });
 
   it("splits a book root into subfiles and preserves appendix in root", async () => {

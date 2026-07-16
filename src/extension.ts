@@ -802,8 +802,13 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
 
   private async localNotesNode(): Promise<ToolkitTreeNode> {
     const projects = await this.projectRegistry.list();
+    const openProjectIds = new Set((await Promise.all(
+      (vscode.workspace.workspaceFolders ?? [])
+        .filter((folder) => folder.uri.scheme === "file")
+        .map((folder) => this.projectRegistry.find(folder.uri.fsPath))
+    )).filter((project): project is NonNullable<typeof project> => Boolean(project)).map((project) => project.id));
     const children = projects.length > 0
-      ? projects.map((project) => this.localProjectNode(project))
+      ? projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id)))
       : [
           this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
           this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
@@ -817,13 +822,14 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     );
   }
 
-  private localProjectNode(project: LocalNoteProjectStatus): ToolkitTreeNode {
+  private localProjectNode(project: LocalNoteProjectStatus, isOpen: boolean): ToolkitTreeNode {
+    const parent = path.basename(path.dirname(project.rootPath)) || path.dirname(project.rootPath);
     return {
       id: `local-project:${project.id}`,
       label: project.label,
-      description: project.missing ? "Missing" : project.rootPath,
+      description: project.missing ? "Missing" : isOpen ? `Open · ${parent}` : parent,
       tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
-      iconId: project.missing ? "warning" : "folder",
+      iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
       commandId: "latexEditingToolkit.openLocalProject",
       commandArgs: [project.rootPath],
       contextValue: project.missing ? "localProjectMissing" : "localProject",
@@ -832,8 +838,10 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
   }
 
   private async workspaceNode(folder: vscode.WorkspaceFolder, isOnlyFolder: boolean): Promise<ToolkitTreeNode> {
-    const description = isOnlyFolder ? path.dirname(folder.uri.fsPath) : folder.uri.fsPath;
     const response = await this.loadWorkspaceState(folder);
+    const description = response instanceof Error
+      ? "Needs attention"
+      : `${this.presetLabel(response.schema.style_presets, response.state.style_preset)} · ${this.workspaceBuildSummary(response.state)}`;
     return {
       id: `workspace:${folder.uri.toString()}`,
       label: folder.name,
@@ -861,59 +869,24 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     const folderArg = [folder.uri];
     const state = response.state;
     const schema = response.schema;
-    const statusChildren = [
-        this.actionNode("status-target", "Target", state.compile_target || "select target", "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
-        this.actionNode("status-recipe", "Recipe", this.compileRecipeDescription(state), "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
-        this.actionNode("status-pdf", "PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
-        this.infoNode(`status-last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state)),
-        this.infoNode(`status-class:${folder.uri.toString()}`, "Document Class", this.documentClassDescription(state), "symbol-class")
+    const nodes: ToolkitTreeNode[] = [
+      this.actionNode("open-toolkit", "Open Toolkit", "visual workbench", "tools", "latexEditingToolkit.openToolkit", folderArg)
     ];
-    if (response.history?.canUndo) statusChildren.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
-    if (response.history?.canRedo) statusChildren.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
-    if (state.config_warnings.length > 0) {
-      statusChildren.push({
-        ...this.infoNode(`status-config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
-        tooltip: state.config_warnings.join("\n")
-      });
-    }
-    return [
-      this.groupNode(`status:${folder.uri.toString()}`, "Status", "pulse", statusChildren, vscode.TreeItemCollapsibleState.Expanded),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
-        this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg),
-        this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
-        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
-        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
-        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
-      ]),
+    if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
+    if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
+    nodes.push(
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "run-all", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
+        this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.actionNode("pick-target", "Pick Target", `${state.compile_targets.length} found`, "symbol-file", "latexEditingToolkit.pickCompileTarget", folderArg),
         this.actionNode("pick-recipe", "Pick Recipe", `${state.compile_recipes.length} found`, "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
-        this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
       ], vscode.TreeItemCollapsibleState.Expanded),
-      this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
-        this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
-        this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
-        this.actionNode("unsplit-unit", "Merge Unit Back To Root", "selected target", "git-merge", "latexEditingToolkit.unsplitUnit", folderArg)
-      ]),
-      this.groupNode(`theme:${folder.uri.toString()}`, "Theme", "symbol-color", [
-        this.groupNode(`theme-presets:${folder.uri.toString()}`, "Presets", "symbol-misc", [
-          this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
-          this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg)
-        ], vscode.TreeItemCollapsibleState.Expanded),
-        this.groupNode(`theme-class-config:${folder.uri.toString()}`, "Class Rules", "symbol-class", schema.class_config.map((field) => (
-          this.actionNode(
-            `pick-class-config-${field.id}`,
-            field.label,
-            this.optionLabel(field.options, state.class_config[field.id]),
-            "settings",
-            "latexEditingToolkit.pickClassConfig",
-            [folder.uri, field.id]
-          )
-        )), vscode.TreeItemCollapsibleState.Expanded),
-        this.groupNode(`theme-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => (
+      this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
+        this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
+        this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
+        this.groupNode(`appearance-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => (
           this.actionNode(
             `toggle-theme-${toggle.id}`,
             toggle.label,
@@ -922,20 +895,59 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
             "latexEditingToolkit.toggleThemeOption",
             [folder.uri, toggle.id]
           )
-        )), vscode.TreeItemCollapsibleState.Expanded),
+        )))
+      ]),
+      this.groupNode(`document:${folder.uri.toString()}`, "Document", "symbol-class", [
+        this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
+        this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => (
+          this.actionNode(
+            `pick-class-config-${field.id}`,
+            field.label,
+            this.optionLabel(field.options, state.class_config[field.id]),
+            "settings",
+            "latexEditingToolkit.pickClassConfig",
+            [folder.uri, field.id]
+          )
+        )))
+      ]),
+      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
+        this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
+        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
         this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+      ]),
+      this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
+        this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
+        this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
+        this.actionNode("unsplit-unit", "Merge Unit Back To Root", "selected target", "git-merge", "latexEditingToolkit.unsplitUnit", folderArg)
       ])
-    ];
+    );
+    if (state.config_warnings.length > 0 || state.compile_last_success === false) {
+      const diagnostics = [this.infoNode(`last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state))];
+      if (state.config_warnings.length > 0) diagnostics.push({
+        ...this.infoNode(`config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
+        tooltip: state.config_warnings.join("\n")
+      });
+      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode.TreeItemCollapsibleState.Expanded));
+    }
+    return nodes;
+  }
+
+  private workspaceBuildSummary(state: ToolkitState): string {
+    if (state.compile_last_success === false) return "Build failed";
+    if (state.compile_last_success === true) return "PDF ready";
+    return "Not compiled";
   }
 
   private workspaceErrorGroups(folder: vscode.WorkspaceFolder, error: Error): ToolkitTreeNode[] {
     const folderArg = [folder.uri];
     return [
-      this.groupNode(`status:${folder.uri.toString()}`, "Status", "warning", [
-        this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error"),
-        this.actionNode("open-toolkit", "Open Toolkit", "webview", "tools", "latexEditingToolkit.openToolkit", folderArg)
+      this.actionNode("open-toolkit", "Open Toolkit", "visual workbench", "tools", "latexEditingToolkit.openToolkit", folderArg),
+      this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", [
+        this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error")
       ], vscode.TreeItemCollapsibleState.Expanded),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project", "repo", [
+      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
         this.actionNode("generate-starter", "Generate Starter", "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
@@ -1043,8 +1055,7 @@ class ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.file(path.join(context.extensionPath, "dist")),
-          vscode.Uri.file(folder.uri.fsPath)
+          vscode.Uri.file(path.join(context.extensionPath, "dist"))
         ]
       }
     );
@@ -1088,10 +1099,17 @@ class ToolkitPanel {
     if (!request?.id || !request.command) return;
     try {
       let data: unknown;
-      if (request.command === "pdf-uri") {
+      if (request.command === "pdf-status") {
         const rawPath = String(request.payload?.path ?? "");
-        const pdfPath = await this.service.readPdfIfExists(rawPath);
-        data = { uri: this.panel.webview.asWebviewUri(vscode.Uri.file(pdfPath)).toString(), path: rawPath };
+        const pdfPath = this.service.resolvePdfPath(rawPath);
+        let exists = false;
+        try {
+          const stat = await fs.promises.stat(pdfPath);
+          exists = stat.isFile();
+        } catch {
+          exists = false;
+        }
+        data = { path: rawPath || path.basename(pdfPath), exists };
       } else if (request.command === "open-pdf") {
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = await this.service.readPdfIfExists(rawPath);
@@ -1194,13 +1212,13 @@ class ToolkitPanel {
     const webview = this.panel.webview;
     const scriptUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "webview.js")));
     const styleUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "codicon.css")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `script-src 'nonce-${nonce}'`,
       `img-src ${webview.cspSource} data:`,
-      `frame-src ${webview.cspSource}`,
       `font-src ${webview.cspSource}`
     ].join("; ");
     const initial = JSON.stringify({ workspaceName: this.folder.name, workspacePath: this.folder.uri.fsPath });
@@ -1212,6 +1230,7 @@ class ToolkitPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="${csp}">
   <title>LaTeX Editing Toolkit</title>
+  <link rel="stylesheet" href="${codiconStyleUri}">
   ${cssExists ? `<link rel="stylesheet" href="${styleUri}">` : ""}
 </head>
 <body>

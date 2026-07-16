@@ -31,6 +31,8 @@ const builds = [
 mkdirSync("dist", { recursive: true });
 mkdirSync(dirname("dist/webview.css"), { recursive: true });
 copyFileSync("src/webview/styles.css", "dist/webview.css");
+copyFileSync("node_modules/@vscode/codicons/dist/codicon.css", "dist/codicon.css");
+copyFileSync("node_modules/@vscode/codicons/dist/codicon.ttf", "dist/codicon.ttf");
 
 if (watch) {
   for (const ctxPromise of builds) {

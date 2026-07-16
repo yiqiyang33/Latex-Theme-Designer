@@ -1,6 +1,6 @@
-# LaTeX Editing Toolkit 0.3.0
+# LaTeX Editing Toolkit 0.4.0
 
-VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and PDF preview from a webview panel.
+VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and native editor PDF opening.
 
 ## Build
 
@@ -20,8 +20,9 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
-Version 0.3.0 adds a three-step project wizard, automatic saving, persistent one-step Undo/Redo,
-global personal styles, style-difference inspection, and a progressively disclosed Toolkit UI.
+Version 0.4.0 reorganizes Toolkit as a responsive visual workbench with section navigation,
+task-focused controls, a richer live Style preview, bundled Codicons, and a quieter Activity Bar.
+The Webview no longer embeds PDFs: compile results open through the native VS Code/Cursor PDF viewer.
 
 ## Create Project Wizard
 
@@ -69,8 +70,10 @@ chapter overviews, and `\\textbf`. `\\hl` remains a background highlight while `
 remains a bold rounded emphasis box; they share the selected preset's color system without
 losing their different semantics.
 
-The Toolkit displays styles as keyboard-accessible cards. Hovering or focusing a card previews it;
-clicking applies its complete color package and saves automatically. A card shows `Customized`
+The Toolkit displays styles as keyboard-accessible miniature document cards. Hovering or focusing
+a card temporarily updates the live Style preview without writing project files; clicking applies
+its complete color package and saves automatically. The preview demonstrates headings, inline
+commands, theorem/note/callout blocks, sidenotes, and chapter overviews. A card shows `Customized`
 when any current color differs from its baseline.
 
 `View Changes` groups changed tokens and shows baseline/current swatches. Individual tokens or the
@@ -117,7 +120,7 @@ are restored from the operation backup and files that did not previously exist a
 Configuration is loaded field by field. A broken JSON file or one invalid toggle, color, preset,
 font size, class option, target, recipe, or compile-status field no longer prevents the Toolkit
 from opening. Valid fields continue to load, invalid fields fall back locally, and warnings appear
-in the Activity Bar Status group and an expandable Toolkit warning panel. Warnings are diagnostic
+in the Activity Bar Diagnostics group and the Toolkit Diagnostics section. Warnings are diagnostic
 only and are not saved into `theme.ui.json`; the next successful automatic save writes normalized state.
 
 Extension commands share a `LaTeX Editing Toolkit` Output channel. Errors include timestamp,
@@ -147,6 +150,26 @@ Available starters:
 
 The default starter remains `book-minimal`.
 
+## Visual Workbench
+
+The Toolkit Webview uses a responsive three-part layout:
+
+- Section navigation for Style, Build, Document, Colors, Project Setup, Structure, and Diagnostics.
+- A task-focused center panel that shows only the active tool.
+- A contextual panel that shows the live Style preview or the current build/setup/operation summary.
+
+Wide editor tabs use three columns, medium tabs use horizontal navigation with two columns, and
+narrow tabs stack the active task above its context. The selected section is remembered per project.
+The interface follows VS Code theme colors, high-contrast mode, reduced-motion preferences, and
+keyboard tab navigation.
+
+## Compile and PDF
+
+`Compile PDF` flushes pending automatic saves and runs the selected target and recipe. The Toolkit
+shows the last result, expected output path, and whether the PDF currently exists. `Open PDF` opens
+the generated file through the native VS Code/Cursor viewer. The Toolkit does not embed, reload, or
+automatically compile a PDF when Style or document settings change.
+
 ## Main Features
 
 - Centralized LaTeX theme module in `theme.sty`.
@@ -156,7 +179,7 @@ The default starter remains `book-minimal`.
 - Built-in color presets, including UChicago maroon/greystone.
 - Global personal styles with difference inspection and JSON import/export.
 - Automatic saving with persistent one-step Undo and Redo.
-- Progressive Style, Build, Document Settings, Colors, Setup, Structure, and Diagnostics sections.
+- Responsive Style, Build, Document, Colors, Setup, Structure, and Diagnostics workspace.
 - Transactional workspace theme asset upgrades with Preserve Colors as the safe default.
 - Internal fallback compile pipeline plus optional VS Code recipe mode.
 - Generate `.vscode/settings.json` for LaTeX Workshop-compatible recipes.

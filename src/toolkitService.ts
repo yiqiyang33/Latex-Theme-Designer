@@ -179,8 +179,6 @@ export class ToolkitService {
             : payload.reset_color_overrides === true ? "default" : "preserve";
           return this.template.upgradeThemeAssets({ colorPolicy });
         });
-      case "pdf-uri":
-        return this.resolvePdfPath(String(payload.path ?? ""));
       default:
         throw new Error(`Unknown toolkit command: ${command}`);
     }

@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "yiqiyang33",
   "icon": "assets/latex-toolkit.png",
   "license": "MIT",
@@ -324,12 +324,12 @@
         {
           "command": "latexEditingToolkit.removeLocalProject",
           "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
-          "group": "inline@1"
+          "group": "1_modification@2"
         },
         {
           "command": "latexEditingToolkit.relocateLocalProject",
           "when": "view == latexEditingToolkit.actions && viewItem == localProjectMissing",
-          "group": "inline@2"
+          "group": "1_modification@1"
         }
       ]
     }
@@ -347,6 +347,7 @@
   "devDependencies": {
     "@types/node": "^20.17.10",
     "@types/vscode": "^1.85.0",
+    "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.28.0",
     "typescript": "^5.7.2",
