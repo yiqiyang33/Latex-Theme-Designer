@@ -716,7 +716,7 @@ describe("TypeScript Toolkit migration", () => {
     expect(source).toContain('request("open-pdf"');
     expect(source).toContain('request("confirm-action"');
     expect(source).not.toMatch(/\bconfirm\s*\(/);
-    expect(uiStateSource).toContain('version: 2');
+    expect(uiStateSource).toContain('version: 3');
     expect(source).toContain("activeStructureTask");
     expect(source).toContain('id="loadingState"');
     expect(source).toContain('id="notice"');
@@ -749,7 +749,13 @@ describe("TypeScript Toolkit migration", () => {
     expect(extension).not.toContain('request.command === "pdf-uri"');
     expect(extension).toContain('"Appearance"');
     expect(extension).toContain('"Project Tools"');
-    expect(manifest.version).toBe("0.4.1");
+    expect(source).toContain('data-section-target="snippets"');
+    expect(source).toContain('id="snippetMonacoHost"');
+    expect(source).toContain('request("snippets-save"');
+    expect(source).toContain('loadSnippetState("snippets-state"');
+    expect(styles).toContain(".snippet-manager-layout");
+    expect(extension).toContain('command("hsnips.openSnippetManager"');
+    expect(manifest.version).toBe("1.0.0");
     expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();
     expect(manifest.contributes.menus["view/item/context"].every((item: any) => !String(item.group).startsWith("inline"))).toBe(true);
     const build = await fs.readFile(path.join(repoRoot, "esbuild.mjs"), "utf8");
@@ -786,18 +792,47 @@ describe("TypeScript Toolkit migration", () => {
         "/notes/b": { activeSection: "build" }
       }
     };
-    expect(readWorkspaceUiState(legacy, "/notes/a")).toEqual({ activeSection: "colors", activeStructureTask: "split" });
-    const migrated = updateWorkspaceUiState(legacy, "/notes/a", "structure", "renumber");
+    expect(readWorkspaceUiState(legacy, "/notes/a")).toEqual({ activeSection: "colors", activeStructureTask: "split", selectedSnippetFile: undefined, snippetSearch: undefined });
+    const migrated = updateWorkspaceUiState(legacy, "/notes/a", "structure", "renumber", { selectedSnippetFile: "/notes/a/.vscode/hsnips/latex.hsnips", snippetSearch: "matrix" });
     expect(migrated).toEqual({
-      version: 2,
+      version: 3,
       workspaces: {
-        "/notes/a": { activeSection: "structure", activeStructureTask: "renumber" },
-        "/notes/b": { activeSection: "build", activeStructureTask: "split" }
+        "/notes/a": { activeSection: "structure", activeStructureTask: "renumber", selectedSnippetFile: "/notes/a/.vscode/hsnips/latex.hsnips", snippetSearch: "matrix" },
+        "/notes/b": { activeSection: "build", activeStructureTask: "split", selectedSnippetFile: undefined, snippetSearch: undefined }
       }
     });
-    expect(readWorkspaceUiState(migrated, "/notes/a")).toEqual({ activeSection: "structure", activeStructureTask: "renumber" });
+    expect(readWorkspaceUiState(migrated, "/notes/a")).toEqual({ activeSection: "structure", activeStructureTask: "renumber", selectedSnippetFile: "/notes/a/.vscode/hsnips/latex.hsnips", snippetSearch: "matrix" });
     expect(readWorkspaceUiState({ version: 2, workspaces: { bad: { activeSection: "unknown", activeStructureTask: "bad" } } }, "bad"))
-      .toEqual({ activeSection: "style", activeStructureTask: "split" });
+      .toEqual({ activeSection: "style", activeStructureTask: "split", selectedSnippetFile: undefined, snippetSearch: undefined });
+    expect(readWorkspaceUiState({ version: 3, workspaces: { "global-snippets": { activeSection: "snippets", activeStructureTask: "split", snippetSearch: "align" } } }, "global-snippets"))
+      .toEqual({ activeSection: "snippets", activeStructureTask: "split", selectedSnippetFile: undefined, snippetSearch: "align" });
+  });
+
+  it("keeps the full hsnips compatibility manifest and packages only the integrated manager", async () => {
+    const manifest = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
+    const commands = manifest.contributes.commands.map((entry: any) => entry.command);
+    const expected = [
+      "hsnips.openSnippetsDir", "hsnips.openWorkspaceSnippetsDir", "hsnips.openWorkspaceSnippetFile",
+      "hsnips.openSnippetFile", "hsnips.openSnippetManager", "hsnips.selectProfile", "hsnips.openActiveProfile",
+      "hsnips.reloadSnippets", "hsnips.convertEnvironment", "hsnips.renameMatchingEnvironment",
+      "hsnips.wrapMathStructure", "hsnips.unwrapMathStructure", "hsnips.smartEnter", "hsnips.smartTab",
+      "hsnips.matrixTab", "hsnips.leaveSnippet", "hsnips.nextPlaceholder", "hsnips.prevPlaceholder", "hsnips.expand"
+    ];
+    expect(expected.every((command) => commands.includes(command))).toBe(true);
+    expect(expected.every((command) => manifest.activationEvents.includes(`onCommand:${command}`))).toBe(true);
+    expect(Object.keys(manifest.contributes.configuration.properties)).toEqual(expect.arrayContaining([
+      "hsnips.multiLineContext", "hsnips.windows", "hsnips.linux", "hsnips.mac",
+      "hsnips.context.extraMathEnvironments", "hsnips.context.extraRowBreakEnvironments",
+      "hsnips.context.extraAlignmentEnvironments", "hsnips.context.extraTextLikeCommands",
+      "hsnips.profiles.activeProfile"
+    ]));
+    expect(manifest.contributes.languages).toContainEqual(expect.objectContaining({ id: "hsnips", extensions: [".hsnips"] }));
+    expect(manifest.contributes.grammars).toContainEqual(expect.objectContaining({ language: "hsnips", scopeName: "source.hsnips" }));
+    expect(await fs.access(path.join(repoRoot, "syntaxes", "hsnips.tmLanguage.json"))).toBeUndefined();
+    const extension = await fs.readFile(path.join(repoRoot, "src", "extension.ts"), "utf8");
+    expect(extension).toContain('const legacyId = "yiqiyang33.yiqis-latexsnips"');
+    expect(extension).toContain('snippetsOnly: !this.folder');
+    expect(extension).not.toContain("registerSnippetManager");
   });
 
   it("summarizes split, renumber, and merge results without double-counting deleted files", () => {

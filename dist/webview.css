@@ -455,6 +455,255 @@ summary { cursor: pointer; font-weight: 650; }
 .config-warnings { border-color: var(--vscode-inputValidation-warningBorder, var(--warning)); background: var(--vscode-inputValidation-warningBackground, transparent); }
 .config-warnings ul { margin: var(--space-2) 0 0; padding-left: 20px; line-height: 1.5; }
 .result, .log { min-height: 110px; max-height: 420px; overflow: auto; padding: var(--space-3); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--vscode-editor-font-family); font-size: 11px; }
+
+.snippet-manager-layout {
+  display: grid;
+  grid-template-columns: minmax(196px, 30%) minmax(0, 1fr);
+  gap: var(--space-3);
+  min-height: 600px;
+}
+
+.snippet-browser,
+.snippet-editor-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--soft-line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--raised) 58%, transparent);
+}
+
+.snippet-browser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.snippet-browser > .field { margin-bottom: 0; }
+.snippet-browser-heading,
+.snippet-context-heading,
+.snippet-editor-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.snippet-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height);
+  border: 1px solid var(--vscode-input-border, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  background: var(--vscode-input-background);
+}
+
+.snippet-search:focus-within {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.snippet-search input {
+  min-height: 28px;
+  border: 0;
+  padding: 4px 0;
+  outline: 0;
+  background: transparent;
+}
+
+.snippet-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.snippet-filters select { width: 100%; font-size: 10px; }
+.snippet-file-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 160px;
+  max-height: 430px;
+  margin: 0 calc(-1 * var(--space-1));
+  overflow: auto;
+  padding: 0 var(--space-1);
+}
+
+.snippet-file-list h4 {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.snippet-file-item,
+.snippet-block-item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  border-color: transparent;
+  padding: 7px 8px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.snippet-file-item:hover,
+.snippet-block-item:hover { background: var(--hover); }
+.snippet-file-item[data-active="true"],
+.snippet-block-item[data-active="true"] {
+  color: var(--vscode-list-activeSelectionForeground, var(--text));
+  background: var(--vscode-list-activeSelectionBackground, var(--hover));
+  box-shadow: inset 2px 0 0 var(--vscode-focusBorder, var(--accent));
+}
+
+.snippet-file-item > span:first-child,
+.snippet-block-item {
+  min-width: 0;
+}
+
+.snippet-file-item strong,
+.snippet-file-item small,
+.snippet-block-item strong,
+.snippet-block-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snippet-file-item small,
+.snippet-block-item small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.snippet-issue-count {
+  flex: 0 0 auto;
+  margin-left: var(--space-2);
+  color: var(--warning);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.snippet-create-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(78px, auto) 30px;
+  gap: var(--space-1);
+  margin-top: auto;
+  border-top: 1px solid var(--soft-line);
+  padding-top: var(--space-2);
+}
+
+.snippet-editor-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(420px, 1fr);
+  min-height: 600px;
+}
+
+.snippet-editor-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--soft-line);
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--raised) 80%, transparent);
+}
+
+.snippet-editor-heading > div:first-child { min-width: 0; }
+.snippet-editor-heading .path { max-width: 44vw; font-size: 10px; }
+.snippet-editor-heading .toolbar { justify-content: flex-end; }
+.inline-editor-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--vscode-inputValidation-warningBorder, var(--line));
+  padding: var(--space-2) var(--space-3);
+  color: var(--vscode-inputValidation-warningForeground, var(--warning));
+  background: var(--vscode-inputValidation-warningBackground, transparent);
+  font-size: 10px;
+}
+
+.snippet-monaco,
+.snippet-fallback-editor {
+  width: 100%;
+  min-width: 0;
+  min-height: 420px;
+  height: 100%;
+}
+
+.snippet-fallback-editor {
+  resize: vertical;
+  border: 0;
+  border-radius: 0;
+  padding: var(--space-3);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size, 12px);
+  line-height: 1.5;
+  outline: 0;
+}
+
+.snippet-block-list { display: grid; gap: 2px; margin-bottom: var(--space-3); }
+.snippet-block-item { display: grid; justify-content: stretch; }
+.snippet-detail-panel {
+  margin: var(--space-3) 0 var(--space-4);
+  border: 1px solid var(--soft-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--raised) 54%, transparent);
+}
+
+.snippet-detail-panel .summary-list { margin: var(--space-2) 0 0; }
+.snippet-body-preview {
+  max-height: 180px;
+  margin: var(--space-2) 0 0;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.snippet-file-summary dd,
+#snippetContextPath { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snippet-diagnostics-title { margin: var(--space-4) 0 var(--space-2); }
+.snippet-diagnostic-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.snippet-diagnostic-list li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  cursor: pointer;
+}
+
+.snippet-diagnostic-list li:hover { background: var(--hover); }
+.snippet-diagnostic-list li[data-severity="error"] > .codicon { color: var(--danger); }
+.snippet-diagnostic-list li[data-severity="warning"] > .codicon { color: var(--warning); }
+.snippet-diagnostic-list span,
+.snippet-diagnostic-list small { display: block; }
+.snippet-diagnostic-list small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+
+body[data-snippets-only="true"] .workspace-nav button:not([data-section-target="snippets"]),
+body[data-snippets-only="true"] #undoBtn,
+body[data-snippets-only="true"] #redoBtn,
+body[data-snippets-only="true"] .save-strip .toolbar-divider,
+body[data-snippets-only="true"] #retrySaveBtn,
+body[data-snippets-only="true"] #saveShowLogBtn { display: none; }
+
+body[data-snippets-only="true"] .save-strip { min-width: 0; }
 @media (max-width: 1179px) {
   .workbench { grid-template-columns: minmax(420px, 1fr) minmax(320px, 380px); }
   .workspace-nav { position: sticky; top: 94px; z-index: 15; grid-column: 1 / -1; display: flex; overflow-x: auto; }
@@ -463,6 +712,10 @@ summary { cursor: pointer; font-weight: 650; }
   .context-pane { top: 94px; }
   .skeleton-grid { grid-template-columns: minmax(420px, 1fr) minmax(320px, 380px); }
   .skeleton-nav { display: none; }
+  .snippet-manager-layout { grid-template-columns: minmax(190px, 31%) minmax(0, 1fr); }
+  .snippet-filters { grid-template-columns: 1fr; }
+  .snippet-editor-heading { align-items: stretch; flex-direction: column; }
+  .snippet-editor-heading .path { max-width: 100%; }
 }
 
 @media (max-width: 759px) {
@@ -484,6 +737,12 @@ summary { cursor: pointer; font-weight: 650; }
   .inline-notice { grid-template-columns: 20px minmax(0, 1fr) auto; }
   .inline-notice .notice-action { grid-column: 2; justify-self: start; }
   .result-stats { grid-template-columns: repeat(3, 1fr); }
+  .snippet-manager-layout { grid-template-columns: 1fr; min-height: 0; }
+  .snippet-browser { max-height: none; }
+  .snippet-file-list { max-height: 300px; }
+  .snippet-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .snippet-editor-card { min-height: 540px; }
+  .snippet-editor-heading .toolbar { justify-content: flex-start; }
 }
 
 @media (max-width: 460px) {
@@ -492,6 +751,9 @@ summary { cursor: pointer; font-weight: 650; }
   .color-row { grid-template-columns: 1fr 34px 90px 30px; }
   .color-row label code { display: none; }
   .config-row { grid-template-columns: 1fr; gap: var(--space-1); margin-bottom: var(--space-2); }
+  .snippet-filters { grid-template-columns: 1fr; }
+  .snippet-create-row { grid-template-columns: 1fr 1fr 30px; }
+  .snippet-editor-heading .toolbar span { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

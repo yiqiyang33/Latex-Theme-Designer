@@ -1,8 +1,8 @@
 {
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
-  "description": "Local-first LaTeX note template toolkit for themes, starter files, splitting, cleanup, and compile workflows.",
-  "version": "0.4.1",
+  "description": "A local-first LaTeX workspace toolkit with themes, project workflows, programmable hsnips, profiles, and mathematical editing helpers.",
+  "version": "1.0.0",
   "publisher": "yiqiyang33",
   "icon": "assets/latex-toolkit.png",
   "license": "MIT",
@@ -14,17 +14,45 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Snippets"
   ],
   "keywords": [
     "latex",
     "tex",
     "cursor",
     "notes",
-    "template"
+    "template",
+    "hsnips",
+    "programmable snippets",
+    "dynamic snippets"
   ],
   "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:hsnips",
+    "onLanguage:markdown",
+    "onLanguage:latex",
+    "onLanguage:tex",
     "onView:latexEditingToolkit.actions",
+    "onCommand:hsnips.openSnippetsDir",
+    "onCommand:hsnips.openWorkspaceSnippetsDir",
+    "onCommand:hsnips.openWorkspaceSnippetFile",
+    "onCommand:hsnips.openSnippetFile",
+    "onCommand:hsnips.openSnippetManager",
+    "onCommand:hsnips.selectProfile",
+    "onCommand:hsnips.openActiveProfile",
+    "onCommand:hsnips.reloadSnippets",
+    "onCommand:hsnips.convertEnvironment",
+    "onCommand:hsnips.renameMatchingEnvironment",
+    "onCommand:hsnips.wrapMathStructure",
+    "onCommand:hsnips.unwrapMathStructure",
+    "onCommand:hsnips.smartEnter",
+    "onCommand:hsnips.smartTab",
+    "onCommand:hsnips.matrixTab",
+    "onCommand:hsnips.leaveSnippet",
+    "onCommand:hsnips.nextPlaceholder",
+    "onCommand:hsnips.prevPlaceholder",
+    "onCommand:hsnips.expand",
     "onCommand:latexEditingToolkit.openToolkit",
     "onCommand:latexEditingToolkit.createProject",
     "onCommand:latexEditingToolkit.openLocalProject",
@@ -189,7 +217,129 @@
       {
         "command": "latexEditingToolkit.unsplitUnit",
         "title": "LaTeX Editing Toolkit: Merge Unit Back To Root"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openSnippetsDir",
+        "title": "Open Snippets Directory"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openWorkspaceSnippetsDir",
+        "title": "Open Workspace Snippets Directory"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openWorkspaceSnippetFile",
+        "title": "Open Workspace Snippet File"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openSnippetFile",
+        "title": "Open Snippet File"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openSnippetManager",
+        "title": "Open Snippet Manager"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.selectProfile",
+        "title": "Select Snippet Profile"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.openActiveProfile",
+        "title": "Open Active Snippet Profile"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.reloadSnippets",
+        "title": "Reload Snippets"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.convertEnvironment",
+        "title": "Convert LaTeX Environment"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.renameMatchingEnvironment",
+        "title": "Rename Matching LaTeX Environment"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.wrapMathStructure",
+        "title": "Wrap Math Structure"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.unwrapMathStructure",
+        "title": "Unwrap Math Structure"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.smartEnter",
+        "title": "Smart Math Enter"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.smartTab",
+        "title": "Smart Alignment Tab"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.matrixTab",
+        "title": "Insert Matrix Column Separator"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.leaveSnippet",
+        "title": "Leave Snippet"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.nextPlaceholder",
+        "title": "Next Snippet Placeholder"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.prevPlaceholder",
+        "title": "Previous Snippet Placeholder"
+      },
+      {
+        "category": "LaTeX Editing Toolkit: Snippets",
+        "command": "hsnips.expand",
+        "title": "Expand Snippet"
       }
+    ],
+    "configuration": {
+      "title": "LaTeX Editing Toolkit: Snippets",
+      "properties": {
+        "hsnips.multiLineContext": { "type": "number", "default": 20, "description": "Number of lines matched when using multi-line regex mode." },
+        "hsnips.windows": { "type": "string", "default": "%APPDATA%/Code/User/hsnips", "description": "Custom snippet path for Windows." },
+        "hsnips.linux": { "type": "string", "default": "$HOME/.config/Code/User/hsnips", "description": "Custom snippet path for Linux." },
+        "hsnips.mac": { "type": "string", "default": "$HOME/Library/Application Support/Code/User/hsnips", "description": "Custom snippet path for macOS." },
+        "hsnips.context.extraMathEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional LaTeX environments treated as math contexts." },
+        "hsnips.context.extraRowBreakEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional environments where Enter can append a row break." },
+        "hsnips.context.extraAlignmentEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional environments where Tab can insert an alignment separator." },
+        "hsnips.context.extraTextLikeCommands": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional LaTeX commands whose argument is treated as text." },
+        "hsnips.profiles.activeProfile": { "type": "string", "default": "", "description": "Active snippet profile loaded from hsnips/profiles/<name>. Empty means base snippets only." }
+      }
+    },
+    "keybindings": [
+      { "key": "enter", "command": "hsnips.smartEnter", "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && hsnips.canSmartEnter" },
+      { "key": "tab", "command": "hsnips.smartTab", "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inlineSuggestionVisible && hsnips.canSmartTab" },
+      { "key": "shift+tab", "command": "hsnips.prevPlaceholder", "when": "editorTextFocus && hasPrevTabstop && inSnippetMode" },
+      { "key": "escape", "command": "hsnips.leaveSnippet", "when": "editorTextFocus && inSnippetMode" },
+      { "key": "shift+escape", "command": "hsnips.leaveSnippet", "when": "editorTextFocus && inSnippetMode" }
+    ],
+    "languages": [
+      { "id": "hsnips", "extensions": [".hsnips"], "aliases": ["LatexSnips"] }
+    ],
+    "grammars": [
+      { "language": "hsnips", "scopeName": "source.hsnips", "path": "./syntaxes/hsnips.tmLanguage.json", "embeddedLanguages": { "meta.embedded.js": "javascript" } }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -336,7 +486,8 @@
   },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "compile": "npm run clean && tsc --noEmit && node esbuild.mjs",
+    "compile": "npm run clean && tsc --noEmit && node esbuild.mjs && npm run prepare-monaco",
+    "prepare-monaco": "node scripts/prepare-monaco.js",
     "watch": "node esbuild.mjs --watch",
     "test:unit": "vitest run",
     "test:extension": "npm run compile",
@@ -350,6 +501,7 @@
     "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.28.0",
+    "monaco-editor": "^0.52.2",
     "typescript": "^5.7.2",
     "vitest": "^3.2.4"
   }

@@ -7,6 +7,10 @@ import { PersonalStyleRegistry } from "./personalStyles";
 import { LocalProjectRegistry } from "./projectRegistry";
 import { preflightCreateProject, runCreateProjectWorkflow } from "./projectWorkflow";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
+import { registerSnippetHost } from "./snippets/engine/host";
+import { getSnippetDir } from "./snippets/engine/utils";
+import { getSnippetFiles } from "./snippets/engine/snippetProfiles";
+import { SnippetService } from "./snippets/snippetService";
 import { ToolkitService } from "./toolkitService";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 
@@ -21,6 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
 
+  registerSnippetHost(context, output);
+  void warnAboutLegacySnips(context, output);
+
   context.subscriptions.push(
     output,
     treeProvider,
@@ -33,6 +40,15 @@ export function activate(context: vscode.ExtensionContext): void {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+    }),
+    command("hsnips.openSnippetManager", async (folderUri?: vscode.Uri) => {
+      const folder = folderUri instanceof vscode.Uri
+        ? vscode.workspace.getWorkspaceFolder(folderUri)
+        : (vscode.window.activeTextEditor
+          ? vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri)
+          : vscode.workspace.workspaceFolders?.[0]);
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+      await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
       await createProjectWizard(context, projectRegistry, treeProvider, output);
@@ -201,6 +217,24 @@ export function deactivate(): void {
   personalStyles = undefined;
 }
 
+const LEGACY_SNIPS_NOTICE_KEY = "latexEditingToolkit.legacySnipsNotice.v1";
+
+async function warnAboutLegacySnips(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<void> {
+  const legacyId = "yiqiyang33.yiqis-latexsnips";
+  const legacy = vscode.extensions.getExtension(legacyId);
+  if (!legacy || context.globalState.get<boolean>(LEGACY_SNIPS_NOTICE_KEY)) return;
+  await context.globalState.update(LEGACY_SNIPS_NOTICE_KEY, true);
+  output.appendLine(`[${new Date().toISOString()}] Legacy extension detected: ${legacyId}`);
+  const action = await vscode.window.showWarningMessage(
+    "Yiqi's LatexSnips is also installed. LaTeX Editing Toolkit 1.0 now includes the same snippet engine; disable the old extension to avoid duplicate completions and Enter/Tab behavior.",
+    "Open Extension",
+    "Continue"
+  );
+  if (action === "Open Extension") {
+    await vscode.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
+  }
+}
+
 const RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
 
 async function createProjectWizard(
@@ -340,7 +374,7 @@ async function restoreLastToolkitChange(
   }
   treeProvider.refresh();
   vscode.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
-  if (activePanel?.folder.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
+  if (activePanel?.folder?.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
 }
 
 function registerToolkitCommand<T extends unknown[]>(
@@ -875,7 +909,21 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     ];
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
+    const activeSnippetProfile = vscode.workspace.getConfiguration("hsnips", folder.uri).get<string>("profiles.activeProfile") || "";
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
+      this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
+        this.actionNode(
+          "open-snippet-manager",
+          "Open Snippet Manager",
+          `${activeSnippetProfile || "base"} · ${snippetFileCount} file${snippetFileCount === 1 ? "" : "s"}`,
+          "edit",
+          "hsnips.openSnippetManager",
+          folderArg
+        ),
+        this.actionNode("select-snippet-profile", "Select Profile", "base + profile + workspace", "account", "hsnips.selectProfile", folderArg),
+        this.actionNode("reload-snippets", "Reload Snippets", ".hsnips files", "refresh", "hsnips.reloadSnippets", folderArg)
+      ], vscode.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} · ${snippetFileCount} files`),
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
@@ -957,10 +1005,11 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     ];
   }
 
-  private groupNode(id: string, label: string, iconId: string, children: ToolkitTreeNode[], collapsibleState = vscode.TreeItemCollapsibleState.Collapsed): ToolkitTreeNode {
+  private groupNode(id: string, label: string, iconId: string, children: ToolkitTreeNode[], collapsibleState = vscode.TreeItemCollapsibleState.Collapsed, description?: string): ToolkitTreeNode {
     return {
       id,
       label,
+      description,
       iconId,
       children,
       collapsibleState,
@@ -1036,13 +1085,15 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
 }
 
 class ToolkitPanel {
-  private readonly service: ToolkitService;
+  private readonly service: ToolkitService | undefined;
+  private readonly snippetService: SnippetService;
   private disposables: vscode.Disposable[] = [];
   private disposed = false;
 
-  static createOrShow(context: vscode.ExtensionContext, folder: vscode.WorkspaceFolder, output: vscode.OutputChannel, styleRegistry: PersonalStyleRegistry, onStateChanged: () => void): ToolkitPanel {
+  static createOrShow(context: vscode.ExtensionContext, folder: vscode.WorkspaceFolder | undefined, output: vscode.OutputChannel, styleRegistry: PersonalStyleRegistry, onStateChanged: () => void): ToolkitPanel {
+    const panelKey = folder?.uri.toString() || "global-snippets";
     if (activePanel) {
-      if (activePanel.folder.uri.toString() === folder.uri.toString()) {
+      if (activePanel.panelKey === panelKey) {
         activePanel.panel.reveal(vscode.ViewColumn.One);
         return activePanel;
       }
@@ -1056,7 +1107,8 @@ class ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.file(path.join(context.extensionPath, "dist"))
+          vscode.Uri.file(path.join(context.extensionPath, "dist")),
+          vscode.Uri.file(path.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -1065,16 +1117,30 @@ class ToolkitPanel {
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
-    readonly folder: vscode.WorkspaceFolder,
+    readonly folder: vscode.WorkspaceFolder | undefined,
     readonly panel: vscode.WebviewPanel,
     private readonly output: vscode.OutputChannel,
     private readonly styleRegistry: PersonalStyleRegistry,
     private readonly onStateChanged: () => void
   ) {
-    this.service = toolkitService(context, folder.uri.fsPath);
+    this.service = folder ? toolkitService(context, folder.uri.fsPath) : undefined;
+    this.snippetService = new SnippetService(folder?.uri.fsPath);
     this.panel.webview.html = this.html();
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message), null, this.disposables);
+  }
+
+  private get panelKey(): string {
+    return this.folder?.uri.toString() || "global-snippets";
+  }
+
+  private requireService(): ToolkitService {
+    if (!this.service) throw new Error("Open a local workspace to use this Toolkit section.");
+    return this.service;
+  }
+
+  private get workspacePath(): string {
+    return this.folder?.uri.fsPath || "global-snippets";
   }
 
   dispose(): void {
@@ -1091,8 +1157,14 @@ class ToolkitPanel {
   }
 
   async refreshState(): Promise<void> {
+    if (!this.service) return;
     const data = await this.service.handle("state", {});
     await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
+  }
+
+  async openSection(section: "snippets"): Promise<void> {
+    this.panel.reveal(vscode.ViewColumn.One);
+    await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
   }
 
   private async handleMessage(message: unknown): Promise<void> {
@@ -1113,9 +1185,43 @@ class ToolkitPanel {
       } else if (request.command === "show-log") {
         this.output.show(true);
         data = { shown: true };
+      } else if (request.command === "snippets-state" || request.command === "snippets-reload") {
+        if (request.command === "snippets-reload") await vscode.commands.executeCommand("hsnips.reloadSnippets");
+        data = await this.snippetService.state();
+      } else if (request.command === "snippets-analyze") {
+        data = await this.snippetService.analyze(String(request.payload?.file_path ?? ""), String(request.payload?.content ?? ""));
+      } else if (request.command === "snippets-save") {
+        data = await this.snippetService.save(
+          String(request.payload?.file_path ?? ""),
+          String(request.payload?.content ?? ""),
+          typeof request.payload?.document_hash === "string" ? request.payload.document_hash : undefined,
+          typeof request.payload?.mtime_ms === "number" ? request.payload.mtime_ms : undefined
+        );
+      } else if (request.command === "snippets-open-source") {
+        await this.snippetService.openSource(String(request.payload?.file_path ?? ""), Number(request.payload?.line ?? 1));
+        data = { opened: true };
+      } else if (request.command === "snippets-create-file") {
+        const scope = String(request.payload?.scope ?? "base");
+        if (scope !== "base" && scope !== "profile" && scope !== "workspace") throw new Error("Unknown snippet scope.");
+        data = await this.snippetService.create(String(request.payload?.language ?? "latex"), scope);
+      } else if (request.command === "snippets-select-profile") {
+        const profile = String(request.payload?.profile ?? "").trim();
+        const current = await this.snippetService.state();
+        if (profile && !current.profiles.includes(profile)) throw new Error("Unknown snippet profile.");
+        await vscode.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode.ConfigurationTarget.Global);
+        await vscode.commands.executeCommand("hsnips.reloadSnippets");
+        data = await this.snippetService.state();
+      } else if (request.command === "snippets-open-directory") {
+        const scope = String(request.payload?.scope ?? "base");
+        if (scope === "base") await vscode.commands.executeCommand("hsnips.openSnippetsDir");
+        else if (scope === "profile") await vscode.commands.executeCommand("hsnips.openActiveProfile");
+        else if (scope === "workspace") await vscode.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
+        else throw new Error("Unknown snippet directory scope.");
+        data = { opened: true };
       } else if (request.command === "pdf-status") {
+        const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
-        const pdfPath = this.service.resolvePdfPath(rawPath);
+        const pdfPath = service.resolvePdfPath(rawPath);
         let exists = false;
         try {
           const stat = await fs.promises.stat(pdfPath);
@@ -1125,70 +1231,78 @@ class ToolkitPanel {
         }
         data = { path: rawPath || path.basename(pdfPath), exists };
       } else if (request.command === "open-pdf") {
+        const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
-        const pdfPath = await this.service.readPdfIfExists(rawPath);
+        const pdfPath = await service.readPdfIfExists(rawPath);
         await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
         data = { opened: true };
       } else if (request.command === "personal-style-save") {
+        const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
         const label = await vscode.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? undefined : "Style name is required." });
         if (!label) {
-          data = await this.service.handle("state", {});
+          data = await service.handle("state", {});
         } else {
           const record = await this.styleRegistry.add(label, String(state.style_base_preset ?? state.style_preset ?? "default"), state.colors as Record<string, string>);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
-          data = await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
+          service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          data = await service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
         }
       } else if (request.command === "personal-style-update") {
+        const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
         await this.styleRegistry.update(String(request.payload?.style_id ?? state.style_preset ?? ""), state.colors as Record<string, string>);
         refreshPersonalStylesOnServices(this.styleRegistry);
-        data = await this.service.handle("state", {});
+        data = await service.handle("state", {});
       } else if (request.command === "personal-style-rename") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
         const label = await vscode.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? undefined : "Style name is required." });
         if (label) await this.styleRegistry.rename(id, label);
         refreshPersonalStylesOnServices(this.styleRegistry);
-        data = await this.service.handle("state", {});
+        data = await service.handle("state", {});
       } else if (request.command === "personal-style-delete") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
         const confirmed = await vscode.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
-        if (confirmed !== "Delete Style") data = await this.service.handle("state", {});
+        if (confirmed !== "Delete Style") data = await service.handle("state", {});
         else {
           await this.styleRegistry.remove(id);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          service.setAdditionalStylePresets(this.styleRegistry.definitions());
           const state = request.payload?.state;
           data = isPlainRecord(state) && state.style_preset === id
-            ? await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } })
-            : await this.service.handle("state", {});
+            ? await service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } })
+            : await service.handle("state", {});
         }
       } else if (request.command === "personal-style-import") {
+        const service = this.requireService();
         const picked = await vscode.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
-        if (!picked?.[0]) data = await this.service.handle("state", {});
+        if (!picked?.[0]) data = await service.handle("state", {});
         else {
           const raw = JSON.parse(await fs.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          data = { ...(await this.service.handle("state", {}) as Record<string, unknown>), personal_style_import: summary };
+          data = { ...(await service.handle("state", {}) as Record<string, unknown>), personal_style_import: summary };
         }
       } else if (request.command === "personal-style-export") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode.Uri.file(path.join(this.folder.uri.fsPath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        const target = await vscode.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode.Uri.file(path.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
         if (target) await fs.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}\n`, "utf8");
-        data = { ...(await this.service.handle("state", {}) as Record<string, unknown>), exported: Boolean(target) };
+        data = { ...(await service.handle("state", {}) as Record<string, unknown>), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
+        const service = this.requireService();
         try {
-          data = await this.service.handle(request.command, request.payload ?? {});
+          data = await service.handle(request.command, request.payload ?? {});
         } catch (err) {
           if (!(err instanceof HistoryConflictError)) throw err;
           const direction = request.command.startsWith("undo") ? "undo" : "redo";
@@ -1202,22 +1316,22 @@ class ToolkitPanel {
             this.output.appendLine(`[${new Date().toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
             for (const conflict of err.conflicts) this.output.appendLine(`- ${conflict}`);
             this.output.show(true);
-            data = await this.service.handle("state", {});
-          } else if (choice === "Force Restore") data = await this.service.handle(request.command, { force: true });
-          else data = await this.service.handle("state", {});
+            data = await service.handle("state", {});
+          } else if (choice === "Force Restore") data = await service.handle(request.command, { force: true });
+          else data = await service.handle("state", {});
         }
       } else {
-        data = await this.service.handle(request.command, request.payload ?? {});
+        data = await this.requireService().handle(request.command, request.payload ?? {});
       }
       if (request.command === "compile") {
-        logCompileResult(this.output, this.folder.uri.fsPath, data as { success?: boolean; output?: string });
+        logCompileResult(this.output, this.workspacePath, data as { success?: boolean; output?: string });
       }
       if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete"].includes(request.command)) {
         this.onStateChanged();
       }
       await this.panel.webview.postMessage({ id: request.id, ok: true, data });
     } catch (err) {
-      logToolkitError(this.output, `webview:${request.command}`, this.folder.uri.fsPath, err);
+      logToolkitError(this.output, `webview:${request.command}`, this.workspacePath, err);
       await this.panel.webview.postMessage({ id: request.id, ok: false, error: (err as Error).message });
     }
   }
@@ -1227,15 +1341,23 @@ class ToolkitPanel {
     const scriptUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "webview.js")));
     const styleUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "webview.css")));
     const codiconStyleUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
+      `script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval'`,
       `img-src ${webview.cspSource} data:`,
-      `font-src ${webview.cspSource}`
+      `font-src ${webview.cspSource}`,
+      `worker-src ${webview.cspSource} blob: data:`,
+      `connect-src ${webview.cspSource}`
     ].join("; ");
-    const initial = JSON.stringify({ workspaceName: this.folder.name, workspacePath: this.folder.uri.fsPath });
+    const initial = JSON.stringify({
+      workspaceName: this.folder?.name || "Global Snippets",
+      workspacePath: this.folder?.uri.fsPath || "global-snippets",
+      snippetsOnly: !this.folder,
+      monacoBaseUri: monacoRootUri.toString()
+    });
     const cssExists = fs.existsSync(path.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">

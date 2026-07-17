@@ -1,17 +1,19 @@
 "use strict";
 (() => {
   // src/webview/uiState.ts
-  var TOOLKIT_SECTIONS = ["style", "build", "document", "colors", "setup", "structure", "diagnostics"];
+  var TOOLKIT_SECTIONS = ["style", "build", "document", "colors", "setup", "structure", "snippets", "diagnostics"];
   var STRUCTURE_TASKS = ["split", "renumber", "unsplit"];
   function readWorkspaceUiState(value, workspaceKey) {
     const root = record(value);
     const workspaces = record(root?.workspaces);
     const workspace = record(workspaces?.[workspaceKey]);
     const activeSection2 = TOOLKIT_SECTIONS.includes(workspace?.activeSection) ? workspace?.activeSection : "style";
-    const activeStructureTask2 = root?.version === 2 && STRUCTURE_TASKS.includes(workspace?.activeStructureTask) ? workspace?.activeStructureTask : "split";
-    return { activeSection: activeSection2, activeStructureTask: activeStructureTask2 };
+    const activeStructureTask2 = (root?.version === 2 || root?.version === 3) && STRUCTURE_TASKS.includes(workspace?.activeStructureTask) ? workspace?.activeStructureTask : "split";
+    const selectedSnippetFile2 = typeof workspace?.selectedSnippetFile === "string" ? workspace.selectedSnippetFile : void 0;
+    const snippetSearch2 = typeof workspace?.snippetSearch === "string" ? workspace.snippetSearch : void 0;
+    return { activeSection: activeSection2, activeStructureTask: activeStructureTask2, selectedSnippetFile: selectedSnippetFile2, snippetSearch: snippetSearch2 };
   }
-  function updateWorkspaceUiState(value, workspaceKey, activeSection2, activeStructureTask2) {
+  function updateWorkspaceUiState(value, workspaceKey, activeSection2, activeStructureTask2, snippets = {}) {
     const root = record(value);
     const existing = record(root?.workspaces);
     const workspaces = {};
@@ -19,8 +21,8 @@
       const normalized = readWorkspaceUiState(value, key);
       workspaces[key] = normalized;
     }
-    workspaces[workspaceKey] = { activeSection: activeSection2, activeStructureTask: activeStructureTask2 };
-    return { version: 2, workspaces };
+    workspaces[workspaceKey] = { activeSection: activeSection2, activeStructureTask: activeStructureTask2, ...snippets };
+    return { version: 3, workspaces };
   }
   function record(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
@@ -55,6 +57,7 @@
 
   // src/webview/index.ts
   var vscode = acquireVsCodeApi();
+  var initialData = JSON.parse(document.getElementById("app")?.getAttribute("data-initial") || "{}");
   var pending = /* @__PURE__ */ new Map();
   var model = null;
   var latestSplit = null;
@@ -76,6 +79,19 @@
   var saveIdleTimer;
   var lastPersonalStyleMenuTrigger = null;
   var lastCompileDurationMs = null;
+  var snippetState = null;
+  var selectedSnippetFile = "";
+  var selectedSnippetId = "";
+  var snippetSearch = "";
+  var snippetEditorContent = "";
+  var snippetSavedHash = "";
+  var snippetSavedMtimeMs;
+  var snippetDirty = false;
+  var snippetAnalysis = null;
+  var snippetAnalyzeTimer;
+  var snippetEditor = null;
+  var snippetEditorLoading = null;
+  var snippetApplyingContent = false;
   function request(command, payload = {}) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     vscode.postMessage({ id, command, payload });
@@ -84,6 +100,11 @@
   window.addEventListener("message", (event) => {
     if (event.data?.type === "toolkit-state-refresh") {
       acceptServerModel(event.data.data);
+      return;
+    }
+    if (event.data?.type === "toolkit-open-section" && event.data.section === "snippets") {
+      selectSection("snippets", true, true);
+      void ensureSnippetsLoaded();
       return;
     }
     const response = event.data;
@@ -833,6 +854,385 @@
     card.innerHTML = `<div style="background:${titleBg};color:${titleFg};border-bottom-color:${accent}">${title}</div><p>${body}</p>`;
     return card;
   }
+  function snippetDocuments() {
+    return Array.isArray(snippetState?.documents) ? snippetState.documents : [];
+  }
+  function selectedSnippetDocument() {
+    return snippetAnalysis || snippetDocuments().find((document2) => document2.filePath === selectedSnippetFile);
+  }
+  async function ensureSnippetsLoaded() {
+    if (!snippetState) await loadSnippetState("snippets-state");
+    await initializeSnippetEditor();
+    window.requestAnimationFrame(() => snippetEditor?.layout?.());
+  }
+  async function loadSnippetState(command = "snippets-state") {
+    const preferred = selectedSnippetFile;
+    const next = await request(command, {});
+    acceptSnippetState(next, preferred);
+  }
+  function acceptSnippetState(next, preferredFile = "") {
+    snippetState = next || { documents: [], profiles: [] };
+    const documents = snippetDocuments();
+    const saved = readWorkspaceUiState(vscode.getState(), workspaceStateKey());
+    const preferred = preferredFile || selectedSnippetFile || saved.selectedSnippetFile || "";
+    selectedSnippetFile = documents.some((document3) => document3.filePath === preferred) ? preferred : documents[0]?.filePath || "";
+    snippetSearch = byId("snippetSearchInput").value || saved.snippetSearch || snippetSearch;
+    const document2 = documents.find((entry) => entry.filePath === selectedSnippetFile);
+    snippetSavedHash = document2?.hash || "";
+    snippetSavedMtimeMs = typeof document2?.mtimeMs === "number" ? document2.mtimeMs : void 0;
+    snippetEditorContent = document2?.content || "";
+    snippetAnalysis = document2 || null;
+    snippetDirty = false;
+    selectedSnippetId = document2?.snippets?.[0]?.id || "";
+    setSnippetEditorValue(snippetEditorContent);
+    renderSnippets();
+    persistNavigationState();
+  }
+  function renderSnippets() {
+    if (!document.getElementById("snippetFileList")) return;
+    const profile = byId("snippetProfileSelect");
+    const profiles = [{ value: "", label: "Base only" }, ...(snippetState?.profiles || []).map((value) => ({ value, label: value }))];
+    renderSelect(profile, profiles, snippetState?.activeProfile || "");
+    byId("snippetSearchInput").value = snippetSearch;
+    const languages = Array.from(new Set(snippetDocuments().map((document2) => document2.language))).sort();
+    const language = byId("snippetLanguageFilter");
+    const preferredLanguage = language.value;
+    renderSelect(language, [{ value: "", label: "All languages" }, ...languages.map((value) => ({ value: String(value), label: String(value) }))], preferredLanguage);
+    byId("snippetWorkspaceDirBtn").disabled = !snippetState?.workspaceSnippetDir;
+    byId("snippetProfileDirBtn").disabled = !snippetState?.activeProfile;
+    byId("snippetCreateScope").querySelector('option[value="workspace"]').disabled = !snippetState?.workspaceSnippetDir;
+    byId("snippetCreateScope").querySelector('option[value="profile"]').disabled = !snippetState?.activeProfile;
+    renderSnippetFileList();
+    renderSnippetEditorHeader();
+    renderSnippetContext();
+  }
+  function filteredSnippetDocuments() {
+    const search = snippetSearch.trim().toLowerCase();
+    const scope = byId("snippetScopeFilter").value;
+    const language = byId("snippetLanguageFilter").value;
+    const diagnostics = byId("snippetDiagnosticFilter").value;
+    return snippetDocuments().filter((document2) => {
+      if (scope && document2.sourceScope !== scope) return false;
+      if (language && document2.language !== language) return false;
+      if (diagnostics === "issues" && !(document2.diagnostics || []).some((item) => item.severity === "error" || item.severity === "warning")) return false;
+      if (diagnostics === "errors" && !(document2.diagnostics || []).some((item) => item.severity === "error")) return false;
+      if (!search) return true;
+      const haystack = [document2.fileName, document2.filePath, ...(document2.snippets || []).flatMap((snippet) => [snippet.trigger, snippet.description, snippet.flags])].join(" ").toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+  function renderSnippetFileList() {
+    const list = byId("snippetFileList");
+    list.innerHTML = "";
+    const documents = filteredSnippetDocuments();
+    byId("snippetFileCount").textContent = String(documents.length);
+    byId("navSnippetsBadge").textContent = String(snippetDocuments().length);
+    byId("navSnippetsBadge").hidden = snippetDocuments().length === 0;
+    if (documents.length === 0) {
+      list.innerHTML = '<div class="empty-state compact"><i class="codicon codicon-symbol-snippet" aria-hidden="true"></i><div><strong>No snippet files</strong><p>Create a .hsnips file or clear the current filters.</p></div></div>';
+      return;
+    }
+    const groups = [["base", "Base"], ["profile", "Active Profile"], ["workspace", "Workspace"]];
+    for (const [scope, label] of groups) {
+      const entries = documents.filter((document2) => document2.sourceScope === scope);
+      if (!entries.length) continue;
+      const heading = document.createElement("h4");
+      heading.textContent = label;
+      list.appendChild(heading);
+      for (const entry of entries) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "snippet-file-item";
+        button.dataset.active = String(entry.filePath === selectedSnippetFile);
+        const errors = (entry.diagnostics || []).filter((item) => item.severity === "error").length;
+        const warnings = (entry.diagnostics || []).filter((item) => item.severity === "warning").length;
+        button.innerHTML = "<span><strong>" + escapeHtml(entry.fileName) + "</strong><small>" + escapeHtml(entry.language) + " \xB7 " + (entry.snippets || []).length + " snippets</small></span>" + (errors || warnings ? '<span class="snippet-issue-count" title="Diagnostics">' + (errors ? errors + "E" : "") + (errors && warnings ? " \xB7 " : "") + (warnings ? warnings + "W" : "") + "</span>" : "");
+        button.title = entry.filePath;
+        button.addEventListener("click", () => selectSnippetFile(entry.filePath));
+        list.appendChild(button);
+      }
+    }
+  }
+  function selectSnippetFile(filePath) {
+    if (filePath === selectedSnippetFile) return;
+    if (snippetDirty) {
+      showNotice({ kind: "warning", message: "Save or reload the current snippet file before switching files.", dismissible: true });
+      return;
+    }
+    const document2 = snippetDocuments().find((entry) => entry.filePath === filePath);
+    if (!document2) return;
+    selectedSnippetFile = filePath;
+    snippetSavedHash = document2.hash || "";
+    snippetSavedMtimeMs = typeof document2.mtimeMs === "number" ? document2.mtimeMs : void 0;
+    snippetEditorContent = document2.content || "";
+    snippetAnalysis = document2;
+    snippetDirty = false;
+    selectedSnippetId = document2.snippets?.[0]?.id || "";
+    setSnippetEditorValue(snippetEditorContent);
+    renderSnippets();
+    persistNavigationState();
+  }
+  function renderSnippetEditorHeader() {
+    const document2 = selectedSnippetDocument();
+    byId("snippetEditorFileName").textContent = document2?.fileName || "No file selected";
+    byId("snippetEditorPath").textContent = document2?.filePath || "Create a snippet file to begin.";
+    byId("snippetEditorPath").title = document2?.filePath || "";
+    const badge = byId("snippetDirtyBadge");
+    badge.textContent = snippetDirty ? "Unsaved" : document2 ? "Saved" : "Empty";
+    badge.dataset.kind = snippetDirty ? "warning" : "ok";
+    for (const id of ["snippetSaveBtn", "snippetReloadFileBtn", "snippetNewBtn", "snippetOpenSourceBtn"]) {
+      byId(id).disabled = !document2;
+    }
+    byId("snippetSaveBtn").disabled = !document2 || !snippetDirty;
+  }
+  function renderSnippetContext() {
+    const currentDocument = selectedSnippetDocument();
+    const snippets = currentDocument?.snippets || [];
+    if (selectedSnippetId && !snippets.some((snippet) => snippet.id === selectedSnippetId)) selectedSnippetId = snippets[0]?.id || "";
+    const selected = snippets.find((snippet) => snippet.id === selectedSnippetId) || snippets[0];
+    if (selected && !selectedSnippetId) selectedSnippetId = selected.id;
+    byId("snippetContextTitle").textContent = currentDocument?.fileName || "No snippet file selected";
+    byId("snippetContextScope").textContent = currentDocument ? currentDocument.sourceScope + (currentDocument.profile ? ":" + currentDocument.profile : "") : "\u2014";
+    byId("snippetContextLanguage").textContent = currentDocument?.language || "\u2014";
+    byId("snippetContextPath").textContent = currentDocument?.filePath || "\u2014";
+    byId("snippetContextPath").title = currentDocument?.filePath || "";
+    byId("snippetContextCounts").textContent = currentDocument ? snippets.length + " snippets \xB7 " + (currentDocument.diagnostics || []).length + " diagnostics" : "";
+    const list = byId("snippetBlockList");
+    list.innerHTML = "";
+    for (const snippet of snippets) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "snippet-block-item";
+      button.dataset.active = String(snippet.id === selectedSnippetId);
+      button.innerHTML = "<strong>" + escapeHtml(snippet.trigger || "(empty trigger)") + "</strong><small>" + escapeHtml(snippet.description || snippet.flags || "No description") + "</small>";
+      button.addEventListener("click", () => {
+        selectedSnippetId = snippet.id;
+        revealSnippetLine(Number(snippet.startLine || 0) + 1);
+        renderSnippetContext();
+      });
+      list.appendChild(button);
+    }
+    byId("snippetNoBlocks").hidden = snippets.length > 0;
+    byId("snippetDeleteBtn").toggleAttribute("disabled", !selected?.isSimple);
+    byId("snippetDetailTrigger").textContent = selected?.trigger || "\u2014";
+    byId("snippetDetailDescription").textContent = selected?.description || "\u2014";
+    byId("snippetDetailFlags").textContent = selected?.flags || "\u2014";
+    byId("snippetDetailPriority").textContent = String(selected?.priority ?? "\u2014");
+    byId("snippetDetailKind").textContent = selected ? [selected.isRegex ? "regex" : "literal", selected.isDynamic ? "dynamic" : "static", selected.isSimple ? "manager-editable" : "source-only"].join(" \xB7 ") : "\u2014";
+    byId("snippetDetailBody").textContent = selected?.body || "No snippet selected.";
+    const diagnostics = byId("snippetDiagnosticList");
+    diagnostics.innerHTML = "";
+    const items = currentDocument?.diagnostics || [];
+    for (const item of items) {
+      const row = document.createElement("li");
+      row.dataset.severity = item.severity || "info";
+      row.innerHTML = '<i class="codicon codicon-' + (item.severity === "error" ? "error" : item.severity === "warning" ? "warning" : "info") + '" aria-hidden="true"></i><span>' + escapeHtml(item.message) + "<small>Line " + (Number(item.line || 0) + 1) + "</small></span>";
+      row.addEventListener("click", () => revealSnippetLine(Number(item.line || 0) + 1));
+      diagnostics.appendChild(row);
+    }
+    byId("snippetNoDiagnostics").hidden = items.length > 0;
+  }
+  function setSnippetEditorValue(value) {
+    snippetApplyingContent = true;
+    snippetEditorContent = value;
+    if (snippetEditor) snippetEditor.setValue(value);
+    const textarea = byId("snippetFallbackEditor");
+    textarea.value = value;
+    snippetApplyingContent = false;
+  }
+  function currentSnippetEditorValue() {
+    return snippetEditor ? snippetEditor.getValue() : byId("snippetFallbackEditor").value;
+  }
+  function onSnippetEditorChanged() {
+    if (snippetApplyingContent || !selectedSnippetFile) return;
+    snippetEditorContent = currentSnippetEditorValue();
+    snippetDirty = true;
+    renderSnippetEditorHeader();
+    scheduleSnippetAnalysis();
+  }
+  function scheduleSnippetAnalysis() {
+    if (snippetAnalyzeTimer !== void 0) window.clearTimeout(snippetAnalyzeTimer);
+    snippetAnalyzeTimer = window.setTimeout(() => {
+      snippetAnalyzeTimer = void 0;
+      void analyzeSnippetBuffer();
+    }, 180);
+  }
+  async function analyzeSnippetBuffer() {
+    if (!selectedSnippetFile) return;
+    try {
+      snippetAnalysis = await request("snippets-analyze", { file_path: selectedSnippetFile, content: snippetEditorContent });
+      renderSnippetContext();
+      renderSnippetEditorHeader();
+    } catch (err) {
+      byId("snippetContextCounts").textContent = err.message;
+    }
+  }
+  async function saveSnippetFile() {
+    if (!selectedSnippetFile || !snippetDirty) return;
+    const currentFile = selectedSnippetFile;
+    const next = await request("snippets-save", {
+      file_path: currentFile,
+      content: currentSnippetEditorValue(),
+      document_hash: snippetSavedHash,
+      mtime_ms: snippetSavedMtimeMs
+    });
+    acceptSnippetState(next, currentFile);
+    showNotice({ kind: "success", message: "Snippet file saved and snippets reloaded.", dismissible: false });
+  }
+  function appendNewSnippet() {
+    const document2 = selectedSnippetDocument();
+    if (!document2) return;
+    const triggers = new Set((document2.snippets || []).map((snippet) => snippet.trigger));
+    let trigger = "newSnippet";
+    let suffix = 2;
+    while (triggers.has(trigger)) trigger = "newSnippet" + suffix++;
+    const current = currentSnippetEditorValue();
+    const separator = !current ? "" : current.endsWith("\n") ? "\n" : "\n\n";
+    setSnippetEditorValue(current + separator + "snippet " + trigger + ' "New snippet"\n$1\nendsnippet\n');
+    snippetDirty = true;
+    renderSnippetEditorHeader();
+    void analyzeSnippetBuffer().then(() => {
+      const created = snippetAnalysis?.snippets?.find((snippet) => snippet.trigger === trigger);
+      if (created) {
+        selectedSnippetId = created.id;
+        revealSnippetLine(Number(created.startLine || 0) + 1);
+        renderSnippetContext();
+      }
+    });
+  }
+  function deleteSelectedSnippet() {
+    const document2 = selectedSnippetDocument();
+    const snippet = document2?.snippets?.find((entry) => entry.id === selectedSnippetId);
+    if (!snippet?.isSimple) return;
+    const content = currentSnippetEditorValue();
+    const start = Number(snippet.priorityStart ?? snippet.headerStart ?? 0);
+    const end = Number(snippet.endOffset ?? start);
+    setSnippetEditorValue(content.slice(0, start) + content.slice(end));
+    snippetDirty = true;
+    selectedSnippetId = "";
+    renderSnippetEditorHeader();
+    void analyzeSnippetBuffer();
+  }
+  async function createSnippetFile() {
+    const language = byId("snippetCreateLanguage").value.trim() || "latex";
+    const scope = byId("snippetCreateScope").value;
+    const next = await request("snippets-create-file", { language, scope });
+    const created = (next.documents || []).find((document2) => document2.language === language.toLowerCase() && document2.sourceScope === scope);
+    acceptSnippetState(next, created?.filePath || "");
+  }
+  async function initializeSnippetEditor() {
+    if (snippetEditor || snippetEditorLoading || !initialData.monacoBaseUri) return snippetEditorLoading || Promise.resolve();
+    snippetEditorLoading = new Promise((resolve) => {
+      const fallback = () => {
+        byId("snippetEditorFallbackNotice").hidden = false;
+        byId("snippetFallbackEditor").hidden = false;
+        resolve();
+      };
+      const begin = () => {
+        try {
+          const amd = window.require;
+          window.MonacoEnvironment = {
+            getWorkerUrl: () => {
+              const source = "self.MonacoEnvironment={baseUrl:" + JSON.stringify(initialData.monacoBaseUri + "/") + "};importScripts(" + JSON.stringify(initialData.monacoBaseUri + "/base/worker/workerMain.js") + ");";
+              return "data:text/javascript;charset=utf-8," + encodeURIComponent(source);
+            }
+          };
+          amd.config({ paths: { vs: initialData.monacoBaseUri } });
+          amd(["vs/editor/editor.main"], () => {
+            const monaco = window.monaco;
+            if (!monaco) return fallback();
+            monaco.languages.register({ id: "hsnips" });
+            monaco.languages.setMonarchTokensProvider("hsnips", {
+              tokenizer: { root: [[/^snippet.*$/, "keyword"], [/^(global|endglobal|endsnippet|priority).*$/, "keyword"], [/``/, { token: "string", next: "@javascript" }]], javascript: [[/``/, { token: "string", next: "@pop" }], [/./, "string"]] }
+            });
+            snippetEditor = monaco.editor.create(byId("snippetMonacoHost"), {
+              value: snippetEditorContent,
+              language: "hsnips",
+              automaticLayout: true,
+              minimap: { enabled: false },
+              fontFamily: "var(--vscode-editor-font-family)",
+              fontSize: 12,
+              lineNumbersMinChars: 3,
+              scrollBeyondLastLine: false,
+              theme: document.body.classList.contains("vscode-light") ? "vs" : "vs-dark"
+            });
+            snippetEditor.onDidChangeModelContent(onSnippetEditorChanged);
+            snippetEditor.onDidChangeCursorPosition((event) => selectSnippetAtLine(Number(event.position?.lineNumber || 1)));
+            byId("snippetFallbackEditor").hidden = true;
+            byId("snippetMonacoHost").hidden = false;
+            byId("snippetEditorFallbackNotice").hidden = true;
+            resolve();
+          }, fallback);
+        } catch {
+          fallback();
+        }
+      };
+      if (window.require) return begin();
+      const loader = document.createElement("script");
+      loader.src = initialData.monacoBaseUri + "/loader.js";
+      loader.addEventListener("load", begin, { once: true });
+      loader.addEventListener("error", fallback, { once: true });
+      document.head.appendChild(loader);
+    }).finally(() => {
+      snippetEditorLoading = null;
+    });
+    return snippetEditorLoading;
+  }
+  function revealSnippetLine(line) {
+    if (snippetEditor) {
+      snippetEditor.revealLineInCenter(line);
+      snippetEditor.setPosition({ lineNumber: line, column: 1 });
+      snippetEditor.focus();
+    } else {
+      byId("snippetFallbackEditor").focus();
+    }
+  }
+  function selectSnippetAtLine(line) {
+    const snippets = selectedSnippetDocument()?.snippets || [];
+    const match = snippets.find((snippet) => line - 1 >= Number(snippet.startLine || 0) && line - 1 <= Number(snippet.endLine || 0));
+    if (!match || match.id === selectedSnippetId) return;
+    selectedSnippetId = match.id;
+    renderSnippetContext();
+  }
+  async function runSnippet(fn) {
+    try {
+      await fn();
+    } catch (err) {
+      showNotice({ kind: "error", message: err.message, action: "show-log", dismissible: true });
+    }
+  }
+  function wireSnippets() {
+    byId("snippetReloadBtn").addEventListener("click", () => void runSnippet(() => loadSnippetState("snippets-reload")));
+    byId("snippetReloadFileBtn").addEventListener("click", () => void runSnippet(() => loadSnippetState("snippets-state")));
+    byId("snippetSaveBtn").addEventListener("click", () => void runSnippet(saveSnippetFile));
+    byId("snippetNewBtn").addEventListener("click", appendNewSnippet);
+    byId("snippetDeleteBtn").addEventListener("click", deleteSelectedSnippet);
+    byId("snippetCreateFileBtn").addEventListener("click", () => void runSnippet(createSnippetFile));
+    byId("snippetOpenSourceBtn").addEventListener("click", () => void runSnippet(async () => {
+      if (selectedSnippetFile) await request("snippets-open-source", { file_path: selectedSnippetFile, line: 1 });
+    }));
+    byId("snippetBaseDirBtn").addEventListener("click", () => void runSnippet(async () => request("snippets-open-directory", { scope: "base" })));
+    byId("snippetProfileDirBtn").addEventListener("click", () => void runSnippet(async () => request("snippets-open-directory", { scope: "profile" })));
+    byId("snippetWorkspaceDirBtn").addEventListener("click", () => void runSnippet(async () => request("snippets-open-directory", { scope: "workspace" })));
+    byId("snippetProfileSelect").addEventListener("change", () => void runSnippet(async () => {
+      if (snippetDirty) throw new Error("Save or reload the current snippet file before switching profiles.");
+      const next = await request("snippets-select-profile", { profile: byId("snippetProfileSelect").value });
+      acceptSnippetState(next);
+    }));
+    for (const id of ["snippetScopeFilter", "snippetLanguageFilter", "snippetDiagnosticFilter"]) {
+      byId(id).addEventListener("change", renderSnippetFileList);
+    }
+    byId("snippetSearchInput").addEventListener("input", () => {
+      snippetSearch = byId("snippetSearchInput").value;
+      renderSnippetFileList();
+      persistNavigationState();
+    });
+    byId("snippetFallbackEditor").addEventListener("input", onSnippetEditorChanged);
+    byId("snippetFallbackEditor").addEventListener("keyup", () => {
+      const textarea = byId("snippetFallbackEditor");
+      selectSnippetAtLine(textarea.value.slice(0, textarea.selectionStart).split("\n").length);
+    });
+  }
   async function refreshPdfStatus() {
     const requestedPath = currentPdfPath();
     pdfStatus = { path: requestedPath, exists: false, checking: true };
@@ -850,8 +1250,16 @@
   async function loadState() {
     setLoadingState("loading");
     try {
-      acceptServerModel(await request("state"));
-      setSaveStatus("Saved", "ok");
+      if (initialData.snippetsOnly) {
+        await loadSnippetState("snippets-state");
+        activeSection = "snippets";
+        selectSection("snippets", true);
+        setSaveStatus("Explicit file save", "ok");
+      } else {
+        acceptServerModel(await request("state"));
+        setSaveStatus("Saved", "ok");
+        if (activeSection === "snippets") await ensureSnippetsLoaded();
+      }
       setLoadingState("ready");
     } catch (err) {
       setLoadingState("error", err.message);
@@ -973,6 +1381,7 @@
   }
   function wire() {
     wireNavigation();
+    wireSnippets();
     byId("retryLoadBtn").addEventListener("click", () => {
       void loadState().catch(() => void 0);
     });
@@ -1113,19 +1522,23 @@
     const saved = readWorkspaceUiState(vscode.getState(), workspace);
     activeSection = saved.activeSection;
     activeStructureTask = saved.activeStructureTask;
+    selectedSnippetFile = saved.selectedSnippetFile || "";
+    snippetSearch = saved.snippetSearch || "";
+    if (initialData.snippetsOnly) activeSection = "snippets";
     document.querySelectorAll("[data-section-target]").forEach((button) => {
       button.addEventListener("click", () => selectSection(button.dataset.sectionTarget, true, true));
       button.addEventListener("keydown", (event) => {
-        const current = TOOLKIT_SECTIONS.indexOf(button.dataset.sectionTarget);
+        const sections = availableSections();
+        const current = sections.indexOf(button.dataset.sectionTarget);
         let next = current;
-        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (current + 1) % TOOLKIT_SECTIONS.length;
-        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (current - 1 + TOOLKIT_SECTIONS.length) % TOOLKIT_SECTIONS.length;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (current + 1) % sections.length;
+        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (current - 1 + sections.length) % sections.length;
         else if (event.key === "Home") next = 0;
-        else if (event.key === "End") next = TOOLKIT_SECTIONS.length - 1;
+        else if (event.key === "End") next = sections.length - 1;
         else return;
         event.preventDefault();
-        selectSection(TOOLKIT_SECTIONS[next], true, true);
-        document.querySelector(`[data-section-target="${TOOLKIT_SECTIONS[next]}"]`)?.focus();
+        selectSection(sections[next], true, true);
+        document.querySelector(`[data-section-target="${sections[next]}"]`)?.focus();
       });
     });
     document.querySelectorAll("[data-structure-task]").forEach((button) => {
@@ -1135,7 +1548,8 @@
     selectSection(activeSection, false);
   }
   function selectSection(section, persist = true, focusPanel = false) {
-    activeSection = TOOLKIT_SECTIONS.includes(section) ? section : "style";
+    const sections = availableSections();
+    activeSection = sections.includes(section) ? section : sections[0];
     document.querySelectorAll("[data-toolkit-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.toolkitPanel !== activeSection;
     });
@@ -1146,6 +1560,7 @@
       button.tabIndex = selected ? 0 : -1;
     });
     renderContextPanels();
+    if (activeSection === "snippets") void ensureSnippetsLoaded();
     if (persist) persistNavigationState();
     if (focusPanel) {
       window.requestAnimationFrame(() => {
@@ -1175,7 +1590,13 @@
     });
   }
   function persistNavigationState() {
-    vscode.setState(updateWorkspaceUiState(vscode.getState(), workspaceStateKey(), activeSection, activeStructureTask));
+    vscode.setState(updateWorkspaceUiState(vscode.getState(), workspaceStateKey(), activeSection, activeStructureTask, {
+      selectedSnippetFile: selectedSnippetFile || void 0,
+      snippetSearch: snippetSearch || void 0
+    }));
+  }
+  function availableSections() {
+    return initialData.snippetsOnly ? ["snippets"] : TOOLKIT_SECTIONS;
   }
   function workspaceStateKey() {
     return document.body.dataset.workspacePath || "workspace";
@@ -1184,10 +1605,10 @@
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function shell() {
-    const initial = JSON.parse(document.getElementById("app")?.getAttribute("data-initial") || "{}");
-    document.body.dataset.workspacePath = initial.workspacePath || "workspace";
-    const workspaceName = escapeHtml(initial.workspaceName || "Workspace");
-    const workspacePath = escapeHtml(initial.workspacePath || "");
+    document.body.dataset.workspacePath = initialData.workspacePath || "workspace";
+    document.body.dataset.snippetsOnly = String(Boolean(initialData.snippetsOnly));
+    const workspaceName = escapeHtml(initialData.workspaceName || "Workspace");
+    const workspacePath = escapeHtml(initialData.snippetsOnly ? "Global, profile, and programmable snippet library" : initialData.workspacePath || "");
     document.body.innerHTML = `
     <main id="appShell" class="app-shell" aria-busy="true">
       <header class="topbar surface">
@@ -1219,6 +1640,7 @@
           <button data-section-target="colors" role="tab"><i class="codicon codicon-symbol-property" aria-hidden="true"></i><span>Colors</span></button>
           <button data-section-target="setup" role="tab"><i class="codicon codicon-tools" aria-hidden="true"></i><span>Project Setup</span></button>
           <button data-section-target="structure" role="tab"><i class="codicon codicon-list-tree" aria-hidden="true"></i><span>Structure</span></button>
+          <button data-section-target="snippets" role="tab"><i class="codicon codicon-symbol-snippet" aria-hidden="true"></i><span>Snippets</span><small id="navSnippetsBadge" class="nav-badge" hidden></small></button>
           <button data-section-target="diagnostics" role="tab"><i class="codicon codicon-warning" aria-hidden="true"></i><span>Diagnostics</span><small id="navDiagnosticsBadge" class="nav-badge warning" hidden></small></button>
         </nav>
 
@@ -1270,6 +1692,26 @@
             <div class="structure-task" data-structure-panel="unsplit" hidden><h3>Merge back to root</h3><p class="hint">Inline the selected unit into the root target.</p><div class="form-row"><label class="inline"><input id="unsplitDeleteSource" type="checkbox" checked> delete source after merge</label><button id="unsplitBtn">Merge Selected</button></div></div>
           </section>
 
+          <section id="panelSnippets" class="toolkit-panel" data-toolkit-panel="snippets" hidden>
+            <header class="section-heading"><div><p class="eyebrow">Programmable Writing</p><h2>Snippet Workbench</h2><p class="hint">Manage base, profile, and workspace .hsnips files. Snippet source uses an explicit Save action.</p></div><div class="toolbar compact"><button id="snippetReloadBtn" class="ghost-button"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Reload All</span></button><button id="snippetBaseDirBtn" class="icon-button" aria-label="Open global snippets directory" title="Open global snippets directory"><i class="codicon codicon-folder-opened" aria-hidden="true"></i></button><button id="snippetProfileDirBtn" class="icon-button" aria-label="Open active profile directory" title="Open active profile directory"><i class="codicon codicon-account" aria-hidden="true"></i></button><button id="snippetWorkspaceDirBtn" class="icon-button" aria-label="Open workspace snippets directory" title="Open workspace snippets directory"><i class="codicon codicon-root-folder-opened" aria-hidden="true"></i></button></div></header>
+            <div class="snippet-manager-layout">
+              <aside class="snippet-browser" aria-label="Snippet files">
+                <label class="field"><span>Active profile</span><select id="snippetProfileSelect"></select></label>
+                <label class="snippet-search"><i class="codicon codicon-search" aria-hidden="true"></i><input id="snippetSearchInput" type="text" placeholder="Search triggers, descriptions, files"></label>
+                <div class="snippet-filters"><select id="snippetScopeFilter" aria-label="Filter snippet scope"><option value="">All scopes</option><option value="base">Base</option><option value="profile">Profile</option><option value="workspace">Workspace</option></select><select id="snippetLanguageFilter" aria-label="Filter snippet language"><option value="">All languages</option></select><select id="snippetDiagnosticFilter" aria-label="Filter snippet diagnostics"><option value="">All health</option><option value="issues">Warnings &amp; errors</option><option value="errors">Errors only</option></select></div>
+                <div class="snippet-browser-heading"><strong>Files</strong><span id="snippetFileCount" class="value-pill">0</span></div>
+                <div id="snippetFileList" class="snippet-file-list"></div>
+                <div class="snippet-create-row"><input id="snippetCreateLanguage" type="text" value="latex" aria-label="New snippet file language"><select id="snippetCreateScope" aria-label="New snippet file scope"><option value="base">Base</option><option value="profile">Profile</option><option value="workspace">Workspace</option></select><button id="snippetCreateFileBtn" class="icon-button" aria-label="Create or open snippet file" title="Create or open snippet file"><i class="codicon codicon-new-file" aria-hidden="true"></i></button></div>
+              </aside>
+              <div class="snippet-editor-card">
+                <header class="snippet-editor-heading"><div><div class="snippet-editor-title"><h3 id="snippetEditorFileName">No file selected</h3><span id="snippetDirtyBadge" class="context-badge">Empty</span></div><p id="snippetEditorPath" class="path"></p></div><div class="toolbar compact"><button id="snippetNewBtn"><i class="codicon codicon-add" aria-hidden="true"></i><span>New Snippet</span></button><button id="snippetReloadFileBtn" class="ghost-button"><i class="codicon codicon-discard" aria-hidden="true"></i><span>Reload</span></button><button id="snippetOpenSourceBtn" class="ghost-button"><i class="codicon codicon-go-to-file" aria-hidden="true"></i><span>Open Source</span></button><button id="snippetSaveBtn" class="primary"><i class="codicon codicon-save" aria-hidden="true"></i><span>Save</span></button></div></header>
+                <div id="snippetEditorFallbackNotice" class="inline-editor-notice" hidden><i class="codicon codicon-info" aria-hidden="true"></i><span>Monaco could not load; using the built-in text editor fallback.</span></div>
+                <div id="snippetMonacoHost" class="snippet-monaco" hidden aria-label="hsnips source editor"></div>
+                <textarea id="snippetFallbackEditor" class="snippet-fallback-editor" hidden spellcheck="false" aria-label="hsnips source editor"></textarea>
+              </div>
+            </div>
+          </section>
+
           <section id="panelDiagnostics" class="toolkit-panel" data-toolkit-panel="diagnostics" hidden>
             <header class="section-heading"><div><p class="eyebrow">Diagnostics</p><h2>Warnings &amp; Log</h2><p class="hint">Configuration recovery details and the latest command output.</p></div></header>
             <details id="configWarnings" class="config-warnings" hidden open><summary id="configWarningSummary">Configuration warnings</summary><ul id="configWarningList"></ul></details>
@@ -1293,6 +1735,18 @@
           </section>
           <section class="context-panel" data-context-panel="setup" hidden><header class="context-heading"><div><p class="eyebrow">Selected Starter</p><h2 id="setupContextTitle">Starter template</h2></div></header><p id="setupContextDescription" class="context-copy"></p><dl class="summary-list"><div><dt>Output</dt><dd>Toolkit-managed workspace files</dd></div><div><dt>Upgrade</dt><dd id="setupContextPolicy">Preserve current colors</dd></div></dl><div class="safety-note"><i class="codicon codicon-shield" aria-hidden="true"></i><p>Theme upgrades create backups first. Reset and overwrite actions still require confirmation.</p></div></section>
           <section class="context-panel" data-context-panel="structure" hidden><header class="context-heading"><div><p class="eyebrow">Latest Result</p><h2 id="structureContextTitle">No structure operation yet</h2></div><span id="structureResultBadge" class="context-badge" hidden></span></header><p id="structureContextDescription" class="context-copy"></p><div id="structureEmptyState" class="empty-state compact"><i class="codicon codicon-list-tree" aria-hidden="true"></i><div><strong>No structure result</strong><p>Run a dry-run first to inspect planned file changes.</p></div></div><div id="structureResultState" hidden><div class="result-stats"><div><strong id="structureCreatedCount">0</strong><span>Created</span></div><div><strong id="structureUpdatedCount">0</strong><span>Updated</span></div><div><strong id="structureRenamedCount">0</strong><span>Renamed</span></div><div><strong id="structureDeletedCount">0</strong><span>Deleted</span></div><div><strong id="structureWarningCount">0</strong><span>Warnings</span></div></div><details class="result-details"><summary id="structureFilesSummary">Affected items</summary><ul id="splitResult" class="result-file-list"></ul></details></div></section>
+          <section class="context-panel" data-context-panel="snippets" hidden>
+            <header class="context-heading"><div><p class="eyebrow">Snippet Inspector</p><h2 id="snippetContextTitle">No snippet file selected</h2></div></header>
+            <p id="snippetContextCounts" class="context-copy"></p>
+            <dl class="summary-list snippet-file-summary"><div><dt>Scope</dt><dd id="snippetContextScope">\u2014</dd></div><div><dt>Language</dt><dd id="snippetContextLanguage">\u2014</dd></div><div><dt>Path</dt><dd id="snippetContextPath">\u2014</dd></div></dl>
+            <div class="snippet-context-heading"><h3>Snippets</h3><button id="snippetDeleteBtn" class="icon-button danger" disabled aria-label="Delete selected simple snippet from buffer" title="Delete selected simple snippet from buffer"><i class="codicon codicon-trash" aria-hidden="true"></i></button></div>
+            <div id="snippetNoBlocks" class="empty-state compact"><i class="codicon codicon-symbol-snippet" aria-hidden="true"></i><div><strong>No parsed snippets</strong><p>Add a snippet block in the source editor.</p></div></div>
+            <div id="snippetBlockList" class="snippet-block-list"></div>
+            <details class="snippet-detail-panel" open><summary>Selected snippet</summary><dl class="summary-list"><div><dt>Trigger</dt><dd id="snippetDetailTrigger">\u2014</dd></div><div><dt>Description</dt><dd id="snippetDetailDescription">\u2014</dd></div><div><dt>Flags</dt><dd id="snippetDetailFlags">\u2014</dd></div><div><dt>Priority</dt><dd id="snippetDetailPriority">\u2014</dd></div><div><dt>Kind</dt><dd id="snippetDetailKind">\u2014</dd></div></dl><pre id="snippetDetailBody" class="snippet-body-preview">No snippet selected.</pre></details>
+            <h3 class="snippet-diagnostics-title">Diagnostics</h3>
+            <div id="snippetNoDiagnostics" class="empty-state compact"><i class="codicon codicon-pass-filled" aria-hidden="true"></i><div><strong>No snippet diagnostics</strong><p>The current buffer parsed without known issues.</p></div></div>
+            <ul id="snippetDiagnosticList" class="snippet-diagnostic-list"></ul>
+          </section>
           <section class="context-panel" data-context-panel="diagnostics" hidden><header class="context-heading"><div><p class="eyebrow">Configuration Health</p><h2 id="diagnosticsContextTitle">Loading diagnostics\u2026</h2></div></header><p id="diagnosticsContextDescription" class="context-copy"></p><div class="safety-note"><i class="codicon codicon-output" aria-hidden="true"></i><p>Full extension logs are also available in the LaTeX Editing Toolkit Output channel.</p></div></section>
         </aside>
       </div>

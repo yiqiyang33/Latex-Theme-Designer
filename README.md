@@ -1,6 +1,6 @@
-# LaTeX Editing Toolkit 0.4.1
+# LaTeX Editing Toolkit 1.0.0
 
-VS Code / Cursor extension for local-first LaTeX note projects. It provides starter templates, theme controls, compile workflows, build cleanup, split/renumber/unsplit commands, and native editor PDF opening.
+VS Code / Cursor extension for local-first LaTeX projects and fast mathematical writing. Toolkit 1.0 combines project creation, themes, compile and structure tools with the complete programmable `hsnips` engine, profiles, workspace snippets, Smart Enter/Tab, and a Monaco-powered snippet workbench.
 
 ## Build
 
@@ -20,10 +20,110 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
-Version 0.4.1 refines the responsive workbench with native confirmation dialogs, loading and empty
-states, quieter inline notices, persistent Structure task selection, structured operation results,
-and more consistent controls. The Webview does not embed PDFs: compile results open through the
-native VS Code/Cursor PDF viewer.
+Version 1.0 keeps the responsive Toolkit workbench and adds a first-class `Snippets` section. The
+former Yiqi's LatexSnips engine now runs inside this extension; existing `hsnips.*` commands,
+settings, shortcuts, profiles, and snippet directories continue to work without moving user data.
+The Webview does not embed PDFs: compile results open through the native VS Code/Cursor PDF viewer.
+
+## Upgrading from Yiqi's LatexSnips
+
+Toolkit 1.0 is the single host for both products. After installing it:
+
+1. Open the Snippets section and confirm that base, profile, and workspace snippets are present.
+2. Disable or uninstall `Yiqi's LatexSnips` (`yiqiyang33.yiqis-latexsnips`).
+3. Run `Developer: Reload Window`.
+
+Keeping both extensions enabled may register duplicate completions and Smart Enter/Tab handlers.
+Toolkit detects the old extension and shows a one-time warning, but it never disables or uninstalls
+another extension automatically. Existing snippet data is reused in place:
+
+- macOS: `~/Library/Application Support/Code/User/hsnips`
+- Windows: `%APPDATA%/Code/User/hsnips`
+- Linux: `$HOME/.config/Code/User/hsnips`
+- Workspace: `.vscode/hsnips`
+- Profiles: `hsnips/profiles/<name>/`
+
+Custom `hsnips.windows`, `hsnips.mac`, and `hsnips.linux` paths remain supported.
+
+## Programmable Snippets
+
+Run `LaTeX Editing Toolkit: Snippets: Open Snippet Manager` or select `Snippets` in the Toolkit.
+The same panel works without an open workspace for global and profile snippets. With a workspace,
+it also shows that folder's `.vscode/hsnips` files. The manager provides:
+
+- base, active-profile, and workspace file groups;
+- search plus scope, language, and diagnostics filters;
+- a lazily loaded Monaco `.hsnips` source editor with textarea fallback;
+- parsed trigger, description, flags, priority, dynamic/regex status, and diagnostics;
+- duplicate-trigger and duplicate-automatic-trigger warnings across loaded files;
+- New, Delete, Reload, Open Source, and explicit Save operations;
+- file hash, modification-time, dirty-editor, and allowed-directory checks before saving.
+
+Snippet source uses explicit Save because it is executable user script, not Toolkit theme state. It
+does not participate in project autosave or Toolkit Undo/Redo.
+
+### Snippet files and profiles
+
+Use language-named files such as `latex.hsnips`, `markdown.hsnips`, or `all.hsnips`. A profile is
+loaded on top of base snippets, and the active workspace's snippets are added last before all
+snippets are sorted by priority:
+
+```text
+hsnips/
+  all.hsnips
+  latex.hsnips
+  profiles/
+    notes/
+      latex.hsnips
+
+project/
+  .vscode/
+    hsnips/
+      latex.hsnips
+```
+
+`hsnips.profiles.activeProfile` stores the current global profile. Multi-root workspaces resolve
+workspace snippets from the folder that owns the active document.
+
+### `.hsnips` syntax
+
+```hsnips
+global
+// JavaScript shared by snippets in this file
+endglobal
+
+priority 10
+snippet RR "Real numbers" iAm
+\\mathbb{R}
+endsnippet
+```
+
+Supported flags include:
+
+- `A`: automatic expansion;
+- `i`, `w`, `b`: inside-word, word-boundary, and line-beginning matching;
+- `M`: multiline regex context;
+- `m`: math-only expansion;
+- `t`: text-only expansion.
+
+Triggers may be literal or backtick-wrapped regular expressions. Snippet bodies support tabstops,
+`${VISUAL}`, and JavaScript interpolation between double backticks. Interpolation receives `rv`,
+`t`, `m`, `w`, and `path`, preserving the behavior of the original Snips extension.
+
+### Mathematical editing
+
+The shared LaTeX context engine recognizes `$...$`, `$$...$$`, `\\(...\\)`, `\\[...\\]`, common
+math environments, comments, Markdown code fences, verbatim-like environments, and text-like
+commands. It powers:
+
+- math-only and text-only snippet flags;
+- Smart Enter row breaks in `align`, matrices, `cases`, `array`, and table environments;
+- Smart Tab alignment separators with normal placeholder fallback;
+- environment conversion and matching `\\begin`/`\\end` renaming;
+- wrapping and unwrapping supported math structures.
+
+Extra environments and text-like commands can be configured with the existing
+`hsnips.context.*` settings.
 
 ## Create Project Wizard
 
@@ -180,7 +280,9 @@ automatically compile a PDF when Style or document settings change.
 - Built-in color presets, including UChicago maroon/greystone.
 - Global personal styles with difference inspection and JSON import/export.
 - Automatic saving with persistent one-step Undo and Redo.
-- Responsive Style, Build, Document, Colors, Setup, Structure, and Diagnostics workspace.
+- Responsive Style, Build, Document, Colors, Setup, Structure, Snippets, and Diagnostics workspace.
+- Programmable `.hsnips` completion engine with profiles and per-workspace snippets.
+- Smart mathematical Enter/Tab, environment conversion, matching-name sync, and wrap/unwrap tools.
 - Transactional workspace theme asset upgrades with Preserve Colors as the safe default.
 - Internal fallback compile pipeline plus optional VS Code recipe mode.
 - Generate `.vscode/settings.json` for LaTeX Workshop-compatible recipes.
@@ -212,3 +314,11 @@ compile, and status settings stored in all three generated files. The equivalent
 ```bash
 rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 ```
+
+## Acknowledgements
+
+The programmable snippet engine was developed in
+[Yiqi's LatexSnips](https://github.com/yiqiyang33/Yiqi-s-LatexSnips), itself based on the ideas and
+syntax of HyperSnips/UltiSnips-style programmable snippets. Toolkit 1.0 preserves that project's
+commands, configuration keys, data layout, and `.hsnips` language while making this repository the
+single maintained extension and user interface.

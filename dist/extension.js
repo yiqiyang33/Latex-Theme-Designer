@@ -743,8 +743,8 @@ function toPosixPath(value) {
 function isSubpath(child, parent) {
   const childResolved = path.resolve(child);
   const parentResolved = path.resolve(parent);
-  const relative3 = path.relative(parentResolved, childResolved);
-  return relative3 === "" || !!relative3 && !relative3.startsWith("..") && !path.isAbsolute(relative3);
+  const relative4 = path.relative(parentResolved, childResolved);
+  return relative4 === "" || !!relative4 && !relative4.startsWith("..") && !path.isAbsolute(relative4);
 }
 function workspaceRel(rootDir, absolutePath) {
   if (!isSubpath(absolutePath, rootDir)) {
@@ -872,10 +872,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename8, pattern) {
+function matchesGlob(relPath, basename12, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename8);
+    return globToRegExp(pattern).test(basename12);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -1017,9 +1017,9 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs12 = __toESM(require("node:fs"));
-var path12 = __toESM(require("node:path"));
-var vscode = __toESM(require("vscode"));
+var fs14 = __toESM(require("node:fs"));
+var path16 = __toESM(require("node:path"));
+var vscode7 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
 var import_node_crypto = require("node:crypto");
@@ -1219,13 +1219,13 @@ var ChangeHistoryService = class {
     }
   }
   normalizePaths(rawPaths) {
-    const unique = /* @__PURE__ */ new Set();
+    const unique2 = /* @__PURE__ */ new Set();
     for (const raw of rawPaths) {
       const target = path2.isAbsolute(raw) ? path2.resolve(raw) : path2.resolve(this.rootDir, raw);
       if (!isSubpath(target, this.rootDir)) throw new Error(`History target is outside workspace: ${raw}`);
-      unique.add(target);
+      unique2.add(target);
     }
-    return [...unique];
+    return [...unique2];
   }
   async commit(input) {
     await this.writeRecord({
@@ -1788,17 +1788,2967 @@ async function preflightCreateProject(draft, extensionDir) {
 // src/extension.ts
 init_schema();
 
+// src/snippets/engine/host.ts
+var vscode5 = __toESM(require("vscode"));
+var import_fs2 = require("fs");
+var path6 = __toESM(require("path"));
+
+// src/snippets/engine/openFileExplorer.ts
+var os = __toESM(require("os"));
+var import_child_process = require("child_process");
+function openExplorer(path17, callback = (err) => {
+  console.log(err);
+}) {
+  let platform3 = os.platform();
+  let defaultPath = {
+    "win32": ".",
+    "darwin": ".",
+    "linux": "."
+  };
+  let commands4 = {
+    "win32": "explorer",
+    "darwin": "open",
+    "linux": "xdg-open"
+  };
+  if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
+    return callback(new Error("Platform not supported"));
+  }
+  path17 = path17 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands4[platform3], [path17]);
+  p.on("error", (err) => {
+    p.kill();
+    return callback(err);
+  });
+}
+
+// src/snippets/engine/hsnippetInstance.ts
+var vscode3 = __toESM(require("vscode"));
+
+// src/snippets/engine/dynamicRange.ts
+var vscode = __toESM(require("vscode"));
+function getRangeDelta(range, change, growth) {
+  let deltaStart = { characterDelta: 0, lineDelta: 0 };
+  let deltaEnd = { characterDelta: 0, lineDelta: 0 };
+  let textLines = change.text.split("\n");
+  let lineDelta = change.text.split("\n").length - (change.range.end.line - change.range.start.line + 1);
+  let charDelta = textLines[textLines.length - 1].length - change.range.end.character;
+  if (lineDelta == 0) charDelta += change.range.start.character;
+  if (range.start.isAfterOrEqual(change.range.end)) {
+    deltaStart.lineDelta = lineDelta;
+  }
+  if (range.end.isAfterOrEqual(change.range.end)) {
+    deltaEnd.lineDelta = lineDelta;
+  }
+  if (change.range.end.line == range.start.line) {
+    if (growth == 2 /* FixRight */ && range.start.isEqual(change.range.end) || range.start.isAfter(change.range.end)) {
+      deltaStart.characterDelta = charDelta;
+    }
+  }
+  if (change.range.end.line == range.end.line) {
+    if (growth != 1 /* FixLeft */ && range.end.isEqual(change.range.end) || range.end.isAfter(change.range.end)) {
+      deltaEnd.characterDelta = charDelta;
+    }
+  }
+  return [deltaStart, deltaEnd];
+}
+var DynamicRange = class _DynamicRange {
+  range;
+  constructor(start, end) {
+    this.range = new vscode.Range(start, end);
+  }
+  static fromRange(range) {
+    return new _DynamicRange(range.start, range.end);
+  }
+  update(changes) {
+    let deltaStart = { characterDelta: 0, lineDelta: 0 };
+    let deltaEnd = { characterDelta: 0, lineDelta: 0 };
+    for (let { change, growth } of changes) {
+      let deltaChange = getRangeDelta(this.range, change, growth);
+      deltaStart.characterDelta += deltaChange[0].characterDelta;
+      deltaStart.lineDelta += deltaChange[0].lineDelta;
+      deltaEnd.characterDelta += deltaChange[1].characterDelta;
+      deltaEnd.lineDelta += deltaChange[1].lineDelta;
+    }
+    let [newStart, newEnd] = [this.range.start, this.range.end];
+    newStart = newStart.translate(deltaStart);
+    newEnd = newEnd.translate(deltaEnd);
+    this.range = this.range.with(newStart, newEnd);
+  }
+  contains(range) {
+    return this.range.contains(range);
+  }
+};
+
+// src/snippets/engine/utils.ts
+var vscode2 = __toESM(require("vscode"));
+var os2 = __toESM(require("os"));
+function lineRange(character, position) {
+  return new vscode2.Range(position.line, character, position.line, position.character);
+}
+function RegReplace(text, reg, replaceFn) {
+  let result = "";
+  let last = 0;
+  while (true) {
+    let match = reg.exec(text);
+    if (!match) break;
+    result += text.slice(last, match.index) + replaceFn(match);
+    last = match.index + match[0].length;
+  }
+  result += text.slice(last);
+  return result;
+}
+function getSnippetDir() {
+  let platform3 = os2.platform();
+  function parse_path(path17) {
+    if (platform3 == "win32") {
+      path17 = RegReplace(path17, /\%(\w+)\%/g, (match) => process.env[match[1]] || "");
+    } else {
+      path17 = RegReplace(path17, /\$(\w+)/g, (match) => process.env[match[1]] || "");
+    }
+    if (platform3 == "win32") {
+      path17 = path17.replace(/\//g, "\\");
+    }
+    return path17;
+  }
+  if (platform3 == "win32") {
+    let path17 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path17 ? parse_path(path17) : parse_path("%APPDATA%/Code/User/hsnips"));
+  } else if (platform3 == "darwin") {
+    let path17 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path17 ? parse_path(path17) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+  } else {
+    let path17 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path17 ? parse_path(path17) : parse_path("$HOME/.config/Code/User/hsnips"));
+  }
+}
+function applyOffset(position, text, indent) {
+  text = text.replace("\\$", "$");
+  let lines = text.split("\n");
+  let newLine = position.line + lines.length - 1;
+  let charOffset = lines[lines.length - 1].length;
+  let newChar = position.character + charOffset;
+  if (lines.length > 1) newChar = indent + charOffset;
+  return position.with(newLine, newChar);
+}
+function getWorkspaceUri() {
+  return vscode2.workspace.workspaceFolders?.[0]?.uri?.toString() ?? "";
+}
+
+// src/snippets/engine/hsnippetInstance.ts
+var selectedText = "";
+var lastTimeOfselectedTextChanged = (/* @__PURE__ */ new Date()).getTime();
+vscode3.window.onDidChangeTextEditorSelection((e) => {
+  const newSelectedText = e.textEditor.document.getText(e.selections[0]);
+  if (newSelectedText) {
+    selectedText = newSelectedText;
+    selectedText = selectedText.replace(/\\\\/g, "\\\\\\ ").replace(/\}/g, "\\}");
+    lastTimeOfselectedTextChanged = (/* @__PURE__ */ new Date()).getTime();
+  }
+});
+var HSnippetPart = class {
+  type;
+  range;
+  content;
+  id;
+  updates;
+  constructor(type, range, content, id) {
+    this.type = type;
+    this.range = range;
+    this.content = content;
+    this.id = id;
+    this.updates = [];
+  }
+  updateRange() {
+    if (this.updates.length == 0) return;
+    this.range.update(this.updates);
+    this.updates = [];
+  }
+};
+var HSnippetInstance = class {
+  type;
+  matchGroups;
+  editor;
+  range;
+  placeholderIds;
+  selectedPlaceholder;
+  parts;
+  blockParts;
+  blockChanged;
+  snippetString;
+  constructor(type, editor, position, matchGroups) {
+    this.type = type;
+    this.editor = editor;
+    this.matchGroups = matchGroups;
+    this.selectedPlaceholder = 0;
+    this.placeholderIds = [];
+    this.blockChanged = false;
+    let generatorResult = [[], []];
+    try {
+      generatorResult = type.generator(
+        new Array(this.type.placeholders).fill(""),
+        this.matchGroups,
+        getWorkspaceUri(),
+        editor.document.uri.toString()
+      );
+    } catch (e) {
+      let message = e instanceof Error ? e.message : String(e);
+      vscode3.window.showWarningMessage(
+        `Snippet ${this.type.description} failed to expand with error: ${message}`
+      );
+    }
+    let [sections, blocks] = generatorResult;
+    blocks = blocks.map(String);
+    this.parts = [];
+    this.blockParts = [];
+    let start = position;
+    let snippetString = "";
+    const indentLevel = editor.document.lineAt(position.line).firstNonWhitespaceCharacterIndex;
+    for (let section of sections) {
+      if (typeof section == "string") {
+        if ((/* @__PURE__ */ new Date()).getTime() - lastTimeOfselectedTextChanged < 5e3) {
+          section = section.replace(/\${VISUAL}/g, selectedText);
+        } else {
+          section = section.replace(/\${VISUAL}/g, "");
+        }
+      }
+      let rawSection = section;
+      if (typeof rawSection != "string") {
+        let block = blocks[rawSection.block];
+        let endPosition = applyOffset(position, block, indentLevel);
+        let range = new DynamicRange(position, endPosition);
+        let part = new HSnippetPart(1 /* Block */, range, block);
+        this.parts.push(part);
+        this.blockParts.push(part);
+        snippetString += block;
+        position = endPosition;
+        continue;
+      }
+      snippetString += rawSection;
+      let PLACEHOLDER_REGEX = /\$(\d+)|\$\{(\d+)\}/;
+      let match;
+      while (match = PLACEHOLDER_REGEX.exec(rawSection)) {
+        let text = rawSection.substring(0, match.index);
+        position = applyOffset(position, text, indentLevel);
+        let range = new DynamicRange(position, position);
+        let placeholderId = Number(match[1] || match[2]);
+        if (!this.placeholderIds.includes(placeholderId)) this.placeholderIds.push(placeholderId);
+        this.parts.push(new HSnippetPart(0 /* Placeholder */, range, "", placeholderId));
+        rawSection = rawSection.substring(match.index + match[0].length);
+      }
+      position = applyOffset(position, rawSection, indentLevel);
+    }
+    this.snippetString = new vscode3.SnippetString(snippetString);
+    this.range = new DynamicRange(start, position);
+    this.placeholderIds.sort();
+    if (this.placeholderIds[0] == 0) this.placeholderIds.shift();
+    this.placeholderIds.push(0);
+    this.selectedPlaceholder = this.placeholderIds[0];
+  }
+  nextPlaceholder() {
+    let currentIndex = this.placeholderIds.indexOf(this.selectedPlaceholder);
+    this.selectedPlaceholder = this.placeholderIds[currentIndex + 1];
+    return this.selectedPlaceholder != void 0 && this.selectedPlaceholder != 0;
+  }
+  prevPlaceholder() {
+    let currentIndex = this.placeholderIds.indexOf(this.selectedPlaceholder);
+    this.selectedPlaceholder = this.placeholderIds[currentIndex - 1];
+    return this.selectedPlaceholder != void 0 && this.selectedPlaceholder != 0;
+  }
+  debugLog() {
+    let parts = this.parts;
+    for (let i = 0; i < parts.length; i++) {
+      let range = parts[i].range.range;
+      let start = range.start;
+      let end = range.end;
+      console.log(
+        `Tabstop ${i}: "${parts[i].content}" (${start.line}, ${start.character})..(${end.line}, ${end.character})`
+      );
+    }
+  }
+  // Updates the location of all the placeholder blocks and code blocks, and if any change happened
+  // to the placeholder blocks then run the generator function again with the updated values so the
+  // code blocks are updated.
+  update(changes) {
+    let ordChanges = [...changes];
+    ordChanges.sort((a, b) => {
+      if (a.range.end.isBefore(b.range.end)) return -1;
+      else if (a.range.end.isEqual(b.range.end)) return 0;
+      else return 1;
+    });
+    let changedPlaceholders = [];
+    let currentPart = 0;
+    for (let change of ordChanges) {
+      if (!change) continue;
+      let part = this.parts[currentPart];
+      while (currentPart < this.parts.length) {
+        if (part.range.range.end.isAfterOrEqual(change.range.end)) {
+          break;
+        }
+        currentPart++;
+        part = this.parts[currentPart];
+      }
+      if (currentPart >= this.parts.length) break;
+      while (part.range.contains(change.range)) {
+        if (part.type == 0 /* Placeholder */ && part.id == this.selectedPlaceholder && !this.blockChanged || part.type == 1 /* Block */ && this.blockChanged && part.content == change.text) {
+          if (part.type == 0 /* Placeholder */) changedPlaceholders.push(part);
+          part.updates.push({ change, growth: 0 /* Grow */ });
+          currentPart++;
+          part = this.parts[currentPart];
+          break;
+        }
+        currentPart++;
+        part = this.parts[currentPart];
+      }
+      for (let i = currentPart; i < this.parts.length; i++) {
+        this.parts[i].updates.push({ change, growth: 2 /* FixRight */ });
+      }
+    }
+    this.range.update(ordChanges.map((c) => ({ change: c, growth: 0 /* Grow */ })));
+    this.parts.forEach((p) => p.updateRange());
+    if (this.blockChanged) this.blockChanged = false;
+    if (!changedPlaceholders.length) return;
+    changedPlaceholders.forEach((p) => p.content = this.editor.document.getText(p.range.range));
+    let placeholderContents = this.parts.filter((p) => p.type == 0 /* Placeholder */).map((p) => p.content);
+    let blocks = this.type.generator(
+      placeholderContents,
+      this.matchGroups,
+      getWorkspaceUri(),
+      this.editor.document.uri.toString()
+    )[1].map(String);
+    this.editor.edit((edit) => {
+      for (let i = 0; i < blocks.length; i++) {
+        let range = this.blockParts[i].range;
+        let oldContent = this.blockParts[i].content;
+        let content = blocks[i];
+        if (content != oldContent) {
+          edit.replace(range.range, content);
+          this.blockChanged = true;
+        }
+      }
+    });
+    this.blockParts.forEach((b, i) => b.content = blocks[i]);
+  }
+};
+
+// src/snippets/engine/hsnippet.ts
+var HSnippet = class {
+  trigger;
+  description;
+  generator;
+  regexp;
+  placeholders;
+  priority;
+  // UltiSnips-like options.
+  automatic = false;
+  multiline = false;
+  inword = false;
+  wordboundary = false;
+  beginningofline = false;
+  math = false;
+  text = false;
+  constructor(header, generator, placeholders) {
+    this.description = header.description;
+    this.generator = generator;
+    this.placeholders = placeholders;
+    this.priority = header.priority || 0;
+    if (header.trigger instanceof RegExp) {
+      this.regexp = header.trigger;
+      this.trigger = "";
+    } else {
+      this.trigger = header.trigger;
+    }
+    if (header.flags.includes("A")) this.automatic = true;
+    if (header.flags.includes("M")) this.multiline = true;
+    if (header.flags.includes("i")) this.inword = true;
+    if (header.flags.includes("w")) this.wordboundary = true;
+    if (header.flags.includes("b")) this.beginningofline = true;
+    if (header.flags.includes("m")) this.math = true;
+    if (header.flags.includes("t")) this.text = true;
+  }
+};
+
+// src/snippets/engine/parser.ts
+var CODE_DELIMITER = "``";
+var HEADER_REGEXP = /^snippet ?(?:`([^`]+)`|(\S+))?(?: "([^"]+)")?(?: ([AMiwbmt]*))?/;
+function parseSnippetHeader(header) {
+  let match = HEADER_REGEXP.exec(header);
+  if (!match) throw new Error("Invalid snippet header");
+  let trigger = match[2];
+  if (match[1]) {
+    if (!match[1].endsWith("$")) match[1] += "$";
+    trigger = new RegExp(match[1], "m");
+  }
+  return {
+    trigger,
+    description: match[3] || "",
+    flags: match[4] || ""
+  };
+}
+function escapeString(string) {
+  return string.replace(/"/g, '\\"').replace(/\\/g, "\\\\");
+}
+function countPlaceholders(string) {
+  return string.split(/\$\d+|\$\{\d+\}/g).length - 1;
+}
+function parseSnippet(headerLine, lines) {
+  let header = parseSnippetHeader(headerLine);
+  let script = [`(require, t, m, w, path) => {`];
+  script.push(`let rv = "";`);
+  script.push(`let result = [];`);
+  script.push(`let blockResults = [];`);
+  let isCode = false;
+  let placeholders = 0;
+  while (lines.length > 0) {
+    let line = lines.shift();
+    if (isCode) {
+      if (!line.includes(CODE_DELIMITER)) {
+        script.push(line.trim());
+      } else {
+        let [code, ...rest] = line.split(CODE_DELIMITER);
+        script.push(code.trim());
+        lines.unshift(rest.join(CODE_DELIMITER));
+        script.push(`result.push({block: blockResults.length});`);
+        script.push(`blockResults.push(rv);`);
+        isCode = false;
+      }
+    } else {
+      if (line.startsWith("endsnippet")) {
+        break;
+      } else if (!line.includes(CODE_DELIMITER)) {
+        script.push(`result.push("${escapeString(line)}");`);
+        script.push(`result.push("\\n");`);
+        placeholders += countPlaceholders(line);
+      } else if (isCode == false) {
+        let [text, ...rest] = line.split(CODE_DELIMITER);
+        script.push(`result.push("${escapeString(text)}");`);
+        script.push(`rv = "";`);
+        placeholders += countPlaceholders(text);
+        lines.unshift(rest.join(CODE_DELIMITER));
+        isCode = true;
+      }
+    }
+  }
+  script.pop();
+  script.push(`return [result, blockResults];`);
+  script.push(`}`);
+  return { body: script.join("\n"), header, placeholders };
+}
+function parse(content) {
+  let lines = content.split(/\r?\n/);
+  let snippetInfos = [];
+  let script = [];
+  let isCode = false;
+  let priority = 0;
+  while (lines.length > 0) {
+    let line = lines.shift();
+    if (isCode) {
+      if (line.startsWith("endglobal")) {
+        isCode = false;
+      } else {
+        script.push(line);
+      }
+    } else if (line.startsWith("global")) {
+      isCode = true;
+    } else if (line.startsWith("priority ")) {
+      priority = Number(line.substring("priority ".length).trim()) || 0;
+    } else if (line.match(HEADER_REGEXP)) {
+      let info = parseSnippet(line, lines);
+      info.header.priority = priority;
+      snippetInfos.push(info);
+      priority = 0;
+    }
+  }
+  script.push(`return [`);
+  for (let snippet of snippetInfos) {
+    script.push(snippet.body);
+    script.push(",");
+  }
+  script.push(`]`);
+  let generators = new Function(script.join("\n"))().map((generator) => {
+    return generator.bind(null, require);
+  });
+  return snippetInfos.map((s, i) => new HSnippet(s.header, generators[i], s.placeholders));
+}
+
+// src/snippets/engine/completion.ts
+var vscode4 = __toESM(require("vscode"));
+var CompletionInfo = class {
+  range;
+  completionRange;
+  snippet;
+  label;
+  groups;
+  constructor(snippet, label, range, groups) {
+    this.snippet = snippet;
+    this.label = label;
+    this.range = range;
+    this.completionRange = new vscode4.Range(range.start, range.start.translate(0, label.length));
+    this.groups = groups;
+  }
+  toCompletionItem() {
+    let completionItem = new vscode4.CompletionItem(this.label);
+    completionItem.range = this.range;
+    completionItem.detail = this.snippet.description;
+    completionItem.insertText = this.label;
+    completionItem.command = {
+      command: "hsnips.expand",
+      title: "expand",
+      arguments: [this]
+    };
+    return completionItem;
+  }
+};
+function matchSuffixPrefix(context, trigger) {
+  while (trigger.length) {
+    if (context.endsWith(trigger)) return trigger;
+    trigger = trigger.substring(0, trigger.length - 1);
+  }
+  return null;
+}
+function createCompletionMatchContext(document, position) {
+  let line = document.getText(lineRange(0, position));
+  let match = line.match(/\S*$/);
+  let contextRange = lineRange(match.index || 0, position);
+  let context = document.getText(contextRange);
+  let precedingContextRange = new vscode4.Range(
+    position.line,
+    0,
+    position.line,
+    match.index || 0
+  );
+  let precedingContext = document.getText(precedingContextRange);
+  let isPrecedingContextWhitespace = precedingContext.match(/^\s*$/) != null;
+  let wordRange = document.getWordRangeAtPosition(position) || contextRange;
+  if (wordRange.end != position) {
+    wordRange = new vscode4.Range(wordRange.start, position);
+  }
+  let wordContext = document.getText(wordRange);
+  return {
+    line,
+    contextRange,
+    context,
+    isPrecedingContextWhitespace,
+    wordContext
+  };
+}
+function getLongContext(document, position, context) {
+  if (context.longContext === void 0) {
+    let numberPrevLines = vscode4.workspace.getConfiguration("hsnips").get("multiLineContext");
+    context.longContext = document.getText(
+      new vscode4.Range(
+        new vscode4.Position(Math.max(position.line - numberPrevLines, 0), 0),
+        position
+      )
+    ).replace(/\r/g, "");
+  }
+  return context.longContext;
+}
+function matchSnippet(document, position, snippet, context) {
+  let snippetMatches = false;
+  let snippetRange = context.contextRange;
+  let prefixMatches = false;
+  let matchGroups = [];
+  let label = snippet.trigger;
+  if (snippet.trigger) {
+    let matchingPrefix = null;
+    if (snippet.inword) {
+      snippetMatches = context.context.endsWith(snippet.trigger);
+      matchingPrefix = snippetMatches ? snippet.trigger : matchSuffixPrefix(context.context, snippet.trigger);
+    } else if (snippet.wordboundary) {
+      snippetMatches = context.wordContext == snippet.trigger;
+      matchingPrefix = snippet.trigger.startsWith(context.wordContext) ? context.wordContext : null;
+    } else if (snippet.beginningofline) {
+      snippetMatches = context.context.endsWith(snippet.trigger) && context.isPrecedingContextWhitespace;
+      matchingPrefix = snippet.trigger.startsWith(context.context) && context.isPrecedingContextWhitespace ? context.context : null;
+    } else {
+      snippetMatches = context.context == snippet.trigger;
+      matchingPrefix = snippet.trigger.startsWith(context.context) ? context.context : null;
+    }
+    if (matchingPrefix) {
+      snippetRange = new vscode4.Range(position.translate(0, -matchingPrefix.length), position);
+      prefixMatches = true;
+    }
+  } else if (snippet.regexp) {
+    let regexContext = context.line;
+    if (snippet.multiline) {
+      regexContext = getLongContext(document, position, context);
+    }
+    let match = snippet.regexp.exec(regexContext);
+    if (match) {
+      let charOffset = match.index - regexContext.lastIndexOf("\n", match.index) - 1;
+      let lineOffset = match[0].split("\n").length - 1;
+      snippetRange = new vscode4.Range(
+        new vscode4.Position(position.line - lineOffset, charOffset),
+        position
+      );
+      snippetMatches = true;
+      matchGroups = match;
+      label = match[0];
+    }
+  }
+  return {
+    snippetMatches,
+    prefixMatches,
+    range: snippetRange,
+    label,
+    groups: matchGroups
+  };
+}
+function getAutomaticCompletion(document, position, snippets) {
+  let context = createCompletionMatchContext(document, position);
+  for (let snippet of snippets) {
+    if (!snippet.automatic) continue;
+    let match = matchSnippet(document, position, snippet, context);
+    if (match.snippetMatches) {
+      return new CompletionInfo(snippet, match.label, match.range, match.groups);
+    }
+  }
+}
+function getCompletions(document, position, snippets) {
+  let context = createCompletionMatchContext(document, position);
+  let completions = [];
+  for (let snippet of snippets) {
+    let match = matchSnippet(document, position, snippet, context);
+    if (snippet.automatic && match.snippetMatches) {
+      return new CompletionInfo(snippet, match.label, match.range, match.groups);
+    }
+    if (match.prefixMatches) {
+      completions.push(new CompletionInfo(snippet, match.label, match.range, match.groups));
+    }
+  }
+  return completions;
+}
+
+// src/snippets/engine/latexContext.ts
+var ROW_BREAK_ENVIRONMENTS = [
+  "align",
+  "align*",
+  "aligned",
+  "alignedat",
+  "alignedat*",
+  "gather",
+  "gather*",
+  "gathered",
+  "split",
+  "multline",
+  "multline*",
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "Bmatrix",
+  "vmatrix",
+  "Vmatrix",
+  "smallmatrix",
+  "cases",
+  "array",
+  "tabular",
+  "tabular*",
+  "tabularx",
+  "longtable"
+];
+var ALIGNMENT_SEPARATOR_ENVIRONMENTS = [
+  "align",
+  "align*",
+  "aligned",
+  "alignedat",
+  "alignedat*",
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "Bmatrix",
+  "vmatrix",
+  "Vmatrix",
+  "smallmatrix",
+  "cases",
+  "array",
+  "tabular",
+  "tabular*",
+  "tabularx",
+  "longtable"
+];
+var MATH_ENVIRONMENTS = [
+  "math",
+  "displaymath",
+  "equation",
+  "equation*",
+  ...ROW_BREAK_ENVIRONMENTS
+];
+var TEXT_LIKE_COMMANDS = [
+  "text",
+  "textrm",
+  "textnormal",
+  "mbox",
+  "operatorname",
+  "mathrm",
+  "label",
+  "tag"
+];
+var VERBATIM_LIKE_ENVIRONMENTS = [
+  "verbatim",
+  "verbatim*",
+  "Verbatim",
+  "lstlisting",
+  "minted",
+  "comment"
+];
+function unique(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+function resolveLatexContextOptions(options = {}) {
+  let rowBreakEnvironments = unique([
+    ...ROW_BREAK_ENVIRONMENTS,
+    ...options.extraRowBreakEnvironments || []
+  ]);
+  let alignmentEnvironments = unique([
+    ...ALIGNMENT_SEPARATOR_ENVIRONMENTS,
+    ...options.extraAlignmentEnvironments || []
+  ]);
+  return {
+    rowBreakEnvironments,
+    alignmentEnvironments,
+    mathEnvironments: unique([
+      ...MATH_ENVIRONMENTS,
+      ...rowBreakEnvironments,
+      ...alignmentEnvironments,
+      ...options.extraMathEnvironments || []
+    ]),
+    textLikeCommands: unique([
+      ...TEXT_LIKE_COMMANDS,
+      ...options.extraTextLikeCommands || []
+    ]),
+    verbatimLikeEnvironments: VERBATIM_LIKE_ENVIRONMENTS
+  };
+}
+function isEscaped(text, index) {
+  let slashCount = 0;
+  for (let i = index - 1; i >= 0 && text[i] == "\\"; i--) {
+    slashCount++;
+  }
+  return slashCount % 2 == 1;
+}
+function findLatexCommentStart(line) {
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] == "%" && !isEscaped(line, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+function maskRange(chars, start, end) {
+  for (let index = Math.max(start, 0); index < Math.min(end, chars.length); index++) {
+    if (chars[index] != "\n" && chars[index] != "\r") {
+      chars[index] = " ";
+    }
+  }
+}
+function getMarkdownFenceRanges(text) {
+  let ranges = [];
+  let open;
+  let lineStart = 0;
+  while (lineStart <= text.length) {
+    let newline = text.indexOf("\n", lineStart);
+    let lineEnd = newline == -1 ? text.length : newline;
+    let nextLineStart = newline == -1 ? text.length + 1 : newline + 1;
+    let line = text.substring(lineStart, lineEnd);
+    let match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (match) {
+      let marker = match[1][0];
+      let length = match[1].length;
+      if (!open) {
+        open = { start: lineStart, marker, length };
+      } else if (marker == open.marker && length >= open.length) {
+        ranges.push({ start: open.start, end: nextLineStart - 1 });
+        open = void 0;
+      }
+    }
+    lineStart = nextLineStart;
+  }
+  if (open) {
+    ranges.push({ start: open.start, end: text.length });
+  }
+  return ranges;
+}
+function maskRegexRanges(chars, text, regexp) {
+  let match;
+  while ((match = regexp.exec(text)) !== null) {
+    maskRange(chars, match.index, match.index + match[0].length);
+  }
+}
+function sanitizeLatexForParsing(text, markdownFenceRanges = getMarkdownFenceRanges(text)) {
+  let chars = text.split("");
+  for (let range of markdownFenceRanges) {
+    maskRange(chars, range.start, range.end);
+  }
+  maskRegexRanges(chars, text, /<!--[\s\S]*?-->/g);
+  maskRegexRanges(chars, text, /`[^`\n]*`/g);
+  let lineStart = 0;
+  while (lineStart <= chars.length) {
+    let newline = chars.indexOf("\n", lineStart);
+    let lineEnd = newline == -1 ? chars.length : newline;
+    let line = chars.slice(lineStart, lineEnd).join("");
+    let commentStart = findLatexCommentStart(line);
+    if (commentStart != -1) {
+      maskRange(chars, lineStart + commentStart, lineEnd);
+    }
+    if (newline == -1) break;
+    lineStart = newline + 1;
+  }
+  return chars.join("");
+}
+function createLatexParsingPrefix(text, offset) {
+  let original = text.substring(0, offset);
+  let markdownFenceRanges = getMarkdownFenceRanges(original);
+  return {
+    original,
+    markdownFenceRanges,
+    sanitized: sanitizeLatexForParsing(original, markdownFenceRanges)
+  };
+}
+function getOpenLatexEnvironmentFramesFromSanitized(beforeCursor, resolved) {
+  let verbatimEnvironments = new Set(resolved.verbatimLikeEnvironments);
+  const stack = [];
+  const environmentReg = /\\(begin|end)\s*\{([^}]+)\}/g;
+  let match;
+  while ((match = environmentReg.exec(beforeCursor)) !== null) {
+    let kind = match[1];
+    let rawEnvironment = match[2];
+    let environment = rawEnvironment.trim();
+    let rawNameStart = match.index + match[0].indexOf("{") + 1;
+    let leadingWhitespace = rawEnvironment.search(/\S/);
+    let nameStart = rawNameStart + (leadingWhitespace == -1 ? 0 : leadingWhitespace);
+    let nameEnd = nameStart + environment.length;
+    let currentVerbatimIndex = -1;
+    for (let index = stack.length - 1; index >= 0; index--) {
+      if (verbatimEnvironments.has(stack[index].name)) {
+        currentVerbatimIndex = index;
+        break;
+      }
+    }
+    if (currentVerbatimIndex != -1) {
+      if (kind == "end" && environment == stack[currentVerbatimIndex].name) {
+        stack.splice(currentVerbatimIndex, 1);
+      }
+      continue;
+    }
+    if (kind == "begin") {
+      stack.push({
+        name: environment,
+        beginStart: match.index,
+        beginEnd: environmentReg.lastIndex,
+        nameStart,
+        nameEnd
+      });
+      continue;
+    }
+    for (let index = stack.length - 1; index >= 0; index--) {
+      if (stack[index].name == environment) {
+        stack.splice(index, 1);
+        break;
+      }
+    }
+  }
+  return stack;
+}
+function isInAnyEnvironment(stack, environments) {
+  return stack.some((environment) => environments.has(environment));
+}
+function isInsideLatexLineComment(text, offset) {
+  let lineStart = text.lastIndexOf("\n", Math.max(offset - 1, 0)) + 1;
+  let lineBeforeCursor = text.substring(lineStart, offset);
+  return findLatexCommentStart(lineBeforeCursor) != -1;
+}
+function isInsideMarkdownCodeInPrefix(beforeCursor, markdownFenceRanges) {
+  if (markdownFenceRanges.some((range) => range.end == beforeCursor.length)) {
+    return true;
+  }
+  let lineStart = beforeCursor.lastIndexOf("\n") + 1;
+  let lineBeforeCursor = beforeCursor.substring(lineStart);
+  let inlineBackticks = lineBeforeCursor.match(/`/g);
+  return inlineBackticks ? inlineBackticks.length % 2 == 1 : false;
+}
+function findMatchingBrace(text, openBrace, limit) {
+  let depth = 0;
+  for (let index = openBrace; index < limit; index++) {
+    if (isEscaped(text, index)) {
+      continue;
+    }
+    if (text[index] == "{") {
+      depth++;
+      continue;
+    }
+    if (text[index] == "}") {
+      depth--;
+      if (depth == 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+function escapeRegExp2(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function isInsideTextLikeCommandInSanitized(sanitized, resolved) {
+  if (resolved.textLikeCommands.length == 0) {
+    return false;
+  }
+  const commandReg = new RegExp(
+    "\\\\(" + resolved.textLikeCommands.map(escapeRegExp2).join("|") + ")\\s*\\{",
+    "g"
+  );
+  let match;
+  while ((match = commandReg.exec(sanitized)) !== null) {
+    let openBrace = commandReg.lastIndex - 1;
+    let closeBrace = findMatchingBrace(sanitized, openBrace, sanitized.length);
+    if (closeBrace == -1 || closeBrace >= sanitized.length) {
+      return true;
+    }
+  }
+  return false;
+}
+function getMathDelimiterStackFromSanitized(beforeCursor) {
+  let stack = [];
+  for (let index = 0; index < beforeCursor.length; index++) {
+    let char = beforeCursor[index];
+    if (char == "\\") {
+      let next = beforeCursor[index + 1];
+      if (next == "(" || next == "[") {
+        stack.push({ kind: next == "(" ? "paren" : "bracket", start: index });
+        index++;
+        continue;
+      }
+      if (next == ")" && stack[stack.length - 1]?.kind == "paren") {
+        stack.pop();
+        index++;
+        continue;
+      }
+      if (next == "]" && stack[stack.length - 1]?.kind == "bracket") {
+        stack.pop();
+        index++;
+        continue;
+      }
+      index++;
+      continue;
+    }
+    if (char == "$" && !isEscaped(beforeCursor, index)) {
+      let delimiter2 = beforeCursor[index + 1] == "$" ? "$$" : "$";
+      let kind = delimiter2 == "$$" ? "displayDollar" : "inlineDollar";
+      if (stack[stack.length - 1]?.kind == kind) {
+        stack.pop();
+      } else {
+        stack.push({ kind, start: index });
+      }
+      if (delimiter2 == "$$") {
+        index++;
+      }
+    }
+  }
+  return stack;
+}
+function getLatexContext(text, offset, options = {}) {
+  let resolved = resolveLatexContextOptions(options);
+  let parsedPrefix = createLatexParsingPrefix(text, offset);
+  let environmentFrames = getOpenLatexEnvironmentFramesFromSanitized(
+    parsedPrefix.sanitized,
+    resolved
+  );
+  let environmentStack = environmentFrames.map((frame) => frame.name);
+  let currentEnvironmentFrame = environmentFrames[environmentFrames.length - 1];
+  let currentEnvironment = currentEnvironmentFrame?.name;
+  let inComment = isInsideLatexLineComment(text, offset);
+  let inMarkdownCode = isInsideMarkdownCodeInPrefix(
+    parsedPrefix.original,
+    parsedPrefix.markdownFenceRanges
+  );
+  let inTextLikeCommand = isInsideTextLikeCommandInSanitized(parsedPrefix.sanitized, resolved);
+  let verbatimEnvironments = new Set(resolved.verbatimLikeEnvironments);
+  let rowBreakEnvironments = new Set(resolved.rowBreakEnvironments);
+  let alignmentEnvironments = new Set(resolved.alignmentEnvironments);
+  let mathEnvironments = new Set(resolved.mathEnvironments);
+  let inVerbatimLikeEnvironment = isInAnyEnvironment(environmentStack, verbatimEnvironments);
+  let delimiterStack = getMathDelimiterStackFromSanitized(parsedPrefix.sanitized);
+  let delimiterMathKind = delimiterStack[delimiterStack.length - 1]?.kind;
+  let inRowBreakEnvironment = isInAnyEnvironment(environmentStack, rowBreakEnvironments);
+  let inAlignmentEnvironment = isInAnyEnvironment(environmentStack, alignmentEnvironments);
+  let inMathEnvironment = isInAnyEnvironment(environmentStack, mathEnvironments);
+  let blocked = inComment || inMarkdownCode || inTextLikeCommand || inVerbatimLikeEnvironment;
+  let inMath = (Boolean(delimiterMathKind) || inMathEnvironment) && !blocked;
+  let mathKind = "none";
+  if (inMath) {
+    mathKind = delimiterMathKind || "environment";
+  }
+  return {
+    environmentStack,
+    environmentFrames,
+    currentEnvironment,
+    currentEnvironmentFrame,
+    inComment,
+    inMarkdownCode,
+    inTextLikeCommand,
+    inVerbatimLikeEnvironment,
+    inMath,
+    mathKind,
+    canSmartEnter: inRowBreakEnvironment && !blocked,
+    canSmartTab: inAlignmentEnvironment && !blocked,
+    canInsertAlignmentSeparator: inAlignmentEnvironment && !blocked,
+    canExpandMathSnippet: inMath && !blocked
+  };
+}
+
+// src/snippets/engine/latexEdit.ts
+function getLineBounds(text, offset) {
+  let start = text.lastIndexOf("\n", Math.max(offset - 1, 0)) + 1;
+  let nextNewline = text.indexOf("\n", offset);
+  let end = nextNewline == -1 ? text.length : nextNewline;
+  return { start, end };
+}
+function getLineIndent(line) {
+  let match = line.match(/^\s*/);
+  return match ? match[0] : "";
+}
+function applyTextEditsToString(text, edits) {
+  return edits.slice().sort((a, b) => b.start - a.start).reduce((result, edit) => {
+    return result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+  }, text);
+}
+function getTextReplacement(fromText, toText) {
+  if (fromText == toText) {
+    return void 0;
+  }
+  let start = 0;
+  while (start < fromText.length && start < toText.length && fromText[start] == toText[start]) {
+    start++;
+  }
+  let fromEnd = fromText.length;
+  let toEnd = toText.length;
+  while (fromEnd > start && toEnd > start && fromText[fromEnd - 1] == toText[toEnd - 1]) {
+    fromEnd--;
+    toEnd--;
+  }
+  return {
+    start,
+    end: fromEnd,
+    text: toText.slice(start, toEnd)
+  };
+}
+function shouldAppendMathLineBreak(line) {
+  let commentStart = findLatexCommentStart(line);
+  let formulaPart = commentStart == -1 ? line : line.substring(0, commentStart);
+  let trimmed = formulaPart.trim();
+  if (!trimmed) return false;
+  if (/^\\(?:begin|end)\s*\{[^}]+\}$/.test(trimmed)) return false;
+  if (/\\\\(?:\[[^\]]+\])?$/.test(trimmed)) return false;
+  return true;
+}
+function getSmartEnterPlan(text, offset, options = {}) {
+  let context = getLatexContext(text, offset, options);
+  if (!context.canSmartEnter) {
+    return { handled: false, edits: [] };
+  }
+  let lineBounds = getLineBounds(text, offset);
+  let line = text.substring(lineBounds.start, lineBounds.end);
+  let column = offset - lineBounds.start;
+  let commentStart = findLatexCommentStart(line);
+  let formulaLimit = commentStart == -1 ? line.length : commentStart;
+  if (column > formulaLimit) {
+    return { handled: false, edits: [] };
+  }
+  if (line.substring(column, formulaLimit).trim().length > 0) {
+    return { handled: false, edits: [] };
+  }
+  if (!shouldAppendMathLineBreak(line)) {
+    return { handled: false, edits: [] };
+  }
+  let indent = getLineIndent(line);
+  let formulaEnd = line.substring(0, formulaLimit).replace(/\s+$/, "").length;
+  if (commentStart == -1) {
+    let replaceStart2 = lineBounds.start + formulaEnd;
+    let insertText2 = " \\\\\n" + indent;
+    return {
+      handled: true,
+      edits: [{ start: replaceStart2, end: lineBounds.end, text: insertText2 }],
+      cursorOffset: replaceStart2 + insertText2.length
+    };
+  }
+  let replaceStart = lineBounds.start + formulaEnd;
+  let replaceEnd = lineBounds.start + commentStart;
+  let insertText = " \\\\ ";
+  let lineBreakText = "\n" + indent;
+  return {
+    handled: true,
+    edits: [
+      { start: replaceStart, end: replaceEnd, text: insertText },
+      { start: lineBounds.end, end: lineBounds.end, text: lineBreakText }
+    ],
+    cursorOffset: lineBounds.end + insertText.length - (replaceEnd - replaceStart) + lineBreakText.length
+  };
+}
+function getSmartEnterRecoveryPlan(beforeEnterText, offsetBeforeEnter, currentText, options = {}) {
+  let desiredPlan = getSmartEnterPlan(beforeEnterText, offsetBeforeEnter, options);
+  if (!desiredPlan.handled || typeof desiredPlan.cursorOffset != "number") {
+    return { handled: false, edits: [] };
+  }
+  let desiredText = applyTextEditsToString(beforeEnterText, desiredPlan.edits);
+  let replacement = getTextReplacement(currentText, desiredText);
+  if (!replacement) {
+    return { handled: false, edits: [] };
+  }
+  return {
+    handled: true,
+    edits: [replacement],
+    cursorOffset: desiredPlan.cursorOffset
+  };
+}
+function shouldInsertAlignmentSeparator(text, offset, options = {}) {
+  let context = getLatexContext(text, offset, options);
+  if (!context.canSmartTab) {
+    return false;
+  }
+  let lineBounds = getLineBounds(text, offset);
+  let line = text.substring(lineBounds.start, lineBounds.end);
+  let column = offset - lineBounds.start;
+  let commentStart = findLatexCommentStart(line);
+  let formulaLimit = commentStart == -1 ? line.length : commentStart;
+  let formulaPart = line.substring(0, formulaLimit).trim();
+  if (column > formulaLimit) return false;
+  if (!formulaPart && line.trim().startsWith("%")) return false;
+  if (/^\\(?:begin|end)\s*\{[^}]+\}$/.test(formulaPart)) return false;
+  if (/\\\\(?:\[[^\]]+\])?$/.test(formulaPart)) return false;
+  return true;
+}
+
+// src/snippets/engine/environmentConvert.ts
+var CONVERTIBLE_ENVIRONMENTS = [
+  "align",
+  "align*",
+  "aligned",
+  "equation",
+  "equation*",
+  "split",
+  "gather",
+  "gather*",
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "Bmatrix",
+  "vmatrix",
+  "Vmatrix",
+  "smallmatrix",
+  "cases",
+  "array",
+  "tabular",
+  "tabular*",
+  "tabularx",
+  "longtable"
+];
+var WRAPPABLE_MATH_ENVIRONMENTS = [
+  "aligned",
+  "cases",
+  "split",
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "equation",
+  "equation*",
+  "align",
+  "align*"
+];
+var TABLE_LIKE_ENVIRONMENTS = [
+  "array",
+  "tabular",
+  "tabular*",
+  "tabularx",
+  "longtable"
+];
+var TWO_ARGUMENT_TABLE_ENVIRONMENTS = ["tabular*", "tabularx"];
+function findMatchingBrace2(text, openBrace) {
+  let depth = 0;
+  for (let index = openBrace; index < text.length; index++) {
+    if (isEscaped(text, index)) {
+      continue;
+    }
+    if (text[index] == "{") {
+      depth++;
+      continue;
+    }
+    if (text[index] == "}") {
+      depth--;
+      if (depth == 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+function parseBracedArguments(text, start) {
+  let args = [];
+  let index = start;
+  while (index < text.length) {
+    while (/\s/.test(text[index] || "")) index++;
+    if (text[index] != "{") break;
+    let end = findMatchingBrace2(text, index);
+    if (end == -1) break;
+    args.push({
+      start: index,
+      end: end + 1,
+      text: text.slice(index, end + 1)
+    });
+    index = end + 1;
+  }
+  return args;
+}
+function getEnvironmentNameRange(match) {
+  let rawName = match[2];
+  let name = rawName.trim();
+  let rawNameStart = match.index + match[0].indexOf("{") + 1;
+  let leadingWhitespace = rawName.search(/\S/);
+  let nameStart = rawNameStart + (leadingWhitespace == -1 ? 0 : leadingWhitespace);
+  return {
+    name,
+    nameStart,
+    nameEnd: nameStart + name.length
+  };
+}
+function findLatexEnvironmentPairAt(text, offset, _options = {}) {
+  let sanitized = sanitizeLatexForParsing(text);
+  let verbatimEnvironments = new Set(VERBATIM_LIKE_ENVIRONMENTS);
+  let stack = [];
+  let pairs = [];
+  const environmentReg = /\\(begin|end)\s*\{([^}]+)\}/g;
+  let match;
+  while ((match = environmentReg.exec(sanitized)) !== null) {
+    let kind = match[1];
+    let { name, nameStart, nameEnd } = getEnvironmentNameRange(match);
+    let currentVerbatim;
+    for (let index = stack.length - 1; index >= 0; index--) {
+      if (verbatimEnvironments.has(stack[index].name)) {
+        currentVerbatim = stack[index];
+        break;
+      }
+    }
+    if (currentVerbatim) {
+      if (kind == "end" && name == currentVerbatim.name) {
+        let matchingBegin2 = stack.lastIndexOf(currentVerbatim);
+        if (matchingBegin2 != -1) {
+          stack.splice(matchingBegin2, 1);
+        }
+      }
+      continue;
+    }
+    if (kind == "begin") {
+      stack.push({
+        name,
+        beginStart: match.index,
+        beginEnd: environmentReg.lastIndex,
+        beginNameStart: nameStart,
+        beginNameEnd: nameEnd
+      });
+      continue;
+    }
+    let matchingBegin = stack.map((token) => token.name).lastIndexOf(name);
+    if (matchingBegin == -1) {
+      continue;
+    }
+    let begin = stack[matchingBegin];
+    stack.splice(matchingBegin, 1);
+    pairs.push({
+      name,
+      beginStart: begin.beginStart,
+      beginEnd: begin.beginEnd,
+      beginNameStart: begin.beginNameStart,
+      beginNameEnd: begin.beginNameEnd,
+      endStart: match.index,
+      endEnd: environmentReg.lastIndex,
+      endNameStart: nameStart,
+      endNameEnd: nameEnd,
+      beginArguments: parseBracedArguments(text, begin.beginEnd)
+    });
+  }
+  return pairs.filter((pair) => pair.beginStart <= offset && offset <= pair.endEnd).sort((a, b) => a.endEnd - a.beginStart - (b.endEnd - b.beginStart))[0];
+}
+function findDisplayMathDelimiterAt(text, offset) {
+  let sanitized = sanitizeLatexForParsing(text);
+  let stack = [];
+  let pairs = [];
+  for (let index = 0; index < sanitized.length; index++) {
+    let char = sanitized[index];
+    if (char == "\\") {
+      let next = sanitized[index + 1];
+      if (next == "(" || next == "[") {
+        stack.push({
+          kind: next == "(" ? "paren" : "bracket",
+          openStart: index,
+          openEnd: index + 2
+        });
+        index++;
+        continue;
+      }
+      if (next == ")" || next == "]") {
+        let kind = next == ")" ? "paren" : "bracket";
+        if (stack[stack.length - 1]?.kind == kind) {
+          let open = stack.pop();
+          if (kind == "bracket") {
+            pairs.push({
+              kind: "bracket",
+              openStart: open.openStart,
+              openEnd: open.openEnd,
+              closeStart: index,
+              closeEnd: index + 2
+            });
+          }
+        }
+        index++;
+        continue;
+      }
+      index++;
+      continue;
+    }
+    if (char == "$" && !isEscaped(sanitized, index)) {
+      let isDisplay = sanitized[index + 1] == "$";
+      let kind = isDisplay ? "displayDollar" : "inlineDollar";
+      let width = isDisplay ? 2 : 1;
+      if (stack[stack.length - 1]?.kind == kind) {
+        let open = stack.pop();
+        if (kind == "displayDollar") {
+          pairs.push({
+            kind: "displayDollar",
+            openStart: open.openStart,
+            openEnd: open.openEnd,
+            closeStart: index,
+            closeEnd: index + width
+          });
+        }
+      } else {
+        stack.push({ kind, openStart: index, openEnd: index + width });
+      }
+      index += width - 1;
+    }
+  }
+  return pairs.filter((pair) => pair.openStart <= offset && offset <= pair.closeEnd).sort((a, b) => a.closeEnd - a.openStart - (b.closeEnd - b.openStart))[0];
+}
+function isTableLikeEnvironment(name) {
+  return TABLE_LIKE_ENVIRONMENTS.indexOf(name) != -1;
+}
+function needsTwoTableArguments(name) {
+  return TWO_ARGUMENT_TABLE_ENVIRONMENTS.indexOf(name) != -1;
+}
+function formatTableArguments(targetName, columnSpecOrArguments = "c") {
+  let value = columnSpecOrArguments.trim() || "c";
+  if (value.startsWith("{")) {
+    return value;
+  }
+  if (needsTwoTableArguments(targetName)) {
+    return `{\\linewidth}{${value}}`;
+  }
+  return `{${value}}`;
+}
+function normalizeArgumentsForTarget(currentArguments, targetName, fallbackArguments) {
+  if (!isTableLikeEnvironment(targetName)) {
+    return "";
+  }
+  if (currentArguments.length > 0) {
+    if (needsTwoTableArguments(targetName)) {
+      if (currentArguments.length >= 2) {
+        return currentArguments[0].text + currentArguments[1].text;
+      }
+      return `{\\linewidth}` + currentArguments[0].text;
+    }
+    return currentArguments[currentArguments.length - 1].text;
+  }
+  return fallbackArguments || formatTableArguments(targetName);
+}
+function conversionNeedsTableArguments(text, offset, targetName) {
+  if (!isTableLikeEnvironment(targetName)) {
+    return false;
+  }
+  let pair = findLatexEnvironmentPairAt(text, offset);
+  return !pair || pair.beginArguments.length == 0;
+}
+function getBeginArgumentsRange(pair) {
+  if (pair.beginArguments.length == 0) {
+    return { start: pair.beginEnd, end: pair.beginEnd };
+  }
+  return {
+    start: pair.beginArguments[0].start,
+    end: pair.beginArguments[pair.beginArguments.length - 1].end
+  };
+}
+function getEnvironmentBodyRange(pair) {
+  let bodyStart = pair.beginArguments.length > 0 ? pair.beginArguments[pair.beginArguments.length - 1].end : pair.beginEnd;
+  return {
+    start: bodyStart,
+    end: pair.endStart
+  };
+}
+function createEnvironmentNameOnlyRenamePlan(pair, targetName) {
+  let name = targetName.trim();
+  if (!isValidEnvironmentName(name) || pair.name == name) {
+    return { handled: false, edits: [] };
+  }
+  return {
+    handled: true,
+    edits: [
+      { start: pair.beginNameStart, end: pair.beginNameEnd, text: name },
+      { start: pair.endNameStart, end: pair.endNameEnd, text: name }
+    ],
+    cursorOffset: pair.beginStart
+  };
+}
+function createEnvironmentRenamePlan(text, pair, targetName, targetArguments) {
+  let argsRange = getBeginArgumentsRange(pair);
+  let nextArguments = normalizeArgumentsForTarget(pair.beginArguments, targetName, targetArguments);
+  let currentArgumentsText = text.slice(argsRange.start, argsRange.end);
+  let edits = [
+    { start: pair.beginNameStart, end: pair.beginNameEnd, text: targetName },
+    { start: pair.endNameStart, end: pair.endNameEnd, text: targetName }
+  ];
+  if (currentArgumentsText != nextArguments) {
+    edits.push({ start: argsRange.start, end: argsRange.end, text: nextArguments });
+  }
+  if (pair.name == targetName && currentArgumentsText == nextArguments) {
+    return { handled: false, edits: [] };
+  }
+  return {
+    handled: true,
+    edits,
+    cursorOffset: pair.beginStart
+  };
+}
+function trimOneOuterNewline(text) {
+  if (text.startsWith("\n")) {
+    text = text.slice(1);
+  }
+  if (text.endsWith("\n")) {
+    text = text.slice(0, -1);
+  }
+  return text;
+}
+function createDelimiterConversionPlan(text, pair, targetName, targetArguments = "") {
+  let body = trimOneOuterNewline(text.slice(pair.openEnd, pair.closeStart));
+  let begin = `\\begin{${targetName}}${targetArguments}`;
+  let replacement = `${begin}
+${body}
+\\end{${targetName}}`;
+  return {
+    handled: true,
+    edits: [{ start: pair.openStart, end: pair.closeEnd, text: replacement }],
+    cursorOffset: pair.openStart + begin.length + 1
+  };
+}
+function createWrapEnvironmentPlan(text, start, end, targetName, targetArguments = "") {
+  let body = text.slice(start, end);
+  let begin = `\\begin{${targetName}}${targetArguments}`;
+  let replacement = `${begin}
+${body}
+\\end{${targetName}}`;
+  return {
+    handled: true,
+    edits: [{ start, end, text: replacement }],
+    cursorOffset: start + begin.length + 1
+  };
+}
+function createWrapBodyPlan(text, start, end, targetName, targetArguments = "") {
+  let body = trimOneOuterNewline(text.slice(start, end));
+  let prefix = text[start] == "\n" ? "\n" : "";
+  let suffix = text[end - 1] == "\n" ? "\n" : "";
+  let begin = `\\begin{${targetName}}${targetArguments}`;
+  let replacement = `${prefix}${begin}
+${body}
+\\end{${targetName}}${suffix}`;
+  return {
+    handled: true,
+    edits: [{ start, end, text: replacement }],
+    cursorOffset: start + prefix.length + begin.length + 1
+  };
+}
+function createWrapCurrentMathStructurePlan(text, offset, targetName, targetArguments = "", options = {}) {
+  let environmentPair = findLatexEnvironmentPairAt(text, offset, options);
+  if (environmentPair) {
+    let bodyRange = getEnvironmentBodyRange(environmentPair);
+    return createWrapBodyPlan(text, bodyRange.start, bodyRange.end, targetName, targetArguments);
+  }
+  let delimiterPair = findDisplayMathDelimiterAt(text, offset);
+  if (delimiterPair) {
+    return createWrapBodyPlan(text, delimiterPair.openEnd, delimiterPair.closeStart, targetName, targetArguments);
+  }
+  return { handled: false, edits: [] };
+}
+function trimOneOuterNewlinePair(text) {
+  if (text.startsWith("\n")) {
+    text = text.slice(1);
+  }
+  if (text.endsWith("\n")) {
+    text = text.slice(0, -1);
+  }
+  return text;
+}
+function createUnwrapEnvironmentPlan(text, pair) {
+  let bodyRange = getEnvironmentBodyRange(pair);
+  let body = trimOneOuterNewlinePair(text.slice(bodyRange.start, bodyRange.end));
+  return {
+    handled: true,
+    edits: [{ start: pair.beginStart, end: pair.endEnd, text: body }],
+    cursorOffset: pair.beginStart
+  };
+}
+function createUnwrapDelimiterPlan(text, pair) {
+  let body = trimOneOuterNewlinePair(text.slice(pair.openEnd, pair.closeStart));
+  return {
+    handled: true,
+    edits: [{ start: pair.openStart, end: pair.closeEnd, text: body }],
+    cursorOffset: pair.openStart
+  };
+}
+function createUnwrapMathStructurePlan(text, offset, options = {}) {
+  let environmentPair = findLatexEnvironmentPairAt(text, offset, options);
+  if (environmentPair && WRAPPABLE_MATH_ENVIRONMENTS.indexOf(environmentPair.name) != -1) {
+    return createUnwrapEnvironmentPlan(text, environmentPair);
+  }
+  let delimiterPair = findDisplayMathDelimiterAt(text, offset);
+  if (delimiterPair) {
+    return createUnwrapDelimiterPlan(text, delimiterPair);
+  }
+  return { handled: false, edits: [] };
+}
+function createEnvironmentConversionPlan(text, offset, targetName, targetArguments = "", options = {}) {
+  let environmentPair = findLatexEnvironmentPairAt(text, offset, options);
+  if (environmentPair) {
+    return createEnvironmentRenamePlan(text, environmentPair, targetName, targetArguments);
+  }
+  let delimiterPair = findDisplayMathDelimiterAt(text, offset);
+  if (delimiterPair) {
+    return createDelimiterConversionPlan(text, delimiterPair, targetName, targetArguments);
+  }
+  return { handled: false, edits: [] };
+}
+function isChangeInRange(change, start, end) {
+  let changeStart = change.rangeOffset;
+  let changeEnd = change.rangeOffset + change.rangeLength;
+  if (change.rangeLength == 0) {
+    return start <= changeStart && changeStart <= end;
+  }
+  return changeStart < end && changeEnd > start;
+}
+function mapOffsetAfterChange(offset, change) {
+  let changeStart = change.rangeOffset;
+  let changeEnd = change.rangeOffset + change.rangeLength;
+  let delta = change.text.length - change.rangeLength;
+  if (offset <= changeStart) {
+    return offset;
+  }
+  if (offset >= changeEnd) {
+    return offset + delta;
+  }
+  return changeStart + change.text.length;
+}
+function mapRangeAfterChange(start, end, change) {
+  if (change.rangeLength == 0) {
+    let delta = change.text.length;
+    if (change.rangeOffset < start) {
+      return { start: start + delta, end: end + delta };
+    }
+    if (change.rangeOffset <= end) {
+      return { start, end: end + delta };
+    }
+    return { start, end };
+  }
+  return {
+    start: mapOffsetAfterChange(start, change),
+    end: mapOffsetAfterChange(end, change)
+  };
+}
+function isValidEnvironmentName(name) {
+  return /^[^{}\s]+$/.test(name);
+}
+function createEnvironmentNameSyncPlan(beforeText, afterText, change, options = {}) {
+  let pairsToCheck = [
+    findLatexEnvironmentPairAt(beforeText, change.rangeOffset, options),
+    findLatexEnvironmentPairAt(beforeText, change.rangeOffset + change.rangeLength, options)
+  ].filter((pair) => Boolean(pair));
+  for (let pair of pairsToCheck) {
+    let editedBegin = isChangeInRange(change, pair.beginNameStart, pair.beginNameEnd);
+    let editedEnd = isChangeInRange(change, pair.endNameStart, pair.endNameEnd);
+    if (editedBegin == editedEnd) {
+      continue;
+    }
+    let editedStart = editedBegin ? pair.beginNameStart : pair.endNameStart;
+    let editedEndOffset = editedBegin ? pair.beginNameEnd : pair.endNameEnd;
+    let targetStart = editedBegin ? pair.endNameStart : pair.beginNameStart;
+    let targetEnd = editedBegin ? pair.endNameEnd : pair.beginNameEnd;
+    let mappedEdited = mapRangeAfterChange(editedStart, editedEndOffset, change);
+    let mappedTarget = mapRangeAfterChange(targetStart, targetEnd, change);
+    let nextName = afterText.slice(mappedEdited.start, mappedEdited.end);
+    let currentTargetName = afterText.slice(mappedTarget.start, mappedTarget.end);
+    if (!isValidEnvironmentName(nextName) || nextName == currentTargetName) {
+      return { handled: false, edits: [] };
+    }
+    return {
+      handled: true,
+      edits: [{ start: mappedTarget.start, end: mappedTarget.end, text: nextName }],
+      cursorOffset: mappedTarget.start
+    };
+  }
+  return { handled: false, edits: [] };
+}
+
+// src/snippets/engine/snippetProfiles.ts
+var import_fs = require("fs");
+var path5 = __toESM(require("path"));
+var PROFILE_ROOT_DIR = "profiles";
+var WORKSPACE_SNIPPET_DIR = path5.join(".vscode", "hsnips");
+function normalizeProfileName(profile) {
+  let normalized = (profile || "").trim();
+  if (!normalized || normalized == "." || normalized == ".." || normalized.includes("\0") || normalized.includes("/") || normalized.includes("\\")) {
+    return "";
+  }
+  return normalized;
+}
+function getProfilesDir(snippetDir) {
+  return path5.join(snippetDir, PROFILE_ROOT_DIR);
+}
+function getProfileDir(snippetDir, profile) {
+  return path5.join(getProfilesDir(snippetDir), profile);
+}
+function getWorkspaceSnippetDir(workspaceFolder) {
+  return path5.join(workspaceFolder, WORKSPACE_SNIPPET_DIR);
+}
+function isHsnipsFile(filePath) {
+  return path5.extname(filePath).toLowerCase() == ".hsnips";
+}
+function readSnippetFileEntries(directory, scope, profile = "", workspaceFolder) {
+  if (!(0, import_fs.existsSync)(directory)) {
+    return [];
+  }
+  let canonicalDirectory = canonicalPath(directory);
+  return (0, import_fs.readdirSync)(directory).filter((file) => isHsnipsFile(file)).filter((file) => isInside(canonicalPath(path5.join(directory, file)), canonicalDirectory)).sort((a, b) => a.localeCompare(b)).map((file) => {
+    let filePath = path5.join(directory, file);
+    return {
+      filePath,
+      language: path5.basename(file, ".hsnips").toLowerCase(),
+      profile,
+      scope,
+      workspaceFolder
+    };
+  });
+}
+function discoverSnippetProfiles(snippetDir) {
+  let profilesDir = getProfilesDir(snippetDir);
+  if (!(0, import_fs.existsSync)(profilesDir)) {
+    return [];
+  }
+  let canonicalProfilesDir = canonicalPath(profilesDir);
+  return (0, import_fs.readdirSync)(profilesDir).filter((name) => {
+    let filePath = path5.join(profilesDir, name);
+    return normalizeProfileName(name) == name && (0, import_fs.statSync)(filePath).isDirectory() && isInside(canonicalPath(filePath), canonicalProfilesDir);
+  }).sort((a, b) => a.localeCompare(b));
+}
+function getSnippetFilesForProfile(snippetDir, activeProfile = "") {
+  let profile = normalizeProfileName(activeProfile);
+  let files = readSnippetFileEntries(snippetDir, "base");
+  if (profile) {
+    files.push(...readSnippetFileEntries(getProfileDir(snippetDir, profile), "profile", profile));
+  }
+  return files;
+}
+function getSnippetFiles(snippetDir, activeProfile = "", workspaceSnippetDir, workspaceFolder) {
+  let files = getSnippetFilesForProfile(snippetDir, activeProfile);
+  if (workspaceSnippetDir) {
+    files.push(...readSnippetFileEntries(workspaceSnippetDir, "workspace", "", workspaceFolder));
+  }
+  return files;
+}
+function getWorkspaceSnippetFiles(workspaceFolder) {
+  return readSnippetFileEntries(
+    getWorkspaceSnippetDir(workspaceFolder),
+    "workspace",
+    "",
+    workspaceFolder
+  );
+}
+function ensureProfileDir(snippetDir, profile) {
+  let normalized = normalizeProfileName(profile);
+  if (!normalized) throw new Error("Snippet profile name is invalid.");
+  let profileDir = getProfileDir(snippetDir, normalized);
+  (0, import_fs.mkdirSync)(profileDir, { recursive: true });
+  return profileDir;
+}
+function canonicalPath(candidate) {
+  try {
+    return import_fs.realpathSync.native(candidate);
+  } catch {
+    return path5.resolve(candidate);
+  }
+}
+function isInside(candidate, root) {
+  let caseInsensitive = process.platform == "win32" || process.platform == "darwin";
+  let normalizedCandidate = caseInsensitive ? candidate.toLocaleLowerCase() : candidate;
+  let normalizedRoot = caseInsensitive ? root.toLocaleLowerCase() : root;
+  return normalizedCandidate == normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}${path5.sep}`);
+}
+
+// src/snippets/engine/host.ts
+var GLOBAL_SNIPPETS_BY_LANGUAGE = /* @__PURE__ */ new Map();
+var WORKSPACE_SNIPPETS_BY_FOLDER = /* @__PURE__ */ new Map();
+var SNIPPET_STACK = [];
+var insertingSnippet = false;
+var applyingLatexEdit = false;
+var latexContextCache;
+var latexContextOptionsCache;
+var DOCUMENT_TEXT_CACHE = /* @__PURE__ */ new WeakMap();
+var snippetOutput;
+function isLatexLikeDocument(document) {
+  return ["latex", "tex", "markdown"].includes(document.languageId.toLowerCase());
+}
+function getStringArrayConfiguration(path17) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path17);
+  return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
+}
+function getActiveSnippetProfile() {
+  return normalizeProfileName(
+    vscode5.workspace.getConfiguration("hsnips").get("profiles.activeProfile")
+  );
+}
+function readLatexContextOptions() {
+  return {
+    extraMathEnvironments: getStringArrayConfiguration("context.extraMathEnvironments"),
+    extraRowBreakEnvironments: getStringArrayConfiguration("context.extraRowBreakEnvironments"),
+    extraAlignmentEnvironments: getStringArrayConfiguration("context.extraAlignmentEnvironments"),
+    extraTextLikeCommands: getStringArrayConfiguration("context.extraTextLikeCommands")
+  };
+}
+function getLatexContextOptionsState() {
+  if (!latexContextOptionsCache) {
+    let options = readLatexContextOptions();
+    latexContextOptionsCache = {
+      options,
+      key: JSON.stringify(options)
+    };
+  }
+  return latexContextOptionsCache;
+}
+function getLatexContextOptions() {
+  return getLatexContextOptionsState().options;
+}
+function getCachedLatexContext(document, position) {
+  if (!isLatexLikeDocument(document)) {
+    return void 0;
+  }
+  let { options, key: optionsKey } = getLatexContextOptionsState();
+  let offset = document.offsetAt(position);
+  if (latexContextCache && latexContextCache.document == document && latexContextCache.version == document.version && latexContextCache.offset == offset && latexContextCache.optionsKey == optionsKey) {
+    return latexContextCache.context;
+  }
+  let context = getLatexContext(document.getText(), offset, options);
+  latexContextCache = {
+    document,
+    version: document.version,
+    offset,
+    optionsKey,
+    context
+  };
+  return context;
+}
+function updateMathContext(editor) {
+  let inLatexMath = false;
+  let canSmartEnter = false;
+  let canSmartTab = false;
+  if (editor) {
+    let context = getCachedLatexContext(editor.document, editor.selection.active);
+    if (context) {
+      inLatexMath = context.inMath;
+      canSmartEnter = context.canSmartEnter;
+      canSmartTab = context.canSmartTab;
+    }
+  }
+  vscode5.commands.executeCommand("setContext", "hsnips.inLatexMath", inLatexMath);
+  vscode5.commands.executeCommand("setContext", "hsnips.canSmartEnter", canSmartEnter);
+  vscode5.commands.executeCommand("setContext", "hsnips.canSmartTab", canSmartTab);
+  vscode5.commands.executeCommand("setContext", "hsnips.canInsertAlignmentSeparator", canSmartTab);
+}
+async function typeText(text) {
+  await vscode5.commands.executeCommand("type", { text });
+}
+async function applyEdits(editor, edits) {
+  applyingLatexEdit = true;
+  try {
+    return await editor.edit((editBuilder) => {
+      for (let edit of edits) {
+        editBuilder.replace(
+          new vscode5.Range(
+            editor.document.positionAt(edit.start),
+            editor.document.positionAt(edit.end)
+          ),
+          edit.text
+        );
+      }
+    });
+  } finally {
+    applyingLatexEdit = false;
+  }
+}
+async function smartEnter(editor) {
+  if (editor.selections.length != 1 || !editor.selection.isEmpty) {
+    await typeText("\n");
+    return;
+  }
+  let text = editor.document.getText();
+  let offset = editor.document.offsetAt(editor.selection.active);
+  let plan = getSmartEnterPlan(text, offset, getLatexContextOptions());
+  if (!plan.handled) {
+    await typeText("\n");
+    return;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted) {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+}
+function isPlainEnterChange(change) {
+  return change.rangeLength == 0 && /^\r?\n[ \t]*$/.test(change.text);
+}
+async function recoverSmartEnterAfterPlainEnter(editor, change) {
+  if (applyingLatexEdit || !isPlainEnterChange(change)) {
+    return false;
+  }
+  let currentText = editor.document.getText();
+  let beforeEnterText = currentText.slice(0, change.rangeOffset) + currentText.slice(change.rangeOffset + change.text.length);
+  let plan = getSmartEnterRecoveryPlan(
+    beforeEnterText,
+    change.rangeOffset,
+    currentText,
+    getLatexContextOptions()
+  );
+  if (!plan.handled) {
+    return false;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted && typeof plan.cursorOffset == "number") {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+  return inserted;
+}
+function getTextBeforeChange(currentText, change) {
+  return currentText.slice(0, change.rangeOffset) + currentText.slice(change.rangeOffset + change.text.length);
+}
+async function recoverEnvironmentNameSyncAfterChange(editor, change, beforeText, currentText) {
+  if (applyingLatexEdit || !isLatexLikeDocument(editor.document)) {
+    return false;
+  }
+  let plan = createEnvironmentNameSyncPlan(
+    beforeText,
+    currentText,
+    {
+      rangeOffset: change.rangeOffset,
+      rangeLength: change.rangeLength,
+      text: change.text
+    },
+    getLatexContextOptions()
+  );
+  if (!plan.handled) {
+    return false;
+  }
+  applyingLatexEdit = true;
+  try {
+    return await editor.edit(
+      (editBuilder) => {
+        for (let edit of plan.edits) {
+          editBuilder.replace(
+            new vscode5.Range(
+              editor.document.positionAt(edit.start),
+              editor.document.positionAt(edit.end)
+            ),
+            edit.text
+          );
+        }
+      },
+      { undoStopBefore: false, undoStopAfter: false }
+    );
+  } finally {
+    applyingLatexEdit = false;
+  }
+}
+async function nextSnippetPlaceholder() {
+  if (SNIPPET_STACK[0] && !SNIPPET_STACK[0].nextPlaceholder()) {
+    SNIPPET_STACK.shift();
+  }
+  await vscode5.commands.executeCommand("jumpToNextSnippetPlaceholder");
+}
+async function fallbackTab() {
+  if (SNIPPET_STACK.length) {
+    await nextSnippetPlaceholder();
+    return;
+  }
+  try {
+    await vscode5.commands.executeCommand("editor.action.insertTab");
+  } catch {
+    await typeText("	");
+  }
+}
+async function smartTab(editor) {
+  let text = editor.document.getText();
+  let options = getLatexContextOptions();
+  let shouldInsertSeparator = editor.selections.every((selection) => {
+    return shouldInsertAlignmentSeparator(text, editor.document.offsetAt(selection.active), options);
+  });
+  if (!shouldInsertSeparator) {
+    await fallbackTab();
+    return;
+  }
+  await editor.edit((editBuilder) => {
+    for (let selection of editor.selections) {
+      editBuilder.replace(selection, " & ");
+    }
+  });
+}
+async function convertEnvironment(editor) {
+  let text = editor.document.getText();
+  let options = getLatexContextOptions();
+  let selection = editor.selection;
+  let offset = editor.document.offsetAt(selection.active);
+  let selectionStart = editor.document.offsetAt(selection.start);
+  let selectionEnd = editor.document.offsetAt(selection.end);
+  let environmentPair = findLatexEnvironmentPairAt(text, offset, options);
+  let delimiterPair = findDisplayMathDelimiterAt(text, offset);
+  let currentName = environmentPair?.name;
+  let target = await vscode5.window.showQuickPick(
+    CONVERTIBLE_ENVIRONMENTS.filter((environment) => environment != currentName).map((environment) => ({
+      label: environment,
+      description: isTableLikeEnvironment(environment) ? "table-like environment" : "math environment"
+    })),
+    {
+      placeHolder: currentName ? `Convert ${currentName} to...` : selection.isEmpty ? "Convert display math to..." : "Wrap selection with..."
+    }
+  );
+  if (!target) {
+    return;
+  }
+  let targetArguments = "";
+  if (isTableLikeEnvironment(target.label)) {
+    let needsArguments = !environmentPair || conversionNeedsTableArguments(text, offset, target.label);
+    if (needsArguments) {
+      let columnSpec = await vscode5.window.showInputBox({
+        prompt: `Column specification for ${target.label}`,
+        value: "c",
+        ignoreFocusOut: true
+      });
+      if (columnSpec === void 0) {
+        return;
+      }
+      targetArguments = formatTableArguments(target.label, columnSpec);
+    }
+  }
+  let plan = !selection.isEmpty && !environmentPair && !delimiterPair ? createWrapEnvironmentPlan(text, selectionStart, selectionEnd, target.label, targetArguments) : createEnvironmentConversionPlan(text, offset, target.label, targetArguments, options);
+  if (!plan.handled) {
+    vscode5.window.showInformationMessage("No LaTeX environment or display math delimiter found at the cursor.");
+    return;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted && typeof plan.cursorOffset == "number") {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+}
+async function renameMatchingEnvironment(editor) {
+  let text = editor.document.getText();
+  let offset = editor.document.offsetAt(editor.selection.active);
+  let pair = findLatexEnvironmentPairAt(text, offset, getLatexContextOptions());
+  if (!pair) {
+    vscode5.window.showInformationMessage("No LaTeX environment found at the cursor.");
+    return;
+  }
+  let targetName = await vscode5.window.showInputBox({
+    prompt: `Rename matching \\begin/\\end for ${pair.name}`,
+    value: pair.name,
+    ignoreFocusOut: true,
+    validateInput(value) {
+      return isValidEnvironmentName(value.trim()) ? void 0 : "Environment name cannot be empty or contain braces/whitespace.";
+    }
+  });
+  if (targetName === void 0) {
+    return;
+  }
+  let plan = createEnvironmentNameOnlyRenamePlan(pair, targetName);
+  if (!plan.handled) {
+    return;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted && typeof plan.cursorOffset == "number") {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+}
+async function pickMathStructureTarget() {
+  let target = await vscode5.window.showQuickPick(
+    WRAPPABLE_MATH_ENVIRONMENTS.map((environment) => ({
+      label: environment,
+      description: isTableLikeEnvironment(environment) ? "matrix/table-like environment" : "math environment"
+    })),
+    { placeHolder: "Wrap with..." }
+  );
+  return target?.label;
+}
+async function getTargetArgumentsIfNeeded(targetName) {
+  if (!isTableLikeEnvironment(targetName)) {
+    return "";
+  }
+  let columnSpec = await vscode5.window.showInputBox({
+    prompt: `Column specification for ${targetName}`,
+    value: "c",
+    ignoreFocusOut: true
+  });
+  if (columnSpec === void 0) {
+    return void 0;
+  }
+  return formatTableArguments(targetName, columnSpec);
+}
+async function wrapMathStructure(editor) {
+  let targetName = await pickMathStructureTarget();
+  if (!targetName) {
+    return;
+  }
+  let targetArguments = await getTargetArgumentsIfNeeded(targetName);
+  if (targetArguments === void 0) {
+    return;
+  }
+  let text = editor.document.getText();
+  let selection = editor.selection;
+  let selectionStart = editor.document.offsetAt(selection.start);
+  let selectionEnd = editor.document.offsetAt(selection.end);
+  let plan = !selection.isEmpty ? createWrapEnvironmentPlan(text, selectionStart, selectionEnd, targetName, targetArguments) : createWrapCurrentMathStructurePlan(
+    text,
+    editor.document.offsetAt(selection.active),
+    targetName,
+    targetArguments,
+    getLatexContextOptions()
+  );
+  if (!plan.handled) {
+    vscode5.window.showInformationMessage("Select text or place the cursor inside a math structure to wrap.");
+    return;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted && typeof plan.cursorOffset == "number") {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+}
+async function unwrapMathStructure(editor) {
+  let text = editor.document.getText();
+  let plan = createUnwrapMathStructurePlan(
+    text,
+    editor.document.offsetAt(editor.selection.active),
+    getLatexContextOptions()
+  );
+  if (!plan.handled) {
+    vscode5.window.showInformationMessage("No supported math structure found at the cursor.");
+    return;
+  }
+  let inserted = await applyEdits(editor, plan.edits);
+  if (inserted && typeof plan.cursorOffset == "number") {
+    let newPosition = editor.document.positionAt(plan.cursorOffset);
+    editor.selection = new vscode5.Selection(newPosition, newPosition);
+    editor.revealRange(new vscode5.Range(newPosition, newPosition));
+  }
+}
+function reportSnippetLoadErrors(errors) {
+  if (!errors.length) {
+    return;
+  }
+  for (let error of errors) snippetOutput?.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] SNIPPET PARSE ${error}`);
+  snippetOutput?.appendLine(`Skipped ${errors.length} snippet file${errors.length == 1 ? "" : "s"}; the Snippets inspector remains available.`);
+  snippetOutput?.appendLine("");
+}
+function readSnippetMap(entries) {
+  let snippetsByLanguage = /* @__PURE__ */ new Map();
+  let errors = [];
+  for (let entry of entries) {
+    try {
+      let fileData = (0, import_fs2.readFileSync)(entry.filePath, "utf8");
+      let snippetList = snippetsByLanguage.get(entry.language);
+      if (!snippetList) {
+        snippetList = [];
+        snippetsByLanguage.set(entry.language, snippetList);
+      }
+      snippetList.push(...parse(fileData));
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      errors.push(`${entry.filePath}: ${message}`);
+    }
+  }
+  return { snippetsByLanguage, errors };
+}
+async function loadSnippets() {
+  GLOBAL_SNIPPETS_BY_LANGUAGE.clear();
+  WORKSPACE_SNIPPETS_BY_FOLDER.clear();
+  let snippetDir = getSnippetDir();
+  if (!(0, import_fs2.existsSync)(snippetDir)) {
+    (0, import_fs2.mkdirSync)(snippetDir, { recursive: true });
+  }
+  let { snippetsByLanguage, errors } = readSnippetMap(
+    getSnippetFilesForProfile(snippetDir, getActiveSnippetProfile())
+  );
+  for (let [language, snippets] of snippetsByLanguage.entries()) {
+    GLOBAL_SNIPPETS_BY_LANGUAGE.set(language, snippets);
+  }
+  reportSnippetLoadErrors(errors);
+}
+function getWorkspaceFolderForDocument(document) {
+  if (document.uri.scheme != "file") {
+    return void 0;
+  }
+  return vscode5.workspace.getWorkspaceFolder(document.uri);
+}
+function loadWorkspaceSnippets(workspaceFolder) {
+  let key = workspaceFolder.uri.fsPath;
+  let cached = WORKSPACE_SNIPPETS_BY_FOLDER.get(key);
+  if (cached) {
+    return cached;
+  }
+  let { snippetsByLanguage, errors } = readSnippetMap(getWorkspaceSnippetFiles(key));
+  WORKSPACE_SNIPPETS_BY_FOLDER.set(key, snippetsByLanguage);
+  reportSnippetLoadErrors(errors);
+  return snippetsByLanguage;
+}
+function appendSnippetsForLanguage(target, snippetsByLanguage, language) {
+  let languageSnippets = snippetsByLanguage.get(language);
+  if (languageSnippets) {
+    target.push(...languageSnippets);
+  }
+  if (language != "all") {
+    let globalSnippets = snippetsByLanguage.get("all");
+    if (globalSnippets) {
+      target.push(...globalSnippets);
+    }
+  }
+}
+function getSnippetsForDocument(document) {
+  let language = document.languageId.toLowerCase();
+  let snippets = [];
+  appendSnippetsForLanguage(snippets, GLOBAL_SNIPPETS_BY_LANGUAGE, language);
+  let workspaceFolder = getWorkspaceFolderForDocument(document);
+  if (workspaceFolder) {
+    appendSnippetsForLanguage(snippets, loadWorkspaceSnippets(workspaceFolder), language);
+  }
+  snippets.sort((a, b) => b.priority - a.priority);
+  return snippets.length ? snippets : void 0;
+}
+function getActiveWorkspaceFolder() {
+  let editor = vscode5.window.activeTextEditor;
+  if (editor) {
+    let workspaceFolder = getWorkspaceFolderForDocument(editor.document);
+    if (workspaceFolder) {
+      return workspaceFolder;
+    }
+  }
+  return vscode5.workspace.workspaceFolders?.[0];
+}
+function getActiveWorkspaceSnippetDir() {
+  let workspaceFolder = getActiveWorkspaceFolder();
+  return workspaceFolder ? getWorkspaceSnippetDir(workspaceFolder.uri.fsPath) : void 0;
+}
+function getWorkspaceSnippetLanguageChoices(workspaceFolder) {
+  let activeLanguage = vscode5.window.activeTextEditor?.document.languageId.toLowerCase();
+  let languages2 = /* @__PURE__ */ new Set(["latex", "tex", "all"]);
+  for (let entry of getWorkspaceSnippetFiles(workspaceFolder.uri.fsPath)) {
+    languages2.add(entry.language);
+  }
+  if (activeLanguage && activeLanguage != "hsnips" && activeLanguage != "plaintext") {
+    languages2.add(activeLanguage);
+  }
+  return [...languages2];
+}
+async function openWorkspaceSnippetFile() {
+  let workspaceFolder = getActiveWorkspaceFolder();
+  if (!workspaceFolder) {
+    vscode5.window.showInformationMessage("Open a workspace folder to create workspace snippets.");
+    return;
+  }
+  let workspaceSnippetDir = getWorkspaceSnippetDir(workspaceFolder.uri.fsPath);
+  (0, import_fs2.mkdirSync)(workspaceSnippetDir, { recursive: true });
+  let picked = await vscode5.window.showQuickPick(
+    getWorkspaceSnippetLanguageChoices(workspaceFolder).map((language) => {
+      let filePath = path6.join(workspaceSnippetDir, `${language}.hsnips`);
+      return {
+        label: `${language}.hsnips`,
+        description: (0, import_fs2.existsSync)(filePath) ? "workspace" : "create",
+        detail: filePath,
+        filePath
+      };
+    }),
+    { placeHolder: "Create or open workspace snippet file" }
+  );
+  if (!picked) {
+    return;
+  }
+  if (!(0, import_fs2.existsSync)(picked.filePath)) {
+    (0, import_fs2.writeFileSync)(picked.filePath, "", "utf8");
+    WORKSPACE_SNIPPETS_BY_FOLDER.delete(workspaceFolder.uri.fsPath);
+  }
+  let document = await vscode5.workspace.openTextDocument(picked.filePath);
+  await vscode5.window.showTextDocument(document);
+}
+async function selectSnippetProfile() {
+  let snippetDir = getSnippetDir();
+  if (!(0, import_fs2.existsSync)(snippetDir)) {
+    (0, import_fs2.mkdirSync)(snippetDir, { recursive: true });
+  }
+  let activeProfile = getActiveSnippetProfile();
+  let profiles = discoverSnippetProfiles(snippetDir);
+  let picked = await vscode5.window.showQuickPick(
+    [
+      {
+        label: "Base only",
+        description: activeProfile ? void 0 : "current",
+        profile: ""
+      },
+      ...profiles.map((profile) => ({
+        label: profile,
+        description: profile == activeProfile ? "current" : void 0,
+        profile
+      }))
+    ],
+    { placeHolder: "Select active snippet profile" }
+  );
+  if (!picked) {
+    return;
+  }
+  await vscode5.workspace.getConfiguration("hsnips").update("profiles.activeProfile", picked.profile, vscode5.ConfigurationTarget.Global);
+  await loadSnippets();
+  vscode5.window.showInformationMessage(
+    picked.profile ? `LaTeX Toolkit snippet profile: ${picked.profile}` : "LaTeX Toolkit snippet profile: base only"
+  );
+}
+async function openActiveSnippetProfile() {
+  let snippetDir = getSnippetDir();
+  let activeProfile = getActiveSnippetProfile();
+  if (!activeProfile) {
+    vscode5.window.showInformationMessage("No active snippet profile selected. Opening the base snippets directory.");
+    openExplorer(snippetDir);
+    return;
+  }
+  openExplorer(ensureProfileDir(snippetDir, activeProfile));
+}
+async function expandSnippet(completion, editor, snippetExpansion = false) {
+  let snippetInstance = new HSnippetInstance(
+    completion.snippet,
+    editor,
+    completion.range.start,
+    completion.groups
+  );
+  let insertionRange = completion.range.start;
+  insertingSnippet = true;
+  await editor.edit(
+    (eb) => {
+      eb.delete(snippetExpansion ? completion.completionRange : completion.range);
+    },
+    { undoStopAfter: false, undoStopBefore: !snippetExpansion }
+  );
+  await editor.insertSnippet(snippetInstance.snippetString, insertionRange, {
+    undoStopAfter: false,
+    undoStopBefore: false
+  });
+  if (snippetInstance.selectedPlaceholder != 0) SNIPPET_STACK.unshift(snippetInstance);
+  insertingSnippet = false;
+}
+function snippetCommandError(output, commandId, error) {
+  let normalized = error instanceof Error ? error : new Error(String(error));
+  output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ERROR ${commandId}`);
+  output.appendLine(`Workspace: ${vscode5.window.activeTextEditor?.document.uri.fsPath || vscode5.workspace.workspaceFolders?.[0]?.uri.fsPath || "(no local workspace)"}`);
+  output.appendLine(normalized.stack || normalized.message);
+  output.appendLine("");
+}
+function snippetCommandCancelled(error) {
+  return error instanceof vscode5.CancellationError || error instanceof Error && /cancelled|canceled/i.test(error.message);
+}
+function registerSnippetHost(context, output) {
+  snippetOutput = output;
+  const guarded = (commandId, handler) => async (...args) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      if (snippetCommandCancelled(error)) return void 0;
+      snippetCommandError(output, commandId, error);
+      let action = await vscode5.window.showErrorMessage(`LaTeX Editing Toolkit: ${error instanceof Error ? error.message : String(error)}`, "Show Log");
+      if (action == "Show Log") output.show(true);
+      return void 0;
+    }
+  };
+  loadSnippets();
+  if (vscode5.window.activeTextEditor) {
+    DOCUMENT_TEXT_CACHE.set(
+      vscode5.window.activeTextEditor.document,
+      vscode5.window.activeTextEditor.document.getText()
+    );
+  }
+  updateMathContext(vscode5.window.activeTextEditor);
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.openSnippetsDir", guarded("hsnips.openSnippetsDir", () => openExplorer(getSnippetDir())))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.openSnippetFile", guarded("hsnips.openSnippetFile", async () => {
+      let snippetDir = getSnippetDir();
+      if (!(0, import_fs2.existsSync)(snippetDir)) {
+        (0, import_fs2.mkdirSync)(snippetDir, { recursive: true });
+      }
+      let files = getSnippetFiles(
+        snippetDir,
+        getActiveSnippetProfile(),
+        getActiveWorkspaceSnippetDir(),
+        getActiveWorkspaceFolder()?.uri.fsPath
+      );
+      let selectedFile = await vscode5.window.showQuickPick(
+        files.map((entry) => ({
+          label: path6.basename(entry.filePath),
+          description: entry.scope == "profile" ? `profile:${entry.profile}` : entry.scope,
+          detail: entry.filePath,
+          filePath: entry.filePath
+        })),
+        { placeHolder: "Open snippet file" }
+      );
+      if (selectedFile) {
+        let document = await vscode5.workspace.openTextDocument(selectedFile.filePath);
+        vscode5.window.showTextDocument(document);
+      }
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.openWorkspaceSnippetsDir", guarded("hsnips.openWorkspaceSnippetsDir", () => {
+      let workspaceSnippetDir = getActiveWorkspaceSnippetDir();
+      if (!workspaceSnippetDir) {
+        vscode5.window.showInformationMessage("Open a workspace folder to use workspace snippets.");
+        return;
+      }
+      (0, import_fs2.mkdirSync)(workspaceSnippetDir, { recursive: true });
+      openExplorer(workspaceSnippetDir);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.openWorkspaceSnippetFile", guarded("hsnips.openWorkspaceSnippetFile", () => openWorkspaceSnippetFile()))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.reloadSnippets", guarded("hsnips.reloadSnippets", () => loadSnippets()))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.selectProfile", guarded("hsnips.selectProfile", () => selectSnippetProfile()))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.openActiveProfile", guarded("hsnips.openActiveProfile", () => openActiveSnippetProfile()))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.leaveSnippet", guarded("hsnips.leaveSnippet", () => {
+      while (SNIPPET_STACK.length) SNIPPET_STACK.pop();
+      vscode5.commands.executeCommand("leaveSnippet");
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.nextPlaceholder", guarded("hsnips.nextPlaceholder", () => {
+      return nextSnippetPlaceholder();
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerCommand("hsnips.prevPlaceholder", guarded("hsnips.prevPlaceholder", () => {
+      if (SNIPPET_STACK[0] && !SNIPPET_STACK[0].prevPlaceholder()) {
+        SNIPPET_STACK.shift();
+      }
+      vscode5.commands.executeCommand("jumpToPrevSnippetPlaceholder");
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.smartEnter", guarded("hsnips.smartEnter", (editor) => {
+      return smartEnter(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.matrixTab", guarded("hsnips.matrixTab", (editor) => {
+      return smartTab(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.smartTab", guarded("hsnips.smartTab", (editor) => {
+      return smartTab(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.convertEnvironment", guarded("hsnips.convertEnvironment", (editor) => {
+      return convertEnvironment(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.renameMatchingEnvironment", guarded("hsnips.renameMatchingEnvironment", (editor) => {
+      return renameMatchingEnvironment(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.wrapMathStructure", guarded("hsnips.wrapMathStructure", (editor) => {
+      return wrapMathStructure(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand("hsnips.unwrapMathStructure", guarded("hsnips.unwrapMathStructure", (editor) => {
+      return unwrapMathStructure(editor);
+    }))
+  );
+  context.subscriptions.push(
+    vscode5.workspace.onDidSaveTextDocument((document) => {
+      if (document.languageId == "hsnips") {
+        loadSnippets();
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode5.workspace.onDidChangeWorkspaceFolders(() => {
+      WORKSPACE_SNIPPETS_BY_FOLDER.clear();
+    })
+  );
+  context.subscriptions.push(
+    vscode5.commands.registerTextEditorCommand(
+      "hsnips.expand",
+      guarded("hsnips.expand", (editor, _, completion) => {
+        expandSnippet(completion, editor, true);
+      })
+    )
+  );
+  function getDocumentLatexContext(document, offset) {
+    return getCachedLatexContext(document, document.positionAt(offset));
+  }
+  function getEditorLatexContext(editor, position = editor.selection.start) {
+    return getDocumentLatexContext(editor.document, editor.document.offsetAt(position));
+  }
+  function canExpandSnippetInContext(snippet, latexContext) {
+    if (snippet.math) {
+      return Boolean(latexContext?.canExpandMathSnippet);
+    }
+    if (snippet.text && latexContext?.inMath) {
+      return false;
+    }
+    return true;
+  }
+  context.subscriptions.push(
+    vscode5.workspace.onDidChangeTextDocument(async (e) => {
+      let previousText = DOCUMENT_TEXT_CACHE.get(e.document);
+      let currentText = e.document.getText();
+      let activeEditor = vscode5.window.activeTextEditor;
+      try {
+        if (activeEditor && e.document == activeEditor.document) {
+          updateMathContext(activeEditor);
+        }
+        if (SNIPPET_STACK.length && SNIPPET_STACK[0].editor.document == e.document) {
+          SNIPPET_STACK[0].update(e.contentChanges);
+        }
+        if (insertingSnippet) return;
+        let mainChange = e.contentChanges[0];
+        if (!mainChange) return;
+        if (activeEditor && e.document == activeEditor.document && e.contentChanges.length == 1 && await recoverEnvironmentNameSyncAfterChange(
+          activeEditor,
+          mainChange,
+          previousText || getTextBeforeChange(currentText, mainChange),
+          currentText
+        )) {
+          return;
+        }
+        if (activeEditor && e.document == activeEditor.document && isPlainEnterChange(mainChange)) {
+          void recoverSmartEnterAfterPlainEnter(activeEditor, mainChange).then(void 0, console.error);
+          return;
+        }
+        if (mainChange.text.length != 1) return;
+        let snippets = getSnippetsForDocument(e.document);
+        if (!snippets) return;
+        let editor = vscode5.window.activeTextEditor;
+        if (!editor || e.document != editor.document) return;
+        let latexContext = getEditorLatexContext(editor);
+        snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
+        let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
+        let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
+        if (completion) {
+          expandSnippet(completion, editor);
+          return;
+        }
+      } finally {
+        DOCUMENT_TEXT_CACHE.set(e.document, e.document.getText());
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode5.window.onDidChangeVisibleTextEditors(() => {
+      while (SNIPPET_STACK.length) SNIPPET_STACK.pop();
+      updateMathContext(vscode5.window.activeTextEditor);
+    })
+  );
+  context.subscriptions.push(
+    vscode5.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor) {
+        DOCUMENT_TEXT_CACHE.set(editor.document, editor.document.getText());
+      }
+      updateMathContext(editor);
+    })
+  );
+  context.subscriptions.push(
+    vscode5.window.onDidChangeTextEditorSelection((e) => {
+      while (SNIPPET_STACK.length) {
+        if (e.selections.some((s) => SNIPPET_STACK[0].range.contains(s))) {
+          break;
+        }
+        SNIPPET_STACK.shift();
+      }
+      updateMathContext(e.textEditor);
+    })
+  );
+  context.subscriptions.push(
+    vscode5.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("hsnips.context")) {
+        latexContextCache = void 0;
+        latexContextOptionsCache = void 0;
+        updateMathContext(vscode5.window.activeTextEditor);
+      }
+      if (event.affectsConfiguration("hsnips.profiles.activeProfile")) {
+        loadSnippets();
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode5.languages.registerCompletionItemProvider([{ scheme: "untitled" }, { scheme: "file" }], {
+      provideCompletionItems(document, position) {
+        let snippets = getSnippetsForDocument(document);
+        if (!snippets) return;
+        let editor = vscode5.window.activeTextEditor;
+        if (!editor || document != editor.document) return;
+        let latexContext = getDocumentLatexContext(document, document.offsetAt(position));
+        snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
+        let completions = getCompletions(document, position, snippets);
+        if (completions && Array.isArray(completions)) {
+          return completions.map((c) => c.toCompletionItem());
+        }
+      }
+    })
+  );
+}
+
+// src/snippets/snippetService.ts
+var import_node_fs7 = require("node:fs");
+var path8 = __toESM(require("node:path"));
+var vscode6 = __toESM(require("vscode"));
+
+// src/snippets/snippetManagerModel.ts
+var import_node_fs5 = require("node:fs");
+
+// src/snippets/engine/snippetDocument.ts
+var import_crypto = require("crypto");
+var HEADER_REGEXP2 = /^snippet(?:\s+(?:`([^`]*)`|(\S+)))?(?:\s+"([^"]*)")?(?:\s+(\S+))?\s*$/;
+var VALID_FLAGS = /^[AMiwbmt]*$/;
+function getSourceLines(content) {
+  let lines = [];
+  let start = 0;
+  if (content.length == 0) {
+    return [{ text: "", start: 0, end: 0, endIncludingNewline: 0 }];
+  }
+  while (start < content.length) {
+    let newline = content.indexOf("\n", start);
+    if (newline == -1) {
+      lines.push({
+        text: content.slice(start),
+        start,
+        end: content.length,
+        endIncludingNewline: content.length
+      });
+      break;
+    }
+    let lineEnd = newline > start && content[newline - 1] == "\r" ? newline - 1 : newline;
+    lines.push({
+      text: content.slice(start, lineEnd),
+      start,
+      end: lineEnd,
+      endIncludingNewline: newline + 1
+    });
+    start = newline + 1;
+  }
+  return lines;
+}
+function hashText(text) {
+  return (0, import_crypto.createHash)("sha256").update(text).digest("hex");
+}
+function assertExpectedSnippetDocumentHash(content, expectedHash) {
+  if (expectedHash && hashText(content) != expectedHash) {
+    throw new Error("The snippet file changed on disk. Reload the manager before saving.");
+  }
+}
+function parseHeader(line) {
+  let match = HEADER_REGEXP2.exec(line);
+  if (!match) {
+    return void 0;
+  }
+  return {
+    isRegex: match[1] !== void 0,
+    trigger: match[1] ?? match[2] ?? "",
+    description: match[3] ?? "",
+    flags: match[4] ?? ""
+  };
+}
+function createDiagnostic(severity, message, line, snippetId) {
+  return { severity, message, line, snippetId };
+}
+function collectBlockDiagnostics(block) {
+  let diagnostics = [];
+  if (!block.trigger) {
+    diagnostics.push(createDiagnostic("error", "Snippet trigger is empty.", block.startLine, block.id));
+  }
+  if (!VALID_FLAGS.test(block.flags)) {
+    diagnostics.push(createDiagnostic("error", `Invalid flags: ${block.flags}`, block.startLine, block.id));
+  }
+  if (!block.isSimple) {
+    diagnostics.push(
+      createDiagnostic(
+        "info",
+        "Complex snippets are read-only in the manager; open the source file to edit them.",
+        block.startLine,
+        block.id
+      )
+    );
+  }
+  return diagnostics;
+}
+function addDuplicateDiagnostics(document) {
+  let byTrigger = /* @__PURE__ */ new Map();
+  let automaticByTrigger = /* @__PURE__ */ new Map();
+  for (let snippet of document.snippets) {
+    if (snippet.isRegex || !snippet.trigger) continue;
+    let key = snippet.trigger;
+    byTrigger.set(key, [...byTrigger.get(key) || [], snippet]);
+    if (snippet.flags.includes("A")) {
+      automaticByTrigger.set(key, [...automaticByTrigger.get(key) || [], snippet]);
+    }
+  }
+  for (let snippets of byTrigger.values()) {
+    if (snippets.length < 2) continue;
+    for (let snippet of snippets) {
+      snippet.diagnostics.push(
+        createDiagnostic("warning", `Duplicate trigger "${snippet.trigger}".`, snippet.startLine, snippet.id)
+      );
+    }
+  }
+  for (let snippets of automaticByTrigger.values()) {
+    if (snippets.length < 2) continue;
+    for (let snippet of snippets) {
+      snippet.diagnostics.push(
+        createDiagnostic(
+          "warning",
+          `Multiple automatic snippets use trigger "${snippet.trigger}".`,
+          snippet.startLine,
+          snippet.id
+        )
+      );
+    }
+  }
+}
+function parseSnippetDocument(content, filePath = "", language = "") {
+  let lines = getSourceLines(content);
+  let snippets = [];
+  let diagnostics = [];
+  let priority = 0;
+  let priorityStart;
+  let priorityLineIndex;
+  let inGlobal = false;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    let line = lines[lineIndex];
+    let trimmed = line.text.trim();
+    if (inGlobal) {
+      if (trimmed == "endglobal") {
+        inGlobal = false;
+      }
+      continue;
+    }
+    if (trimmed == "global") {
+      inGlobal = true;
+      continue;
+    }
+    if (trimmed.startsWith("priority ")) {
+      priority = Number(trimmed.substring("priority ".length).trim()) || 0;
+      priorityStart = line.start;
+      priorityLineIndex = lineIndex;
+      continue;
+    }
+    if (!trimmed.startsWith("snippet")) {
+      continue;
+    }
+    let header = parseHeader(trimmed);
+    if (!header) {
+      diagnostics.push(createDiagnostic("error", "Invalid snippet header.", lineIndex));
+      priority = 0;
+      priorityStart = void 0;
+      priorityLineIndex = void 0;
+      continue;
+    }
+    let endLineIndex = lineIndex + 1;
+    while (endLineIndex < lines.length && lines[endLineIndex].text.trim() != "endsnippet") {
+      endLineIndex++;
+    }
+    let bodyStart = line.endIncludingNewline;
+    let bodyEnd = endLineIndex < lines.length ? lines[endLineIndex].start : content.length;
+    let body = content.slice(bodyStart, bodyEnd).replace(/\r?\n$/, "");
+    let endOffset = endLineIndex < lines.length ? lines[endLineIndex].endIncludingNewline : content.length;
+    let id = `${filePath}:${line.start}`;
+    let isDynamic = body.includes("``");
+    let canReplacePriority = priorityLineIndex !== void 0 && lines.slice(priorityLineIndex + 1, lineIndex).every((sourceLine) => sourceLine.text.trim() == "");
+    let isSimple = !header.isRegex && !isDynamic && Boolean(header.trigger) && !/\s/.test(header.trigger) && VALID_FLAGS.test(header.flags);
+    let block = {
+      id,
+      trigger: header.trigger,
+      description: header.description,
+      flags: header.flags,
+      priority,
+      body,
+      language,
+      filePath,
+      startLine: lineIndex,
+      endLine: endLineIndex < lines.length ? endLineIndex : lines.length - 1,
+      headerStart: line.start,
+      endOffset,
+      priorityStart: canReplacePriority ? priorityStart : void 0,
+      isRegex: header.isRegex,
+      isDynamic,
+      isSimple,
+      diagnostics: []
+    };
+    if (endLineIndex >= lines.length) {
+      block.diagnostics.push(createDiagnostic("error", "Snippet is missing endsnippet.", lineIndex, id));
+    }
+    block.diagnostics.push(...collectBlockDiagnostics(block));
+    snippets.push(block);
+    lineIndex = endLineIndex;
+    priority = 0;
+    priorityStart = void 0;
+    priorityLineIndex = void 0;
+  }
+  let document = {
+    filePath,
+    language,
+    content,
+    hash: hashText(content),
+    snippets,
+    diagnostics
+  };
+  addDuplicateDiagnostics(document);
+  document.diagnostics.push(...document.snippets.flatMap((snippet) => snippet.diagnostics));
+  return document;
+}
+
+// src/snippets/snippetManagerModel.ts
+function crossDocumentDiagnostic(message, snippet) {
+  return {
+    severity: "warning",
+    message,
+    line: snippet.startLine,
+    snippetId: snippet.id
+  };
+}
+function addCrossDocumentDuplicateDiagnostics(documents) {
+  const byTrigger = /* @__PURE__ */ new Map();
+  const automaticByTrigger = /* @__PURE__ */ new Map();
+  for (const document of documents) {
+    for (const snippet of document.snippets) {
+      if (snippet.isRegex || !snippet.trigger) continue;
+      byTrigger.set(snippet.trigger, [...byTrigger.get(snippet.trigger) || [], snippet]);
+      if (snippet.flags.includes("A")) {
+        automaticByTrigger.set(snippet.trigger, [...automaticByTrigger.get(snippet.trigger) || [], snippet]);
+      }
+    }
+  }
+  for (const snippets of byTrigger.values()) {
+    if (new Set(snippets.map((snippet) => snippet.filePath)).size < 2) continue;
+    for (const snippet of snippets) {
+      const diagnostic = crossDocumentDiagnostic(`Duplicate trigger "${snippet.trigger}" across loaded snippet files.`, snippet);
+      snippet.diagnostics.push(diagnostic);
+      documents.find((document) => document.filePath === snippet.filePath)?.diagnostics.push(diagnostic);
+    }
+  }
+  for (const snippets of automaticByTrigger.values()) {
+    if (new Set(snippets.map((snippet) => snippet.filePath)).size < 2) continue;
+    for (const snippet of snippets) {
+      const diagnostic = crossDocumentDiagnostic(`Multiple automatic snippets use trigger "${snippet.trigger}" across loaded snippet files.`, snippet);
+      snippet.diagnostics.push(diagnostic);
+      documents.find((document) => document.filePath === snippet.filePath)?.diagnostics.push(diagnostic);
+    }
+  }
+}
+function readSnippetDocuments(snippetDir, activeProfile = "", workspaceSnippetDir, workspaceFolder) {
+  if (!(0, import_node_fs5.existsSync)(snippetDir)) (0, import_node_fs5.mkdirSync)(snippetDir, { recursive: true });
+  const documents = [];
+  for (const entry of getSnippetFiles(snippetDir, activeProfile, workspaceSnippetDir, workspaceFolder)) {
+    try {
+      const content = (0, import_node_fs5.readFileSync)(entry.filePath, "utf8");
+      const document = parseSnippetDocument(content, entry.filePath, entry.language);
+      document.mtimeMs = (0, import_node_fs5.statSync)(entry.filePath).mtimeMs;
+      document.sourceScope = entry.scope;
+      document.profile = entry.profile;
+      document.workspaceFolder = entry.workspaceFolder;
+      documents.push(document);
+    } catch {
+    }
+  }
+  addCrossDocumentDuplicateDiagnostics(documents);
+  return documents;
+}
+
+// src/snippets/pathPolicy.ts
+var import_node_fs6 = require("node:fs");
+var path7 = __toESM(require("node:path"));
+async function canonicalSnippetPath(candidate, mustExist) {
+  const resolved = path7.resolve(candidate);
+  try {
+    return await import_node_fs6.promises.realpath(resolved);
+  } catch (error) {
+    if (mustExist) throw error;
+    try {
+      return path7.join(await import_node_fs6.promises.realpath(path7.dirname(resolved)), path7.basename(resolved));
+    } catch {
+      return resolved;
+    }
+  }
+}
+async function assertSnippetPathAllowed(filePath, allowedRoots, mustExist) {
+  const resolved = path7.resolve(filePath);
+  if (path7.extname(resolved).toLowerCase() !== ".hsnips") throw new Error("Only .hsnips files can be managed.");
+  const candidate = await canonicalSnippetPath(resolved, mustExist);
+  const roots = await Promise.all(allowedRoots.map((root) => canonicalSnippetPath(root, false)));
+  if (!roots.some((root) => candidate === root || candidate.startsWith(`${root}${path7.sep}`))) {
+    throw new Error("Snippet path is outside the configured snippet directories.");
+  }
+}
+
+// src/snippets/snippetService.ts
+var SnippetService = class {
+  constructor(workspaceRoot) {
+    this.workspaceRoot = workspaceRoot;
+  }
+  workspaceRoot;
+  async state() {
+    const snippetDir = getSnippetDir();
+    await import_node_fs7.promises.mkdir(snippetDir, { recursive: true });
+    const activeProfile = normalizeProfileName(vscode6.workspace.getConfiguration("hsnips").get("profiles.activeProfile"));
+    const workspaceSnippetDir = this.workspaceRoot ? getWorkspaceSnippetDir(this.workspaceRoot) : void 0;
+    const documents = readSnippetDocuments(snippetDir, activeProfile, workspaceSnippetDir, this.workspaceRoot).map((document) => ({
+      filePath: document.filePath,
+      fileName: path8.basename(document.filePath),
+      sourceScope: document.sourceScope || "base",
+      profile: document.profile || "",
+      workspaceFolder: document.workspaceFolder || "",
+      language: document.language,
+      content: document.content,
+      hash: document.hash,
+      mtimeMs: document.mtimeMs,
+      diagnostics: document.diagnostics || [],
+      snippets: document.snippets || []
+    }));
+    return {
+      activeProfile,
+      profiles: discoverSnippetProfiles(snippetDir),
+      snippetDir,
+      workspaceSnippetDir,
+      documents
+    };
+  }
+  async analyze(filePath, content) {
+    await this.assertAllowed(filePath, true);
+    const document = parseSnippetDocument(content, filePath, path8.basename(filePath, ".hsnips"));
+    return {
+      filePath,
+      fileName: path8.basename(filePath),
+      sourceScope: this.scopeFor(filePath),
+      profile: this.profileFor(filePath),
+      workspaceFolder: this.workspaceRoot || "",
+      language: document.language,
+      content: document.content,
+      hash: document.hash,
+      diagnostics: document.diagnostics,
+      snippets: document.snippets
+    };
+  }
+  async save(filePath, content, expectedHash, expectedMtimeMs) {
+    await this.assertAllowed(filePath, true);
+    const openDocument = vscode6.workspace.textDocuments.find((document) => document.uri.scheme === "file" && path8.resolve(document.uri.fsPath) === path8.resolve(filePath));
+    if (openDocument?.isDirty) {
+      throw new Error("The snippet file has unsaved changes in the editor. Save or discard them before using the manager.");
+    }
+    const currentStat = await import_node_fs7.promises.stat(filePath);
+    if (expectedMtimeMs !== void 0 && Math.abs(currentStat.mtimeMs - expectedMtimeMs) > 1) {
+      throw new Error("The snippet file timestamp changed on disk. Reload the manager before saving.");
+    }
+    const current = await import_node_fs7.promises.readFile(filePath, "utf8");
+    assertExpectedSnippetDocumentHash(current, expectedHash);
+    await this.atomicWrite(filePath, content);
+    await vscode6.commands.executeCommand("hsnips.reloadSnippets");
+    return this.state();
+  }
+  async create(language, scope) {
+    if (!/^[a-z0-9_-]+$/i.test(language)) throw new Error("Snippet language must contain only letters, digits, underscores, or hyphens.");
+    const snippetDir = getSnippetDir();
+    const activeProfile = normalizeProfileName(vscode6.workspace.getConfiguration("hsnips").get("profiles.activeProfile"));
+    let directory = snippetDir;
+    if (scope === "profile") {
+      if (!activeProfile) throw new Error("Select an active snippet profile before creating a profile file.");
+      directory = path8.join(getProfilesDir(snippetDir), activeProfile);
+    } else if (scope === "workspace") {
+      if (!this.workspaceRoot) throw new Error("Open a local workspace before creating workspace snippets.");
+      directory = getWorkspaceSnippetDir(this.workspaceRoot);
+    }
+    await import_node_fs7.promises.mkdir(directory, { recursive: true });
+    const filePath = path8.join(directory, `${language.toLowerCase()}.hsnips`);
+    await this.assertAllowed(filePath, false);
+    try {
+      await import_node_fs7.promises.writeFile(filePath, "", { encoding: "utf8", flag: "wx" });
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+    await vscode6.commands.executeCommand("hsnips.reloadSnippets");
+    return this.state();
+  }
+  async openSource(filePath, line = 1) {
+    await this.assertAllowed(filePath, true);
+    const document = await vscode6.workspace.openTextDocument(filePath);
+    const editor = await vscode6.window.showTextDocument(document);
+    const position = new vscode6.Position(Math.max(0, line - 1), 0);
+    editor.selection = new vscode6.Selection(position, position);
+    editor.revealRange(new vscode6.Range(position, position));
+  }
+  allowedRoots() {
+    const snippetDir = path8.resolve(getSnippetDir());
+    return this.workspaceRoot ? [snippetDir, path8.resolve(getWorkspaceSnippetDir(this.workspaceRoot))] : [snippetDir];
+  }
+  async assertAllowed(filePath, mustExist) {
+    await assertSnippetPathAllowed(filePath, this.allowedRoots(), mustExist);
+  }
+  scopeFor(filePath) {
+    if (this.workspaceRoot && path8.resolve(filePath).startsWith(`${path8.resolve(getWorkspaceSnippetDir(this.workspaceRoot))}${path8.sep}`)) return "workspace";
+    if (path8.resolve(filePath).startsWith(`${path8.resolve(getProfilesDir(getSnippetDir()))}${path8.sep}`)) return "profile";
+    return "base";
+  }
+  profileFor(filePath) {
+    if (this.scopeFor(filePath) !== "profile") return "";
+    return path8.relative(getProfilesDir(getSnippetDir()), filePath).split(path8.sep)[0] || "";
+  }
+  async atomicWrite(filePath, content) {
+    const temp = `${filePath}.toolkit-${process.pid}-${Date.now()}.tmp`;
+    await import_node_fs7.promises.writeFile(temp, content, "utf8");
+    await import_node_fs7.promises.rename(temp, filePath);
+  }
+};
+
 // src/toolkitService.ts
-var import_node_fs11 = require("node:fs");
-var path11 = __toESM(require("node:path"));
+var import_node_fs14 = require("node:fs");
+var path15 = __toESM(require("node:path"));
 
 // src/cleanup.ts
-var import_node_fs6 = require("node:fs");
-var path6 = __toESM(require("node:path"));
+var import_node_fs9 = require("node:fs");
+var path10 = __toESM(require("node:path"));
 
 // src/vscodeSettings.ts
-var import_node_fs5 = require("node:fs");
-var path5 = __toESM(require("node:path"));
+var import_node_fs8 = require("node:fs");
+var path9 = __toESM(require("node:path"));
 init_utils();
 function toolkitVscodeSettingsTemplate() {
   return {
@@ -1867,9 +4817,9 @@ function toolkitVscodeSettingsTemplate() {
   };
 }
 async function loadVscodeSettings(rootDir) {
-  const settingsPath = path5.join(rootDir, ".vscode", "settings.json");
+  const settingsPath = path9.join(rootDir, ".vscode", "settings.json");
   try {
-    const text = await import_node_fs5.promises.readFile(settingsPath, "utf8");
+    const text = await import_node_fs8.promises.readFile(settingsPath, "utf8");
     if (!text.trim()) return {};
     const parsed = parseJsonc(text);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -1995,16 +4945,16 @@ async function loadRecipeCatalog(rootDir) {
   return catalog;
 }
 async function generateVscodeSettingsIfMissing(rootDir) {
-  const settingsPath = path5.join(rootDir, ".vscode", "settings.json");
+  const settingsPath = path9.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat = await import_node_fs5.promises.stat(settingsPath);
+    const stat = await import_node_fs8.promises.stat(settingsPath);
     if (stat.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
-  await import_node_fs5.promises.mkdir(path5.dirname(settingsPath), { recursive: true });
-  await import_node_fs5.promises.writeFile(settingsPath, `${JSON.stringify(toolkitVscodeSettingsTemplate(), null, 2)}
+  await import_node_fs8.promises.mkdir(path9.dirname(settingsPath), { recursive: true });
+  await import_node_fs8.promises.writeFile(settingsPath, `${JSON.stringify(toolkitVscodeSettingsTemplate(), null, 2)}
 `, "utf8");
   return { generated: true, generated_path: ".vscode/settings.json", message: "Generated .vscode/settings.json." };
 }
@@ -2099,18 +5049,18 @@ var CleanupService = class {
     const scope = /* @__PURE__ */ new Set();
     const errors = [];
     const walk = async (dir) => {
-      const entries = await import_node_fs6.promises.readdir(dir, { withFileTypes: true });
+      const entries = await import_node_fs9.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name.startsWith(".") || ["node_modules", "dist", "build", "__pycache__"].includes(entry.name)) continue;
-        const abs = path6.join(dir, entry.name);
+        const abs = path10.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walk(abs);
         } else if (entry.isFile() && entry.name.endsWith(".tex")) {
           try {
-            const text = await import_node_fs6.promises.readFile(abs, "utf8");
+            const text = await import_node_fs9.promises.readFile(abs, "utf8");
             const declaration = extractDocumentclassDeclaration(text);
-            if (declaration?.className === "subfiles" && path6.dirname(abs) !== this.rootDir) {
-              scope.add(workspaceRel(this.rootDir, path6.dirname(abs)));
+            if (declaration?.className === "subfiles" && path10.dirname(abs) !== this.rootDir) {
+              scope.add(workspaceRel(this.rootDir, path10.dirname(abs)));
             }
           } catch (err) {
             errors.push(`Failed to inspect documentclass for ${safeWorkspaceRel(this.rootDir, abs)}: ${err.message}`);
@@ -2127,20 +5077,20 @@ var CleanupService = class {
     const errors = [];
     const normalizedScope = scopeDirs.map((scope) => scope || ".").filter(Boolean);
     for (const scope of normalizedScope) {
-      const scopeAbs = path6.resolve(this.rootDir, scope);
+      const scopeAbs = path10.resolve(this.rootDir, scope);
       if (!isSubpath(scopeAbs, this.rootDir) || !await exists(scopeAbs)) continue;
       const files = await this.listScopeFiles(scopeAbs, recursiveAll);
       for (const abs of files) {
-        const relToScope = safeWorkspaceRel(scopeAbs, abs) || path6.basename(abs);
+        const relToScope = safeWorkspaceRel(scopeAbs, abs) || path10.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename8 = path6.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename8, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename8, pattern))) {
+        const basename12 = path10.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename12, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename12, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
         try {
-          if (!dryRun) await import_node_fs6.promises.unlink(abs);
+          if (!dryRun) await import_node_fs9.promises.unlink(abs);
           deleted.push(workspaceRelative);
         } catch (err) {
           errors.push(`Failed to delete ${workspaceRelative}: ${err.message}`);
@@ -2152,9 +5102,9 @@ var CleanupService = class {
   async listScopeFiles(scopeAbs, recursive) {
     const out = [];
     const walk = async (dir) => {
-      for (const entry of await import_node_fs6.promises.readdir(dir, { withFileTypes: true })) {
+      for (const entry of await import_node_fs9.promises.readdir(dir, { withFileTypes: true })) {
         if (entry.name.startsWith(".") || ["node_modules", ".git"].includes(entry.name)) continue;
-        const abs = path6.join(dir, entry.name);
+        const abs = path10.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (recursive) await walk(abs);
         } else if (entry.isFile()) {
@@ -2169,12 +5119,12 @@ var CleanupService = class {
     const removed = [];
     const errors = [];
     for (const scope of scopeDirs) {
-      const scopeAbs = path6.resolve(this.rootDir, scope);
+      const scopeAbs = path10.resolve(this.rootDir, scope);
       const dirs = [];
       const collect = async (dir) => {
-        for (const entry of await import_node_fs6.promises.readdir(dir, { withFileTypes: true })) {
+        for (const entry of await import_node_fs9.promises.readdir(dir, { withFileTypes: true })) {
           if (entry.isDirectory()) {
-            const abs = path6.join(dir, entry.name);
+            const abs = path10.join(dir, entry.name);
             dirs.push(abs);
             await collect(abs);
           }
@@ -2184,9 +5134,9 @@ var CleanupService = class {
       dirs.sort((a, b) => b.length - a.length);
       for (const dir of dirs) {
         try {
-          const entries = await import_node_fs6.promises.readdir(dir);
+          const entries = await import_node_fs9.promises.readdir(dir);
           if (entries.length === 0) {
-            if (!dryRun) await import_node_fs6.promises.rmdir(dir);
+            if (!dryRun) await import_node_fs9.promises.rmdir(dir);
             removed.push(workspaceRel(this.rootDir, dir));
           }
         } catch (err) {
@@ -2200,8 +5150,8 @@ var CleanupService = class {
 
 // src/compile.ts
 var import_node_child_process = require("node:child_process");
-var import_node_fs7 = require("node:fs");
-var path7 = __toESM(require("node:path"));
+var import_node_fs10 = require("node:fs");
+var path11 = __toESM(require("node:path"));
 init_utils();
 var COMMAND_TIMEOUT_MS = 12e4;
 var SUBFILE_PATTERN = /\\subfile(?:\[[^\]]*\])?\{([^}]+)\}/g;
@@ -2214,12 +5164,12 @@ var CompileService = class {
   stateService;
   resolveContext(compileTarget) {
     if (!compileTarget) throw new Error("No compile target selected.");
-    const targetAbs = path7.resolve(this.rootDir, compileTarget);
+    const targetAbs = path11.resolve(this.rootDir, compileTarget);
     if (!isSubpath(targetAbs, this.rootDir)) throw new Error(`Compile target is outside workspace: ${compileTarget}`);
-    const compileCwd = path7.dirname(targetAbs);
-    const docfile = path7.basename(targetAbs);
-    const docstem = path7.basename(targetAbs, path7.extname(targetAbs));
-    const defaultPdfAbs = path7.join(compileCwd, `${docstem}.pdf`);
+    const compileCwd = path11.dirname(targetAbs);
+    const docfile = path11.basename(targetAbs);
+    const docstem = path11.basename(targetAbs, path11.extname(targetAbs));
+    const defaultPdfAbs = path11.join(compileCwd, `${docstem}.pdf`);
     return {
       targetRel: toPosixPath(compileTarget),
       targetAbs,
@@ -2260,7 +5210,7 @@ var CompileService = class {
   }
   async compileTexTarget(compileTarget, recipeId, useInternalFallback) {
     const ctx = this.resolveContext(compileTarget);
-    const targetStat = await import_node_fs7.promises.stat(ctx.targetAbs).catch(() => null);
+    const targetStat = await import_node_fs10.promises.stat(ctx.targetAbs).catch(() => null);
     if (!targetStat?.isFile()) throw new Error(`Compile target does not exist: ${compileTarget}`);
     const preflight = await this.preflight(ctx);
     if (preflight) return preflight;
@@ -2333,7 +5283,7 @@ var CompileService = class {
     const visited = /* @__PURE__ */ new Set();
     const visiting = /* @__PURE__ */ new Set();
     const walk = async (filePath, chain) => {
-      const resolved = path7.resolve(filePath);
+      const resolved = path11.resolve(filePath);
       if (visiting.has(resolved)) {
         issues.push(`Recursive subfile cycle detected: ${[...chain, resolved].map((item) => safeWorkspaceRel(this.rootDir, item) || item).join(" -> ")}`);
         return;
@@ -2343,7 +5293,7 @@ var CompileService = class {
       visiting.add(resolved);
       let text = "";
       try {
-        text = stripTexComments(await import_node_fs7.promises.readFile(resolved, "utf8"));
+        text = stripTexComments(await import_node_fs10.promises.readFile(resolved, "utf8"));
       } catch (err) {
         issues.push(`Failed to read source file: ${safeWorkspaceRel(this.rootDir, resolved)} (${err.message})`);
         visiting.delete(resolved);
@@ -2352,7 +5302,7 @@ var CompileService = class {
       for (const match of text.matchAll(SUBFILE_PATTERN)) {
         const raw = match[1].trim();
         const withExt = raw.endsWith(".tex") ? raw : `${raw}.tex`;
-        const target = path7.isAbsolute(withExt) ? withExt : path7.resolve(path7.dirname(resolved), withExt);
+        const target = path11.isAbsolute(withExt) ? withExt : path11.resolve(path11.dirname(resolved), withExt);
         const sourceRel = safeWorkspaceRel(this.rootDir, resolved) || resolved;
         const targetRel = safeWorkspaceRel(this.rootDir, target) || target;
         if (target === resolved) {
@@ -2382,7 +5332,7 @@ var CompileService = class {
     return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
   }
   replaceRecipeTokens(value, ctx, outdir) {
-    return value.replace(/%DOCFILE%/g, ctx.docfile).replace(/%DOC%/g, ctx.targetAbs).replace(/%DOC_EXT%/g, ctx.docfile).replace(/%DOCFILE_EXT%/g, ctx.docfile).replace(/%DOCFILE_NOEXT%/g, ctx.docstem).replace(/%DOC_NOEXT%/g, path7.join(ctx.compileCwd, ctx.docstem)).replace(/%OUTDIR%/g, outdir || ".");
+    return value.replace(/%DOCFILE%/g, ctx.docfile).replace(/%DOC%/g, ctx.targetAbs).replace(/%DOC_EXT%/g, ctx.docfile).replace(/%DOCFILE_EXT%/g, ctx.docfile).replace(/%DOCFILE_NOEXT%/g, ctx.docstem).replace(/%DOC_NOEXT%/g, path11.join(ctx.compileCwd, ctx.docstem)).replace(/%OUTDIR%/g, outdir || ".");
   }
   extractOutdir(args) {
     for (let i = 0; i < args.length; i += 1) {
@@ -2396,17 +5346,17 @@ var CompileService = class {
   }
   resolvePdfPathForOutdir(ctx, outdir) {
     const replaced = this.replaceRecipeTokens(outdir, ctx, ".");
-    const outAbs = path7.isAbsolute(replaced) ? path7.resolve(replaced) : path7.resolve(ctx.compileCwd, replaced);
+    const outAbs = path11.isAbsolute(replaced) ? path11.resolve(replaced) : path11.resolve(ctx.compileCwd, replaced);
     if (!isSubpath(outAbs, this.rootDir)) return ctx.defaultPdfRel;
-    return workspaceRel(this.rootDir, path7.join(outAbs, `${ctx.docstem}.pdf`));
+    return workspaceRel(this.rootDir, path11.join(outAbs, `${ctx.docstem}.pdf`));
   }
   async finalizeCompileOutput(ctx, logs, expectedPdfRel) {
     let pdfRel = expectedPdfRel;
-    const expectedAbs = path7.resolve(this.rootDir, expectedPdfRel);
+    const expectedAbs = path11.resolve(this.rootDir, expectedPdfRel);
     if (!await exists(expectedAbs) && await exists(ctx.defaultPdfAbs)) {
       pdfRel = ctx.defaultPdfRel;
     }
-    const pdfAbs = path7.resolve(this.rootDir, pdfRel);
+    const pdfAbs = path11.resolve(this.rootDir, pdfRel);
     if (!await exists(pdfAbs)) {
       logs.push("");
       logs.push(`[output] Expected PDF not found: ${pdfRel}`);
@@ -2424,7 +5374,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve11) => {
+    return new Promise((resolve14) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -2443,22 +5393,22 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve11({ code: 127, output: `${output}
+        resolve14({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve11({ code: code ?? 1, output });
+        resolve14({ code: code ?? 1, output });
       });
     });
   }
   async resolveBinary(command) {
-    if (path7.isAbsolute(command) || command.includes(path7.sep)) return await exists(command) ? command : null;
-    const paths = (process.env.PATH ?? "").split(path7.delimiter);
+    if (path11.isAbsolute(command) || command.includes(path11.sep)) return await exists(command) ? command : null;
+    const paths = (process.env.PATH ?? "").split(path11.delimiter);
     const candidates = process.platform === "win32" ? [`${command}.exe`, `${command}.cmd`, command] : [command];
     for (const dir of paths) {
       for (const candidate of candidates) {
-        const abs = path7.join(dir, candidate);
+        const abs = path11.join(dir, candidate);
         if (await exists(abs)) return abs;
       }
     }
@@ -2467,8 +5417,8 @@ ${err.message}` });
 };
 
 // src/splitter.ts
-var import_node_fs8 = require("node:fs");
-var path8 = __toESM(require("node:path"));
+var import_node_fs11 = require("node:fs");
+var path12 = __toESM(require("node:path"));
 init_utils();
 var BEGIN_DOCUMENT_PATTERN = /\\begin\s*\{document\}/;
 var END_DOCUMENT_PATTERN = /\\end\s*\{document\}/;
@@ -2485,32 +5435,32 @@ var SplitterService = class {
   async splitCompileTarget(compileTarget, dryRun = false, sectionsDir = "Sections") {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.splitTexFile(path8.resolve(this.rootDir, target), sectionsDir, dryRun);
+    const result = await this.splitTexFile(path12.resolve(this.rootDir, target), sectionsDir, dryRun);
     return { response: await this.stateService.buildResponseState(), split: result };
   }
   async renumberCompileTarget(compileTarget, mode, dryRun = false) {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.renumberReferences(path8.resolve(this.rootDir, target), mode, dryRun);
+    const result = await this.renumberReferences(path12.resolve(this.rootDir, target), mode, dryRun);
     return { response: await this.stateService.buildResponseState(), renumber: result };
   }
   async unsplitCompileTarget(compileTarget, dryRun = false, deleteSource = true) {
     const state = await this.stateService.loadState();
     const target = normalizeCompileTarget(this.rootDir, compileTarget, state.compile_targets);
-    const result = await this.unsplitOneUnit(path8.resolve(this.rootDir, target), dryRun, deleteSource);
+    const result = await this.unsplitOneUnit(path12.resolve(this.rootDir, target), dryRun, deleteSource);
     return { response: await this.stateService.buildResponseState(), unsplit: result };
   }
   async splitTexFile(rootTexPath, sectionsDirRaw = "Sections", dryRun = false) {
-    const rootAbs = path8.resolve(rootTexPath);
+    const rootAbs = path12.resolve(rootTexPath);
     if (!isSubpath(rootAbs, this.rootDir)) throw new Error("Split target is outside workspace.");
-    const originalText = await import_node_fs8.promises.readFile(rootAbs, "utf8");
+    const originalText = await import_node_fs11.promises.readFile(rootAbs, "utf8");
     const declaration = extractDocumentclassDeclaration(originalText);
     if (!declaration) throw new Error("Split source must contain a \\documentclass declaration.");
     if (declaration.className === "subfiles") throw new Error("Split source must be a root target, not a subfiles unit.");
     const splitCommand = isChapterCapableClass(declaration.className) ? "chapter" : "section";
     const bounds = this.findBodyBounds(originalText);
     const body = originalText.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
+    const refs = this.extractTopLevelReferences(path12.dirname(rootAbs), body);
     const anchors = this.findTopLevelAnchors(body, splitCommand);
     const chunks = this.computeChunks(body, anchors, refs);
     const appendixStart = this.firstAppendixStart(body);
@@ -2539,7 +5489,7 @@ var SplitterService = class {
       };
     }
     const sectionsRel = this.normalizeSectionsDir(sectionsDirRaw);
-    const sectionsAbs = path8.resolve(path8.dirname(rootAbs), sectionsRel);
+    const sectionsAbs = path12.resolve(path12.dirname(rootAbs), sectionsRel);
     if (!isSubpath(sectionsAbs, this.rootDir)) throw new Error("Sections directory is outside workspace.");
     const seenSlugs = /* @__PURE__ */ new Map();
     const units = [];
@@ -2549,10 +5499,10 @@ var SplitterService = class {
       const slug = this.stableSlug(chunk.anchor.title, seenSlugs);
       let unitPath;
       do {
-        unitPath = path8.join(sectionsAbs, `${String(index).padStart(2, "0")}-${slug}.tex`);
+        unitPath = path12.join(sectionsAbs, `${String(index).padStart(2, "0")}-${slug}.tex`);
         index += 1;
       } while (await exists(unitPath));
-      const ref = this.relativeTexReference(path8.dirname(rootAbs), unitPath);
+      const ref = this.relativeTexReference(path12.dirname(rootAbs), unitPath);
       units.push({ path: workspaceRel(this.rootDir, unitPath), title: chunk.anchor.title, reference: ref });
       replacements.push({ start: chunk.anchor.start, end: chunk.end, text: `\\subfile{${ref.replace(/\.tex$/i, "")}}
 ` });
@@ -2564,13 +5514,13 @@ var SplitterService = class {
     const backupPath = await this.nextBackupPath(rootAbs);
     const updatedFiles = [workspaceRel(this.rootDir, rootAbs), ...units.map((unit) => unit.path)];
     if (!dryRun) {
-      await import_node_fs8.promises.mkdir(sectionsAbs, { recursive: true });
-      await import_node_fs8.promises.copyFile(rootAbs, backupPath);
-      await import_node_fs8.promises.writeFile(rootAbs, rewritten, "utf8");
+      await import_node_fs11.promises.mkdir(sectionsAbs, { recursive: true });
+      await import_node_fs11.promises.copyFile(rootAbs, backupPath);
+      await import_node_fs11.promises.writeFile(rootAbs, rewritten, "utf8");
       for (const unit of units) {
-        const unitAbs = path8.resolve(this.rootDir, unit.path);
+        const unitAbs = path12.resolve(this.rootDir, unit.path);
         const chunk = newChunks[units.indexOf(unit)];
-        await import_node_fs8.promises.writeFile(unitAbs, this.buildSubfileUnitText(rootAbs, unitAbs, body.slice(chunk.anchor.start, chunk.end)), "utf8");
+        await import_node_fs11.promises.writeFile(unitAbs, this.buildSubfileUnitText(rootAbs, unitAbs, body.slice(chunk.anchor.start, chunk.end)), "utf8");
       }
     }
     return {
@@ -2591,19 +5541,19 @@ var SplitterService = class {
   }
   async renumberReferences(rootTexPath, modeRaw, dryRun = false) {
     const mode = modeRaw === "remove" ? "remove" : "add";
-    const rootAbs = path8.resolve(rootTexPath);
-    const text = await import_node_fs8.promises.readFile(rootAbs, "utf8");
+    const rootAbs = path12.resolve(rootTexPath);
+    const text = await import_node_fs11.promises.readFile(rootAbs, "utf8");
     const bounds = this.findBodyBounds(text);
     const body = text.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
+    const refs = this.extractTopLevelReferences(path12.dirname(rootAbs), body);
     const renameMap = /* @__PURE__ */ new Map();
     const replacements = [];
     const warnings = [];
     let counter = 1;
     for (const ref of refs) {
-      const ext = path8.extname(ref.path);
-      const dir = path8.dirname(ref.path);
-      const stem = path8.basename(ref.path, ext);
+      const ext = path12.extname(ref.path);
+      const dir = path12.dirname(ref.path);
+      const stem = path12.basename(ref.path, ext);
       const match = NUMERIC_PREFIX_PATTERN.exec(stem);
       let newStem;
       if (mode === "add") {
@@ -2612,21 +5562,21 @@ var SplitterService = class {
       } else {
         newStem = match ? match[2] : stem;
       }
-      const newPath = path8.join(dir, `${newStem}${ext || ".tex"}`);
+      const newPath = path12.join(dir, `${newStem}${ext || ".tex"}`);
       if (newPath !== ref.path) {
         if (await exists(newPath)) {
           warnings.push(`Skipped rename because target exists: ${workspaceRel(this.rootDir, newPath)}`);
           continue;
         }
         renameMap.set(ref.path, newPath);
-        const newRef = this.relativeTexReference(path8.dirname(rootAbs), newPath).replace(/\.tex$/i, "");
+        const newRef = this.relativeTexReference(path12.dirname(rootAbs), newPath).replace(/\.tex$/i, "");
         replacements.push({ start: ref.start, end: ref.end, text: `\\${ref.macro}{${newRef}}` });
       }
     }
     const rewritten = `${text.slice(0, bounds.bodyStart)}${this.applyReplacements(body, replacements)}${text.slice(bounds.bodyEnd)}`;
     if (!dryRun) {
-      for (const [from, to] of renameMap) await import_node_fs8.promises.rename(from, to);
-      if (replacements.length > 0) await import_node_fs8.promises.writeFile(rootAbs, rewritten, "utf8");
+      for (const [from, to] of renameMap) await import_node_fs11.promises.rename(from, to);
+      if (replacements.length > 0) await import_node_fs11.promises.writeFile(rootAbs, rewritten, "utf8");
     }
     return {
       success: true,
@@ -2639,19 +5589,19 @@ var SplitterService = class {
     };
   }
   async unsplitOneUnit(unitPath, dryRun = false, deleteSource = true) {
-    const unitAbs = path8.resolve(unitPath);
-    const unitText = await import_node_fs8.promises.readFile(unitAbs, "utf8");
+    const unitAbs = path12.resolve(unitPath);
+    const unitText = await import_node_fs11.promises.readFile(unitAbs, "utf8");
     const declaration = extractDocumentclassDeclaration(unitText);
     if (!declaration || declaration.className !== "subfiles") throw new Error("Selected target is not a subfiles unit.");
     const parentRef = declaration.options.split(",")[0]?.trim();
     if (!parentRef) throw new Error("Subfiles unit is missing parent root reference.");
-    const rootAbs = path8.resolve(path8.dirname(unitAbs), parentRef);
+    const rootAbs = path12.resolve(path12.dirname(unitAbs), parentRef);
     if (!isSubpath(rootAbs, this.rootDir)) throw new Error("Parent root is outside workspace.");
-    const rootText = await import_node_fs8.promises.readFile(rootAbs, "utf8");
+    const rootText = await import_node_fs11.promises.readFile(rootAbs, "utf8");
     const bounds = this.findBodyBounds(rootText);
     const body = rootText.slice(bounds.bodyStart, bounds.bodyEnd);
-    const refs = this.extractTopLevelReferences(path8.dirname(rootAbs), body);
-    const matching = refs.find((ref) => path8.resolve(ref.path) === unitAbs);
+    const refs = this.extractTopLevelReferences(path12.dirname(rootAbs), body);
+    const matching = refs.find((ref) => path12.resolve(ref.path) === unitAbs);
     if (!matching) throw new Error("Could not find matching \\subfile reference in parent root.");
     const unitBody = this.extractUnitBody(unitText);
     const replacement = unitBody.endsWith("\n") ? unitBody : `${unitBody}
@@ -2659,9 +5609,9 @@ var SplitterService = class {
     const newBody = `${body.slice(0, matching.start)}${replacement}${body.slice(matching.end)}`;
     const updated = [workspaceRel(this.rootDir, rootAbs)];
     if (!dryRun) {
-      await import_node_fs8.promises.writeFile(rootAbs, `${rootText.slice(0, bounds.bodyStart)}${newBody}${rootText.slice(bounds.bodyEnd)}`, "utf8");
+      await import_node_fs11.promises.writeFile(rootAbs, `${rootText.slice(0, bounds.bodyStart)}${newBody}${rootText.slice(bounds.bodyEnd)}`, "utf8");
       if (deleteSource) {
-        await import_node_fs8.promises.unlink(unitAbs);
+        await import_node_fs11.promises.unlink(unitAbs);
         updated.push(workspaceRel(this.rootDir, unitAbs));
       }
     }
@@ -2713,7 +5663,7 @@ var SplitterService = class {
       const macro = match[1];
       const ref = match[2].trim();
       let target = ref.endsWith(".tex") ? ref : `${ref}.tex`;
-      target = path8.isAbsolute(target) ? target : path8.resolve(baseDir, target);
+      target = path12.isAbsolute(target) ? target : path12.resolve(baseDir, target);
       refs.push({ macro, ref, start: match.index ?? 0, end: (match.index ?? 0) + match[0].length, path: target });
     }
     return refs;
@@ -2724,7 +5674,7 @@ var SplitterService = class {
   highestExistingPrefix(refs) {
     let highest = 0;
     for (const ref of refs) {
-      const stem = path8.basename(ref.path, path8.extname(ref.path));
+      const stem = path12.basename(ref.path, path12.extname(ref.path));
       const match = NUMERIC_PREFIX_PATTERN.exec(stem);
       if (match) highest = Math.max(highest, Number(match[1]));
     }
@@ -2773,7 +5723,7 @@ var SplitterService = class {
     return value;
   }
   relativeTexReference(rootDir, targetTexPath) {
-    return toPosixPath(path8.relative(rootDir, targetTexPath)).replace(/\.tex$/i, "");
+    return toPosixPath(path12.relative(rootDir, targetTexPath)).replace(/\.tex$/i, "");
   }
   injectSubfilesPackage(preamblePlusBegin) {
     if (/\\usepackage(?:\[[^\]]*\])?\{subfiles\}/.test(preamblePlusBegin)) {
@@ -2794,7 +5744,7 @@ ${preamblePlusBegin.slice(insertAt)}`;
     return result;
   }
   buildSubfileUnitText(rootAbs, unitAbs, content) {
-    const rootRel = toPosixPath(path8.relative(path8.dirname(unitAbs), rootAbs));
+    const rootRel = toPosixPath(path12.relative(path12.dirname(unitAbs), rootAbs));
     const body = content.trimStart();
     return `\\documentclass[${rootRel}]{subfiles}
 \\begin{document}
@@ -2810,8 +5760,8 @@ ${body.trimEnd()}
 
 // src/state.ts
 var import_node_crypto4 = require("node:crypto");
-var import_node_fs9 = require("node:fs");
-var path9 = __toESM(require("node:path"));
+var import_node_fs12 = require("node:fs");
+var path13 = __toESM(require("node:path"));
 init_schema();
 init_utils();
 var StateService = class {
@@ -2825,19 +5775,19 @@ var StateService = class {
     this.additionalStylePresets = presets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
   }
   configPath() {
-    return path9.join(this.rootDir, "theme.ui.json");
+    return path13.join(this.rootDir, "theme.ui.json");
   }
   toggleOverridePath() {
-    return path9.join(this.rootDir, "theme.overrides.tex");
+    return path13.join(this.rootDir, "theme.overrides.tex");
   }
   colorOverridePath() {
-    return path9.join(this.rootDir, "theme.colors.tex");
+    return path13.join(this.rootDir, "theme.colors.tex");
   }
   themePath() {
-    return path9.join(this.rootDir, "theme.sty");
+    return path13.join(this.rootDir, "theme.sty");
   }
   mainTexPath() {
-    return path9.join(this.rootDir, "main.tex");
+    return path13.join(this.rootDir, "main.tex");
   }
   async buildResponseState() {
     const state = await this.loadState();
@@ -3036,7 +5986,7 @@ var StateService = class {
     }
     let uiState = {};
     try {
-      const parsed = JSON.parse(await import_node_fs9.promises.readFile(this.configPath(), "utf8"));
+      const parsed = JSON.parse(await import_node_fs12.promises.readFile(this.configPath(), "utf8"));
       if (this.isRecord(parsed)) uiState = parsed;
     } catch (err) {
       if (err.code !== "ENOENT" && !(err instanceof SyntaxError)) throw err;
@@ -3092,7 +6042,7 @@ var StateService = class {
   async deleteOverrideFiles() {
     for (const file of [this.configPath(), this.toggleOverridePath(), this.colorOverridePath()]) {
       try {
-        await import_node_fs9.promises.unlink(file);
+        await import_node_fs12.promises.unlink(file);
       } catch (err) {
         if (err.code !== "ENOENT") throw err;
       }
@@ -3118,20 +6068,20 @@ var StateService = class {
     this.applyStylePreset(state, this.styleIdFromHeadingPreset(presetId));
   }
   async starterTemplateMeta() {
-    const templateDir = path9.join(this.rootDir, "templates");
-    const assetTemplateDir = path9.resolve(__dirname, "..", "assets", "template", "templates");
+    const templateDir = path13.join(this.rootDir, "templates");
+    const assetTemplateDir = path13.resolve(__dirname, "..", "assets", "template", "templates");
     const out = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path9.join(templateDir, entry.filename)) || await exists(path9.join(assetTemplateDir, entry.filename))) {
+      if (await exists(path13.join(templateDir, entry.filename)) || await exists(path13.join(assetTemplateDir, entry.filename))) {
         out.push({ id: entry.id, label: entry.label, description: entry.description });
       }
     }
     return out;
   }
   async templateSourcePath(filename) {
-    const workspaceTemplate = path9.join(this.rootDir, "templates", filename);
+    const workspaceTemplate = path13.join(this.rootDir, "templates", filename);
     if (await exists(workspaceTemplate)) return workspaceTemplate;
-    return path9.resolve(__dirname, "..", "assets", "template", "templates", filename);
+    return path13.resolve(__dirname, "..", "assets", "template", "templates", filename);
   }
   async refreshDerivedState(state) {
     state.compile_recipe_name = state.compile_recipes.find((item) => item.id === state.compile_recipe)?.name ?? "";
@@ -3152,18 +6102,18 @@ var StateService = class {
       const catalog = await loadRecipeCatalog(this.rootDir);
       const recipe = catalog.recipes.find((item) => item.id === state.compile_recipe);
       if (!recipe) return compileOutputPdfRelpath(state.compile_target);
-      const targetAbs = path9.resolve(this.rootDir, state.compile_target);
-      const targetDir = path9.dirname(targetAbs);
-      const stem = path9.basename(targetAbs, ".tex");
+      const targetAbs = path13.resolve(this.rootDir, state.compile_target);
+      const targetDir = path13.dirname(targetAbs);
+      const stem = path13.basename(targetAbs, ".tex");
       for (const toolName of recipe.tools) {
         const tool = catalog.tools[toolName];
         if (!tool) continue;
         const outdir = this.extractRecipeOutdir(tool.args);
         if (!outdir) continue;
-        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path9.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
-        const outAbs = path9.isAbsolute(normalizedOutdir) ? path9.resolve(normalizedOutdir) : path9.resolve(targetDir, normalizedOutdir);
+        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path13.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
+        const outAbs = path13.isAbsolute(normalizedOutdir) ? path13.resolve(normalizedOutdir) : path13.resolve(targetDir, normalizedOutdir);
         if (!isSubpath(outAbs, this.rootDir)) return compileOutputPdfRelpath(state.compile_target);
-        return workspaceRel(this.rootDir, path9.join(outAbs, `${stem}.pdf`));
+        return workspaceRel(this.rootDir, path13.join(outAbs, `${stem}.pdf`));
       }
     } catch {
       return compileOutputPdfRelpath(state.compile_target);
@@ -3183,7 +6133,7 @@ var StateService = class {
   async detectTargetDocumentClass(targetRel) {
     if (!targetRel) return "";
     try {
-      const abs = path9.resolve(this.rootDir, targetRel);
+      const abs = path13.resolve(this.rootDir, targetRel);
       return await extractDocumentclassName(abs, this.rootDir);
     } catch {
       return "";
@@ -3193,7 +6143,7 @@ var StateService = class {
     const defaults = {};
     let text = "";
     try {
-      text = await import_node_fs9.promises.readFile(this.mainTexPath(), "utf8");
+      text = await import_node_fs12.promises.readFile(this.mainTexPath(), "utf8");
     } catch {
     }
     for (const entry of TOGGLE_SCHEMA) {
@@ -3210,7 +6160,7 @@ var StateService = class {
   async mergePersistedState(state) {
     let raw;
     try {
-      const parsed = JSON.parse(await import_node_fs9.promises.readFile(this.configPath(), "utf8"));
+      const parsed = JSON.parse(await import_node_fs12.promises.readFile(this.configPath(), "utf8"));
       if (!this.isRecord(parsed)) {
         this.addWarning(state, "theme.ui.json must contain a JSON object; defaults were used.");
         return;
@@ -3320,7 +6270,7 @@ var StateService = class {
   }
   async mergeOverrideFiles(state) {
     try {
-      const text = await import_node_fs9.promises.readFile(this.toggleOverridePath(), "utf8");
+      const text = await import_node_fs12.promises.readFile(this.toggleOverridePath(), "utf8");
       for (const entry of TOGGLE_SCHEMA) {
         const matches = Array.from(text.matchAll(new RegExp(`\\\\${entry.command}(true|false)`, "g")));
         if (matches.length > 0) state.toggles[entry.id] = boolFromTex(matches.at(-1)?.[1] ?? "") ?? state.toggles[entry.id];
@@ -3350,7 +6300,7 @@ var StateService = class {
       }
     }
     try {
-      const text = await import_node_fs9.promises.readFile(this.colorOverridePath(), "utf8");
+      const text = await import_node_fs12.promises.readFile(this.colorOverridePath(), "utf8");
       const defines = /* @__PURE__ */ new Map();
       for (const match of text.matchAll(/\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}/g)) {
         defines.set(match[1], `#${match[2].toUpperCase()}`);
@@ -3415,12 +6365,12 @@ var StateService = class {
   }
   async writeFileAtomic(targetPath, text) {
     const tempPath = `${targetPath}.tmp-${process.pid}-${(0, import_node_crypto4.randomUUID)()}`;
-    await import_node_fs9.promises.mkdir(path9.dirname(targetPath), { recursive: true });
+    await import_node_fs12.promises.mkdir(path13.dirname(targetPath), { recursive: true });
     try {
-      await import_node_fs9.promises.writeFile(tempPath, text, "utf8");
-      await import_node_fs9.promises.rename(tempPath, targetPath);
+      await import_node_fs12.promises.writeFile(tempPath, text, "utf8");
+      await import_node_fs12.promises.rename(tempPath, targetPath);
     } catch (err) {
-      await import_node_fs9.promises.unlink(tempPath).catch(() => void 0);
+      await import_node_fs12.promises.unlink(tempPath).catch(() => void 0);
       throw err;
     }
   }
@@ -3486,12 +6436,12 @@ var StateService = class {
   }
 };
 async function copyDirectory(src, dest) {
-  await import_node_fs9.promises.mkdir(dest, { recursive: true });
-  for (const entry of await import_node_fs9.promises.readdir(src, { withFileTypes: true })) {
-    const srcPath = path9.join(src, entry.name);
-    const destPath = path9.join(dest, entry.name);
+  await import_node_fs12.promises.mkdir(dest, { recursive: true });
+  for (const entry of await import_node_fs12.promises.readdir(src, { withFileTypes: true })) {
+    const srcPath = path13.join(src, entry.name);
+    const destPath = path13.join(dest, entry.name);
     if (entry.isDirectory()) await copyDirectory(srcPath, destPath);
-    else if (entry.isFile()) await import_node_fs9.promises.copyFile(srcPath, destPath);
+    else if (entry.isFile()) await import_node_fs12.promises.copyFile(srcPath, destPath);
   }
 }
 async function copyMissingDirectory(src, dest, relLabel, copied) {
@@ -3500,39 +6450,39 @@ async function copyMissingDirectory(src, dest, relLabel, copied) {
     copied.push(`${relLabel}/`);
     return;
   }
-  for (const entry of await import_node_fs9.promises.readdir(src, { withFileTypes: true })) {
-    const source = path9.join(src, entry.name);
-    const target = path9.join(dest, entry.name);
+  for (const entry of await import_node_fs12.promises.readdir(src, { withFileTypes: true })) {
+    const source = path13.join(src, entry.name);
+    const target = path13.join(dest, entry.name);
     if (await exists(target)) continue;
     if (entry.isDirectory()) {
       await copyDirectory(source, target);
       copied.push(`${relLabel}/${entry.name}/`);
     } else if (entry.isFile()) {
-      await import_node_fs9.promises.copyFile(source, target);
+      await import_node_fs12.promises.copyFile(source, target);
       copied.push(`${relLabel}/${entry.name}`);
     }
   }
 }
 async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
-  const assetRoot = path9.join(extensionDir, "assets", "template");
+  const assetRoot = path13.join(extensionDir, "assets", "template");
   const copied = [];
   const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
   for (const file of files) {
-    const target = path9.join(rootDir, file);
+    const target = path13.join(rootDir, file);
     if (!await exists(target)) {
-      await import_node_fs9.promises.copyFile(path9.join(assetRoot, file), target);
+      await import_node_fs12.promises.copyFile(path13.join(assetRoot, file), target);
       copied.push(file);
     }
   }
-  await copyMissingDirectory(path9.join(assetRoot, "Fig"), path9.join(rootDir, "Fig"), "Fig", copied);
-  await copyMissingDirectory(path9.join(assetRoot, "templates"), path9.join(rootDir, "templates"), "templates", copied);
-  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path9.join(rootDir, item)));
+  await copyMissingDirectory(path13.join(assetRoot, "Fig"), path13.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(path13.join(assetRoot, "templates"), path13.join(rootDir, "templates"), "templates", copied);
+  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path13.join(rootDir, item)));
 }
 
 // src/template.ts
 var import_node_crypto5 = require("node:crypto");
-var import_node_fs10 = require("node:fs");
-var path10 = __toESM(require("node:path"));
+var import_node_fs13 = require("node:fs");
+var path14 = __toESM(require("node:path"));
 init_schema();
 init_utils();
 var UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
@@ -3556,15 +6506,15 @@ var TemplateService = class {
     if (colorPolicy !== "preserve" && colorPolicy !== "default") {
       throw new Error(`Unknown upgrade color policy: ${String(colorPolicy)}`);
     }
-    const assetRoot = path10.join(this.extensionDir, "assets", "template");
-    const backupDir = path10.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
+    const assetRoot = path14.join(this.extensionDir, "assets", "template");
+    const backupDir = path14.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
     const upgradedFiles = [];
     const updatedOverrideFiles = [];
     const skippedMissingFiles = [];
     const assetReplacements = [];
     for (const file of UPGRADE_THEME_ASSET_FILES) {
-      const source = path10.join(assetRoot, file);
-      const target = path10.join(this.rootDir, file);
+      const source = path14.join(assetRoot, file);
+      const target = path14.join(this.rootDir, file);
       this.assertInsideWorkspace(target);
       if (!await exists(source)) {
         skippedMissingFiles.push(file);
@@ -3575,10 +6525,10 @@ var TemplateService = class {
     const state = colorPolicy === "default" ? await this.stateService.loadState() : void 0;
     const targets = assetReplacements.map((item) => item.target);
     if (colorPolicy === "default") {
-      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path10.join(this.rootDir, file)));
+      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path14.join(this.rootDir, file)));
     }
     const existedBefore = /* @__PURE__ */ new Map();
-    await import_node_fs10.promises.mkdir(backupDir, { recursive: true });
+    await import_node_fs13.promises.mkdir(backupDir, { recursive: true });
     for (const target of targets) {
       this.assertInsideWorkspace(target);
       const existed = await exists(target);
@@ -3615,18 +6565,18 @@ var TemplateService = class {
     const normalizedTarget = this.normalizeOutputTarget(outputTarget);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === String(templateId || "").trim()) ?? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal") ?? STARTER_TEMPLATE_DEFINITIONS[0];
     if (!template) throw new Error("No starter templates available.");
-    const targetAbs = path10.resolve(this.rootDir, normalizedTarget);
+    const targetAbs = path14.resolve(this.rootDir, normalizedTarget);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat = await import_node_fs10.promises.stat(targetAbs);
+      const stat = await import_node_fs13.promises.stat(targetAbs);
       if (stat.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
-    const text = await import_node_fs10.promises.readFile(source, "utf8");
+    const text = await import_node_fs13.promises.readFile(source, "utf8");
     if (!extractDocumentclassDeclaration(text)) throw new Error(`Starter template is missing a valid \\documentclass declaration: ${template.filename}`);
-    await import_node_fs10.promises.mkdir(path10.dirname(targetAbs), { recursive: true });
-    await import_node_fs10.promises.writeFile(targetAbs, text, "utf8");
+    await import_node_fs13.promises.mkdir(path14.dirname(targetAbs), { recursive: true });
+    await import_node_fs13.promises.writeFile(targetAbs, text, "utf8");
     const state = await this.stateService.loadState();
     state.compile_targets = await this.stateService.listCandidateTexFiles();
     state.compile_target = normalizeCompileTarget(this.rootDir, normalizedTarget, state.compile_targets);
@@ -3641,31 +6591,31 @@ var TemplateService = class {
   normalizeOutputTarget(raw) {
     let target = String(raw ?? "").trim() || "main.tex";
     target = toPosixPath(target);
-    if (path10.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
-    if (!path10.extname(target)) target += ".tex";
-    if (path10.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
-    const resolved = path10.resolve(this.rootDir, target);
+    if (path14.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
+    if (!path14.extname(target)) target += ".tex";
+    if (path14.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
+    const resolved = path14.resolve(this.rootDir, target);
     if (!isSubpath(resolved, this.rootDir)) throw new Error("Output target is outside workspace.");
     return workspaceRel(this.rootDir, resolved);
   }
   async backupFile(source, backupDir) {
     this.assertInsideWorkspace(source);
     const rel = workspaceRel(this.rootDir, source);
-    const backupPath = path10.join(backupDir, rel);
+    const backupPath = path14.join(backupDir, rel);
     this.assertInsideWorkspace(backupPath);
-    await import_node_fs10.promises.mkdir(path10.dirname(backupPath), { recursive: true });
-    await import_node_fs10.promises.copyFile(source, backupPath);
+    await import_node_fs13.promises.mkdir(path14.dirname(backupPath), { recursive: true });
+    await import_node_fs13.promises.copyFile(source, backupPath);
   }
   async replaceFileAtomic(source, target) {
     const tempPath = `${target}.tmp-${process.pid}-${(0, import_node_crypto5.randomUUID)()}`;
     this.assertInsideWorkspace(target);
     this.assertInsideWorkspace(tempPath);
-    await import_node_fs10.promises.mkdir(path10.dirname(target), { recursive: true });
+    await import_node_fs13.promises.mkdir(path14.dirname(target), { recursive: true });
     try {
-      await import_node_fs10.promises.copyFile(source, tempPath);
-      await import_node_fs10.promises.rename(tempPath, target);
+      await import_node_fs13.promises.copyFile(source, tempPath);
+      await import_node_fs13.promises.rename(tempPath, target);
     } catch (err) {
-      await import_node_fs10.promises.unlink(tempPath).catch(() => void 0);
+      await import_node_fs13.promises.unlink(tempPath).catch(() => void 0);
       throw err;
     }
   }
@@ -3674,10 +6624,10 @@ var TemplateService = class {
     for (const target of [...targets].reverse()) {
       try {
         if (existedBefore.get(target)) {
-          const backupPath = path10.join(backupDir, workspaceRel(this.rootDir, target));
+          const backupPath = path14.join(backupDir, workspaceRel(this.rootDir, target));
           await this.replaceFileAtomic(backupPath, target);
         } else {
-          await import_node_fs10.promises.unlink(target).catch((err) => {
+          await import_node_fs13.promises.unlink(target).catch((err) => {
             if (err.code !== "ENOENT") throw err;
           });
         }
@@ -3688,7 +6638,7 @@ var TemplateService = class {
     return errors;
   }
   assertInsideWorkspace(absPath) {
-    if (!isSubpath(path10.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
+    if (!isSubpath(path14.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
   }
   timestamp() {
     return (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(".", "-");
@@ -3797,9 +6747,9 @@ var ToolkitService = class {
           }
           const target = String(payload.compile_target ?? "");
           const preview = await this.splitter.splitCompileTarget(target, true, String(payload.sections_dir ?? "Sections"));
-          const backup = await this.nextSplitBackupPath(path11.resolve(this.rootDir, target));
+          const backup = await this.nextSplitBackupPath(path15.resolve(this.rootDir, target));
           const generated = preview.split.generated_subfile_targets;
-          const paths = [target, backup, ...generated, ...new Set(generated.map((item) => path11.dirname(item)))];
+          const paths = [target, backup, ...generated, ...new Set(generated.map((item) => path15.dirname(item)))];
           const result = await this.history.runFileChange(command, "Split LaTeX target", paths, async () => {
             const changed = await this.splitter.splitCompileTarget(target, false, String(payload.sections_dir ?? "Sections"));
             return { ...changed.response, split: changed.split };
@@ -3866,14 +6816,14 @@ var ToolkitService = class {
   }
   resolvePdfPath(rawPath) {
     const rel = rawPath.trim() || "main.pdf";
-    const resolved = path11.resolve(this.rootDir, rel);
+    const resolved = path15.resolve(this.rootDir, rel);
     if (!resolved.endsWith(".pdf")) throw new Error("PDF path must end with .pdf.");
-    if (!resolved.startsWith(path11.resolve(this.rootDir) + path11.sep) && resolved !== path11.resolve(this.rootDir)) throw new Error("PDF path is outside workspace.");
+    if (!resolved.startsWith(path15.resolve(this.rootDir) + path15.sep) && resolved !== path15.resolve(this.rootDir)) throw new Error("PDF path is outside workspace.");
     return resolved;
   }
   async readPdfIfExists(rawPath) {
     const pdf = this.resolvePdfPath(rawPath);
-    await import_node_fs11.promises.access(pdf);
+    await import_node_fs14.promises.access(pdf);
     return pdf;
   }
   async runStateMutation(command, label, payload, task) {
@@ -3933,23 +6883,30 @@ var activePanel;
 var toolkitServices = /* @__PURE__ */ new Map();
 var personalStyles;
 function activate(context) {
-  const output = vscode.window.createOutputChannel("LaTeX Editing Toolkit");
+  const output = vscode7.window.createOutputChannel("LaTeX Editing Toolkit");
   const projectRegistry = new LocalProjectRegistry(context.globalState);
   personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = (id, handler) => registerToolkitCommand(output, id, handler);
+  registerSnippetHost(context, output);
+  void warnAboutLegacySnips(context, output);
   context.subscriptions.push(
     output,
     treeProvider,
-    vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
-    vscode.window.onDidChangeWindowState((state) => {
+    vscode7.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
+    vscode7.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
+    vscode7.window.onDidChangeWindowState((state) => {
       if (state.focused) treeProvider.refresh();
     }),
     command("latexEditingToolkit.openToolkit", async (folderUri) => {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
+    }),
+    command("hsnips.openSnippetManager", async (folderUri) => {
+      const folder = folderUri instanceof vscode7.Uri ? vscode7.workspace.getWorkspaceFolder(folderUri) : vscode7.window.activeTextEditor ? vscode7.workspace.getWorkspaceFolder(vscode7.window.activeTextEditor.document.uri) : vscode7.workspace.workspaceFolders?.[0];
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
+      await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
       await createProjectWizard(context, projectRegistry, treeProvider, output);
@@ -4011,32 +6968,32 @@ function activate(context) {
       if (!service) return;
       const result = await service.handle("initialize-workspace", {});
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
+      vscode7.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
     }),
     command("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const choice = await vscode.window.showWarningMessage(
+      const choice = await vscode7.window.showWarningMessage(
         "Upgrade bundled theme assets? Existing files are backed up first. Preserve Colors keeps all current settings; Reset to Default only replaces the complete color/style package.",
         { modal: true },
         "Preserve Colors",
         "Reset to Default"
       );
       if (!choice) return;
-      const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
+      const result = await vscode7.window.withProgress(
+        { location: vscode7.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
         () => service.handle("upgrade-theme-assets", { color_policy: choice === "Reset to Default" ? "default" : "preserve" })
       );
       const resetSuffix = result.updated_override_files?.length ? ` Updated ${result.updated_override_files.length} color state file(s).` : " Colors preserved.";
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
+      vscode7.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
     }),
     command("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {});
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
+      vscode7.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
     }),
     command("latexEditingToolkit.saveOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -4044,12 +7001,12 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("save", response.state);
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
+      vscode7.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
     }),
     command("latexEditingToolkit.resetOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode.window.showWarningMessage(
+      const ok = await vscode7.window.showWarningMessage(
         "Reset all Toolkit overrides? This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, and status settings.",
         { modal: true },
         "Reset All"
@@ -4057,30 +7014,30 @@ function activate(context) {
       if (ok !== "Reset All") return;
       await service.handle("reset", {});
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
+      vscode7.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
     }),
     command("latexEditingToolkit.compilePdf", async (folderUri) => {
       const scoped = await folderAndServiceForCommand(context, folderUri);
       if (!scoped) return;
       const response = await scoped.service.handle("state", {});
-      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
+      const result = await vscode7.window.withProgress({ location: vscode7.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
       logCompileResult(output, scoped.folder.uri.fsPath, result);
       const success = Boolean(result.success);
       treeProvider.refresh();
-      if (success) vscode.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
+      if (success) vscode7.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
       else {
-        const action = await vscode.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
+        const action = await vscode7.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
         if (action === "Show Log") output.show(true);
       }
     }),
     command("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
+      const ok = await vscode7.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {});
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
+      vscode7.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
     }),
     command("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -4088,7 +7045,7 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage("Split current LaTeX target.", 2500);
+      vscode7.window.setStatusBarMessage("Split current LaTeX target.", 2500);
     }),
     command("latexEditingToolkit.renumberUnits", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -4096,17 +7053,17 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage("Renumbered referenced units.", 2500);
+      vscode7.window.setStatusBarMessage("Renumbered referenced units.", 2500);
     }),
     command("latexEditingToolkit.unsplitUnit", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
-      const ok = await vscode.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
+      const ok = await vscode7.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
       treeProvider.refresh();
-      vscode.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
+      vscode7.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
 }
@@ -4116,20 +7073,36 @@ function deactivate() {
   toolkitServices.clear();
   personalStyles = void 0;
 }
+var LEGACY_SNIPS_NOTICE_KEY = "latexEditingToolkit.legacySnipsNotice.v1";
+async function warnAboutLegacySnips(context, output) {
+  const legacyId = "yiqiyang33.yiqis-latexsnips";
+  const legacy = vscode7.extensions.getExtension(legacyId);
+  if (!legacy || context.globalState.get(LEGACY_SNIPS_NOTICE_KEY)) return;
+  await context.globalState.update(LEGACY_SNIPS_NOTICE_KEY, true);
+  output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Legacy extension detected: ${legacyId}`);
+  const action = await vscode7.window.showWarningMessage(
+    "Yiqi's LatexSnips is also installed. LaTeX Editing Toolkit 1.0 now includes the same snippet engine; disable the old extension to avoid duplicate completions and Enter/Tab behavior.",
+    "Open Extension",
+    "Continue"
+  );
+  if (action === "Open Extension") {
+    await vscode7.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
+  }
+}
 var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
 async function createProjectWizard(context, registry, treeProvider, output) {
   const recent = context.globalState.get(RECENT_PROJECT_PARENTS_KEY) ?? [];
   const suggested = /* @__PURE__ */ new Set();
-  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+  for (const folder of vscode7.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path12.dirname(folder.uri.fsPath));
+      suggested.add(path16.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
-  const location = await vscode.window.showQuickPick(
+  const location = await vscode7.window.showQuickPick(
     [
-      ...[...suggested].map((folderPath) => ({ label: path12.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...[...suggested].map((folderPath) => ({ label: path16.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
@@ -4137,7 +7110,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
   if (!location) return;
   let parentPath = location.folderPath;
   if (!parentPath) {
-    const selected = await vscode.window.showOpenDialog({
+    const selected = await vscode7.window.showOpenDialog({
       title: "Create Project (1/3): Choose Parent Folder",
       canSelectFiles: false,
       canSelectFolders: true,
@@ -4148,7 +7121,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
     parentPath = selected[0].fsPath;
   }
-  const projectName = await vscode.window.showInputBox({
+  const projectName = await vscode7.window.showInputBox({
     title: "Create Project (2/3): Project Name",
     prompt: `A new folder will be created inside ${parentPath}`,
     value: "New Notes",
@@ -4162,7 +7135,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     }
   });
   if (!projectName) return;
-  const pickedTemplate = await vscode.window.showQuickPick(
+  const pickedTemplate = await vscode7.window.showQuickPick(
     STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
       label: template.label,
       description: template.id,
@@ -4174,42 +7147,42 @@ async function createProjectWizard(context, registry, treeProvider, output) {
   if (!pickedTemplate) return;
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
   if (!preflight.ok) {
-    const action = await vscode.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
+    const action = await vscode7.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE PROJECT PREFLIGHT`);
     for (const error of preflight.errors) output.appendLine(`- ${error}`);
     if (action === "Show Log") output.show(true);
     return;
   }
   if (preflight.targetExists && preflight.targetEmpty) {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await vscode7.window.showWarningMessage(
       `The folder '${preflight.rootPath}' already exists and is empty. Use it for the new project?`,
       { modal: true },
       "Use Empty Folder"
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const nextRecent = [parentPath, ...recent.filter((item) => path12.normalize(item) !== path12.normalize(parentPath))].slice(0, 8);
+  const nextRecent = [parentPath, ...recent.filter((item) => path16.normalize(item) !== path16.normalize(parentPath))].slice(0, 8);
   await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
   try {
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id));
+    await vscode7.window.withProgress({ location: vscode7.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id));
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
     const message = err instanceof Error ? err.message : String(err);
-    const action = await vscode.window.showErrorMessage(
+    const action = await vscode7.window.showErrorMessage(
       `Project creation failed: ${message}. The folder may contain partially generated resources.`,
       "Open Folder",
       "Show Log"
     );
-    if (action === "Open Folder") await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+    if (action === "Open Folder") await vscode7.commands.executeCommand("vscode.openFolder", vscode7.Uri.file(preflight.rootPath), { forceNewWindow: false });
     if (action === "Show Log") output.show(true);
     return;
   }
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
-  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+  vscode7.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
+  await vscode7.commands.executeCommand("vscode.openFolder", vscode7.Uri.file(preflight.rootPath), { forceNewWindow: false });
 }
 async function restoreLastToolkitChange(context, treeProvider, output, direction, folderUri) {
   const scoped = await folderAndServiceForCommand(context, folderUri);
@@ -4219,7 +7192,7 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, {});
   } catch (err) {
     if (!(err instanceof HistoryConflictError)) throw err;
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await vscode7.window.showWarningMessage(
       `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
       { modal: true },
       "Show Conflicts",
@@ -4235,11 +7208,11 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, { force: true });
   }
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
-  if (activePanel?.folder.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
+  vscode7.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
+  if (activePanel?.folder?.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
 }
 function registerToolkitCommand(output, commandId, handler) {
-  return vscode.commands.registerCommand(commandId, async (...args) => {
+  return vscode7.commands.registerCommand(commandId, async (...args) => {
     try {
       return await handler(...args);
     } catch (err) {
@@ -4247,22 +7220,22 @@ function registerToolkitCommand(output, commandId, handler) {
       const workspacePath = workspacePathFromArguments(args);
       logToolkitError(output, commandId, workspacePath, err);
       const message = err instanceof Error ? err.message : String(err);
-      const action = await vscode.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
+      const action = await vscode7.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
       if (action === "Show Log") output.show(true);
       return void 0;
     }
   });
 }
 function isUserCancellation(err) {
-  return err instanceof vscode.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
+  return err instanceof vscode7.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
 }
 function workspacePathFromArguments(args) {
   for (const arg of args) {
-    if (arg instanceof vscode.Uri && arg.scheme === "file") return arg.fsPath;
+    if (arg instanceof vscode7.Uri && arg.scheme === "file") return arg.fsPath;
     const projectPath = localProjectPathFromArgument(arg);
     if (projectPath) return projectPath;
   }
-  return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
+  return vscode7.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
 }
 function logToolkitError(output, commandId, workspacePath, err) {
   const error = err instanceof Error ? err : new Error(String(err));
@@ -4278,14 +7251,14 @@ function logCompileResult(output, workspacePath, result) {
   output.appendLine("");
 }
 async function selectWorkspaceFolder(preferredFolderUri) {
-  const folders = vscode.workspace.workspaceFolders ?? [];
+  const folders = vscode7.workspace.workspaceFolders ?? [];
   if (folders.length === 0) {
-    vscode.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
+    vscode7.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
     return void 0;
   }
   const localFolders = folders.filter((folder) => folder.uri.scheme === "file");
   if (localFolders.length === 0) {
-    vscode.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
+    vscode7.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
     return void 0;
   }
   if (preferredFolderUri?.scheme === "file") {
@@ -4293,7 +7266,7 @@ async function selectWorkspaceFolder(preferredFolderUri) {
     if (matched) return matched;
   }
   if (localFolders.length === 1) return localFolders[0];
-  const picked = await vscode.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
+  const picked = await vscode7.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
   return picked?.folder;
 }
 async function serviceForCommand(context, preferredFolderUri) {
@@ -4305,9 +7278,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path12.resolve(rootPath);
+  let canonical = path16.resolve(rootPath);
   try {
-    canonical = fs12.realpathSync.native(canonical);
+    canonical = fs14.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -4342,24 +7315,24 @@ function currentPdfPath(state) {
 async function openLocalProject(projectPathArg) {
   const projectPath = localProjectPathFromArgument(projectPathArg);
   if (!projectPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    vscode7.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
   try {
-    if (!(await fs12.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
+    if (!(await fs14.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
-    vscode.window.showWarningMessage(`Local note project not found: ${projectPath}`);
+    vscode7.window.showWarningMessage(`Local note project not found: ${projectPath}`);
     return;
   }
-  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectPath), { forceNewWindow: false });
+  await vscode7.commands.executeCommand("vscode.openFolder", vscode7.Uri.file(projectPath), { forceNewWindow: false });
 }
 async function relocateLocalProject(registry, treeProvider, projectPathArg) {
   const oldPath = localProjectPathFromArgument(projectPathArg);
   if (!oldPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    vscode7.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
-  const target = await vscode.window.showOpenDialog({
+  const target = await vscode7.window.showOpenDialog({
     canSelectFiles: false,
     canSelectFolders: true,
     canSelectMany: false,
@@ -4367,22 +7340,22 @@ async function relocateLocalProject(registry, treeProvider, projectPathArg) {
   });
   if (!target?.[0]) return;
   if (target[0].scheme !== "file") {
-    vscode.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
+    vscode7.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
     return;
   }
   const updated = await registry.relocate(oldPath, target[0].fsPath);
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
+  vscode7.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
 }
 async function removeLocalProject(registry, treeProvider, projectPathArg) {
   const projectPath = localProjectPathFromArgument(projectPathArg);
   if (!projectPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+    vscode7.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
   const project = await registry.find(projectPath);
-  const label = project?.label ?? path12.basename(path12.normalize(projectPath));
-  const choice = await vscode.window.showWarningMessage(
+  const label = project?.label ?? path16.basename(path16.normalize(projectPath));
+  const choice = await vscode7.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
     { modal: true },
     "Forget"
@@ -4390,7 +7363,7 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
   if (choice !== "Forget") return;
   const removed = await registry.remove(projectPath);
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
+  vscode7.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
 }
 function localProjectPathFromArgument(value) {
   if (typeof value === "string") return value;
@@ -4407,7 +7380,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const templates = scoped.response.schema.starter_templates;
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     templates.map((template) => ({
       label: template.label,
       description: template.id,
@@ -4417,15 +7390,15 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     { placeHolder: "Select starter template" }
   );
   if (!picked) return;
-  const outputTarget = await vscode.window.showInputBox({
+  const outputTarget = await vscode7.window.showInputBox({
     title: "Generate Starter",
     prompt: "Workspace-relative .tex file to create",
     value: scoped.response.schema.starter_default_output_target || "main.tex"
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs12.existsSync(path12.resolve(scoped.folder.uri.fsPath, outputTarget))) {
-    const ok = await vscode.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
+  if (fs14.existsSync(path16.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+    const ok = await vscode7.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
   }
@@ -4435,17 +7408,17 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     overwrite
   });
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
+  vscode7.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
 }
 async function pickCompileTarget(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const targets = scoped.response.state.compile_targets;
   if (targets.length === 0) {
-    vscode.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
+    vscode7.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
     return;
   }
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     targets.map((target) => ({
       label: target,
       description: target === scoped.response.state.compile_target ? "current" : ""
@@ -4455,17 +7428,17 @@ async function pickCompileTarget(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("target", { compile_target: picked.label });
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
 }
 async function pickCompileRecipe(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const recipes = scoped.response.state.compile_recipes;
   if (recipes.length === 0) {
-    vscode.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
+    vscode7.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
     return;
   }
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     recipes.map((recipe) => ({
       label: recipe.name,
       description: recipe.id === scoped.response.state.compile_recipe ? "current" : recipe.id,
@@ -4480,7 +7453,7 @@ async function pickCompileRecipe(context, treeProvider, folderUri) {
     compile_use_internal_fallback: false
   });
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
 }
 async function toggleInternalFallback(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -4491,7 +7464,7 @@ async function toggleInternalFallback(context, treeProvider, folderUri) {
     compile_use_internal_fallback: next
   });
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
 }
 async function openCurrentPdf(context, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -4499,9 +7472,9 @@ async function openCurrentPdf(context, folderUri) {
   const rawPath = currentPdfPath(scoped.response.state);
   try {
     const pdfPath = await scoped.service.readPdfIfExists(rawPath);
-    await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
+    await vscode7.commands.executeCommand("vscode.open", vscode7.Uri.file(pdfPath));
   } catch {
-    vscode.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
+    vscode7.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
   }
 }
 async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
@@ -4513,7 +7486,7 @@ async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
   state.toggles[toggleId] = !state.toggles[toggleId];
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
 }
 async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const scoped = await responseForCommand(context, folderUri);
@@ -4521,7 +7494,7 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const field = scoped.response.schema.class_config.find((item) => item.id === fieldId);
   if (!field) return;
   const current = scoped.response.state.class_config[field.id];
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     field.options.map((option) => ({
       label: option.label,
       description: option.value === current ? "current" : option.value,
@@ -4534,14 +7507,14 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   state.class_config[field.id] = picked.option.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
 }
 async function pickStylePreset(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const presets = scoped.response.schema.style_presets;
   const current = scoped.response.state.style_preset;
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.label,
       description: preset.id === current ? "current" : preset.id,
@@ -4553,7 +7526,7 @@ async function pickStylePreset(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
 }
 async function pickBodyFontSize(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -4564,7 +7537,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
     values.push(Number(value.toFixed(2)));
   }
   const current = scoped.response.state.body_font_size_pt;
-  const picked = await vscode.window.showQuickPick(
+  const picked = await vscode7.window.showQuickPick(
     values.map((value) => ({
       label: `${formatPointSize(value)} pt`,
       description: value === current ? "current" : "",
@@ -4577,7 +7550,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
   state.body_font_size_pt = picked.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
+  vscode7.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
 }
 function formatPointSize(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -4589,7 +7562,7 @@ var ToolkitTreeProvider = class {
   }
   context;
   projectRegistry;
-  changeEmitter = new vscode.EventEmitter();
+  changeEmitter = new vscode7.EventEmitter();
   onDidChangeTreeData = this.changeEmitter.event;
   refresh() {
     this.changeEmitter.fire();
@@ -4598,14 +7571,14 @@ var ToolkitTreeProvider = class {
     this.changeEmitter.dispose();
   }
   getTreeItem(node) {
-    const collapsibleState = node.collapsibleState ?? (node.children ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
-    const item = new vscode.TreeItem(node.label, collapsibleState);
+    const collapsibleState = node.collapsibleState ?? (node.children ? vscode7.TreeItemCollapsibleState.Collapsed : vscode7.TreeItemCollapsibleState.None);
+    const item = new vscode7.TreeItem(node.label, collapsibleState);
     item.id = node.id;
     item.description = node.description;
     item.tooltip = node.tooltip ?? node.label;
     item.contextValue = node.contextValue;
     item.resourceUri = node.resourceUri;
-    if (node.iconId) item.iconPath = new vscode.ThemeIcon(node.iconId);
+    if (node.iconId) item.iconPath = new vscode7.ThemeIcon(node.iconId);
     if (node.commandId) {
       item.command = {
         command: node.commandId,
@@ -4620,7 +7593,7 @@ var ToolkitTreeProvider = class {
     return this.rootNodes();
   }
   async rootNodes() {
-    const localFolders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
+    const localFolders = (vscode7.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes = [];
     nodes.push(await this.localNotesNode());
     if (localFolders.length === 0) {
@@ -4641,7 +7614,7 @@ var ToolkitTreeProvider = class {
   async localNotesNode() {
     const projects = await this.projectRegistry.list();
     const openProjectIds = new Set((await Promise.all(
-      (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
+      (vscode7.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project) => Boolean(project)).map((project) => project.id));
     const children = projects.length > 0 ? projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))) : [
       this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
@@ -4652,11 +7625,11 @@ var ToolkitTreeProvider = class {
       "Local Notes",
       "book",
       children,
-      vscode.TreeItemCollapsibleState.Expanded
+      vscode7.TreeItemCollapsibleState.Expanded
     );
   }
   localProjectNode(project, isOpen) {
-    const parent = path12.basename(path12.dirname(project.rootPath)) || path12.dirname(project.rootPath);
+    const parent = path16.basename(path16.dirname(project.rootPath)) || path16.dirname(project.rootPath);
     return {
       id: `local-project:${project.id}`,
       label: project.label,
@@ -4666,7 +7639,7 @@ var ToolkitTreeProvider = class {
       commandId: "latexEditingToolkit.openLocalProject",
       commandArgs: [project.rootPath],
       contextValue: project.missing ? "localProjectMissing" : "localProject",
-      resourceUri: vscode.Uri.file(project.rootPath)
+      resourceUri: vscode7.Uri.file(project.rootPath)
     };
   }
   async workspaceNode(folder, isOnlyFolder) {
@@ -4679,7 +7652,7 @@ var ToolkitTreeProvider = class {
       tooltip: folder.uri.fsPath,
       iconId: "root-folder",
       resourceUri: folder.uri,
-      collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+      collapsibleState: vscode7.TreeItemCollapsibleState.Expanded,
       contextValue: "workspace",
       children: response instanceof Error ? this.workspaceErrorGroups(folder, response) : this.workspaceGroups(folder, response)
     };
@@ -4700,7 +7673,21 @@ var ToolkitTreeProvider = class {
     ];
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
+    const activeSnippetProfile = vscode7.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path16.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
+      this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
+        this.actionNode(
+          "open-snippet-manager",
+          "Open Snippet Manager",
+          `${activeSnippetProfile || "base"} \xB7 ${snippetFileCount} file${snippetFileCount === 1 ? "" : "s"}`,
+          "edit",
+          "hsnips.openSnippetManager",
+          folderArg
+        ),
+        this.actionNode("select-snippet-profile", "Select Profile", "base + profile + workspace", "account", "hsnips.selectProfile", folderArg),
+        this.actionNode("reload-snippets", "Reload Snippets", ".hsnips files", "refresh", "hsnips.reloadSnippets", folderArg)
+      ], vscode7.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} \xB7 ${snippetFileCount} files`),
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
@@ -4708,7 +7695,7 @@ var ToolkitTreeProvider = class {
         this.actionNode("pick-recipe", "Pick Recipe", `${state.compile_recipes.length} found`, "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
-      ], vscode.TreeItemCollapsibleState.Expanded),
+      ], vscode7.TreeItemCollapsibleState.Expanded),
       this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
         this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
         this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
@@ -4751,7 +7738,7 @@ var ToolkitTreeProvider = class {
         ...this.infoNode(`config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
         tooltip: state.config_warnings.join("\n")
       });
-      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode.TreeItemCollapsibleState.Expanded));
+      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode7.TreeItemCollapsibleState.Expanded));
     }
     return nodes;
   }
@@ -4766,19 +7753,20 @@ var ToolkitTreeProvider = class {
       this.actionNode("open-toolkit", "Open Toolkit", "visual workbench", "tools", "latexEditingToolkit.openToolkit", folderArg),
       this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", [
         this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error")
-      ], vscode.TreeItemCollapsibleState.Expanded),
+      ], vscode7.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
         this.actionNode("generate-starter", "Generate Starter", "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
         this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
-      ], vscode.TreeItemCollapsibleState.Expanded)
+      ], vscode7.TreeItemCollapsibleState.Expanded)
     ];
   }
-  groupNode(id, label, iconId, children, collapsibleState = vscode.TreeItemCollapsibleState.Collapsed) {
+  groupNode(id, label, iconId, children, collapsibleState = vscode7.TreeItemCollapsibleState.Collapsed, description) {
     return {
       id,
       label,
+      description,
       iconId,
       children,
       collapsibleState,
@@ -4851,7 +7839,8 @@ var ToolkitPanel = class _ToolkitPanel {
     this.output = output;
     this.styleRegistry = styleRegistry;
     this.onStateChanged = onStateChanged;
-    this.service = toolkitService(context, folder.uri.fsPath);
+    this.service = folder ? toolkitService(context, folder.uri.fsPath) : void 0;
+    this.snippetService = new SnippetService(folder?.uri.fsPath);
     this.panel.webview.html = this.html();
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message), null, this.disposables);
@@ -4863,29 +7852,42 @@ var ToolkitPanel = class _ToolkitPanel {
   styleRegistry;
   onStateChanged;
   service;
+  snippetService;
   disposables = [];
   disposed = false;
   static createOrShow(context, folder, output, styleRegistry, onStateChanged) {
+    const panelKey = folder?.uri.toString() || "global-snippets";
     if (activePanel) {
-      if (activePanel.folder.uri.toString() === folder.uri.toString()) {
-        activePanel.panel.reveal(vscode.ViewColumn.One);
+      if (activePanel.panelKey === panelKey) {
+        activePanel.panel.reveal(vscode7.ViewColumn.One);
         return activePanel;
       }
       activePanel.dispose();
     }
-    const panel = vscode.window.createWebviewPanel(
+    const panel = vscode7.window.createWebviewPanel(
       "latexEditingToolkit.toolkit",
       "LaTeX Editing Toolkit",
-      vscode.ViewColumn.One,
+      vscode7.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode.Uri.file(path12.join(context.extensionPath, "dist"))
+          vscode7.Uri.file(path16.join(context.extensionPath, "dist")),
+          vscode7.Uri.file(path16.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
     return new _ToolkitPanel(context, folder, panel, output, styleRegistry, onStateChanged);
+  }
+  get panelKey() {
+    return this.folder?.uri.toString() || "global-snippets";
+  }
+  requireService() {
+    if (!this.service) throw new Error("Open a local workspace to use this Toolkit section.");
+    return this.service;
+  }
+  get workspacePath() {
+    return this.folder?.uri.fsPath || "global-snippets";
   }
   dispose() {
     if (this.disposed) return;
@@ -4899,8 +7901,13 @@ var ToolkitPanel = class _ToolkitPanel {
     this.disposables = [];
   }
   async refreshState() {
+    if (!this.service) return;
     const data = await this.service.handle("state", {});
     await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
+  }
+  async openSection(section) {
+    this.panel.reveal(vscode7.ViewColumn.One);
+    await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
   }
   async handleMessage(message) {
     const request = message;
@@ -4911,7 +7918,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const action = request.payload?.action;
         if (!isConfirmAction(action)) throw new Error("Unknown Toolkit confirmation action.");
         const spec = confirmationSpec(action, String(request.payload?.detail ?? ""));
-        const choice = await vscode.window.showWarningMessage(
+        const choice = await vscode7.window.showWarningMessage(
           spec.message,
           { modal: true, detail: spec.detail },
           spec.confirmLabel
@@ -4920,85 +7927,127 @@ var ToolkitPanel = class _ToolkitPanel {
       } else if (request.command === "show-log") {
         this.output.show(true);
         data = { shown: true };
+      } else if (request.command === "snippets-state" || request.command === "snippets-reload") {
+        if (request.command === "snippets-reload") await vscode7.commands.executeCommand("hsnips.reloadSnippets");
+        data = await this.snippetService.state();
+      } else if (request.command === "snippets-analyze") {
+        data = await this.snippetService.analyze(String(request.payload?.file_path ?? ""), String(request.payload?.content ?? ""));
+      } else if (request.command === "snippets-save") {
+        data = await this.snippetService.save(
+          String(request.payload?.file_path ?? ""),
+          String(request.payload?.content ?? ""),
+          typeof request.payload?.document_hash === "string" ? request.payload.document_hash : void 0,
+          typeof request.payload?.mtime_ms === "number" ? request.payload.mtime_ms : void 0
+        );
+      } else if (request.command === "snippets-open-source") {
+        await this.snippetService.openSource(String(request.payload?.file_path ?? ""), Number(request.payload?.line ?? 1));
+        data = { opened: true };
+      } else if (request.command === "snippets-create-file") {
+        const scope = String(request.payload?.scope ?? "base");
+        if (scope !== "base" && scope !== "profile" && scope !== "workspace") throw new Error("Unknown snippet scope.");
+        data = await this.snippetService.create(String(request.payload?.language ?? "latex"), scope);
+      } else if (request.command === "snippets-select-profile") {
+        const profile = String(request.payload?.profile ?? "").trim();
+        const current = await this.snippetService.state();
+        if (profile && !current.profiles.includes(profile)) throw new Error("Unknown snippet profile.");
+        await vscode7.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode7.ConfigurationTarget.Global);
+        await vscode7.commands.executeCommand("hsnips.reloadSnippets");
+        data = await this.snippetService.state();
+      } else if (request.command === "snippets-open-directory") {
+        const scope = String(request.payload?.scope ?? "base");
+        if (scope === "base") await vscode7.commands.executeCommand("hsnips.openSnippetsDir");
+        else if (scope === "profile") await vscode7.commands.executeCommand("hsnips.openActiveProfile");
+        else if (scope === "workspace") await vscode7.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
+        else throw new Error("Unknown snippet directory scope.");
+        data = { opened: true };
       } else if (request.command === "pdf-status") {
+        const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
-        const pdfPath = this.service.resolvePdfPath(rawPath);
+        const pdfPath = service.resolvePdfPath(rawPath);
         let exists2 = false;
         try {
-          const stat = await fs12.promises.stat(pdfPath);
+          const stat = await fs14.promises.stat(pdfPath);
           exists2 = stat.isFile();
         } catch {
           exists2 = false;
         }
-        data = { path: rawPath || path12.basename(pdfPath), exists: exists2 };
+        data = { path: rawPath || path16.basename(pdfPath), exists: exists2 };
       } else if (request.command === "open-pdf") {
+        const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
-        const pdfPath = await this.service.readPdfIfExists(rawPath);
-        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath));
+        const pdfPath = await service.readPdfIfExists(rawPath);
+        await vscode7.commands.executeCommand("vscode.open", vscode7.Uri.file(pdfPath));
         data = { opened: true };
       } else if (request.command === "personal-style-save") {
+        const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
-        const label = await vscode.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode7.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (!label) {
-          data = await this.service.handle("state", {});
+          data = await service.handle("state", {});
         } else {
           const record = await this.styleRegistry.add(label, String(state.style_base_preset ?? state.style_preset ?? "default"), state.colors);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
-          data = await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
+          service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          data = await service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: record.id, style_base_preset: record.basePresetId } });
         }
       } else if (request.command === "personal-style-update") {
+        const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
         await this.styleRegistry.update(String(request.payload?.style_id ?? state.style_preset ?? ""), state.colors);
         refreshPersonalStylesOnServices(this.styleRegistry);
-        data = await this.service.handle("state", {});
+        data = await service.handle("state", {});
       } else if (request.command === "personal-style-rename") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const label = await vscode.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode7.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (label) await this.styleRegistry.rename(id, label);
         refreshPersonalStylesOnServices(this.styleRegistry);
-        data = await this.service.handle("state", {});
+        data = await service.handle("state", {});
       } else if (request.command === "personal-style-delete") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const confirmed = await vscode.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
-        if (confirmed !== "Delete Style") data = await this.service.handle("state", {});
+        const confirmed = await vscode7.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
+        if (confirmed !== "Delete Style") data = await service.handle("state", {});
         else {
           await this.styleRegistry.remove(id);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          this.service.setAdditionalStylePresets(this.styleRegistry.definitions());
+          service.setAdditionalStylePresets(this.styleRegistry.definitions());
           const state = request.payload?.state;
-          data = isPlainRecord(state) && state.style_preset === id ? await this.service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } }) : await this.service.handle("state", {});
+          data = isPlainRecord(state) && state.style_preset === id ? await service.handle("autosave", { revision: request.payload?.revision ?? 0, state: { ...state, style_preset: current.basePresetId, style_base_preset: current.basePresetId } }) : await service.handle("state", {});
         }
       } else if (request.command === "personal-style-import") {
-        const picked = await vscode.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
-        if (!picked?.[0]) data = await this.service.handle("state", {});
+        const service = this.requireService();
+        const picked = await vscode7.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
+        if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs12.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs14.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
-          data = { ...await this.service.handle("state", {}), personal_style_import: summary };
+          data = { ...await service.handle("state", {}), personal_style_import: summary };
         }
       } else if (request.command === "personal-style-export") {
+        const service = this.requireService();
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode.Uri.file(path12.join(this.folder.uri.fsPath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs12.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode7.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode7.Uri.file(path16.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs14.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
-        data = { ...await this.service.handle("state", {}), exported: Boolean(target) };
+        data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
+        const service = this.requireService();
         try {
-          data = await this.service.handle(request.command, request.payload ?? {});
+          data = await service.handle(request.command, request.payload ?? {});
         } catch (err) {
           if (!(err instanceof HistoryConflictError)) throw err;
           const direction = request.command.startsWith("undo") ? "undo" : "redo";
-          const choice = await vscode.window.showWarningMessage(
+          const choice = await vscode7.window.showWarningMessage(
             `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
             { modal: true },
             "Show Conflicts",
@@ -5008,40 +8057,48 @@ var ToolkitPanel = class _ToolkitPanel {
             this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${direction.toUpperCase()} CONFLICTS`);
             for (const conflict of err.conflicts) this.output.appendLine(`- ${conflict}`);
             this.output.show(true);
-            data = await this.service.handle("state", {});
-          } else if (choice === "Force Restore") data = await this.service.handle(request.command, { force: true });
-          else data = await this.service.handle("state", {});
+            data = await service.handle("state", {});
+          } else if (choice === "Force Restore") data = await service.handle(request.command, { force: true });
+          else data = await service.handle("state", {});
         }
       } else {
-        data = await this.service.handle(request.command, request.payload ?? {});
+        data = await this.requireService().handle(request.command, request.payload ?? {});
       }
       if (request.command === "compile") {
-        logCompileResult(this.output, this.folder.uri.fsPath, data);
+        logCompileResult(this.output, this.workspacePath, data);
       }
       if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete"].includes(request.command)) {
         this.onStateChanged();
       }
       await this.panel.webview.postMessage({ id: request.id, ok: true, data });
     } catch (err) {
-      logToolkitError(this.output, `webview:${request.command}`, this.folder.uri.fsPath, err);
+      logToolkitError(this.output, `webview:${request.command}`, this.workspacePath, err);
       await this.panel.webview.postMessage({ id: request.id, ok: false, error: err.message });
     }
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode.Uri.file(path12.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode.Uri.file(path12.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode.Uri.file(path12.join(this.context.extensionPath, "dist", "codicon.css")));
+    const scriptUri = webview.asWebviewUri(vscode7.Uri.file(path16.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode7.Uri.file(path16.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode7.Uri.file(path16.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode7.Uri.file(path16.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
+      `script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval'`,
       `img-src ${webview.cspSource} data:`,
-      `font-src ${webview.cspSource}`
+      `font-src ${webview.cspSource}`,
+      `worker-src ${webview.cspSource} blob: data:`,
+      `connect-src ${webview.cspSource}`
     ].join("; ");
-    const initial = JSON.stringify({ workspaceName: this.folder.name, workspacePath: this.folder.uri.fsPath });
-    const cssExists = fs12.existsSync(path12.join(this.context.extensionPath, "dist", "webview.css"));
+    const initial = JSON.stringify({
+      workspaceName: this.folder?.name || "Global Snippets",
+      workspacePath: this.folder?.uri.fsPath || "global-snippets",
+      snippetsOnly: !this.folder,
+      monacoBaseUri: monacoRootUri.toString()
+    });
+    const cssExists = fs14.existsSync(path16.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>
