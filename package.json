@@ -1,10 +1,10 @@
 {
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
-  "description": "A local-first LaTeX workspace toolkit with themes, project workflows, programmable hsnips, profiles, and mathematical editing helpers.",
-  "version": "1.0.0",
+  "description": "An integrated LaTeX workspace for themes, programmable hsnips, local and Overleaf builds, realtime sync, mirrors, and conflict resolution.",
+  "version": "2.0.0",
   "publisher": "yiqiyang33",
-  "icon": "assets/latex-toolkit.png",
+  "icon": "assets/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,7 +25,11 @@
     "template",
     "hsnips",
     "programmable snippets",
-    "dynamic snippets"
+    "dynamic snippets",
+    "overleaf",
+    "realtime sync",
+    "conflict resolution",
+    "remote compile"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -54,6 +58,7 @@
     "onCommand:hsnips.prevPlaceholder",
     "onCommand:hsnips.expand",
     "onCommand:latexEditingToolkit.openToolkit",
+    "onCommand:latexEditingToolkit.openSync",
     "onCommand:latexEditingToolkit.createProject",
     "onCommand:latexEditingToolkit.openLocalProject",
     "onCommand:latexEditingToolkit.relocateLocalProject",
@@ -82,7 +87,35 @@
     "onCommand:latexEditingToolkit.splitCurrentTarget",
     "onCommand:latexEditingToolkit.renumberUnits",
     "onCommand:latexEditingToolkit.unsplitUnit",
-    "onWebviewPanel:latexEditingToolkit.toolkit"
+    "onWebviewPanel:latexEditingToolkit.toolkit",
+    "onCommand:overleafCodex.loginWithCookie",
+    "onCommand:overleafCodex.listProjects",
+    "onCommand:overleafCodex.openProjectLocally",
+    "onCommand:overleafCodex.startRealtimeSync",
+    "onCommand:overleafCodex.stopRealtimeSync",
+    "onCommand:overleafCodex.checkSyncStatus",
+    "onCommand:overleafCodex.runFullSyncAudit",
+    "onCommand:overleafCodex.retrySyncPath",
+    "onCommand:overleafCodex.pushLocalFile",
+    "onCommand:overleafCodex.pullRemoteFile",
+    "onCommand:overleafCodex.openSyncDiff",
+    "onCommand:overleafCodex.resolveConflictUseLocal",
+    "onCommand:overleafCodex.resolveConflictAcceptRemote",
+    "onCommand:overleafCodex.moveRemoteDeletedToTrash",
+    "onCommand:overleafCodex.compile",
+    "onCommand:overleafCodex.viewPdf",
+    "onCommand:overleafCodex.showCompileLog",
+    "onCommand:overleafCodex.openLocalMirror",
+    "onCommand:overleafCodex.deleteLocalMirror",
+    "onCommand:overleafCodex.forgetLocalMirror",
+    "onCommand:overleafCodex.initializeMirrorGit",
+    "onCommand:overleafCodex.showCollaborators",
+    "onCommand:overleafCodex.showConflicts",
+    "onCommand:overleafCodex.openConflictDiff",
+    "onCommand:overleafCodex.acceptRemoteConflict",
+    "onCommand:overleafCodex.useLocalConflict",
+    "onCommand:overleafCodex.refreshViews",
+    "onCommand:overleafCodex.logout"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -90,6 +123,11 @@
       {
         "command": "latexEditingToolkit.openToolkit",
         "title": "LaTeX Editing Toolkit: Open Toolkit"
+      },
+      {
+        "command": "latexEditingToolkit.openSync",
+        "title": "LaTeX Editing Toolkit: Open Sync",
+        "icon": "$(cloud)"
       },
       {
         "command": "latexEditingToolkit.createProject",
@@ -312,34 +350,355 @@
         "category": "LaTeX Editing Toolkit: Snippets",
         "command": "hsnips.expand",
         "title": "Expand Snippet"
+      },
+      {
+        "command": "overleafCodex.loginWithCookie",
+        "title": "LaTeX Editing Toolkit: Overleaf: Login with Cookie",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.listProjects",
+        "title": "LaTeX Editing Toolkit: Overleaf: List Projects",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.openProjectLocally",
+        "title": "LaTeX Editing Toolkit: Overleaf: Open Project Locally",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.startRealtimeSync",
+        "title": "LaTeX Editing Toolkit: Overleaf: Start Realtime Sync",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.stopRealtimeSync",
+        "title": "LaTeX Editing Toolkit: Overleaf: Stop Realtime Sync",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.checkSyncStatus",
+        "title": "LaTeX Editing Toolkit: Overleaf: Check Sync Status",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.runFullSyncAudit",
+        "title": "LaTeX Editing Toolkit: Overleaf: Run Full Sync Audit",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.retrySyncPath",
+        "title": "LaTeX Editing Toolkit: Overleaf: Retry Sync Path",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.pushLocalFile",
+        "title": "LaTeX Editing Toolkit: Overleaf: Push Local",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.pullRemoteFile",
+        "title": "LaTeX Editing Toolkit: Overleaf: Pull Remote",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.openSyncDiff",
+        "title": "LaTeX Editing Toolkit: Overleaf: Open Sync Diff",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.resolveConflictUseLocal",
+        "title": "LaTeX Editing Toolkit: Overleaf: Resolve Conflict with Local",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.resolveConflictAcceptRemote",
+        "title": "LaTeX Editing Toolkit: Overleaf: Resolve Conflict with Remote",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.moveRemoteDeletedToTrash",
+        "title": "LaTeX Editing Toolkit: Overleaf: Move Remote Deleted to Trash",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.compile",
+        "title": "LaTeX Editing Toolkit: Overleaf: Compile Remote",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.viewPdf",
+        "title": "LaTeX Editing Toolkit: Overleaf: Open Remote PDF",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.showCompileLog",
+        "title": "LaTeX Editing Toolkit: Overleaf: Show Compile Log",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.openLocalMirror",
+        "title": "LaTeX Editing Toolkit: Overleaf: Open Local Mirror",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.deleteLocalMirror",
+        "title": "LaTeX Editing Toolkit: Overleaf: Delete Local Mirror",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.forgetLocalMirror",
+        "title": "LaTeX Editing Toolkit: Overleaf: Forget Local Mirror",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.initializeMirrorGit",
+        "title": "LaTeX Editing Toolkit: Overleaf: Initialize Mirror Git",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.showCollaborators",
+        "title": "LaTeX Editing Toolkit: Overleaf: Show Collaborators",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.showConflicts",
+        "title": "LaTeX Editing Toolkit: Overleaf: Show Conflicts",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.openConflictDiff",
+        "title": "LaTeX Editing Toolkit: Overleaf: Open Conflict Diff",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.acceptRemoteConflict",
+        "title": "LaTeX Editing Toolkit: Overleaf: Accept Remote Conflict",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.useLocalConflict",
+        "title": "LaTeX Editing Toolkit: Overleaf: Use Local Conflict",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.refreshViews",
+        "title": "LaTeX Editing Toolkit: Overleaf: Refresh",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.logout",
+        "title": "LaTeX Editing Toolkit: Overleaf: Logout",
+        "category": "LaTeX Editing Toolkit: Overleaf"
       }
     ],
     "configuration": {
       "title": "LaTeX Editing Toolkit: Snippets",
       "properties": {
-        "hsnips.multiLineContext": { "type": "number", "default": 20, "description": "Number of lines matched when using multi-line regex mode." },
-        "hsnips.windows": { "type": "string", "default": "%APPDATA%/Code/User/hsnips", "description": "Custom snippet path for Windows." },
-        "hsnips.linux": { "type": "string", "default": "$HOME/.config/Code/User/hsnips", "description": "Custom snippet path for Linux." },
-        "hsnips.mac": { "type": "string", "default": "$HOME/Library/Application Support/Code/User/hsnips", "description": "Custom snippet path for macOS." },
-        "hsnips.context.extraMathEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional LaTeX environments treated as math contexts." },
-        "hsnips.context.extraRowBreakEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional environments where Enter can append a row break." },
-        "hsnips.context.extraAlignmentEnvironments": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional environments where Tab can insert an alignment separator." },
-        "hsnips.context.extraTextLikeCommands": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Additional LaTeX commands whose argument is treated as text." },
-        "hsnips.profiles.activeProfile": { "type": "string", "default": "", "description": "Active snippet profile loaded from hsnips/profiles/<name>. Empty means base snippets only." }
+        "hsnips.multiLineContext": {
+          "type": "number",
+          "default": 20,
+          "description": "Number of lines matched when using multi-line regex mode."
+        },
+        "hsnips.windows": {
+          "type": "string",
+          "default": "%APPDATA%/Code/User/hsnips",
+          "description": "Custom snippet path for Windows."
+        },
+        "hsnips.linux": {
+          "type": "string",
+          "default": "$HOME/.config/Code/User/hsnips",
+          "description": "Custom snippet path for Linux."
+        },
+        "hsnips.mac": {
+          "type": "string",
+          "default": "$HOME/Library/Application Support/Code/User/hsnips",
+          "description": "Custom snippet path for macOS."
+        },
+        "hsnips.context.extraMathEnvironments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional LaTeX environments treated as math contexts."
+        },
+        "hsnips.context.extraRowBreakEnvironments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional environments where Enter can append a row break."
+        },
+        "hsnips.context.extraAlignmentEnvironments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional environments where Tab can insert an alignment separator."
+        },
+        "hsnips.context.extraTextLikeCommands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional LaTeX commands whose argument is treated as text."
+        },
+        "hsnips.profiles.activeProfile": {
+          "type": "string",
+          "default": "",
+          "description": "Active snippet profile loaded from hsnips/profiles/<name>. Empty means base snippets only."
+        },
+        "overleafCodex.serverUrl": {
+          "type": "string",
+          "default": "https://www.overleaf.com/",
+          "description": "Default Overleaf-compatible server URL."
+        },
+        "overleafCodex.localProjectsRoot": {
+          "type": "string",
+          "default": "~/Documents/OverleafCodex/projects",
+          "description": "Default parent directory for local Overleaf mirrors."
+        },
+        "overleafCodex.compileOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Compile the active Overleaf mirror after saving a supported source file."
+        },
+        "overleafCodex.syncBinaryFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow binary files to be uploaded during Overleaf synchronization."
+        },
+        "overleafCodex.autoPushLocalAhead": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically push local-ahead files after a sync check."
+        },
+        "overleafCodex.timeout": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "description": "Overleaf HTTP timeout in seconds."
+        },
+        "overleafCodex.connectTimeout": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "description": "Overleaf realtime connection timeout in seconds."
+        },
+        "overleafCodex.projectJoinTimeout": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Overleaf project join timeout in seconds."
+        },
+        "overleafCodex.httpTimeout": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "description": "Overleaf HTTP request timeout in seconds."
+        },
+        "overleafCodex.joinDocTimeout": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Overleaf document join timeout in seconds."
+        },
+        "overleafCodex.otAckTimeout": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "Overleaf OT acknowledgement timeout in seconds."
+        },
+        "overleafCodex.syncDestructiveChanges": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow destructive sync changes without an additional confirmation."
+        },
+        "latexEditingToolkit.overleaf.syncToolkitOverrides": {
+          "type": "boolean",
+          "default": true,
+          "description": "Synchronize LaTeX Editing Toolkit theme and configuration overrides with Overleaf."
+        },
+        "latexEditingToolkit.overleaf.autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically maintain Overleaf mirror synchronization."
+        },
+        "latexEditingToolkit.overleaf.autoPushLocalAhead": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically push safe local-ahead source changes."
+        },
+        "latexEditingToolkit.overleaf.syncBinaryFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow binary files to be synchronized with Overleaf."
+        },
+        "latexEditingToolkit.overleaf.confirmDestructiveChanges": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require confirmation before destructive Overleaf operations."
+        },
+        "latexEditingToolkit.overleaf.compileMode": {
+          "type": "string",
+          "enum": ["local", "overleaf"],
+          "enumDescriptions": ["Compile using the local Toolkit compiler.", "Compile using the Overleaf remote compiler."],
+          "default": "local",
+          "description": "Preferred compile mode for the Toolkit Build section."
+        }
       }
     },
     "keybindings": [
-      { "key": "enter", "command": "hsnips.smartEnter", "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && hsnips.canSmartEnter" },
-      { "key": "tab", "command": "hsnips.smartTab", "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inlineSuggestionVisible && hsnips.canSmartTab" },
-      { "key": "shift+tab", "command": "hsnips.prevPlaceholder", "when": "editorTextFocus && hasPrevTabstop && inSnippetMode" },
-      { "key": "escape", "command": "hsnips.leaveSnippet", "when": "editorTextFocus && inSnippetMode" },
-      { "key": "shift+escape", "command": "hsnips.leaveSnippet", "when": "editorTextFocus && inSnippetMode" }
+      {
+        "key": "enter",
+        "command": "hsnips.smartEnter",
+        "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && hsnips.canSmartEnter"
+      },
+      {
+        "key": "tab",
+        "command": "hsnips.smartTab",
+        "when": "editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inlineSuggestionVisible && hsnips.canSmartTab"
+      },
+      {
+        "key": "shift+tab",
+        "command": "hsnips.prevPlaceholder",
+        "when": "editorTextFocus && hasPrevTabstop && inSnippetMode"
+      },
+      {
+        "key": "escape",
+        "command": "hsnips.leaveSnippet",
+        "when": "editorTextFocus && inSnippetMode"
+      },
+      {
+        "key": "shift+escape",
+        "command": "hsnips.leaveSnippet",
+        "when": "editorTextFocus && inSnippetMode"
+      }
     ],
     "languages": [
-      { "id": "hsnips", "extensions": [".hsnips"], "aliases": ["LatexSnips"] }
+      {
+        "id": "hsnips",
+        "extensions": [
+          ".hsnips"
+        ],
+        "aliases": [
+          "LatexSnips"
+        ]
+      }
     ],
     "grammars": [
-      { "language": "hsnips", "scopeName": "source.hsnips", "path": "./syntaxes/hsnips.tmLanguage.json", "embeddedLanguages": { "meta.embedded.js": "javascript" } }
+      {
+        "language": "hsnips",
+        "scopeName": "source.hsnips",
+        "path": "./syntaxes/hsnips.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.js": "javascript"
+        }
+      }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -492,11 +851,24 @@
     "test:unit": "vitest run",
     "test:extension": "npm run compile",
     "test": "npm run compile && npm run test:unit",
-    "package": "npm run test && vsce package --no-dependencies"
+    "package": "npm run test && vsce package --no-dependencies --out latex-editing-toolkit-2.0.0.vsix",
+    "verify:vsix": "node scripts/verify-vsix.mjs latex-editing-toolkit-2.0.0.vsix"
   },
-  "dependencies": {},
+  "dependencies": {
+    "diff-match-patch": "^1.0.5",
+    "ignore": "^7.0.6",
+    "mime-types": "^2.1.35",
+    "minimatch": "^9.0.9",
+    "node-fetch": "^2.7.0",
+    "socket.io-client": "github:overleaf/socket.io-client#0.9.17-overleaf-5",
+    "uuid": "^9.0.1"
+  },
   "devDependencies": {
+    "@types/diff-match-patch": "^1.0.36",
+    "@types/mime-types": "^2.1.4",
     "@types/node": "^20.17.10",
+    "@types/node-fetch": "^2.6.13",
+    "@types/uuid": "^9.0.8",
     "@types/vscode": "^1.85.0",
     "@vscode/codicons": "^0.0.45",
     "@vscode/vsce": "^3.2.1",

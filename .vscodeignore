@@ -4,6 +4,12 @@
 .DS_Store
 **/.DS_Store
 assets/yiqisnips.png
+assets/latex-toolkit.png
+icon.png
+image.png
+image 2.png
+cookie
+cookie-sjtu
 .pytest_cache/**
 .vscode/**
 node_modules/**
@@ -25,6 +31,8 @@ theorems.tex
 !assets/template/references.bib
 !assets/template/theme.sty
 !assets/template/theorems.tex
+!assets/icon.png
+!assets/activitybar.svg
 esbuild.mjs
 templates/**/*.pdf
 templates/**/*.aux

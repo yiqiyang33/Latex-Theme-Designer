@@ -1,6 +1,14 @@
-# LaTeX Editing Toolkit 1.0.0
+# LaTeX Editing Toolkit 2.0.0
 
-VS Code / Cursor extension for local-first LaTeX projects and fast mathematical writing. Toolkit 1.0 combines project creation, themes, compile and structure tools with the complete programmable `hsnips` engine, profiles, workspace snippets, Smart Enter/Tab, and a Monaco-powered snippet workbench.
+VS Code / Cursor extension for local-first LaTeX projects and fast mathematical writing. Toolkit 2.0 combines project creation, themes, compile and structure tools with the complete programmable `hsnips` engine, profiles, workspace snippets, Smart Enter/Tab, a Monaco-powered snippet workbench, and integrated Overleaf mirrors, realtime sync, conflict resolution, and remote compilation.
+
+## Overleaf integration
+
+The former Overleaf Codex workflow is now part of the same `yiqiyang33.latex-editing-toolkit` extension. Use the Toolkit Activity Bar's **Overleaf Mirrors** and **Sync** sections to log in, open local mirrors, inspect local/remote/base changes, resolve conflicts, and run a remote compile. Remote PDFs open in the native VS Code/Cursor viewer; the Toolkit never embeds a PDF iframe.
+
+Toolkit source and configuration files can be synchronized by default, including `.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `commands.tex`, `theorems.tex`, `theme.sty`, `theme.colors.tex`, `theme.ui.json`, and `theme.overrides.tex`. Sync metadata, `.vscode`, build outputs, PDFs, logs, conflict copies, and machine caches remain local. Destructive deletes, conflict replacement, and binary uploads require explicit confirmation.
+
+For security, Overleaf cookies are not migrated from the old extension. Sign in once through the native **Login with Cookie** command; credentials are stored in VS Code SecretStorage.
 
 ## Build
 
@@ -20,14 +28,14 @@ Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then 
 The extension also contributes a `LaTeX Toolkit` Activity Bar view with TreeView shortcuts
 for project setup, build, structure, and theme actions.
 
-Version 1.0 keeps the responsive Toolkit workbench and adds a first-class `Snippets` section. The
+Version 2.0 keeps the responsive Toolkit workbench and adds first-class `Snippets` and `Sync` sections. The
 former Yiqi's LatexSnips engine now runs inside this extension; existing `hsnips.*` commands,
 settings, shortcuts, profiles, and snippet directories continue to work without moving user data.
 The Webview does not embed PDFs: compile results open through the native VS Code/Cursor PDF viewer.
 
 ## Upgrading from Yiqi's LatexSnips
 
-Toolkit 1.0 is the single host for both products. After installing it:
+Toolkit 2.0 is the single host for the local Toolkit, programmable snippets, and Overleaf workflow. After installing it:
 
 1. Open the Snippets section and confirm that base, profile, and workspace snippets are present.
 2. Disable or uninstall `Yiqi's LatexSnips` (`yiqiyang33.yiqis-latexsnips`).
@@ -319,6 +327,6 @@ rm -f theme.colors.tex theme.overrides.tex theme.ui.json
 
 The programmable snippet engine was developed in
 [Yiqi's LatexSnips](https://github.com/yiqiyang33/Yiqi-s-LatexSnips), itself based on the ideas and
-syntax of HyperSnips/UltiSnips-style programmable snippets. Toolkit 1.0 preserves that project's
+syntax of HyperSnips/UltiSnips-style programmable snippets. Toolkit 2.0 preserves that project's
 commands, configuration keys, data layout, and `.hsnips` language while making this repository the
 single maintained extension and user interface.

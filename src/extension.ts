@@ -12,11 +12,13 @@ import { getSnippetDir } from "./snippets/engine/utils";
 import { getSnippetFiles } from "./snippets/engine/snippetProfiles";
 import { SnippetService } from "./snippets/snippetService";
 import { ToolkitService } from "./toolkitService";
+import { OverleafService } from "./overleaf/overleafService";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 
 let activePanel: ToolkitPanel | undefined;
 const toolkitServices = new Map<string, ToolkitService>();
 let personalStyles: PersonalStyleRegistry | undefined;
+let overleafService: OverleafService | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("LaTeX Editing Toolkit");
@@ -24,6 +26,8 @@ export function activate(context: vscode.ExtensionContext): void {
   personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
+
+  overleafService = new OverleafService(context, output, () => treeProvider.refresh());
 
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
@@ -40,6 +44,12 @@ export function activate(context: vscode.ExtensionContext): void {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+    }),
+    command("latexEditingToolkit.openSync", async (folderUri?: vscode.Uri) => {
+      const folder = await selectWorkspaceFolder(folderUri);
+      if (!folder) return;
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+      await activePanel.openSection("sync");
     }),
     command("hsnips.openSnippetManager", async (folderUri?: vscode.Uri) => {
       const folder = folderUri instanceof vscode.Uri
@@ -208,6 +218,9 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
+  overleafService.registerCommands((id, handler) => command(id, handler));
+  void autoStartOverleafMirror(overleafService, output);
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch(error => output.appendLine(`Overleaf workspace refresh failed: ${String(error)}`))));
 }
 
 export function deactivate(): void {
@@ -215,6 +228,20 @@ export function deactivate(): void {
   activePanel = undefined;
   toolkitServices.clear();
   personalStyles = undefined;
+  overleafService?.dispose();
+  overleafService = undefined;
+}
+
+async function autoStartOverleafMirror(service: OverleafService, output: vscode.OutputChannel): Promise<void> {
+  try {
+    const state = await service.state();
+    if (!state.available || !state.authenticated || !state.mirrorRoot) return;
+    if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
+    await vscode.commands.executeCommand("overleafCodex.startRealtimeSync");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    output.appendLine(`[${new Date().toISOString()}] Overleaf auto-sync skipped: ${message}`);
+  }
 }
 
 const LEGACY_SNIPS_NOTICE_KEY = "latexEditingToolkit.legacySnipsNotice.v1";
@@ -819,6 +846,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     const localFolders = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes: ToolkitTreeNode[] = [];
     nodes.push(await this.localNotesNode());
+    nodes.push(await this.overleafMirrorsNode());
     if (localFolders.length === 0) {
       nodes.push({
         id: "open-local-folder",
@@ -833,6 +861,32 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
     }
     return nodes;
+  }
+
+  private async overleafMirrorsNode(): Promise<ToolkitTreeNode> {
+    if (!overleafService) {
+      return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", [
+        this.infoNode("overleaf-unavailable", "Overleaf unavailable", "The sync service has not initialized yet.", "warning")
+      ], vscode.TreeItemCollapsibleState.Collapsed);
+    }
+    const mirrors = await overleafService.listMirrors().catch(() => []);
+    const currentRoot = overleafService.realtimeSync.currentRoot;
+    const children = mirrors.length
+      ? await Promise.all(mirrors.map(async mirror => {
+        const state = await overleafService!.state(mirror.root);
+        const status = state.conflicts.length > 0 ? "Conflict" : state.syncStatus?.hasBlocking ? "Needs attention" : state.running ? "Syncing" : "Ready";
+        const icon = state.conflicts.length > 0 ? "warning" : state.syncStatus?.hasBlocking ? "git-compare" : state.running ? "cloud-upload" : "cloud";
+        return this.actionNode(
+          `overleaf-mirror:${mirror.root}`,
+          mirror.name,
+          `${status} · ${path.basename(path.dirname(mirror.root))}`,
+          icon,
+          "overleafCodex.openLocalMirror",
+          [{ mirror }]
+        );
+      }))
+      : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud")];
+    return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : undefined);
   }
 
   private async localNotesNode(): Promise<ToolkitTreeNode> {
@@ -972,6 +1026,15 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
         this.actionNode("unsplit-unit", "Merge Unit Back To Root", "selected target", "git-merge", "latexEditingToolkit.unsplitUnit", folderArg)
       ])
     );
+    if (overleafService) {
+      nodes.push(this.groupNode(`sync:${folder.uri.toString()}`, "Sync", "cloud", [
+        this.actionNode("sync-status", "Open Sync Workbench", "incremental", "shield", "latexEditingToolkit.openSync", folderArg),
+        this.actionNode("sync-start", "Start Realtime Sync", "mirror files", "cloud-upload", "overleafCodex.startRealtimeSync", folderArg),
+        this.actionNode("sync-stop", "Stop Realtime Sync", "pause remote updates", "debug-stop", "overleafCodex.stopRealtimeSync", folderArg),
+        this.actionNode("sync-conflicts", "Show Conflicts", "manual resolution", "warning", "overleafCodex.showConflicts", folderArg),
+        this.actionNode("sync-refresh", "Refresh Sync", "remote status", "refresh", "overleafCodex.refreshViews", folderArg)
+      ], vscode.TreeItemCollapsibleState.Collapsed));
+    }
     if (state.config_warnings.length > 0 || state.compile_last_success === false) {
       const diagnostics = [this.infoNode(`last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state))];
       if (state.config_warnings.length > 0) diagnostics.push({
@@ -1162,7 +1225,7 @@ class ToolkitPanel {
     await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
   }
 
-  async openSection(section: "snippets"): Promise<void> {
+  async openSection(section: "snippets" | "sync"): Promise<void> {
     this.panel.reveal(vscode.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
   }
@@ -1218,6 +1281,11 @@ class ToolkitPanel {
         else if (scope === "workspace") await vscode.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
         else throw new Error("Unknown snippet directory scope.");
         data = { opened: true };
+      } else if (request.command.startsWith("overleaf-")) {
+        if (!overleafService) throw new Error("Overleaf service is unavailable.");
+        data = request.command === "overleaf-pdf-status"
+          ? await overleafService.pdfStatus()
+          : await overleafService.handle(request.command, request.payload ?? {});
       } else if (request.command === "pdf-status") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");

@@ -48,6 +48,7 @@ let snippetAnalyzeTimer: number | undefined;
 let snippetEditor: any = null;
 let snippetEditorLoading: Promise<void> | null = null;
 let snippetApplyingContent = false;
+let overleafState: any = null;
 
 function request(command: string, payload: Record<string, unknown> = {}): Promise<any> {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -60,9 +61,10 @@ window.addEventListener("message", (event) => {
     acceptServerModel(event.data.data);
     return;
   }
-  if (event.data?.type === "toolkit-open-section" && event.data.section === "snippets") {
-    selectSection("snippets", true, true);
-    void ensureSnippetsLoaded();
+  if (event.data?.type === "toolkit-open-section" && (event.data.section === "snippets" || event.data.section === "sync")) {
+    selectSection(event.data.section, true, true);
+    if (event.data.section === "snippets") void ensureSnippetsLoaded();
+    if (event.data.section === "sync") void refreshOverleafState();
     return;
   }
   const response = event.data as ToolkitResponse;
@@ -287,7 +289,73 @@ function renderAll(): void {
   renderStyleDifferences();
   renderSplitResult();
   renderContextPanels();
+  void refreshOverleafState();
   void refreshPdfStatus();
+}
+
+async function refreshOverleafState(): Promise<void> {
+  if (initialData.snippetsOnly) return;
+  try {
+    overleafState = await request("overleaf-state", {});
+    if (overleafState?.available && overleafState.compileMode === "overleaf") {
+      const remotePdf = await request("overleaf-pdf-status", {});
+      if (remotePdf?.exists) pdfStatus = { path: remotePdf.path, exists: true, checking: false };
+    }
+  } catch {
+    overleafState = null;
+  }
+  renderSyncPanel();
+  if (model) {
+    renderTargets();
+    renderBuildContext();
+  }
+}
+
+function renderSyncPanel(): void {
+  const state = overleafState;
+  const unavailable = byId("syncUnavailable");
+  const details = byId("syncDetails");
+  unavailable.hidden = Boolean(state?.available);
+  details.hidden = !state?.available;
+  if (!state?.available) {
+    byId("syncContextTitle").textContent = "No mirror selected";
+    byId("syncContextBadge").textContent = "";
+    byId("syncContextDescription").textContent = "Open an Overleaf mirror to inspect realtime status.";
+    byId("syncContextEmpty").hidden = false;
+    byId("syncContextSummary").hidden = true;
+    return;
+  }
+  byId("syncServer").textContent = state.serverUrl || "—";
+  byId("syncProject").textContent = state.projectName || "—";
+  byId("syncMirror").textContent = state.mirrorRoot || "—";
+  const status = state.conflicts?.length ? "Conflict" : state.running ? "Syncing" : state.syncStatus?.hasBlocking ? "Needs attention" : "Ready";
+  byId("syncStatus").textContent = status;
+  byId("syncContextTitle").textContent = state.projectName || "Overleaf mirror";
+  byId("syncContextBadge").textContent = status;
+  byId("syncContextDescription").textContent = state.error || (state.authenticated ? "Remote mirror is available for synchronization." : "Login is required before starting sync.");
+  byId("syncContextEmpty").hidden = true;
+  byId("syncContextSummary").hidden = false;
+  byId("syncContextServer").textContent = state.serverUrl || "—";
+  byId("syncContextLastSync").textContent = state.lastSyncAt ? new Date(state.lastSyncAt).toLocaleString() : "—";
+  byId("syncContextFiles").textContent = `${state.syncItems?.length || 0} needing attention · ${state.conflicts?.length || 0} conflicts`;
+  const items = (state.syncItems || []).filter((item: any) => item.status !== "synced");
+  byId("syncItemCount").textContent = String(items.length);
+  const itemList = byId("syncItemList");
+  itemList.innerHTML = items.length ? items.map((item: any) => `<div class="sync-item"><span><strong>${escapeHtml(item.path)}</strong><small>${escapeHtml(item.status)}${item.message ? ` · ${escapeHtml(item.message)}` : ""}</small></span><span class="toolbar compact"><button class="icon-button" data-sync-action="diff" data-sync-path="${escapeHtml(item.path)}" aria-label="Open diff for ${escapeHtml(item.path)}" title="Open diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-sync-action="push" data-sync-path="${escapeHtml(item.path)}" aria-label="Push ${escapeHtml(item.path)}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-sync-action="pull" data-sync-path="${escapeHtml(item.path)}" aria-label="Pull ${escapeHtml(item.path)}" title="Pull remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>Everything is synced</strong><p>No file needs attention.</p></div></div>`;
+  const conflicts = state.conflicts || [];
+  byId("syncConflictCount").textContent = String(conflicts.length);
+  const conflictList = byId("syncConflictList");
+  conflictList.innerHTML = conflicts.length ? conflicts.map((item: any) => `<div class="sync-item"><span><strong>${escapeHtml(item.relPath)}</strong><small>${escapeHtml(item.reason || "manual resolution required")}</small></span><span class="toolbar compact"><button class="icon-button" data-conflict-action="diff" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Open conflict diff for ${escapeHtml(item.relPath)}" title="Open conflict diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-conflict-action="local" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Use local version for ${escapeHtml(item.relPath)}" title="Use local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-conflict-action="remote" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Accept remote version for ${escapeHtml(item.relPath)}" title="Accept remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>No conflicts</strong><p>Conflicts will appear here instead of being overwritten silently.</p></div></div>`;
+  itemList.querySelectorAll<HTMLButtonElement>("[data-sync-action]").forEach(button => button.addEventListener("click", () => run(async () => {
+    const command = button.dataset.syncAction === "diff" ? "overleaf-open-diff" : button.dataset.syncAction === "push" ? "overleaf-push" : "overleaf-pull";
+    await request(command, { path: button.dataset.syncPath });
+    await refreshOverleafState();
+  })));
+  conflictList.querySelectorAll<HTMLButtonElement>("[data-conflict-action]").forEach(button => button.addEventListener("click", () => run(async () => {
+    const action = button.dataset.conflictAction;
+    await request("overleaf-resolve-conflict", { path: button.dataset.conflictPath, resolution: action === "local" ? "local" : action === "remote" ? "remote" : "diff" });
+    await refreshOverleafState();
+  })));
 }
 
 function renderHistoryActions(): void {
@@ -678,6 +746,8 @@ function renderColors(): void {
 }
 
 function renderTargets(): void {
+  const mode = byId<HTMLSelectElement>("compileModeSelect");
+  mode.value = overleafState?.compileMode === "overleaf" ? "overleaf" : "local";
   const target = byId<HTMLSelectElement>("targetSelect");
   renderSelect(target, (model.state.compile_targets || []).map((value: string) => ({ value, label: value })), model.state.compile_target || "");
   const info = byId("targetInfo");
@@ -701,6 +771,11 @@ function renderBuildContext(): void {
   const targets = model.state.compile_targets || [];
   const compile = byId<HTMLButtonElement>("compileBtn");
   const noTargets = targets.length === 0;
+  const remote = overleafState?.compileMode === "overleaf";
+  byId("compileHelp").textContent = remote ? "Remote mode compiles through Overleaf and downloads output to the mirror." : "Local mode uses the configured Toolkit compiler and fallback.";
+  byId<HTMLSelectElement>("targetSelect").disabled = remote;
+  byId<HTMLSelectElement>("recipeSelect").disabled = remote;
+  byId<HTMLInputElement>("useInternalFallback").disabled = remote;
   byId("buildNoTargets").hidden = !noTargets;
   compile.disabled = noTargets;
   if (noTargets) {
@@ -709,6 +784,12 @@ function renderBuildContext(): void {
     title.textContent = "No compile targets found";
     description.textContent = "Add a local .tex target or generate a starter before compiling.";
     open.disabled = true;
+  } else if (remote && overleafState?.syncStatus?.checkedAt) {
+    badge.textContent = overleafState.conflicts?.length ? "Conflict" : "Remote";
+    badge.dataset.kind = overleafState.conflicts?.length ? "error" : "ok";
+    title.textContent = overleafState.conflicts?.length ? "Remote sync needs attention" : "Overleaf Remote Compile";
+    description.textContent = overleafState.mirrorRoot || "Open an Overleaf mirror before remote compile.";
+    open.disabled = !pdfStatus.exists;
   } else if (pdfStatus.checking) {
     badge.textContent = "Checking";
     badge.dataset.kind = "";
@@ -1302,7 +1383,9 @@ async function refreshPdfStatus(): Promise<void> {
   pdfStatus = { path: requestedPath, exists: false, checking: true };
   renderBuildContext();
   try {
-    const result = await request("pdf-status", { path: requestedPath });
+    const result = overleafState?.compileMode === "overleaf"
+      ? await request("overleaf-pdf-status", {})
+      : await request("pdf-status", { path: requestedPath });
     if (requestedPath !== currentPdfPath()) return;
     pdfStatus = { path: result.path || requestedPath, exists: Boolean(result.exists), checking: false };
   } catch {
@@ -1370,6 +1453,14 @@ async function upgradeThemeAssets(): Promise<void> {
 
 async function compilePdf(): Promise<void> {
   await flushAutosave();
+  if (overleafState?.compileMode === "overleaf") {
+    const result = await request("overleaf-remote-compile", {});
+    setStatus("Overleaf Remote compile finished.", "ok");
+    await refreshOverleafState();
+    await refreshPdfStatus();
+    renderBuildContext();
+    return result;
+  }
   const compileButton = byId<HTMLButtonElement>("compileBtn");
   const startedAt = performance.now();
   lastCompileDurationMs = null;
@@ -1470,6 +1561,17 @@ function wire(): void {
   });
   byId("openDiagnosticsBtn").addEventListener("click", () => selectSection("diagnostics", true, true));
   byId("buildShowLogBtn").addEventListener("click", () => { void request("show-log"); });
+  byId("overleafRefreshBtn").addEventListener("click", () => run(refreshOverleafState));
+  byId("syncLoginBtn").addEventListener("click", () => run(async () => { await request("overleaf-login", {}); await refreshOverleafState(); }));
+  byId("syncStartBtn").addEventListener("click", () => run(async () => { await request("overleaf-start-sync", {}); await refreshOverleafState(); }));
+  byId("syncStopBtn").addEventListener("click", () => run(async () => { await request("overleaf-stop-sync", {}); await refreshOverleafState(); }));
+  byId("syncCheckBtn").addEventListener("click", () => run(async () => { await request("overleaf-check-sync", { mode: "incremental" }); await refreshOverleafState(); }));
+  byId("compileModeSelect").addEventListener("change", () => run(async () => {
+    const mode = byId<HTMLSelectElement>("compileModeSelect").value === "overleaf" ? "overleaf" : "local";
+    await request("overleaf-set-compile-mode", { mode });
+    await refreshOverleafState();
+    renderTargets();
+  }));
   byId("starterTemplateSelect").addEventListener("change", () => {
     starterTemplateSelection = byId<HTMLSelectElement>("starterTemplateSelect").value;
     renderStarterDescription();
@@ -1722,6 +1824,7 @@ function shell(): void {
           <button data-section-target="setup" role="tab"><i class="codicon codicon-tools" aria-hidden="true"></i><span>Project Setup</span></button>
           <button data-section-target="structure" role="tab"><i class="codicon codicon-list-tree" aria-hidden="true"></i><span>Structure</span></button>
           <button data-section-target="snippets" role="tab"><i class="codicon codicon-symbol-snippet" aria-hidden="true"></i><span>Snippets</span><small id="navSnippetsBadge" class="nav-badge" hidden></small></button>
+          <button data-section-target="sync" role="tab"><i class="codicon codicon-cloud" aria-hidden="true"></i><span>Sync</span><small id="navSyncBadge" class="nav-badge" hidden></small></button>
           <button data-section-target="diagnostics" role="tab"><i class="codicon codicon-warning" aria-hidden="true"></i><span>Diagnostics</span><small id="navDiagnosticsBadge" class="nav-badge warning" hidden></small></button>
         </nav>
 
@@ -1737,8 +1840,8 @@ function shell(): void {
           </section>
 
           <section id="panelBuild" class="toolkit-panel" data-toolkit-panel="build" hidden>
-            <header class="section-heading"><div><p class="eyebrow">Build</p><h2>Compile Configuration</h2><p class="hint">Choose the source and recipe used by the next explicit compile.</p></div></header>
-            <div class="form-card"><label class="field"><span>Target</span><select id="targetSelect"></select></label><label class="field"><span>Recipe</span><select id="recipeSelect"></select></label><label class="toggle-row standalone"><span class="toggle-copy"><strong>Internal fallback</strong><small>Compile without the selected VS Code recipe.</small></span><span class="switch"><input id="useInternalFallback" type="checkbox"><span aria-hidden="true"></span></span></label><p id="compileHelp" class="hint"></p></div>
+            <header class="section-heading"><div><p class="eyebrow">Build</p><h2>Compile Configuration</h2><p class="hint">Choose local or Overleaf Remote compilation for the next explicit build.</p></div></header>
+            <div class="form-card"><label class="field"><span>Compile Mode</span><select id="compileModeSelect"><option value="local">Local</option><option value="overleaf">Overleaf Remote</option></select></label><label class="field"><span>Target</span><select id="targetSelect"></select></label><label class="field"><span>Recipe</span><select id="recipeSelect"></select></label><label class="toggle-row standalone"><span class="toggle-copy"><strong>Internal fallback</strong><small>Compile without the selected VS Code recipe.</small></span><span class="switch"><input id="useInternalFallback" type="checkbox"><span aria-hidden="true"></span></span></label><p id="compileHelp" class="hint"></p></div>
             <div id="buildNoTargets" class="empty-state compact" hidden><i class="codicon codicon-file-code" aria-hidden="true"></i><div><strong>No compile targets</strong><p>Generate a starter or add a local .tex file to this workspace.</p></div></div>
             <div class="technical-details"><code id="targetInfo" class="meta"></code><code id="outputInfo" class="meta"></code></div>
             <div class="secondary-actions"><details class="overflow-menu"><summary class="icon-button" aria-label="More build actions" title="More build actions"><i class="codicon codicon-ellipsis" aria-hidden="true"></i></summary><div class="overflow-menu-items"><button id="cleanBtn" class="menu-action"><i class="codicon codicon-trash" aria-hidden="true"></i><span>Clean Build Artifacts</span></button></div></details></div>
@@ -1793,6 +1896,16 @@ function shell(): void {
             </div>
           </section>
 
+          <section id="panelSync" class="toolkit-panel" data-toolkit-panel="sync" hidden>
+            <header class="section-heading"><div><p class="eyebrow">Overleaf</p><h2>Realtime Sync</h2><p class="hint">Mirror local source and Toolkit configuration safely with explicit conflict handling.</p></div><div class="toolbar compact"><button id="overleafRefreshBtn" class="ghost-button"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Refresh</span></button></div></header>
+            <div id="syncUnavailable" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>No Overleaf mirror detected</strong><p>Open an Overleaf project locally to manage realtime sync here.</p></div></div>
+            <div id="syncDetails" hidden>
+              <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">—</dd></div><div><dt>Project</dt><dd id="syncProject">—</dd></div><div><dt>Mirror</dt><dd id="syncMirror">—</dd></div><div><dt>Status</dt><dd id="syncStatus">—</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button></div></div>
+              <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div id="syncItemList" class="sync-item-list"></div></div>
+              <div class="settings-group"><div class="group-heading"><h3>Conflicts</h3><span id="syncConflictCount" class="value-pill">0</span></div><div id="syncConflictList" class="sync-item-list"></div></div>
+            </div>
+          </section>
+
           <section id="panelDiagnostics" class="toolkit-panel" data-toolkit-panel="diagnostics" hidden>
             <header class="section-heading"><div><p class="eyebrow">Diagnostics</p><h2>Warnings &amp; Log</h2><p class="hint">Configuration recovery details and the latest command output.</p></div></header>
             <details id="configWarnings" class="config-warnings" hidden open><summary id="configWarningSummary">Configuration warnings</summary><ul id="configWarningList"></ul></details>
@@ -1828,6 +1941,7 @@ function shell(): void {
             <div id="snippetNoDiagnostics" class="empty-state compact"><i class="codicon codicon-pass-filled" aria-hidden="true"></i><div><strong>No snippet diagnostics</strong><p>The current buffer parsed without known issues.</p></div></div>
             <ul id="snippetDiagnosticList" class="snippet-diagnostic-list"></ul>
           </section>
+          <section class="context-panel" data-context-panel="sync" hidden><header class="context-heading"><div><p class="eyebrow">Sync Inspector</p><h2 id="syncContextTitle">No mirror selected</h2></div><span id="syncContextBadge" class="context-badge"></span></header><p id="syncContextDescription" class="context-copy"></p><div id="syncContextEmpty" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>Sync is ready when a mirror is open</strong><p>Use the Setup or Activity Bar actions to connect an Overleaf project.</p></div></div><dl id="syncContextSummary" class="summary-list" hidden><div><dt>Server</dt><dd id="syncContextServer">—</dd></div><div><dt>Last sync</dt><dd id="syncContextLastSync">—</dd></div><div><dt>Files</dt><dd id="syncContextFiles">—</dd></div></dl></section>
           <section class="context-panel" data-context-panel="diagnostics" hidden><header class="context-heading"><div><p class="eyebrow">Configuration Health</p><h2 id="diagnosticsContextTitle">Loading diagnostics…</h2></div></header><p id="diagnosticsContextDescription" class="context-copy"></p><div class="safety-note"><i class="codicon codicon-output" aria-hidden="true"></i><p>Full extension logs are also available in the LaTeX Editing Toolkit Output channel.</p></div></section>
         </aside>
       </div>
