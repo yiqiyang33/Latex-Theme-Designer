@@ -15,6 +15,7 @@ import {
   readManifest,
   readSyncStatus,
   shouldIgnore,
+  isToolkitOverridePath,
   shouldIgnoreUntrackedLocalPath,
   writeBaseDoc
 } from './manifest';
@@ -51,6 +52,7 @@ import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
 import { SyncHealthService } from './syncHealthService';
+import { getWithLegacyFallback } from './config';
 import {
   applyOtOperations,
   buildOtOperations,
@@ -281,6 +283,11 @@ export class RealtimeSyncService implements vscode.Disposable {
       ...Object.keys(remote.manifest.files),
       ...localPaths
     ]);
+    if (!this.canSyncToolkitOverrides()) {
+      for (const relPath of allPaths) {
+        if (isToolkitOverridePath(relPath)) allPaths.delete(relPath);
+      }
+    }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
     const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths);
     const items: SyncStatusItem[] = [...folderStructure.items];
@@ -294,7 +301,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       if (requestedPaths && !requestedPaths.has(relPath)) {
         continue;
       }
-      if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath)) {
+      if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath)
+        || (!this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath))) {
         continue;
       }
 
@@ -443,7 +451,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     this.log(`Manual Push Local requested for ${normalized}.`);
     const entry = this.manifest!.files[normalized];
-    if (shouldIgnore(this.manifest!, normalized) || isAlwaysLocal(normalized)) {
+    if (shouldIgnore(this.manifest!, normalized) || isAlwaysLocal(normalized)
+      || (!this.canSyncToolkitOverrides() && isToolkitOverridePath(normalized))) {
       throw new Error(`${normalized} is local-only and cannot be pushed to Overleaf.`);
     }
     if (!entry && shouldIgnoreUntrackedLocalPath(this.manifest!, normalized)) {
@@ -1055,6 +1064,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       || relPath.startsWith('..')
       || isAlwaysLocal(relPath)
       || shouldIgnore(this.manifest, relPath)
+      || (!this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath))
       || (!tracked && shouldIgnoreUntrackedLocalPath(this.manifest, relPath))
     ) {
       return;
@@ -2385,12 +2395,33 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private canSyncBinaryFiles(): boolean {
-    return vscode.workspace.getConfiguration('overleafCodex').get<boolean>('syncBinaryFiles', false);
+    return getWithLegacyFallback(
+      vscode.workspace.getConfiguration('latexEditingToolkit.overleaf'),
+      'syncBinaryFiles',
+      vscode.workspace.getConfiguration('overleafCodex'),
+      'syncBinaryFiles',
+      false
+    );
+  }
+
+  private canSyncToolkitOverrides(): boolean {
+    return getWithLegacyFallback(
+      vscode.workspace.getConfiguration('latexEditingToolkit.overleaf'),
+      'syncToolkitOverrides',
+      vscode.workspace.getConfiguration('overleafCodex'),
+      'syncToolkitOverrides',
+      true
+    );
   }
 
   private canAutoPushLocalAhead(): boolean {
-    return vscode.workspace.getConfiguration('latexEditingToolkit.overleaf').get<boolean>('autoPushLocalAhead',
-      vscode.workspace.getConfiguration('overleafCodex').get<boolean>('autoPushLocalAhead', true));
+    return getWithLegacyFallback(
+      vscode.workspace.getConfiguration('latexEditingToolkit.overleaf'),
+      'autoPushLocalAhead',
+      vscode.workspace.getConfiguration('overleafCodex'),
+      'autoPushLocalAhead',
+      true
+    );
   }
 
   private async canUploadBinaryFile(relPath: string, manual: boolean, verb: 'Upload' | 'Replace'): Promise<boolean> {
@@ -2410,7 +2441,13 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private canSyncDestructiveChanges(): boolean {
-    return vscode.workspace.getConfiguration('overleafCodex').get<boolean>('syncDestructiveChanges', false);
+    return getWithLegacyFallback(
+      vscode.workspace.getConfiguration('latexEditingToolkit.overleaf'),
+      'syncDestructiveChanges',
+      vscode.workspace.getConfiguration('overleafCodex'),
+      'syncDestructiveChanges',
+      false
+    );
   }
 
   private showError(error: unknown): void {

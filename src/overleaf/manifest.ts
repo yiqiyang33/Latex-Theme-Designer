@@ -41,6 +41,15 @@ export const TOOLKIT_CONFIG_ALLOWLIST = [
   'theme.ui.json', 'theme.overrides.tex'
 ];
 
+export const TOOLKIT_OVERRIDE_PATHS = new Set([
+  'commands.tex', 'theorems.tex', 'theme.sty', 'theme.colors.tex',
+  'theme.ui.json', 'theme.overrides.tex'
+]);
+
+export function isToolkitOverridePath(relPath: string): boolean {
+  return TOOLKIT_OVERRIDE_PATHS.has(toPosixPath(relPath));
+}
+
 export const TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   '.overleaf-codex/**', '.vscode/**', '**/.vscode/**', '.latexmkrc', '**/.latexmkrc',
   'AGENTS.md', '**/AGENTS.md', '**/*.pdf', '**/*.aux', '**/*.log', '**/*.fls',

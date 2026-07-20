@@ -105,6 +105,9 @@
     vscode.postMessage({ id, command, payload });
     return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
   }
+  function overleafPayload(payload = {}) {
+    return initialData.workspacePath ? { ...payload, workspacePath: initialData.workspacePath } : payload;
+  }
   window.addEventListener("message", (event) => {
     if (event.data?.type === "toolkit-state-refresh") {
       acceptServerModel(event.data.data);
@@ -319,9 +322,9 @@
   async function refreshOverleafState() {
     if (initialData.snippetsOnly) return;
     try {
-      overleafState = await request("overleaf-state", {});
+      overleafState = await request("overleaf-state", overleafPayload());
       if (overleafState?.available && overleafState.compileMode === "overleaf") {
-        const remotePdf = await request("overleaf-pdf-status", {});
+        const remotePdf = await request("overleaf-pdf-status", overleafPayload());
         if (remotePdf?.exists) pdfStatus = { path: remotePdf.path, exists: true, checking: false };
       }
     } catch {
@@ -363,21 +366,36 @@
     const items = (state.syncItems || []).filter((item) => item.status !== "synced");
     byId("syncItemCount").textContent = String(items.length);
     const itemList = byId("syncItemList");
-    itemList.innerHTML = items.length ? items.map((item) => `<div class="sync-item"><span><strong>${escapeHtml(item.path)}</strong><small>${escapeHtml(item.status)}${item.message ? ` \xB7 ${escapeHtml(item.message)}` : ""}</small></span><span class="toolbar compact"><button class="icon-button" data-sync-action="diff" data-sync-path="${escapeHtml(item.path)}" aria-label="Open diff for ${escapeHtml(item.path)}" title="Open diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-sync-action="push" data-sync-path="${escapeHtml(item.path)}" aria-label="Push ${escapeHtml(item.path)}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-sync-action="pull" data-sync-path="${escapeHtml(item.path)}" aria-label="Pull ${escapeHtml(item.path)}" title="Pull remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>Everything is synced</strong><p>No file needs attention.</p></div></div>`;
+    itemList.innerHTML = items.length ? items.map((item) => syncItemMarkup(item)).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>Everything is synced</strong><p>No file needs attention.</p></div></div>`;
     const conflicts = state.conflicts || [];
     byId("syncConflictCount").textContent = String(conflicts.length);
     const conflictList = byId("syncConflictList");
     conflictList.innerHTML = conflicts.length ? conflicts.map((item) => `<div class="sync-item"><span><strong>${escapeHtml(item.relPath)}</strong><small>${escapeHtml(item.reason || "manual resolution required")}</small></span><span class="toolbar compact"><button class="icon-button" data-conflict-action="diff" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Open conflict diff for ${escapeHtml(item.relPath)}" title="Open conflict diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-conflict-action="local" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Use local version for ${escapeHtml(item.relPath)}" title="Use local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-conflict-action="remote" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Accept remote version for ${escapeHtml(item.relPath)}" title="Accept remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>No conflicts</strong><p>Conflicts will appear here instead of being overwritten silently.</p></div></div>`;
     itemList.querySelectorAll("[data-sync-action]").forEach((button) => button.addEventListener("click", () => run(async () => {
-      const command = button.dataset.syncAction === "diff" ? "overleaf-open-diff" : button.dataset.syncAction === "push" ? "overleaf-push" : "overleaf-pull";
-      await request(command, { path: button.dataset.syncPath });
+      const command = button.dataset.syncAction === "diff" ? "overleaf-open-diff" : button.dataset.syncAction === "push" ? "overleaf-push" : button.dataset.syncAction === "pull" ? "overleaf-pull" : button.dataset.syncAction === "retry" ? "overleaf-retry" : "overleaf-trash";
+      await request(command, overleafPayload({ path: button.dataset.syncPath }));
       await refreshOverleafState();
     })));
     conflictList.querySelectorAll("[data-conflict-action]").forEach((button) => button.addEventListener("click", () => run(async () => {
       const action = button.dataset.conflictAction;
-      await request("overleaf-resolve-conflict", { path: button.dataset.conflictPath, resolution: action === "local" ? "local" : action === "remote" ? "remote" : "diff" });
+      await request("overleaf-resolve-conflict", overleafPayload({ path: button.dataset.conflictPath, resolution: action === "local" ? "local" : action === "remote" ? "remote" : "diff" }));
       await refreshOverleafState();
     })));
+  }
+  function syncItemMarkup(item) {
+    const encodedPath = escapeHtml(item.path);
+    const actions = [
+      `<button class="icon-button" data-sync-action="diff" data-sync-path="${encodedPath}" aria-label="Open diff for ${encodedPath}" title="Open diff"><i class="codicon codicon-diff"></i></button>`,
+      `<button class="icon-button" data-sync-action="push" data-sync-path="${encodedPath}" aria-label="Push ${encodedPath}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button>`,
+      `<button class="icon-button" data-sync-action="pull" data-sync-path="${encodedPath}" aria-label="Pull ${encodedPath}" title="Pull remote"><i class="codicon codicon-cloud-download"></i></button>`
+    ];
+    if (item.status === "error") {
+      actions.push(`<button class="icon-button" data-sync-action="retry" data-sync-path="${encodedPath}" aria-label="Retry ${encodedPath}" title="Retry sync"><i class="codicon codicon-debug-restart"></i></button>`);
+    }
+    if (item.status === "remote deleted") {
+      actions.push(`<button class="icon-button danger" data-sync-action="trash" data-sync-path="${encodedPath}" aria-label="Move ${encodedPath} to trash" title="Move local copy to Overleaf trash"><i class="codicon codicon-trash"></i></button>`);
+    }
+    return `<div class="sync-item"><span><strong>${encodedPath}</strong><small>${escapeHtml(item.status)}${item.message ? ` \xB7 ${escapeHtml(item.message)}` : ""}</small></span><span class="toolbar compact">${actions.join("")}</span></div>`;
   }
   function renderHistoryActions() {
     const history = model?.history || {};
@@ -1388,7 +1406,7 @@
   async function compilePdf() {
     await flushAutosave();
     if (overleafState?.compileMode === "overleaf") {
-      const result = await request("overleaf-remote-compile", {});
+      const result = await request("overleaf-remote-compile", overleafPayload());
       setStatus("Overleaf Remote compile finished.", "ok");
       await refreshOverleafState();
       await refreshPdfStatus();
@@ -1501,24 +1519,44 @@
     });
     byId("overleafRefreshBtn").addEventListener("click", () => run(refreshOverleafState));
     byId("syncLoginBtn").addEventListener("click", () => run(async () => {
-      await request("overleaf-login", {});
+      await request("overleaf-login", overleafPayload());
+      await refreshOverleafState();
+    }));
+    byId("syncProjectsBtn").addEventListener("click", () => run(async () => {
+      await request("overleaf-list-projects", overleafPayload());
+      await refreshOverleafState();
+    }));
+    byId("syncOpenBtn").addEventListener("click", () => run(async () => {
+      await request("overleaf-open-project", overleafPayload());
       await refreshOverleafState();
     }));
     byId("syncStartBtn").addEventListener("click", () => run(async () => {
-      await request("overleaf-start-sync", {});
+      await request("overleaf-start-sync", overleafPayload());
       await refreshOverleafState();
     }));
     byId("syncStopBtn").addEventListener("click", () => run(async () => {
-      await request("overleaf-stop-sync", {});
+      await request("overleaf-stop-sync", overleafPayload());
       await refreshOverleafState();
     }));
     byId("syncCheckBtn").addEventListener("click", () => run(async () => {
-      await request("overleaf-check-sync", { mode: "incremental" });
+      await request("overleaf-check-sync", overleafPayload({ mode: "incremental" }));
+      await refreshOverleafState();
+    }));
+    byId("syncFullAuditBtn").addEventListener("click", () => run(async () => {
+      await request("overleaf-full-audit", overleafPayload());
+      await refreshOverleafState();
+    }));
+    byId("syncCollaboratorsBtn").addEventListener("click", () => run(async () => {
+      await request("overleaf-show-collaborators", overleafPayload());
+      await refreshOverleafState();
+    }));
+    byId("syncGitBtn").addEventListener("click", () => run(async () => {
+      await request("overleaf-init-git", overleafPayload());
       await refreshOverleafState();
     }));
     byId("compileModeSelect").addEventListener("change", () => run(async () => {
       const mode = byId("compileModeSelect").value === "overleaf" ? "overleaf" : "local";
-      await request("overleaf-set-compile-mode", { mode });
+      await request("overleaf-set-compile-mode", overleafPayload({ mode }));
       await refreshOverleafState();
       renderTargets();
     }));
@@ -1834,7 +1872,7 @@
             <header class="section-heading"><div><p class="eyebrow">Overleaf</p><h2>Realtime Sync</h2><p class="hint">Mirror local source and Toolkit configuration safely with explicit conflict handling.</p></div><div class="toolbar compact"><button id="overleafRefreshBtn" class="ghost-button"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Refresh</span></button></div></header>
             <div id="syncUnavailable" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>No Overleaf mirror detected</strong><p>Open an Overleaf project locally to manage realtime sync here.</p></div></div>
             <div id="syncDetails" hidden>
-              <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">\u2014</dd></div><div><dt>Project</dt><dd id="syncProject">\u2014</dd></div><div><dt>Mirror</dt><dd id="syncMirror">\u2014</dd></div><div><dt>Status</dt><dd id="syncStatus">\u2014</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button></div></div>
+            <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">\u2014</dd></div><div><dt>Project</dt><dd id="syncProject">\u2014</dd></div><div><dt>Mirror</dt><dd id="syncMirror">\u2014</dd></div><div><dt>Status</dt><dd id="syncStatus">\u2014</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncProjectsBtn" class="ghost-button"><i class="codicon codicon-list-unordered" aria-hidden="true"></i><span>Projects</span></button><button id="syncOpenBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Mirror</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button><button id="syncFullAuditBtn" class="ghost-button"><i class="codicon codicon-search-fuzzy" aria-hidden="true"></i><span>Full Audit</span></button><button id="syncCollaboratorsBtn" class="ghost-button"><i class="codicon codicon-organization" aria-hidden="true"></i><span>Collaborators</span></button><button id="syncGitBtn" class="ghost-button"><i class="codicon codicon-git-branch" aria-hidden="true"></i><span>Init Git</span></button></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div id="syncItemList" class="sync-item-list"></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Conflicts</h3><span id="syncConflictCount" class="value-pill">0</span></div><div id="syncConflictList" class="sync-item-list"></div></div>
             </div>

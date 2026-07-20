@@ -1,0 +1,197 @@
+import { promises as fs } from "node:fs";
+import { existsSync } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  matchesLocalIgnoreRule,
+  migrateManifest,
+  parseLocalIgnoreFile,
+  readManifest,
+  shouldIgnoreUntrackedLocalPath
+} from "../src/overleaf/manifest";
+import {
+  cachedLocalFileHash,
+  classifyFolderStructure,
+  classifySyncStatus,
+  isBlockingStatus,
+  mergeTargetedSyncStatusReport
+} from "../src/overleaf/syncStatus";
+import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalChangedSinceLastSync, hasRemoteChangedSinceLastSync } from "../src/overleaf/ot";
+import { getWithLegacyFallback, hasExplicitConfigurationValue, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
+import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
+import { gitBlobHash } from "../src/overleaf/util";
+import { parseContentRange, mergeCookieHeader, loadSocketIoClient } from "../src/overleaf/overleafClient";
+import type { OverleafCodexManifest, SyncStatusReport } from "../src/overleaf/types";
+
+class FakeConfig implements InspectableConfiguration {
+  constructor(
+    private readonly values: Record<string, unknown>,
+    private readonly inspections: Record<string, ConfigurationInspection<unknown> | undefined> = {}
+  ) {}
+
+  get<T>(section: string, defaultValue: T): T {
+    return (Object.prototype.hasOwnProperty.call(this.values, section) ? this.values[section] : defaultValue) as T;
+  }
+
+  inspect<T>(section: string): ConfigurationInspection<T> | undefined {
+    return this.inspections[section] as ConfigurationInspection<T> | undefined;
+  }
+}
+
+function fakeConfig(values: Record<string, unknown>, inspections: Record<string, ConfigurationInspection<unknown> | undefined> = {}): InspectableConfiguration {
+  return new FakeConfig(values, inspections);
+}
+
+describe("Overleaf integration primitives", () => {
+  it("migrates old manifests and applies gitignore-style local rules", async () => {
+    const manifest = migrateManifest({
+      schemaVersion: 1,
+      serverUrl: "https://www.overleaf.com/",
+      projectId: "project",
+      projectName: "Project",
+      files: {},
+      folders: {},
+      ignore: [],
+      lastSyncAt: "2026-01-01T00:00:00.000Z"
+    });
+    expect(manifest.schemaVersion).toBe(3);
+    expect(manifest.ignore).toContain(".overleaf-codex/**");
+
+    const rules = parseLocalIgnoreFile("tmp/\n*.swp\n!tmp/keep.tex\n");
+    expect(matchesLocalIgnoreRule("tmp/pdfs/output.pdf", rules[0])).toBe(true);
+    expect(matchesLocalIgnoreRule("main.tex.swp", rules[1])).toBe(true);
+    expect(rules[2].negated).toBe(true);
+
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-ignore-"));
+    try {
+      await fs.mkdir(path.join(root, ".overleaf-codex"), { recursive: true });
+      await fs.writeFile(path.join(root, ".overleaf-codex", "manifest.json"), JSON.stringify(manifest));
+      await fs.writeFile(path.join(root, ".overleaf-codexignore"), "tmp/\n!tmp/keep.tex\n", "utf8");
+      const loaded = await readManifest(root);
+      expect(shouldIgnoreUntrackedLocalPath(loaded, "tmp/render.png")).toBe(true);
+      expect(shouldIgnoreUntrackedLocalPath(loaded, "tmp/keep.tex")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies clean, local, remote and diverged paths", () => {
+    const manifestFile = {
+      path: "main.tex", entityId: "doc-1", entityType: "doc" as const,
+      parentFolderId: "root", version: 3, sha1: "base", baseHash: "base"
+    };
+    expect(classifySyncStatus({ path: "main.tex", manifestFile, localExists: true, localHash: "base", remoteHash: "base", remoteFile: { ...manifestFile, version: 4 } }).status).toBe("synced");
+    expect(classifySyncStatus({ path: "main.tex", manifestFile, localExists: true, localHash: "local", remoteHash: "base", remoteFile: { ...manifestFile, version: 4 } }).status).toBe("local ahead");
+    expect(classifySyncStatus({ path: "main.tex", manifestFile, localExists: true, localHash: "base", remoteHash: "remote", remoteFile: { ...manifestFile, version: 4 } }).status).toBe("remote ahead");
+    expect(classifySyncStatus({ path: "main.tex", manifestFile, localExists: true, localHash: "local", remoteHash: "remote", remoteFile: { ...manifestFile, version: 4 } }).status).toBe("diverged");
+    expect(isBlockingStatus("diverged")).toBe(true);
+    expect(isBlockingStatus("synced")).toBe(false);
+  });
+
+  it("keeps unrelated targeted sync failures and detects folder identity drift", () => {
+    const previous: SyncStatusReport = {
+      schemaVersion: 2, checkedAt: "old", projectId: "project", projectName: "Project",
+      hasBlocking: true, completeness: "failed", globalBlockReason: "tree unavailable",
+      items: [{ path: "retry.tex", status: "error", blocking: true }, { path: "other.tex", status: "diverged", blocking: true }]
+    };
+    const targeted: SyncStatusReport = {
+      schemaVersion: 2, checkedAt: "new", projectId: "project", projectName: "Project",
+      hasBlocking: false, completeness: "complete", items: [{ path: "retry.tex", status: "synced", blocking: false }]
+    };
+    const merged = mergeTargetedSyncStatusReport(previous, targeted, ["retry.tex"]);
+    expect(merged.items.map(item => [item.path, item.status])).toEqual([["other.tex", "diverged"], ["retry.tex", "synced"]]);
+    expect(merged.globalBlockReason).toBe("tree unavailable");
+
+    const make = (folders: OverleafCodexManifest["folders"]): OverleafCodexManifest => ({
+      schemaVersion: 3, serverUrl: "https://www.overleaf.com/", projectId: "project", projectName: "Project",
+      files: {}, folders, ignore: [], lastSyncAt: "now"
+    });
+    expect(classifyFolderStructure(make({ "": { path: "", entityId: "a" } }), make({ "": { path: "", entityId: "b" } })).globalBlockReason).toMatch(/root folder/);
+  });
+
+  it("round-trips OT text and computes Overleaf binary hashes", () => {
+    const before = "Hello World\n";
+    const after = "Hello Overleaf Codex\n";
+    expect(applyOtOperations(before, buildOtOperations(before, after))).toBe(after);
+    expect(mergeRemoteIntoLocal("Hello World", "Hello Overleaf", "Hello World!")).toMatchObject({ clean: true, content: "Hello Overleaf!" });
+    expect(hasLocalChangedSinceLastSync("local", "manifest")).toBe(true);
+    expect(hasRemoteChangedSinceLastSync(4, 4, "remote", "manifest")).toBe(false);
+    expect(gitBlobHash(Buffer.from("hello\n"))).toBe("ce013625030ba8dba906f756967f9e9ca394464a");
+  });
+
+  it("loads the native Socket.IO runtime and validates HTTP helpers", () => {
+    const runtimeRoot = existsSync(path.resolve("dist/vendor/socket.io-client/lib/io.js"))
+      ? path.resolve("dist/vendor/socket.io-client")
+      : path.resolve("node_modules/socket.io-client");
+    const socketIo = loadSocketIoClient(runtimeRoot);
+    expect(socketIo.version).toBe("0.9.17-overleaf-5");
+    expect(typeof socketIo.connect).toBe("function");
+    expect(socketIo.parser.decodePacket(socketIo.parser.encodePacket({ type: "message", data: "ok" })).data).toBe("ok");
+    expect(parseContentRange("bytes 10-19/30")).toEqual({ start: 10, end: 19, total: 30 });
+    expect(() => parseContentRange(null)).toThrow(/Content-Range/);
+    expect(mergeCookieHeader("overleaf_session2=abc; GCLB=old", ["GCLB=new; Path=/"])).toBe("overleaf_session2=abc; GCLB=new");
+  });
+
+  it("falls back to legacy Overleaf settings unless the new Toolkit key is explicit", () => {
+    expect(hasExplicitConfigurationValue({ defaultValue: false })).toBe(false);
+    expect(hasExplicitConfigurationValue({ globalValue: false })).toBe(true);
+    expect(hasExplicitConfigurationValue({ workspaceValue: false })).toBe(true);
+    expect(hasExplicitConfigurationValue({ workspaceFolderValue: false })).toBe(true);
+
+    const legacyEnabled = fakeConfig({ compileOnSave: true });
+    const newDefaultOnly = fakeConfig(
+      { compileOnSave: false },
+      { compileOnSave: { defaultValue: false } }
+    );
+    expect(getWithLegacyFallback(newDefaultOnly, "compileOnSave", legacyEnabled, "compileOnSave", false)).toBe(true);
+
+    const newExplicitFalse = fakeConfig(
+      { compileOnSave: false },
+      { compileOnSave: { defaultValue: false, workspaceValue: false } }
+    );
+    expect(getWithLegacyFallback(newExplicitFalse, "compileOnSave", legacyEnabled, "compileOnSave", false)).toBe(false);
+
+    const legacyDisabled = fakeConfig({ autoPushLocalAhead: false });
+    const newAutoPushDefaultOnly = fakeConfig(
+      { autoPushLocalAhead: true },
+      { autoPushLocalAhead: { defaultValue: true } }
+    );
+    expect(getWithLegacyFallback(newAutoPushDefaultOnly, "autoPushLocalAhead", legacyDisabled, "autoPushLocalAhead", true)).toBe(false);
+  });
+
+  it("resolves saved file paths to their owning Overleaf mirror", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-roots-"));
+    const first = path.join(parent, "first");
+    const second = path.join(parent, "second");
+    try {
+      await fs.mkdir(path.join(first, ".overleaf-codex"), { recursive: true });
+      await fs.mkdir(path.join(second, ".overleaf-codex"), { recursive: true });
+      const hasManifest = (root: string) => root === first || root === second;
+
+      expect(firstWorkspaceMirrorRoot([first, second], hasManifest)).toBe(first);
+      expect(resolveMirrorRootForPath(path.join(second, "chapters", "intro.tex"), [first, second], hasManifest)).toBe(second);
+      expect(resolveMirrorRootForPath(second, [first, second], hasManifest)).toBe(second);
+      expect(workspaceContainsPath(second, [parent])).toBe(true);
+      expect(workspaceContainsPath(path.join(parent, "outside"), [first, second])).toBe(false);
+    } finally {
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses local hash cache only while file metadata is stable", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-cache-"));
+    try {
+      const file = path.join(root, "main.tex");
+      const manifestFile = { path: "main.tex", entityId: "doc-1", entityType: "doc" as const, parentFolderId: "root" };
+      await fs.writeFile(file, "one", "utf8");
+      const first = await cachedLocalFileHash(file, manifestFile);
+      const second = await cachedLocalFileHash(file, manifestFile);
+      expect(first.reused).toBe(false);
+      expect(second.reused).toBe(true);
+      expect(second.hash).toBe(first.hash);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});

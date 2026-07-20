@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "An integrated LaTeX workspace for themes, programmable hsnips, local and Overleaf builds, realtime sync, mirrors, and conflict resolution.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "publisher": "yiqiyang33",
   "icon": "assets/icon.png",
   "license": "MIT",
@@ -643,6 +643,11 @@
           "default": true,
           "description": "Require confirmation before destructive Overleaf operations."
         },
+        "latexEditingToolkit.overleaf.compileOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Compile the active Overleaf mirror after saving a supported source file. Overrides overleafCodex.compileOnSave when set."
+        },
         "latexEditingToolkit.overleaf.compileMode": {
           "type": "string",
           "enum": ["local", "overleaf"],
@@ -845,14 +850,15 @@
   },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "compile": "npm run clean && tsc --noEmit && node esbuild.mjs && npm run prepare-monaco",
+    "compile": "npm run clean && tsc --noEmit && node esbuild.mjs && npm run prepare-monaco && npm run prepare-overleaf-runtime",
     "prepare-monaco": "node scripts/prepare-monaco.js",
+    "prepare-overleaf-runtime": "node scripts/prepare-overleaf-runtime.js",
     "watch": "node esbuild.mjs --watch",
     "test:unit": "vitest run",
     "test:extension": "npm run compile",
     "test": "npm run compile && npm run test:unit",
-    "package": "npm run test && vsce package --no-dependencies --out latex-editing-toolkit-2.0.0.vsix",
-    "verify:vsix": "node scripts/verify-vsix.mjs latex-editing-toolkit-2.0.0.vsix"
+    "package": "npm run test && vsce package --no-dependencies --out latex-editing-toolkit-2.0.1.vsix",
+    "verify:vsix": "node scripts/verify-vsix.mjs latex-editing-toolkit-2.0.1.vsix"
   },
   "dependencies": {
     "diff-match-patch": "^1.0.5",

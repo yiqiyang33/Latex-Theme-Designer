@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
+import { createRequire } from 'module';
 import { Readable } from 'stream';
 import FormData from 'form-data';
 import fetch, { Response } from 'node-fetch';
@@ -498,8 +499,9 @@ export class OverleafSocketSession {
 
   constructor(serverUrl: string, private readonly identity: Identity, timeouts: NetworkTimeouts, query?: string) {
     this.timeouts = timeouts;
-    const socketIo = loadSocketIoClient();
-    patchSocketIoHandshake(socketIo);
+    const runtimeRoot = path.join(__dirname, 'vendor', 'socket.io-client');
+    const socketIo = loadSocketIoClient(runtimeRoot);
+    patchSocketIoHandshake(socketIo, runtimeRoot);
     const connect = socketIo.connect.bind(socketIo);
     const origin = new URL(normalizeServerUrl(serverUrl)).origin;
     this.socket = connect(`${origin}${query ?? ''}`, {
@@ -689,8 +691,16 @@ function abortError(signal?: AbortSignal): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error('Operation cancelled.');
 }
 
-function loadSocketIoClient(): any {
-  const loaded = require('socket.io-client');
+export function loadSocketIoClient(runtimeRoot = path.join(__dirname, 'vendor', 'socket.io-client')): any {
+  const requireFromExtension = createRequire(__filename);
+  const entry = path.join(runtimeRoot, 'lib', 'io.js');
+  let loaded: any;
+  try {
+    loaded = requireFromExtension(entry);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load Overleaf Socket.IO runtime from ${entry}: ${message}. Rebuild or reinstall the extension.`);
+  }
   const candidates = [
     loaded,
     loaded?.default,
@@ -711,7 +721,28 @@ function loadSocketIoClient(): any {
   throw new Error(`Could not load socket.io-client connect function. Loaded shape: ${shape || 'empty'}.`);
 }
 
-function patchSocketIoHandshake(socketIo: any): void {
+function loadSocketIoWebSocket(runtimeRoot: string): any {
+  const entry = path.join(runtimeRoot, 'lib', 'io.js');
+  const requireFromRuntime = createRequire(entry);
+  let loaded: any;
+  try {
+    // Keep this require indirect: esbuild must not turn the legacy ws module
+    // into another synthetic CommonJS wrapper. Node resolves it from the
+    // prepared Socket.IO runtime's node_modules directory.
+    loaded = requireFromRuntime('ws');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load the Overleaf WebSocket runtime from ${path.join(runtimeRoot, 'node_modules', 'ws')}: ${message}. Rebuild or reinstall the extension.`);
+  }
+  const candidate = loaded?.default ?? loaded;
+  if (typeof candidate !== 'function') {
+    const shape = loaded && typeof loaded === 'object' ? Object.keys(loaded).join(', ') : typeof loaded;
+    throw new Error(`The Overleaf WebSocket runtime has invalid exports (${shape || 'empty'}). Rebuild or reinstall the extension.`);
+  }
+  return candidate;
+}
+
+function patchSocketIoHandshake(socketIo: any, runtimeRoot: string): void {
   if (socketIo.__overleafCodexHandshakePatched || !socketIo.Socket?.prototype) {
     return;
   }
@@ -719,6 +750,7 @@ function patchSocketIoHandshake(socketIo: any): void {
   const originalHandshake = socketIo.Socket.prototype.handshake;
   const originalWebsocketOpen = socketIo.Transport?.websocket?.prototype?.open;
   const originalXhrRequest = socketIo.Transport?.XHR?.prototype?.request;
+  const Ws = originalWebsocketOpen ? loadSocketIoWebSocket(runtimeRoot) : undefined;
 
   if (originalWebsocketOpen) {
     socketIo.Transport.websocket.prototype.open = function patchedWebsocketOpen(this: any): unknown {
@@ -728,7 +760,6 @@ function patchSocketIoHandshake(socketIo: any): void {
       }
 
       const query = socketIo.util.query(this.socket.options.query);
-      const Ws = require('ws');
       this.websocket = new Ws(this.prepareUrl() + query, undefined, {
         origin: this.socket.options.overleafCodexOrigin,
         headers: {

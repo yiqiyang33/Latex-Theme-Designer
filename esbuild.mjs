@@ -17,7 +17,11 @@ const builds = [
     outfile: "dist/extension.js",
     platform: "node",
     format: "cjs",
-    external: ["vscode"]
+    // Overleaf uses a legacy Socket.IO client whose CommonJS modules share
+    // `module.parent.exports` during circular initialisation. Keep it out of
+    // esbuild's synthetic CommonJS wrappers and load the prepared runtime
+    // with Node's native loader instead.
+    external: ["vscode", "socket.io-client"]
   }),
   esbuild.context({
     ...common,

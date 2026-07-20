@@ -755,7 +755,7 @@ describe("TypeScript Toolkit migration", () => {
     expect(source).toContain('loadSnippetState("snippets-state"');
     expect(styles).toContain(".snippet-manager-layout");
     expect(extension).toContain('command("hsnips.openSnippetManager"');
-    expect(manifest.version).toBe("2.0.0");
+    expect(manifest.version).toBe("2.0.1");
     expect(manifest.icon).toBe("assets/icon.png");
     expect(manifest.activationEvents).toContain("onCommand:overleafCodex.compile");
     expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();

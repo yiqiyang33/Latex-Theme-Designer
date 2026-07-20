@@ -237,7 +237,7 @@ async function autoStartOverleafMirror(service: OverleafService, output: vscode.
     const state = await service.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
     if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
-    await vscode.commands.executeCommand("overleafCodex.startRealtimeSync");
+    await vscode.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     output.appendLine(`[${new Date().toISOString()}] Overleaf auto-sync skipped: ${message}`);
@@ -1283,9 +1283,13 @@ class ToolkitPanel {
         data = { opened: true };
       } else if (request.command.startsWith("overleaf-")) {
         if (!overleafService) throw new Error("Overleaf service is unavailable.");
+        const payload = { ...(request.payload ?? {}) };
+        if (this.folder?.uri.scheme === "file" && payload.workspacePath === undefined) {
+          payload.workspacePath = this.folder.uri.fsPath;
+        }
         data = request.command === "overleaf-pdf-status"
-          ? await overleafService.pdfStatus()
-          : await overleafService.handle(request.command, request.payload ?? {});
+          ? await overleafService.pdfStatus(payload.workspacePath)
+          : await overleafService.handle(request.command, payload);
       } else if (request.command === "pdf-status") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
