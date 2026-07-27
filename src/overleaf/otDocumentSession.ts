@@ -1,5 +1,6 @@
 import { JoinDocResult, OtUpdate } from './types';
 import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, shareJsBlobHash } from './ot';
+import { formatUnknownError } from './util';
 
 export interface OtDocumentState {
   docId: string;
@@ -12,6 +13,12 @@ export interface OtSubmitResult {
   content: string;
   changed: boolean;
   conflictRemote?: string;
+}
+
+interface AmbiguousApplyResult {
+  applied: boolean;
+  content: string;
+  version: number;
 }
 
 export interface OtDocumentTransport {
@@ -33,11 +40,11 @@ export class OtDocumentSession {
     return current;
   }
 
-  submitLocal(content: string, source?: string): Promise<OtSubmitResult> {
-    return this.run(() => this.submitLocalNow(content, source));
+  submitLocal(content: string): Promise<OtSubmitResult> {
+    return this.run(() => this.submitLocalNow(content));
   }
 
-  private async submitLocalNow(content: string, source?: string): Promise<OtSubmitResult> {
+  private async submitLocalNow(content: string): Promise<OtSubmitResult> {
     let intended = content;
     if (this.state.remoteCache !== this.state.localCache) {
       const merge = mergeRemoteIntoLocal(this.state.localCache, this.state.remoteCache, content);
@@ -54,33 +61,56 @@ export class OtDocumentSession {
       return { content: intended, changed: false };
     }
 
-    try {
-      await this.apply(operations, this.state.version, intended, source);
-      this.state.version += 1;
-    } catch (error) {
-      if (!isAmbiguousAckError(error)) throw error;
-      const joined = await this.transport.joinDoc(this.state.docId);
-      if (joined.content === intended) {
-        this.state.version = joined.version;
-      } else if (joined.content === beforeRemote) {
-        const retry = buildOtOperations(joined.content, intended);
-        await this.apply(retry, joined.version, intended, source);
-        this.state.version = joined.version + 1;
+    const applied = await this.applyOrReadBack(operations, this.state.version, intended);
+    if (applied.applied) {
+      this.state.version = applied.version;
+    } else if (applied.content === beforeRemote) {
+      const retry = await this.applyOrReadBack(
+        buildOtOperations(applied.content, intended),
+        applied.version,
+        intended
+      );
+      if (retry.applied) {
+        this.state.version = retry.version;
       } else {
-        const merge = mergeRemoteIntoLocal(beforeRemote, joined.content, intended);
+        const merge = mergeRemoteIntoLocal(applied.content, retry.content, intended);
         if (!merge.clean) {
-          this.state.version = joined.version;
-          this.state.remoteCache = joined.content;
-          return { content: intended, changed: false, conflictRemote: joined.content };
+          this.state.version = retry.version;
+          this.state.remoteCache = retry.content;
+          return { content: intended, changed: false, conflictRemote: retry.content };
         }
         intended = merge.content;
-        const retry = buildOtOperations(joined.content, intended);
-        if (retry.length > 0) {
-          await this.apply(retry, joined.version, intended, source);
-          this.state.version = joined.version + 1;
-        } else {
-          this.state.version = joined.version;
+        const merged = await this.applyOrReadBack(
+          buildOtOperations(retry.content, intended),
+          retry.version,
+          intended
+        );
+        if (!merged.applied) {
+          this.state.version = merged.version;
+          this.state.remoteCache = merged.content;
+          return { content: intended, changed: false, conflictRemote: merged.content };
         }
+        this.state.version = merged.version;
+      }
+    } else {
+      const merge = mergeRemoteIntoLocal(beforeRemote, applied.content, intended);
+      if (!merge.clean) {
+        this.state.version = applied.version;
+        this.state.remoteCache = applied.content;
+        return { content: intended, changed: false, conflictRemote: applied.content };
+      }
+      intended = merge.content;
+      const retry = buildOtOperations(applied.content, intended);
+      if (retry.length > 0) {
+        const merged = await this.applyOrReadBack(retry, applied.version, intended);
+        if (!merged.applied) {
+          this.state.version = merged.version;
+          this.state.remoteCache = merged.content;
+          return { content: intended, changed: false, conflictRemote: merged.content };
+        }
+        this.state.version = merged.version;
+      } else {
+        this.state.version = applied.version;
       }
     }
 
@@ -102,18 +132,42 @@ export class OtDocumentSession {
     });
   }
 
-  private apply(operations: OtUpdate['op'], version: number, content: string, source?: string): Promise<void> {
+  private apply(operations: OtUpdate['op'], version: number, content: string): Promise<void> {
     return this.transport.applyOtUpdate(this.state.docId, {
       doc: this.state.docId,
       op: operations,
       v: version,
-      hash: shareJsBlobHash(content),
-      meta: { source, ts: Date.now() }
+      hash: shareJsBlobHash(content)
     });
+  }
+
+  private async applyOrReadBack(
+    operations: OtUpdate['op'],
+    version: number,
+    content: string
+  ): Promise<AmbiguousApplyResult> {
+    if (!operations || operations.length === 0) {
+      return { applied: true, content, version };
+    }
+    try {
+      await this.apply(operations, version, content);
+      return { applied: true, content, version: version + 1 };
+    } catch (error) {
+      if (!isAmbiguousAckError(error)) throw error;
+      const joined = await this.transport.joinDoc(this.state.docId);
+      return {
+        applied: joined.content === content,
+        content: joined.content,
+        version: joined.version
+      };
+    }
   }
 }
 
 function isAmbiguousAckError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /timed out waiting for applyOtUpdate|cancelled|socket|disconnect/i.test(message);
+  if (error && typeof error === 'object' && !(error instanceof Error)) {
+    return true;
+  }
+  const message = formatUnknownError(error);
+  return /applyOtUpdate|acknowledg|cancelled|socket|disconnect|version|hash|out.?of.?order/i.test(message);
 }

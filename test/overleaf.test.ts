@@ -18,11 +18,12 @@ import {
   mergeTargetedSyncStatusReport
 } from "../src/overleaf/syncStatus";
 import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalChangedSinceLastSync, hasRemoteChangedSinceLastSync } from "../src/overleaf/ot";
+import { OtDocumentSession, type OtDocumentTransport } from "../src/overleaf/otDocumentSession";
 import { getWithLegacyFallback, hasExplicitConfigurationValue, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
-import { gitBlobHash } from "../src/overleaf/util";
-import { parseContentRange, mergeCookieHeader, loadSocketIoClient } from "../src/overleaf/overleafClient";
-import type { OverleafCodexManifest, SyncStatusReport } from "../src/overleaf/types";
+import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
+import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
+import type { JoinDocResult, OtUpdate, OverleafCodexManifest, SyncStatusReport } from "../src/overleaf/types";
 
 class FakeConfig implements InspectableConfiguration {
   constructor(
@@ -133,6 +134,35 @@ describe("Overleaf integration primitives", () => {
     expect(mergeCookieHeader("overleaf_session2=abc; GCLB=old", ["GCLB=new; Path=/"])).toBe("overleaf_session2=abc; GCLB=new");
   });
 
+  it("accepts non-node-style socket acknowledgements and formats object errors", () => {
+    expect(parseSocketAck([])).toEqual({ values: [] });
+    expect(parseSocketAck([null, ["line"], 7])).toEqual({ values: [["line"], 7] });
+    expect(parseSocketAck([{}])).toEqual({ values: [{}] });
+    expect(parseSocketAck([{ ok: true, version: 8 }])).toEqual({ values: [{ ok: true, version: 8 }] });
+
+    const failure = parseSocketAck([{ message: "Overleaf rejected the update", code: "bad_update" }]);
+    expect(failure.error?.message).toContain("Overleaf rejected the update");
+    expect(failure.error?.message).toContain("bad_update");
+    expect(formatUnknownError({ error: "not_authorized", status: 403 })).toContain("not_authorized");
+  });
+
+  it("verifies ambiguous object-shaped OT acknowledgements by reading the document back", async () => {
+    const afterApply = new AmbiguousAckTransport("Hello", 1);
+    afterApply.objectAckAfterFirstApply = true;
+    const accepted = await makeOtSession(afterApply).submitLocal("Hello!");
+    expect(accepted).toMatchObject({ content: "Hello!", changed: true });
+    expect(afterApply.content).toBe("Hello!");
+    expect(afterApply.applyCount).toBe(1);
+    expect(afterApply.lastUpdate).not.toHaveProperty("meta");
+
+    const beforeApply = new AmbiguousAckTransport("Hello", 1);
+    beforeApply.objectAckBeforeFirstApply = true;
+    const retried = await makeOtSession(beforeApply).submitLocal("Hello!");
+    expect(retried).toMatchObject({ content: "Hello!", changed: true });
+    expect(beforeApply.content).toBe("Hello!");
+    expect(beforeApply.applyCount).toBe(2);
+  });
+
   it("falls back to legacy Overleaf settings unless the new Toolkit key is explicit", () => {
     expect(hasExplicitConfigurationValue({ defaultValue: false })).toBe(false);
     expect(hasExplicitConfigurationValue({ globalValue: false })).toBe(true);
@@ -195,3 +225,40 @@ describe("Overleaf integration primitives", () => {
     }
   });
 });
+
+class AmbiguousAckTransport implements OtDocumentTransport {
+  applyCount = 0;
+  objectAckAfterFirstApply = false;
+  objectAckBeforeFirstApply = false;
+  lastUpdate?: OtUpdate;
+
+  constructor(public content: string, public version: number) {}
+
+  async joinDoc(): Promise<JoinDocResult> {
+    return { content: this.content, version: this.version };
+  }
+
+  async applyOtUpdate(_docId: string, update: OtUpdate): Promise<void> {
+    this.applyCount += 1;
+    this.lastUpdate = update;
+    if (this.applyCount === 1 && this.objectAckBeforeFirstApply) {
+      this.objectAckBeforeFirstApply = false;
+      throw { event: "applyOtUpdate", status: "unknown" };
+    }
+    this.content = applyOtOperations(this.content, update.op ?? []);
+    this.version = update.v + 1;
+    if (this.applyCount === 1 && this.objectAckAfterFirstApply) {
+      this.objectAckAfterFirstApply = false;
+      throw { event: "applyOtUpdate", applied: true };
+    }
+  }
+}
+
+function makeOtSession(transport: AmbiguousAckTransport): OtDocumentSession {
+  return new OtDocumentSession({
+    docId: "doc-1",
+    version: transport.version,
+    localCache: transport.content,
+    remoteCache: transport.content
+  }, transport);
+}

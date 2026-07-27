@@ -32,6 +32,7 @@
     "remote compile"
   ],
   "activationEvents": [
+    "workspaceContains:.overleaf-codex/manifest.json",
     "onStartupFinished",
     "onLanguage:hsnips",
     "onLanguage:markdown",

@@ -13,6 +13,7 @@ import { getSnippetFiles } from "./snippets/engine/snippetProfiles";
 import { SnippetService } from "./snippets/snippetService";
 import { ToolkitService } from "./toolkitService";
 import { OverleafService } from "./overleaf/overleafService";
+import { formatUnknownError } from "./overleaf/util";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 
 let activePanel: ToolkitPanel | undefined;
@@ -220,7 +221,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   overleafService.registerCommands((id, handler) => command(id, handler));
   void autoStartOverleafMirror(overleafService, output);
-  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch(error => output.appendLine(`Overleaf workspace refresh failed: ${String(error)}`))));
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch(error => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
 }
 
 export function deactivate(): void {
@@ -239,7 +240,7 @@ async function autoStartOverleafMirror(service: OverleafService, output: vscode.
     if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
     await vscode.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     output.appendLine(`[${new Date().toISOString()}] Overleaf auto-sync skipped: ${message}`);
   }
 }

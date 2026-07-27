@@ -24,7 +24,7 @@ import {
   SyncPdfResponse,
   UploadFileResult
 } from './types';
-import { normalizeServerUrl } from './util';
+import { formatUnknownError, normalizeServerUrl } from './util';
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE';
 type SocketHandler = (...args: unknown[]) => void;
@@ -305,8 +305,8 @@ export class OverleafClient {
         fallback.disconnect();
         throw new Error(
           'Overleaf realtime connection failed. '
-          + `Project-query attempt: ${errorMessage(firstError)}. `
-          + `Fallback attempt: ${errorMessage(fallbackError)}.`
+          + `Project-query attempt: ${formatUnknownError(firstError)}. `
+          + `Fallback attempt: ${formatUnknownError(fallbackError)}.`
         );
       }
     }
@@ -549,7 +549,7 @@ export class OverleafSocketSession {
       };
       const onConnect = (): void => finish();
       const onFailed = (): void => finish(new Error('Failed to connect to Overleaf realtime server.'));
-      const onError = (error: unknown): void => finish(error instanceof Error ? error : new Error(String(error)));
+      const onError = (error: unknown): void => finish(error instanceof Error ? error : new Error(formatUnknownError(error)));
       const onAbort = (): void => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error('Timed out connecting to Overleaf realtime server.')), ms);
       this.socket.once('connect', onConnect);
@@ -662,15 +662,62 @@ export class OverleafSocketSession {
         return;
       }
       signal?.addEventListener('abort', onAbort, { once: true });
-      this.socket.emit(event, ...args, (error: unknown, ...values: unknown[]) => {
-        if (error) {
-          finish(error instanceof Error ? error : new Error(String(error)));
+      this.socket.emit(event, ...args, (...ackArgs: unknown[]) => {
+        const ack = parseSocketAck(ackArgs);
+        if (ack.error) {
+          finish(ack.error);
           return;
         }
-        finish(undefined, values);
+        finish(undefined, ack.values);
       });
     });
   }
+}
+
+export interface ParsedSocketAck {
+  error?: Error;
+  values: unknown[];
+}
+
+export function parseSocketAck(args: unknown[]): ParsedSocketAck {
+  if (args.length === 0) {
+    return { values: [] };
+  }
+  const [first, ...rest] = args;
+  if (first === null || first === undefined || first === false) {
+    return { values: rest };
+  }
+  const error = socketAckError(first);
+  if (error) {
+    return { error, values: rest };
+  }
+  return { values: args };
+}
+
+function socketAckError(value: unknown): Error | undefined {
+  if (value instanceof Error) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return new Error(value);
+  }
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.success === false || record.ok === false || record.status === 'error') {
+    return new Error(formatUnknownError(value));
+  }
+  if (typeof record.error === 'string' || record.error instanceof Error) {
+    return new Error(formatUnknownError(value));
+  }
+  if (record.error && typeof record.error === 'object') {
+    return new Error(formatUnknownError(value));
+  }
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return new Error(formatUnknownError(value));
+  }
+  return undefined;
 }
 
 export interface ParsedContentRange {
@@ -698,7 +745,7 @@ export function loadSocketIoClient(runtimeRoot = path.join(__dirname, 'vendor', 
   try {
     loaded = requireFromExtension(entry);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     throw new Error(`Could not load Overleaf Socket.IO runtime from ${entry}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidates = [
@@ -731,7 +778,7 @@ function loadSocketIoWebSocket(runtimeRoot: string): any {
     // prepared Socket.IO runtime's node_modules directory.
     loaded = requireFromRuntime('ws');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     throw new Error(`Could not load the Overleaf WebSocket runtime from ${path.join(runtimeRoot, 'node_modules', 'ws')}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidate = loaded?.default ?? loaded;
@@ -824,7 +871,7 @@ function patchSocketIoHandshake(socketIo: any, runtimeRoot: string): void {
       })
       .catch(error => {
         this.connecting = false;
-        this.onError(error instanceof Error ? error.message : String(error));
+        this.onError(formatUnknownError(error));
       });
   };
 
@@ -866,7 +913,7 @@ export async function requestSocketHandshake(
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
 }
 
 export function parseSocketHandshakeBody(body: string): SocketHandshakeParts {
@@ -984,12 +1031,8 @@ function requestSocketHandshakeOnce(
 }
 
 function isRetryableSocketHandshakeError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = formatUnknownError(error);
   return !/HTTP [34]\d\d|Log in again/i.test(message);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function encodePackedUtf8(text: string): string {

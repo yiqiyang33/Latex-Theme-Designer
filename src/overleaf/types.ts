@@ -106,11 +106,6 @@ export interface OtUpdate {
   v: number;
   lastV?: number;
   hash?: string;
-  meta?: {
-    source?: string;
-    ts?: number;
-    user_id?: string;
-  };
 }
 
 export interface CompileOutputFile {

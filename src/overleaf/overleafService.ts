@@ -11,7 +11,7 @@ import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
 import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
-import { normalizeServerUrl } from "./util";
+import { formatUnknownError, normalizeServerUrl } from "./util";
 
 export interface OverleafState {
   available: boolean;
@@ -142,7 +142,7 @@ export class OverleafService implements vscode.Disposable {
         syncItems: [],
         conflicts: [],
         collaborators: [],
-        error: error instanceof Error ? error.message : String(error),
+        error: formatUnknownError(error),
         compileMode: this.compileMode()
       };
     }
@@ -669,7 +669,7 @@ function existsSync(filePath: string): boolean {
 }
 
 function formatError(error: unknown): string {
-  return error instanceof Error ? error.stack ?? error.message : String(error);
+  return error instanceof Error ? error.stack ?? error.message : formatUnknownError(error);
 }
 
 function abortSignalFromToken(token: vscode.CancellationToken): AbortSignal {

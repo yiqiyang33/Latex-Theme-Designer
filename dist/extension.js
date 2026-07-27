@@ -23917,6 +23917,7 @@ var import_ignore = __toESM(require_ignore());
 var crypto = __toESM(require("crypto"));
 var os3 = __toESM(require("os"));
 var path18 = __toESM(require("path"));
+var import_util = require("util");
 function normalizeServerUrl(raw) {
   const trimmed = raw.trim() || "https://www.overleaf.com/";
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
@@ -23960,6 +23961,47 @@ function isTextLike(filePath) {
 }
 function toPosixPath2(input) {
   return input.replace(/[\\/]+/g, "/").replace(/^\/+/, "");
+}
+function formatUnknownError(error) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error === void 0) {
+    return "Unknown error";
+  }
+  if (error === null || typeof error !== "object") {
+    return String(error);
+  }
+  const record = error;
+  const message = typeof record.message === "string" ? record.message : void 0;
+  const nested = record.error;
+  const nestedMessage = typeof nested === "string" ? nested : nested && typeof nested === "object" && typeof nested.message === "string" ? String(nested.message) : void 0;
+  const main = message ?? nestedMessage;
+  const details = Object.entries(record).filter(([key, value]) => value !== void 0 && value !== "" && key !== "message" && key !== "stack").map(([key, value]) => `${key}=${formatErrorDetail(value)}`).join(", ");
+  if (main) {
+    return details ? `${main} (${details})` : main;
+  }
+  const json = safeJson(error);
+  return json && json !== "{}" ? json : (0, import_util.inspect)(error, { depth: 4, breakLength: 140 });
+}
+function formatErrorDetail(value) {
+  if (value instanceof Error) {
+    return value.message;
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return safeJson(value) ?? (0, import_util.inspect)(value, { depth: 2, breakLength: 80 });
+}
+function safeJson(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return void 0;
+  }
 }
 function sanitizeProjectFolderName(projectName, projectId) {
   const safeName = projectName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "overleaf-project";
@@ -24199,7 +24241,7 @@ var fs15 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path21 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
-var import_util2 = require("util");
+var import_util3 = require("util");
 var vscode8 = __toESM(require("vscode"));
 
 // src/overleaf/tree.ts
@@ -24274,7 +24316,7 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
 }
 
 // src/overleaf/mirrorManager.ts
-var execFileAsync = (0, import_util2.promisify)(import_child_process2.execFile);
+var execFileAsync = (0, import_util3.promisify)(import_child_process2.execFile);
 var LOCAL_MIRRORS_KEY = "overleafCodex.localMirrors.v1";
 var AGENTS_CONTENT = `# AGENTS.md
 
@@ -24993,7 +25035,7 @@ var OverleafClient = class {
       } catch (fallbackError) {
         fallback.disconnect();
         throw new Error(
-          `Overleaf realtime connection failed. Project-query attempt: ${errorMessage(firstError)}. Fallback attempt: ${errorMessage(fallbackError)}.`
+          `Overleaf realtime connection failed. Project-query attempt: ${formatUnknownError(firstError)}. Fallback attempt: ${formatUnknownError(fallbackError)}.`
         );
       }
     }
@@ -25210,7 +25252,7 @@ var OverleafSocketSession = class {
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
-      const onError = (error) => finish(error instanceof Error ? error : new Error(String(error)));
+      const onError = (error) => finish(error instanceof Error ? error : new Error(formatUnknownError(error)));
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error("Timed out connecting to Overleaf realtime server.")), ms);
       this.socket.once("connect", onConnect);
@@ -25314,16 +25356,56 @@ var OverleafSocketSession = class {
         return;
       }
       signal?.addEventListener("abort", onAbort, { once: true });
-      this.socket.emit(event, ...args, (error, ...values) => {
-        if (error) {
-          finish(error instanceof Error ? error : new Error(String(error)));
+      this.socket.emit(event, ...args, (...ackArgs) => {
+        const ack = parseSocketAck(ackArgs);
+        if (ack.error) {
+          finish(ack.error);
           return;
         }
-        finish(void 0, values);
+        finish(void 0, ack.values);
       });
     });
   }
 };
+function parseSocketAck(args) {
+  if (args.length === 0) {
+    return { values: [] };
+  }
+  const [first, ...rest] = args;
+  if (first === null || first === void 0 || first === false) {
+    return { values: rest };
+  }
+  const error = socketAckError(first);
+  if (error) {
+    return { error, values: rest };
+  }
+  return { values: args };
+}
+function socketAckError(value) {
+  if (value instanceof Error) {
+    return value;
+  }
+  if (typeof value === "string") {
+    return new Error(value);
+  }
+  if (!value || typeof value !== "object") {
+    return void 0;
+  }
+  const record = value;
+  if (record.success === false || record.ok === false || record.status === "error") {
+    return new Error(formatUnknownError(value));
+  }
+  if (typeof record.error === "string" || record.error instanceof Error) {
+    return new Error(formatUnknownError(value));
+  }
+  if (record.error && typeof record.error === "object") {
+    return new Error(formatUnknownError(value));
+  }
+  if (typeof record.message === "string" && record.message.trim()) {
+    return new Error(formatUnknownError(value));
+  }
+  return void 0;
+}
 function parseContentRange(value) {
   const match2 = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(value ?? "");
   if (!match2) {
@@ -25341,7 +25423,7 @@ function loadSocketIoClient(runtimeRoot = path23.join(__dirname, "vendor", "sock
   try {
     loaded = requireFromExtension(entry);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     throw new Error(`Could not load Overleaf Socket.IO runtime from ${entry}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidates = [
@@ -25370,7 +25452,7 @@ function loadSocketIoWebSocket(runtimeRoot) {
   try {
     loaded = requireFromRuntime("ws");
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     throw new Error(`Could not load the Overleaf WebSocket runtime from ${path23.join(runtimeRoot, "node_modules", "ws")}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidate = loaded?.default ?? loaded;
@@ -25452,7 +25534,7 @@ function patchSocketIoHandshake(socketIo, runtimeRoot) {
       fn(...result.parts);
     }).catch((error) => {
       this.connecting = false;
-      this.onError(error instanceof Error ? error.message : String(error));
+      this.onError(formatUnknownError(error));
     });
   };
   socketIo.__overleafCodexHandshakePatched = true;
@@ -25473,7 +25555,7 @@ async function requestSocketHandshake(url, options) {
       await new Promise((resolve16) => setTimeout(resolve16, 250 * 2 ** attempt));
     }
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
 }
 function parseSocketHandshakeBody(body) {
   const normalized = body.trim();
@@ -25577,11 +25659,8 @@ function requestSocketHandshakeOnce(url, options) {
   });
 }
 function isRetryableSocketHandshakeError(error) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = formatUnknownError(error);
   return !/HTTP [34]\d\d|Log in again/i.test(message);
-}
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
 }
 function decodePackedUtf8(text) {
   return Buffer.from(text, "latin1").toString("utf8");
@@ -26126,10 +26205,10 @@ var OtDocumentSession = class {
     this.queue = current.then(() => void 0, () => void 0);
     return current;
   }
-  submitLocal(content, source) {
-    return this.run(() => this.submitLocalNow(content, source));
+  submitLocal(content) {
+    return this.run(() => this.submitLocalNow(content));
   }
-  async submitLocalNow(content, source) {
+  async submitLocalNow(content) {
     let intended = content;
     if (this.state.remoteCache !== this.state.localCache) {
       const merge = mergeRemoteIntoLocal(this.state.localCache, this.state.remoteCache, content);
@@ -26144,33 +26223,56 @@ var OtDocumentSession = class {
       this.state.localCache = intended;
       return { content: intended, changed: false };
     }
-    try {
-      await this.apply(operations, this.state.version, intended, source);
-      this.state.version += 1;
-    } catch (error) {
-      if (!isAmbiguousAckError(error)) throw error;
-      const joined = await this.transport.joinDoc(this.state.docId);
-      if (joined.content === intended) {
-        this.state.version = joined.version;
-      } else if (joined.content === beforeRemote) {
-        const retry = buildOtOperations(joined.content, intended);
-        await this.apply(retry, joined.version, intended, source);
-        this.state.version = joined.version + 1;
+    const applied = await this.applyOrReadBack(operations, this.state.version, intended);
+    if (applied.applied) {
+      this.state.version = applied.version;
+    } else if (applied.content === beforeRemote) {
+      const retry = await this.applyOrReadBack(
+        buildOtOperations(applied.content, intended),
+        applied.version,
+        intended
+      );
+      if (retry.applied) {
+        this.state.version = retry.version;
       } else {
-        const merge = mergeRemoteIntoLocal(beforeRemote, joined.content, intended);
+        const merge = mergeRemoteIntoLocal(applied.content, retry.content, intended);
         if (!merge.clean) {
-          this.state.version = joined.version;
-          this.state.remoteCache = joined.content;
-          return { content: intended, changed: false, conflictRemote: joined.content };
+          this.state.version = retry.version;
+          this.state.remoteCache = retry.content;
+          return { content: intended, changed: false, conflictRemote: retry.content };
         }
         intended = merge.content;
-        const retry = buildOtOperations(joined.content, intended);
-        if (retry.length > 0) {
-          await this.apply(retry, joined.version, intended, source);
-          this.state.version = joined.version + 1;
-        } else {
-          this.state.version = joined.version;
+        const merged = await this.applyOrReadBack(
+          buildOtOperations(retry.content, intended),
+          retry.version,
+          intended
+        );
+        if (!merged.applied) {
+          this.state.version = merged.version;
+          this.state.remoteCache = merged.content;
+          return { content: intended, changed: false, conflictRemote: merged.content };
         }
+        this.state.version = merged.version;
+      }
+    } else {
+      const merge = mergeRemoteIntoLocal(beforeRemote, applied.content, intended);
+      if (!merge.clean) {
+        this.state.version = applied.version;
+        this.state.remoteCache = applied.content;
+        return { content: intended, changed: false, conflictRemote: applied.content };
+      }
+      intended = merge.content;
+      const retry = buildOtOperations(applied.content, intended);
+      if (retry.length > 0) {
+        const merged = await this.applyOrReadBack(retry, applied.version, intended);
+        if (!merged.applied) {
+          this.state.version = merged.version;
+          this.state.remoteCache = merged.content;
+          return { content: intended, changed: false, conflictRemote: merged.content };
+        }
+        this.state.version = merged.version;
+      } else {
+        this.state.version = applied.version;
       }
     }
     this.state.remoteCache = intended;
@@ -26189,19 +26291,38 @@ var OtDocumentSession = class {
       return next;
     });
   }
-  apply(operations, version, content, source) {
+  apply(operations, version, content) {
     return this.transport.applyOtUpdate(this.state.docId, {
       doc: this.state.docId,
       op: operations,
       v: version,
-      hash: shareJsBlobHash(content),
-      meta: { source, ts: Date.now() }
+      hash: shareJsBlobHash(content)
     });
+  }
+  async applyOrReadBack(operations, version, content) {
+    if (!operations || operations.length === 0) {
+      return { applied: true, content, version };
+    }
+    try {
+      await this.apply(operations, version, content);
+      return { applied: true, content, version: version + 1 };
+    } catch (error) {
+      if (!isAmbiguousAckError(error)) throw error;
+      const joined = await this.transport.joinDoc(this.state.docId);
+      return {
+        applied: joined.content === content,
+        content: joined.content,
+        version: joined.version
+      };
+    }
   }
 };
 function isAmbiguousAckError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /timed out waiting for applyOtUpdate|cancelled|socket|disconnect/i.test(message);
+  if (error && typeof error === "object" && !(error instanceof Error)) {
+    return true;
+  }
+  const message = formatUnknownError(error);
+  return /applyOtUpdate|acknowledg|cancelled|socket|disconnect|version|hash|out.?of.?order/i.test(message);
 }
 
 // src/overleaf/renameDetector.ts
@@ -26407,7 +26528,7 @@ var RealtimeSyncService = class {
         return this.checkSyncStatus(this.root, this.client, void 0, request);
       },
       void 0,
-      (error) => this.log(`Could not refresh sync status: ${error instanceof Error ? error.message : String(error)}`)
+      (error) => this.log(`Could not refresh sync status: ${formatUnknownError(error)}`)
     );
     this.status.command = "overleafCodex.startRealtimeSync";
     this.status.text = "$(cloud) Overleaf";
@@ -26508,14 +26629,23 @@ var RealtimeSyncService = class {
     if (!activeClient) {
       throw new Error("Overleaf Codex is not connected.");
     }
+    if (this.root === root && this.session && !this.stopping) {
+      const expectedGeneration = this.generation;
+      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
+        ...options,
+        expectedGeneration
+      })).report;
+      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
+    }
     progress?.report({ message: "Connecting for sync health check" });
     const session = await activeClient.connectSocket(manifest.projectId, options.signal);
     try {
       const expectedGeneration = this.root === root ? this.generation : void 0;
-      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
+      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
         ...options,
         expectedGeneration
       })).report;
+      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     } finally {
       session.disconnect();
     }
@@ -26934,7 +27064,7 @@ var RealtimeSyncService = class {
     });
     this.session.on("error", (error) => {
       if (!current()) return;
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatUnknownError(error);
       void this.handleSocketDisconnected(`Overleaf realtime socket error: ${message}`);
     });
     this.session.on("rootDocUpdated", (rootDocId) => {
@@ -27097,7 +27227,7 @@ var RealtimeSyncService = class {
       return;
     }
     const users = await this.session.getConnectedUsers().catch((error) => {
-      this.log(`Could not load collaborators: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`Could not load collaborators: ${formatUnknownError(error)}`);
       return [];
     });
     for (const user of users) {
@@ -27139,7 +27269,7 @@ var RealtimeSyncService = class {
       clearTimeout(this.positionTimer);
     }
     this.positionTimer = setTimeout(() => {
-      void this.session?.updatePosition(file.entityId, active.line, active.character).catch((error) => this.log(`Could not update Overleaf cursor position: ${error instanceof Error ? error.message : String(error)}`));
+      void this.session?.updatePosition(file.entityId, active.line, active.character).catch((error) => this.log(`Could not update Overleaf cursor position: ${formatUnknownError(error)}`));
     }, 250);
   }
   updateCollaborator(user) {
@@ -27402,6 +27532,12 @@ var RealtimeSyncService = class {
       reason: "post-auto-push"
     });
   }
+  async autoPushLocalAheadAfterCheck(root, report, progress, options = {}) {
+    if (options.reason === "post-auto-push" || root !== this.root || !this.session || !this.client || this.stopping) {
+      return report;
+    }
+    return this.autoPushLocalAhead(report, progress);
+  }
   async fetchRemoteSnapshot(manifest, session, client = this.client, progress, options = {}) {
     const signal = options.signal;
     const project = session.getProject();
@@ -27445,7 +27581,7 @@ var RealtimeSyncService = class {
         file.version = joined.version;
         contents.set(file.path, joined.content);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatUnknownError(error);
         failures.set(file.path, message);
         this.log(`Could not read remote ${file.path}: ${message}`);
       } finally {
@@ -27461,7 +27597,7 @@ var RealtimeSyncService = class {
         const bytes = await client.downloadProjectFile(manifest.projectId, file.entityId, signal);
         contents.set(file.path, bytes);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatUnknownError(error);
         failures.set(file.path, message);
         this.log(`Could not read remote ${file.path}: ${message}`);
       } finally {
@@ -27548,6 +27684,11 @@ var RealtimeSyncService = class {
       return;
     }
     const blocking = this.syncStatusReport?.items.filter((item) => item.blocking).length ?? 0;
+    if (this.syncGate.project === "checking") {
+      this.status.text = "$(sync~spin) Overleaf";
+      this.status.tooltip = "Checking Overleaf Codex sync status";
+      return;
+    }
     if (this.syncGate.project !== "ready") {
       this.status.text = "$(debug-disconnect) Overleaf";
       this.status.tooltip = this.syncGate.reason ?? `Overleaf sync is ${this.syncGate.project}.`;
@@ -27593,7 +27734,7 @@ var RealtimeSyncService = class {
         return;
       }
       void this.start(root, client).catch((error) => {
-        this.log(`Reconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Reconnect failed: ${formatUnknownError(error)}`);
         this.scheduleReconnect();
       });
     }, delay);
@@ -27963,7 +28104,7 @@ var RealtimeSyncService = class {
       transaction.stage = "promoted";
       await this.binaryTransactions.upsert(transaction);
       await this.client.deleteEntity(this.manifest.projectId, "file", entry.entityId).catch((error) => {
-        this.log(`Could not clean binary backup ${backupName}: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Could not clean binary backup ${backupName}: ${formatUnknownError(error)}`);
       });
       await this.binaryTransactions.remove(transaction.id);
       return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expectedBlobHash };
@@ -28009,7 +28150,7 @@ var RealtimeSyncService = class {
         }
         await this.binaryTransactions.remove(transaction.id);
       } catch (error) {
-        this.log(`Could not recover binary transaction ${transaction.id}: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
       }
     }
     if (records.length > 0) await this.persistManifest();
@@ -28019,7 +28160,7 @@ var RealtimeSyncService = class {
     if (state.paused || !force && content === state.localCache) {
       return;
     }
-    const result = await this.documentSessionFor(state).submitLocal(content, this.session?.publicId);
+    const result = await this.documentSessionFor(state).submitLocal(content);
     if (result.conflictRemote !== void 0) {
       await this.pauseForConflict(
         relPath,
@@ -28514,7 +28655,7 @@ var RealtimeSyncService = class {
     );
   }
   showError(error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     this.log(message);
     void vscode10.window.showErrorMessage(`Overleaf Codex: ${message}`);
   }
@@ -28745,7 +28886,7 @@ var OverleafService = class {
         syncItems: [],
         conflicts: [],
         collaborators: [],
-        error: error instanceof Error ? error.message : String(error),
+        error: formatUnknownError(error),
         compileMode: this.compileMode()
       };
     }
@@ -29254,7 +29395,7 @@ function existsSync4(filePath) {
   }
 }
 function formatError(error) {
-  return error instanceof Error ? error.stack ?? error.message : String(error);
+  return error instanceof Error ? error.stack ?? error.message : formatUnknownError(error);
 }
 function abortSignalFromToken(token) {
   const controller = new AbortController();
@@ -29469,7 +29610,7 @@ function activate(context) {
   );
   overleafService.registerCommands((id, handler) => command(id, handler));
   void autoStartOverleafMirror(overleafService, output);
-  context.subscriptions.push(vscode12.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${String(error)}`))));
+  context.subscriptions.push(vscode12.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
 }
 function deactivate() {
   activePanel?.dispose();
@@ -29486,7 +29627,7 @@ async function autoStartOverleafMirror(service, output) {
     if (!vscode12.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
     await vscode12.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf auto-sync skipped: ${message}`);
   }
 }

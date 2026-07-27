@@ -44,7 +44,7 @@ import {
   isBlockingStatus,
   trashPathFor
 } from './syncStatus';
-import { gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
+import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
 import { SyncGate } from './syncGate';
 import { ConflictStore } from './conflictStore';
 import { ManifestStore } from './manifestStore';
@@ -168,7 +168,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         return this.checkSyncStatus(this.root, this.client, undefined, request);
       },
       undefined,
-      error => this.log(`Could not refresh sync status: ${error instanceof Error ? error.message : String(error)}`)
+      error => this.log(`Could not refresh sync status: ${formatUnknownError(error)}`)
     );
     this.status.command = 'overleafCodex.startRealtimeSync';
     this.status.text = '$(cloud) Overleaf';
@@ -250,15 +250,24 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (!activeClient) {
       throw new Error('Overleaf Codex is not connected.');
     }
+    if (this.root === root && this.session && !this.stopping) {
+      const expectedGeneration = this.generation;
+      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
+        ...options,
+        expectedGeneration
+      })).report;
+      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
+    }
     progress?.report({ message: 'Connecting for sync health check' });
     const session = await activeClient.connectSocket(manifest.projectId, options.signal);
 
     try {
       const expectedGeneration = this.root === root ? this.generation : undefined;
-      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
+      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
         ...options,
         expectedGeneration
       })).report;
+      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     } finally {
       session.disconnect();
     }
@@ -721,7 +730,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     });
     this.session.on('error', error => {
       if (!current()) return;
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatUnknownError(error);
       void this.handleSocketDisconnected(`Overleaf realtime socket error: ${message}`);
     });
     this.session.on('rootDocUpdated', rootDocId => {
@@ -900,7 +909,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
     const users = await this.session.getConnectedUsers().catch(error => {
-      this.log(`Could not load collaborators: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`Could not load collaborators: ${formatUnknownError(error)}`);
       return [] as OnlineUser[];
     });
     for (const user of users) {
@@ -944,7 +953,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     this.positionTimer = setTimeout(() => {
       void this.session?.updatePosition(file.entityId, active.line, active.character)
-        .catch(error => this.log(`Could not update Overleaf cursor position: ${error instanceof Error ? error.message : String(error)}`));
+        .catch(error => this.log(`Could not update Overleaf cursor position: ${formatUnknownError(error)}`));
     }, 250);
   }
 
@@ -1231,6 +1240,22 @@ export class RealtimeSyncService implements vscode.Disposable {
     });
   }
 
+  private async autoPushLocalAheadAfterCheck(
+    root: string,
+    report: SyncStatusReport,
+    progress?: SyncProgress,
+    options: SyncCheckOptions = {}
+  ): Promise<SyncStatusReport> {
+    if (options.reason === 'post-auto-push'
+      || root !== this.root
+      || !this.session
+      || !this.client
+      || this.stopping) {
+      return report;
+    }
+    return this.autoPushLocalAhead(report, progress);
+  }
+
   private async fetchRemoteSnapshot(
     manifest: OverleafCodexManifest,
     session: OverleafSocketSession,
@@ -1282,7 +1307,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         file.version = joined.version;
         contents.set(file.path, joined.content);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatUnknownError(error);
         failures.set(file.path, message);
         this.log(`Could not read remote ${file.path}: ${message}`);
       } finally {
@@ -1299,7 +1324,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         const bytes = await client!.downloadProjectFile(manifest.projectId, file.entityId, signal);
         contents.set(file.path, bytes);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatUnknownError(error);
         failures.set(file.path, message);
         this.log(`Could not read remote ${file.path}: ${message}`);
       } finally {
@@ -1393,6 +1418,11 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
     const blocking = this.syncStatusReport?.items.filter(item => item.blocking).length ?? 0;
+    if (this.syncGate.project === 'checking') {
+      this.status.text = '$(sync~spin) Overleaf';
+      this.status.tooltip = 'Checking Overleaf Codex sync status';
+      return;
+    }
     if (this.syncGate.project !== 'ready') {
       this.status.text = '$(debug-disconnect) Overleaf';
       this.status.tooltip = this.syncGate.reason ?? `Overleaf sync is ${this.syncGate.project}.`;
@@ -1440,7 +1470,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         return;
       }
       void this.start(root, client).catch(error => {
-        this.log(`Reconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Reconnect failed: ${formatUnknownError(error)}`);
         this.scheduleReconnect();
       });
     }, delay);
@@ -1851,7 +1881,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       transaction.stage = 'promoted';
       await this.binaryTransactions!.upsert(transaction);
       await this.client!.deleteEntity(this.manifest!.projectId, 'file', entry.entityId).catch(error => {
-        this.log(`Could not clean binary backup ${backupName}: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Could not clean binary backup ${backupName}: ${formatUnknownError(error)}`);
       });
       await this.binaryTransactions!.remove(transaction.id);
       return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expectedBlobHash };
@@ -1899,7 +1929,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         }
         await this.binaryTransactions!.remove(transaction.id);
       } catch (error) {
-        this.log(`Could not recover binary transaction ${transaction.id}: ${error instanceof Error ? error.message : String(error)}`);
+        this.log(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
       }
     }
     if (records.length > 0) await this.persistManifest();
@@ -1911,7 +1941,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
-    const result = await this.documentSessionFor(state).submitLocal(content, this.session?.publicId);
+    const result = await this.documentSessionFor(state).submitLocal(content);
     if (result.conflictRemote !== undefined) {
       await this.pauseForConflict(
         relPath,
@@ -2451,7 +2481,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private showError(error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatUnknownError(error);
     this.log(message);
     void vscode.window.showErrorMessage(`Overleaf Codex: ${message}`);
   }
