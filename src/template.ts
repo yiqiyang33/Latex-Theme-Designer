@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
+import { defaultBeamerSettings, writeBeamerSettings, writeTemplateMetadata } from "./beamer";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
 import type { UpgradeThemeAssetsOptions, UpgradeThemeAssetsResult } from "./types";
 import { exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
@@ -17,8 +18,8 @@ export class TemplateService {
     private readonly stateService: StateService
   ) {}
 
-  async initializeWorkspace(): Promise<{ copied: string[]; vscode_settings: { generated: boolean; generated_path: string; message: string } }> {
-    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
+  async initializeWorkspace(templateId?: string): Promise<{ copied: string[]; vscode_settings: { generated: boolean; generated_path: string; message: string } }> {
+    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, templateId);
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
   }
@@ -92,13 +93,14 @@ export class TemplateService {
   }
 
   async createStarter(templateId: unknown, outputTarget: unknown, overwrite: boolean): Promise<{ response: unknown; generated_target: string; overwrote_existing: boolean }> {
-    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
     const normalizedTarget = this.normalizeOutputTarget(outputTarget);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === String(templateId || "").trim())
       ?? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal")
       ?? STARTER_TEMPLATE_DEFINITIONS[0];
     if (!template) throw new Error("No starter templates available.");
     const targetAbs = path.resolve(this.rootDir, normalizedTarget);
+    const assetDestination = template.kind === "beamer" ? path.dirname(targetAbs) : this.rootDir;
+    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);
     if (existed) {
       const stat = await fs.stat(targetAbs);
@@ -110,6 +112,8 @@ export class TemplateService {
     if (!extractDocumentclassDeclaration(text)) throw new Error(`Starter template is missing a valid \\documentclass declaration: ${template.filename}`);
     await fs.mkdir(path.dirname(targetAbs), { recursive: true });
     await fs.writeFile(targetAbs, text, "utf8");
+    await writeTemplateMetadata(this.rootDir, { kind: template.kind, templateId: template.id, target: normalizedTarget });
+    if (template.kind === "beamer") await writeBeamerSettings(this.rootDir, normalizedTarget, defaultBeamerSettings());
 
     const state = await this.stateService.loadState();
     state.compile_targets = await this.stateService.listCandidateTexFiles();

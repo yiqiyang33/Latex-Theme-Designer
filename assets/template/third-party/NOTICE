@@ -1,0 +1,21 @@
+Third-party Beamer theme resources bundled with LaTeX Editing Toolkit
+
+beamerthemeblei.sty
+  Source: https://github.com/mvsoom/beamerthemeblei
+  Bundled source commit: fa96de426725c622fab832d58d0ce44748f8611f
+  License: MIT
+  Copyright: Marnix Van Soom, 2025
+  The original MIT notice is included in LICENSES/beamerthemeblei-MIT.txt.
+
+Gotham Beamer theme files
+  Source: https://gitlab.com/RomainNOEL/beamertheme-gotham
+  Release: v1.2.5.a
+  License: LaTeX Project Public License 1.3c
+  The original license is included in LICENSES/beamertheme-gotham-LPPL-1.3c.txt.
+
+UChicago / Ritsumeikan theme
+  Source: user-supplied UChicago_Beamer.zip, based on the Ritsumeikan Beamer theme.
+  The bundled Ritsumeikan.sty is preserved under its original filename.
+  The source file states that it is LPPL licensed, but the supplied archive did not
+  contain a separate license document. Redistribution should be confirmed before a
+  public release of the extension.

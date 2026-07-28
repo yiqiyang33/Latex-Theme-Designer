@@ -1,4 +1,4 @@
-export type ToolkitSection = "style" | "build" | "document" | "colors" | "setup" | "structure" | "diagnostics" | "snippets" | "sync";
+export type ToolkitSection = "style" | "presentation" | "build" | "document" | "colors" | "setup" | "structure" | "diagnostics" | "snippets" | "sync";
 export type StructureTask = "split" | "renumber" | "unsplit";
 
 export interface ToolkitWebviewUiState {
@@ -13,7 +13,7 @@ export interface ToolkitWebviewUiState {
   }>;
 }
 
-export const TOOLKIT_SECTIONS: ToolkitSection[] = ["style", "build", "document", "colors", "setup", "structure", "snippets", "sync", "diagnostics"];
+export const TOOLKIT_SECTIONS: ToolkitSection[] = ["style", "presentation", "build", "document", "colors", "setup", "structure", "snippets", "sync", "diagnostics"];
 export const STRUCTURE_TASKS: StructureTask[] = ["split", "renumber", "unsplit"];
 
 export function readWorkspaceUiState(value: unknown, workspaceKey: string): {

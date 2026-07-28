@@ -258,8 +258,22 @@ Available starters:
 - `book-minimal`
 - `article-minimal`
 - `homework-assignment`
+- `beamer-uchicago`
+- `beamer-blei`
+- `beamer-gotham`
 
 The default starter remains `book-minimal`.
+
+Beamer starters are grouped under the Beamer Slides document type. Their theme files are
+bundled into the generated workspace so a new presentation can compile without a global
+theme installation. Beamer workspaces open a Presentation Toolkit with slide metadata,
+aspect ratio, section outline, and speaker-notes settings; book/article theme controls are
+hidden for these projects.
+
+Third-party Beamer notices and licenses are bundled under `assets/template/third-party/`.
+The supplied UChicago/Ritsumeikan archive states LPPL licensing in its source comments but
+does not contain a separate license file; confirm redistribution permission before a public
+extension release.
 
 ## Visual Workbench
 

@@ -24,7 +24,7 @@ export async function runCreateProjectWorkflow(
   templateId: string
 ): Promise<void> {
   await fs.mkdir(rootPath, { recursive: true });
-  await service.handle("initialize-workspace", {});
+  await service.handle("initialize-workspace", { template_id: templateId });
   await service.handle("template-bootstrap", {
     template_id: templateId,
     output_target: "main.tex",
@@ -81,6 +81,13 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
       const source = path.join(extensionDir, "assets", "template", "templates", template.filename);
       const text = await fs.readFile(source, "utf8");
       if (!extractDocumentclassDeclaration(text)) errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
+      for (const asset of template.assetManifest) {
+        try {
+          await fs.access(path.join(extensionDir, "assets", "template", asset));
+        } catch {
+          errors.push(`Starter template asset is unavailable: ${asset}`);
+        }
+      }
     } catch (err) {
       errors.push(`Starter template is unavailable: ${(err as Error).message}`);
     }
@@ -93,9 +100,16 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
     targetEmpty,
     errors,
     warnings,
-    plannedFiles: [
-      "main.tex", "theme.sty", "theorems.tex", "commands.tex", "references.bib",
-      ".vscode/settings.json", "Fig/", "templates/"
-    ]
+    plannedFiles: template
+      ? [
+          "main.tex",
+          ...template.assetManifest,
+          ".latex-editing-toolkit/template.json",
+          ...(template.kind === "beamer"
+            ? [".latex-editing-toolkit/beamer-class-options.tex", ".latex-editing-toolkit/beamer-settings.tex"]
+            : []),
+          ".vscode/settings.json"
+        ]
+      : ["main.tex", ".vscode/settings.json"]
   };
 }

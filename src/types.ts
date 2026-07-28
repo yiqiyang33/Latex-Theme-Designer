@@ -57,6 +57,41 @@ export interface CreateProjectPreflightResult {
   plannedFiles: string[];
 }
 
+export type DocumentKind = "book" | "article" | "beamer" | "unknown";
+export type TemplateDetectionSource = "metadata" | "source" | "default" | "unknown";
+export type TemplateDetectionConfidence = "exact" | "probable" | "unknown";
+
+export interface WorkspaceTemplateState {
+  kind: DocumentKind;
+  templateId: string;
+  detectionSource: TemplateDetectionSource;
+  confidence: TemplateDetectionConfidence;
+  assetsComplete?: boolean;
+  missingAssets?: string[];
+  warning?: string;
+}
+
+export interface BeamerSettings {
+  title: string;
+  author: string;
+  institute: string;
+  date: string;
+  aspectRatio: "169" | "43";
+  notesMode: "hide" | "show-notes" | "only-notes";
+  sectionOutline: boolean;
+}
+
+export interface StarterTemplateDefinition {
+  id: string;
+  kind: Exclude<DocumentKind, "unknown">;
+  parentId?: string;
+  label: string;
+  description: string;
+  filename: string;
+  assetManifest: string[];
+  capabilities: string[];
+}
+
 export interface LocalNoteProject {
   id: string;
   rootPath: string;
@@ -136,6 +171,9 @@ export interface ToolkitState {
   detected_document_class: string;
   detected_document_class_has_chapter: boolean;
   effective_theme_class: "book" | "article";
+  workspace_template: WorkspaceTemplateState;
+  beamer_settings: BeamerSettings;
+  beamer_hooks_enabled?: boolean;
 }
 
 export interface ToolkitSchema {
@@ -153,8 +191,11 @@ export interface ToolkitSchema {
     default: number;
   };
   starter_templates: StarterTemplateMeta[];
+  starter_template_groups: StarterTemplateGroup[];
   starter_default_template: string;
   starter_default_output_target: string;
+  workspace_template: WorkspaceTemplateState;
+  beamer_capabilities: string[];
 }
 
 export interface ResponseState {
@@ -236,6 +277,15 @@ export interface StarterTemplateMeta {
   id: string;
   label: string;
   description: string;
+  kind?: DocumentKind;
+  parent_id?: string;
+  capabilities?: string[];
+}
+
+export interface StarterTemplateGroup {
+  id: string;
+  label: string;
+  templates: StarterTemplateMeta[];
 }
 
 export interface CompileContext {

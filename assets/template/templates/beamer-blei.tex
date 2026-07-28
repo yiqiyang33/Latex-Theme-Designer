@@ -1,0 +1,38 @@
+% Beamer starter: Blei theme.
+\IfFileExists{.latex-editing-toolkit/beamer-class-options.tex}{\input{.latex-editing-toolkit/beamer-class-options.tex}}{}
+\documentclass{beamer}
+\providecommand{\ToolkitBeamerTitle}{Presentation Title}
+\providecommand{\ToolkitBeamerAuthor}{Author Name}
+\providecommand{\ToolkitBeamerInstitute}{Institute}
+\providecommand{\ToolkitBeamerDate}{\today}
+
+\usepackage{amsmath}
+\usepackage{hyperref}
+\makeatletter
+\def\input@path{{beamer/blei/}}
+\makeatother
+\usetheme{blei}
+\IfFileExists{.latex-editing-toolkit/beamer-settings.tex}{\input{.latex-editing-toolkit/beamer-settings.tex}}{}
+
+\title{\ToolkitBeamerTitle}
+\author{\ToolkitBeamerAuthor}
+\institute{\ToolkitBeamerInstitute}
+\date{\ToolkitBeamerDate}
+
+\begin{document}
+
+\begin{frame}
+  \maketitle
+\end{frame}
+
+\section{Getting Started}
+
+\begin{frame}{First Slide}
+  Replace this content with the main idea of your presentation.
+  \begin{itemize}
+    \item Blei provides a restrained academic visual language.
+    \item Use \texttt{\\textbackslash pause} or overlays for progressive emphasis.
+  \end{itemize}
+\end{frame}
+
+\end{document}

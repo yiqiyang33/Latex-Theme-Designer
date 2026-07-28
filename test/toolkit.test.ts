@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { HistoryConflictError } from "../src/changeHistory";
+import { detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, writeTemplateMetadata } from "../src/beamer";
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
@@ -525,6 +526,87 @@ describe("TypeScript Toolkit migration", () => {
     expect(text).toContain("\\NewDocumentEnvironment{homeworkProblem}");
     expect(text).toContain("\\NewDocumentEnvironment{homeworkSection}");
     expect(text).toContain("\\NewDocumentEnvironment{solution}");
+  });
+
+  it("creates bundled Beamer child templates with metadata and local theme assets", async () => {
+    for (const template of STARTER_TEMPLATE_DEFINITIONS.filter((entry) => entry.kind === "beamer")) {
+      const root = await tempWorkspace();
+      const state = new StateService(root);
+      const service = new TemplateService(root, repoRoot, state);
+      const result = await service.createStarter(template.id, "main.tex", false);
+      const source = await fs.readFile(path.join(root, "main.tex"), "utf8");
+      const metadata = JSON.parse(await fs.readFile(path.join(root, ".latex-editing-toolkit", "template.json"), "utf8"));
+      expect(result.generated_target).toBe("main.tex");
+      expect(source).toContain("\\documentclass{beamer}");
+      expect(metadata).toMatchObject({ kind: "beamer", templateId: template.id, target: "main.tex", assetVersion: "bundled" });
+      for (const asset of template.assetManifest) await expect(fs.access(path.join(root, asset))).resolves.toBeUndefined();
+      await expect(fs.access(path.join(root, ".latex-editing-toolkit", "beamer-class-options.tex"))).resolves.toBeUndefined();
+      await expect(fs.access(path.join(root, ".latex-editing-toolkit", "beamer-settings.tex"))).resolves.toBeUndefined();
+      const response = await state.buildResponseState();
+      expect(response.state.workspace_template).toMatchObject({ kind: "beamer", templateId: template.id, detectionSource: "metadata" });
+      expect(response.state.workspace_template.assetsComplete).toBe(true);
+      expect(response.schema.beamer_capabilities.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("detects Beamer child themes from source and preserves conflicting metadata as a warning", async () => {
+    expect(detectTemplateFromSource("\\documentclass{beamer}\n\\usetheme{gotham}\n")).toMatchObject({ kind: "beamer", templateId: "beamer-gotham", confidence: "exact" });
+    expect(detectTemplateFromSource("\\documentclass{beamer}\n\\usepackage{Ritsumeikan}\n")).toMatchObject({ kind: "beamer", templateId: "beamer-uchicago", confidence: "exact" });
+    expect(detectTemplateFromSource("\\documentclass{beamer}\n")).toMatchObject({ kind: "beamer", templateId: "beamer-generic", confidence: "probable" });
+
+    const root = await tempWorkspace();
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{beamer}\n\\usetheme{gotham}\n", "utf8");
+    await writeTemplateMetadata(root, { kind: "beamer", templateId: "beamer-blei", target: "main.tex" });
+    const state = await new StateService(root).loadState();
+    expect(state.workspace_template).toMatchObject({ kind: "beamer", templateId: "beamer-blei", detectionSource: "metadata" });
+    expect(state.workspace_template.warning).toContain("beamer-gotham");
+  });
+
+  it("applies template metadata only to the target it describes", async () => {
+    const root = await tempWorkspace();
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{beamer}\n\\usetheme{blei}\n", "utf8");
+    await fs.writeFile(path.join(root, "article.tex"), "\\documentclass{article}\n", "utf8");
+    await writeTemplateMetadata(root, { kind: "beamer", templateId: "beamer-blei", target: "main.tex" });
+    await expect(detectWorkspaceTemplate(root, "article.tex")).resolves.toMatchObject({ kind: "article", templateId: "article-minimal", detectionSource: "source" });
+  });
+
+  it("reads generated Beamer settings without changing the slide source", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new ToolkitService(root, repoRoot);
+    await service.template.createStarter("beamer-gotham", "slides/main.tex", false);
+    const before = await fs.readFile(path.join(root, "slides/main.tex"), "utf8");
+    await expect(fs.access(path.join(root, "slides", "beamer", "gotham", "beamerthemegotham.sty"))).resolves.toBeUndefined();
+    const result = await service.handle("beamer-settings", {
+      target: "slides/main.tex",
+      settings: { title: "A New Talk", author: "Ada", institute: "Lab", date: "2026", aspectRatio: "43", notesMode: "show-notes", sectionOutline: true }
+    }) as { state: ToolkitState };
+    const after = await fs.readFile(path.join(root, "slides/main.tex"), "utf8");
+    expect(after).toBe(before);
+    expect(result.state.beamer_settings).toMatchObject({ title: "A New Talk", aspectRatio: "43", notesMode: "show-notes", sectionOutline: true });
+    expect((await readBeamerSettings(root, "slides/main.tex", after)).title).toBe("A New Talk");
+    expect((await fs.readFile(path.join(root, "slides", ".latex-editing-toolkit", "beamer-settings.tex"), "utf8"))).toContain("show notes on second screen");
+  });
+
+  it("enables Beamer hooks explicitly for an existing presentation", async () => {
+    const root = await tempWorkspace();
+    await fs.writeFile(path.join(root, "main.tex"), [
+      "\\documentclass{beamer}",
+      "\\usetheme{gotham}",
+      "\\title{Existing Talk}",
+      "\\begin{document}",
+      "\\begin{frame}{Hello}Hello\\end{frame}",
+      "\\end{document}",
+      ""
+    ].join("\n"), "utf8");
+    const service = new ToolkitService(root, repoRoot);
+    const before = await service.handle("state", {}) as { state: ToolkitState };
+    expect(before.state.beamer_hooks_enabled).toBe(false);
+    const result = await service.handle("beamer-enable-hooks", {}) as { state: ToolkitState };
+    const source = await fs.readFile(path.join(root, "main.tex"), "utf8");
+    expect(result.state.beamer_hooks_enabled).toBe(true);
+    expect(source).toContain("beamer-class-options.tex");
+    expect(source).toContain("beamer-settings.tex");
   });
 
   it("adds missing built-in starter templates without overwriting existing workspace templates", async () => {

@@ -1,0 +1,42 @@
+% Beamer starter: UChicago / Ritsumeikan theme.
+\IfFileExists{.latex-editing-toolkit/beamer-class-options.tex}{\input{.latex-editing-toolkit/beamer-class-options.tex}}{}
+\documentclass{beamer}
+\providecommand{\ToolkitBeamerTitle}{Presentation Title}
+\providecommand{\ToolkitBeamerAuthor}{Author Name}
+\providecommand{\ToolkitBeamerInstitute}{Institute}
+\providecommand{\ToolkitBeamerDate}{\today}
+
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\makeatletter
+\def\input@path{{beamer/uchicago/}}
+\makeatother
+\usepackage{Ritsumeikan}
+\IfFileExists{.latex-editing-toolkit/beamer-settings.tex}{\input{.latex-editing-toolkit/beamer-settings.tex}}{}
+
+\title{\ToolkitBeamerTitle}
+\author{\ToolkitBeamerAuthor}
+\institute{\ToolkitBeamerInstitute}
+\date{\ToolkitBeamerDate}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+  \begin{center}
+    \includegraphics[height=0.16\paperheight]{beamer/uchicago/pic/uchicago.png}
+  \end{center}
+\end{frame}
+
+\section{Getting Started}
+
+\begin{frame}{First Slide}
+  Replace this content with the main idea of your presentation.
+  \begin{itemize}
+    \item Use sections to organize the talk.
+    \item Use overlays when the audience should follow a sequence.
+  \end{itemize}
+\end{frame}
+
+\end{document}

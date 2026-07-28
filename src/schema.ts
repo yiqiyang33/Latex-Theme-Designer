@@ -1,4 +1,4 @@
-import type { ClassConfigSchemaItem, ColorGroup, ToggleSchemaItem } from "./types";
+import type { ClassConfigSchemaItem, ColorGroup, StarterTemplateDefinition, ToggleSchemaItem } from "./types";
 export { STYLE_PRESET_DEFINITIONS } from "./stylePresets";
 
 export const TOGGLE_SCHEMA: ToggleSchemaItem[] = [
@@ -131,10 +131,87 @@ export const BODY_FONT_SIZE_CONFIG = {
   default: 10.0
 };
 
-export const STARTER_TEMPLATE_DEFINITIONS = [
-  { id: "book-minimal", label: "Book Minimal", description: "Minimal book starter wired to theme.sty and theorem blocks.", filename: "book-minimal.tex" },
-  { id: "article-minimal", label: "Article Minimal", description: "Minimal article starter wired to theme.sty and theorem blocks.", filename: "article-minimal.tex" },
-  { id: "homework-assignment", label: "Homework Assignment", description: "Formal homework starter with problem, part, and solution environments.", filename: "homework-assignment.tex" }
+export const STARTER_TEMPLATE_DEFINITIONS: StarterTemplateDefinition[] = [
+  {
+    id: "book-minimal",
+    kind: "book",
+    label: "Book Minimal",
+    description: "Minimal book starter wired to theme.sty and theorem blocks.",
+    filename: "book-minimal.tex",
+    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib", "Fig/cover.png"],
+    capabilities: ["toolkit-theme", "book-structure"]
+  },
+  {
+    id: "article-minimal",
+    kind: "article",
+    label: "Article Minimal",
+    description: "Minimal article starter wired to theme.sty and theorem blocks.",
+    filename: "article-minimal.tex",
+    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+    capabilities: ["toolkit-theme", "article-structure"]
+  },
+  {
+    id: "homework-assignment",
+    kind: "article",
+    label: "Homework Assignment",
+    description: "Formal homework starter with problem, part, and solution environments.",
+    filename: "homework-assignment.tex",
+    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+    capabilities: ["toolkit-theme", "homework-structure"]
+  },
+  {
+    id: "beamer-uchicago",
+    kind: "beamer",
+    parentId: "beamer",
+    label: "UChicago",
+    description: "University of Chicago presentation starter using the supplied Ritsumeikan theme.",
+    filename: "beamer-uchicago.tex",
+    assetManifest: ["beamer/uchicago/Ritsumeikan.sty", "beamer/uchicago/pic/uchicago.png"],
+    capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"]
+  },
+  {
+    id: "beamer-blei",
+    kind: "beamer",
+    parentId: "beamer",
+    label: "Blei",
+    description: "Clean academic Beamer slides inspired by David Blei's presentations.",
+    filename: "beamer-blei.tex",
+    assetManifest: ["beamer/blei/beamerthemeblei.sty"],
+    capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"]
+  },
+  {
+    id: "beamer-gotham",
+    kind: "beamer",
+    parentId: "beamer",
+    label: "Gotham",
+    description: "Modern, minimal and extensible Beamer presentation starter.",
+    filename: "beamer-gotham.tex",
+    assetManifest: [
+      "beamer/gotham/beamerthemegotham.sty",
+      "beamer/gotham/beamerfontthemegotham.sty",
+      "beamer/gotham/beamercolorthemegotham.sty",
+      "beamer/gotham/beamerinnerthemegotham.sty",
+      "beamer/gotham/beamerouterthemegotham.sty",
+      "beamer/gotham/gotham-logo.pdf"
+    ],
+    capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes"]
+  }
 ];
+
+export const DOCUMENT_TEMPLATE_GROUPS = [
+  { id: "book", label: "Book" },
+  { id: "article", label: "Article" },
+  { id: "beamer", label: "Beamer Slides" }
+] as const;
+
+export const BEAMER_DEFAULT_SETTINGS = {
+  title: "Presentation Title",
+  author: "Author Name",
+  institute: "Institute",
+  date: "\\today",
+  aspectRatio: "169" as const,
+  notesMode: "hide" as const,
+  sectionOutline: false
+};
 
 export const CHAPTER_CLASS_NAMES = new Set(["book", "report", "memoir", "scrbook", "scrreprt", "ctexbook", "ctexrep", "bxjsbook"]);

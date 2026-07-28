@@ -292,9 +292,86 @@ function renderAll(): void {
   renderPreview();
   renderStyleDifferences();
   renderSplitResult();
+  renderBeamerSettings();
+  renderWorkspaceMode();
   renderContextPanels();
   void refreshOverleafState();
   void refreshPdfStatus();
+}
+
+function renderWorkspaceMode(): void {
+  const beamer = model?.state?.workspace_template?.kind === "beamer";
+  const sections = new Set(availableSections());
+  document.querySelectorAll<HTMLButtonElement>("[data-section-target]").forEach((button) => {
+    button.hidden = !sections.has(button.dataset.sectionTarget as ToolkitSection);
+  });
+  if (!sections.has(activeSection)) activeSection = availableSections()[0] || "style";
+  selectSection(activeSection, false);
+  byId("previewModeLabel").textContent = beamer ? "Presentation" : "Document";
+}
+
+function renderBeamerSettings(): void {
+  const beamer = model?.state?.workspace_template?.kind === "beamer";
+  const settings = model?.state?.beamer_settings || {};
+  const capabilities = new Set(model?.schema?.beamer_capabilities || []);
+  const panel = document.getElementById("panelPresentation");
+  if (!panel) return;
+  panel.hidden = !beamer;
+  if (!beamer) return;
+  const templateId = model.state.workspace_template.templateId;
+  byId("beamerTemplateName").textContent = templateId === "beamer-generic"
+    ? "Generic Beamer"
+    : (model.schema.starter_templates || []).find((item: any) => item.id === templateId)?.label || templateId;
+  byId("beamerDetectionSource").textContent = model.state.workspace_template.detectionSource;
+  const assetsComplete = model.state.workspace_template.assetsComplete;
+  const missingAssets = model.state.workspace_template.missingAssets || [];
+  byId("beamerResourceStatus").textContent = assetsComplete === true
+    ? "Complete"
+    : assetsComplete === false ? `Missing (${missingAssets.length})` : "Unknown";
+  byId("beamerTemplateWarning").textContent = model.state.workspace_template.warning || "Bundled theme resources are available for this workspace.";
+  byId("beamerTemplateWarning").hidden = !model.state.workspace_template.warning;
+  const hooksEnabled = model.state.beamer_hooks_enabled !== false;
+  byId("beamerHookNotice").hidden = hooksEnabled;
+  byId<HTMLButtonElement>("enableBeamerHooksBtn").hidden = hooksEnabled;
+  byId("presentationContextTheme").textContent = byId("beamerTemplateName").textContent;
+  byId("presentationContextTarget").textContent = model.state.compile_target || "main.tex";
+  byId("presentationContextRatio").textContent = settings.aspectRatio === "43" ? "4:3" : "16:9";
+  byId<HTMLInputElement>("beamerTitleInput").value = settings.title || "";
+  byId<HTMLInputElement>("beamerAuthorInput").value = settings.author || "";
+  byId<HTMLInputElement>("beamerInstituteInput").value = settings.institute || "";
+  byId<HTMLInputElement>("beamerDateInput").value = settings.date || "";
+  byId<HTMLSelectElement>("beamerAspectRatioSelect").value = settings.aspectRatio || "169";
+  byId<HTMLSelectElement>("beamerNotesModeSelect").value = settings.notesMode || "hide";
+  byId<HTMLInputElement>("beamerSectionOutlineInput").checked = Boolean(settings.sectionOutline);
+  const metadataEnabled = hooksEnabled && capabilities.has("presentation-metadata");
+  for (const id of ["beamerTitleInput", "beamerAuthorInput", "beamerInstituteInput", "beamerDateInput"]) {
+    byId<HTMLInputElement>(id).disabled = !metadataEnabled;
+  }
+  byId<HTMLSelectElement>("beamerAspectRatioSelect").disabled = !hooksEnabled || !capabilities.has("aspect-ratio");
+  byId<HTMLSelectElement>("beamerNotesModeSelect").disabled = !hooksEnabled || !capabilities.has("speaker-notes");
+  byId<HTMLInputElement>("beamerSectionOutlineInput").disabled = !hooksEnabled || !capabilities.has("section-outline");
+  byId<HTMLButtonElement>("saveBeamerSettingsBtn").disabled = !hooksEnabled || capabilities.size === 0;
+}
+
+async function saveBeamerSettings(): Promise<void> {
+  const settings = {
+    title: byId<HTMLInputElement>("beamerTitleInput").value,
+    author: byId<HTMLInputElement>("beamerAuthorInput").value,
+    institute: byId<HTMLInputElement>("beamerInstituteInput").value,
+    date: byId<HTMLInputElement>("beamerDateInput").value,
+    aspectRatio: byId<HTMLSelectElement>("beamerAspectRatioSelect").value,
+    notesMode: byId<HTMLSelectElement>("beamerNotesModeSelect").value,
+    sectionOutline: byId<HTMLInputElement>("beamerSectionOutlineInput").checked
+  };
+  const result = await request("beamer-settings", { target: model.state.compile_target, settings });
+  acceptServerModel(result);
+  setStatus("Presentation settings saved.", "ok");
+}
+
+async function enableBeamerToolkit(): Promise<void> {
+  const result = await request("beamer-enable-hooks", { target: model.state.compile_target });
+  acceptServerModel(result);
+  setStatus("Beamer Toolkit controls are enabled for this target.", "ok");
 }
 
 async function refreshOverleafState(): Promise<void> {
@@ -399,9 +476,14 @@ function renderHistoryActions(): void {
 }
 
 function renderStarter(): void {
+  const kindSelect = byId<HTMLSelectElement>("starterKindSelect");
   const select = byId<HTMLSelectElement>("starterTemplateSelect");
   const output = byId<HTMLInputElement>("starterOutputTarget");
-  const templates = model.schema.starter_templates || [];
+  const groups = model.schema.starter_template_groups || [];
+  const current = model.schema.starter_templates?.find((item: any) => item.id === starterTemplateSelection);
+  const preferredKind = current?.kind || kindSelect.value || groups[0]?.id || "book";
+  renderSelect(kindSelect, groups.map((group: any) => ({ value: group.id, label: group.label })), preferredKind);
+  const templates = groups.find((group: any) => group.id === kindSelect.value)?.templates || model.schema.starter_templates || [];
   const preferred = starterTemplateSelection || select.value || model.schema.starter_default_template || "book-minimal";
   starterTemplateSelection = renderSelect(select, templates.map((item: any) => ({ value: item.id, label: item.label })), preferred);
   renderStarterDescription();
@@ -409,7 +491,8 @@ function renderStarter(): void {
 }
 
 function renderStarterDescription(): void {
-  const templates = model.schema.starter_templates || [];
+  const kind = byId<HTMLSelectElement>("starterKindSelect").value;
+  const templates = (model.schema.starter_template_groups || []).find((group: any) => group.id === kind)?.templates || model.schema.starter_templates || [];
   const selected = byId<HTMLSelectElement>("starterTemplateSelect").value;
   const info = templates.find((item: any) => item.id === selected);
   byId("starterTemplateDesc").textContent = info?.description || "";
@@ -1605,6 +1688,10 @@ function wire(): void {
     await refreshOverleafState();
     renderTargets();
   }));
+  byId("starterKindSelect").addEventListener("change", () => {
+    starterTemplateSelection = "";
+    renderStarter();
+  });
   byId("starterTemplateSelect").addEventListener("change", () => {
     starterTemplateSelection = byId<HTMLSelectElement>("starterTemplateSelect").value;
     renderStarterDescription();
@@ -1650,6 +1737,8 @@ function wire(): void {
   });
   byId("upgradeThemeAssetsBtn").addEventListener("click", () => run(upgradeThemeAssets));
   byId("upgradeColorPolicy").addEventListener("change", renderStarterDescription);
+  byId("saveBeamerSettingsBtn").addEventListener("click", () => run(saveBeamerSettings));
+  byId("enableBeamerHooksBtn").addEventListener("click", () => run(enableBeamerToolkit));
   byId("compileBtn").addEventListener("click", () => run(compilePdf));
   byId("openPdfBtn").addEventListener("click", () => run(async () => request("open-pdf", { path: currentPdfPath() })));
   byId("splitBtn").addEventListener("click", () => run(splitCurrent));
@@ -1804,7 +1893,9 @@ function persistNavigationState(): void {
 }
 
 function availableSections(): ToolkitSection[] {
-  return initialData.snippetsOnly ? ["snippets"] : TOOLKIT_SECTIONS;
+  if (initialData.snippetsOnly) return ["snippets"];
+  if (model?.state?.workspace_template?.kind === "beamer") return ["presentation", "build", "setup", "structure", "snippets", "sync", "diagnostics"];
+  return TOOLKIT_SECTIONS.filter((section) => section !== "presentation");
 }
 
 function workspaceStateKey(): string {
@@ -1851,6 +1942,7 @@ function shell(): void {
       <div id="workbench" class="workbench" hidden>
         <nav class="workspace-nav surface" role="tablist" aria-label="Toolkit sections">
           <button data-section-target="style" role="tab"><i class="codicon codicon-symbol-color" aria-hidden="true"></i><span>Style</span></button>
+          <button data-section-target="presentation" role="tab"><i class="codicon codicon-device-camera-video" aria-hidden="true"></i><span>Presentation</span></button>
           <button data-section-target="build" role="tab"><i class="codicon codicon-play" aria-hidden="true"></i><span>Build</span><small id="navBuildBadge" class="nav-badge" hidden></small></button>
           <button data-section-target="document" role="tab"><i class="codicon codicon-book" aria-hidden="true"></i><span>Document</span></button>
           <button data-section-target="colors" role="tab"><i class="codicon codicon-symbol-property" aria-hidden="true"></i><span>Colors</span></button>
@@ -1870,6 +1962,19 @@ function shell(): void {
             <div id="stylePresetCards" role="group" aria-label="Style presets"></div>
             <div class="customized-row"><p id="customizedSummary" class="customized-summary" hidden></p><div class="toolbar compact"><button id="savePersonalStyleBtn" hidden>Save as Personal Style</button><button id="updatePersonalStyleBtn" hidden>Update Personal Style</button></div></div>
             <details id="styleDifferences" class="difference-panel" hidden><summary>View customized tokens</summary><div class="toolbar compact"><button id="revertAllStyleBtn" class="ghost-button"><i class="codicon codicon-discard" aria-hidden="true"></i><span>Revert All</span></button></div><div id="styleDifferenceList"></div></details>
+          </section>
+
+          <section id="panelPresentation" class="toolkit-panel" data-toolkit-panel="presentation" hidden>
+            <header class="section-heading"><div><p class="eyebrow">Beamer</p><h2>Presentation Toolkit</h2><p class="hint">Configure the generated presentation settings without rewriting your slide content.</p></div></header>
+            <div class="form-card">
+              <div class="summary-list"><div><dt>Template</dt><dd id="beamerTemplateName"></dd></div><div><dt>Resources</dt><dd id="beamerResourceStatus"></dd></div><div><dt>Detection</dt><dd id="beamerDetectionSource"></dd></div></div>
+              <p id="beamerTemplateWarning" class="inline-notice" hidden></p>
+              <p id="beamerHookNotice" class="inline-notice">This existing target has no Toolkit hook. Enable the hook before changing generated presentation settings.</p>
+              <button id="enableBeamerHooksBtn" class="secondary" hidden><i class="codicon codicon-wrench" aria-hidden="true"></i><span>Enable Beamer Toolkit Controls</span></button>
+            </div>
+            <div class="settings-group"><h3>Presentation Metadata</h3><div class="config-row"><span>Title</span><input id="beamerTitleInput" type="text"></div><div class="config-row"><span>Author</span><input id="beamerAuthorInput" type="text"></div><div class="config-row"><span>Institute</span><input id="beamerInstituteInput" type="text"></div><div class="config-row"><span>Date</span><input id="beamerDateInput" type="text"></div></div>
+            <div class="settings-group"><h3>Slide Behavior</h3><div class="config-row"><span>Aspect Ratio</span><select id="beamerAspectRatioSelect"><option value="169">16:9</option><option value="43">4:3</option></select></div><div class="config-row"><span>Speaker Notes</span><select id="beamerNotesModeSelect"><option value="hide">Hide notes</option><option value="show-notes">Show notes on second screen</option><option value="only-notes">Show only notes</option></select></div><label class="toggle-row"><span class="toggle-copy"><strong>Section outline</strong><small>Add an outline frame at the beginning of each section when supported by the theme.</small></span><span class="switch"><input id="beamerSectionOutlineInput" type="checkbox"><span aria-hidden="true"></span></span></label></div>
+            <div class="action-card-footer"><button id="saveBeamerSettingsBtn" class="primary"><i class="codicon codicon-save" aria-hidden="true"></i><span>Save Presentation Settings</span></button></div>
           </section>
 
           <section id="panelBuild" class="toolkit-panel" data-toolkit-panel="build" hidden>
@@ -1894,7 +1999,7 @@ function shell(): void {
 
           <section id="panelSetup" class="toolkit-panel" data-toolkit-panel="setup" hidden>
             <header class="section-heading"><div><p class="eyebrow">Workspace</p><h2>Project Setup</h2><p class="hint">Generate or safely upgrade Toolkit-managed project resources.</p></div></header>
-            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div class="action-card-body"><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Creates the selected target and missing Toolkit theme assets.</p><div class="form-row"><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label></div><div class="action-card-footer"><button id="generateTemplateBtn">Generate</button></div></div></article>
+            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div class="action-card-body"><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Creates the selected target and missing Toolkit theme assets.</p><div class="form-row"><select id="starterKindSelect"></select><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label></div><div class="action-card-footer"><button id="generateTemplateBtn">Generate</button></div></div></article>
             <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-settings-gear" aria-hidden="true"></i></div><div class="action-card-body"><h3>VS Code Settings</h3><p class="hint">Generate the recommended LaTeX Workshop recipe and output-directory settings.</p><p class="affected-files"><i class="codicon codicon-file-code" aria-hidden="true"></i> Creates .vscode/settings.json only when it is missing.</p><div class="action-card-footer"><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button></div></div></article>
             <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-cloud-download" aria-hidden="true"></i></div><div class="action-card-body"><h3>Theme Assets</h3><p class="hint">Back up and replace bundled theme resources without changing colors by default.</p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Replaces theme.sty, theorems.tex, and commands.tex after backup.</p><div class="form-row"><label class="field compact-field"><span>Colors</span><select id="upgradeColorPolicy"><option value="preserve" selected>Preserve Colors</option><option value="default">Reset to Default</option></select></label></div><div class="action-card-footer"><button id="upgradeThemeAssetsBtn">Upgrade Theme Assets</button></div></div></article>
             <article class="danger-zone"><div><h3>Danger Zone</h3><p>Delete generated Toolkit overrides and configuration from this workspace.</p></div><button id="resetBtn" class="danger">Reset All Toolkit Overrides</button></article>
@@ -1953,6 +2058,11 @@ function shell(): void {
             <p class="preview-disclaimer">Illustrative browser preview; final TeX spacing may differ.</p>
             <div id="docPreview" class="doc-preview"></div>
             <div id="preview" class="preview-grid"></div>
+          </section>
+          <section class="context-panel" data-context-panel="presentation" hidden>
+            <header class="context-heading"><div><p class="eyebrow">Presentation</p><h2>Beamer Workspace</h2></div><span class="context-badge">THEME</span></header>
+            <p class="context-copy">The selected theme and generated settings stay local to this presentation target.</p>
+            <dl class="summary-list"><div><dt>Theme</dt><dd id="presentationContextTheme"></dd></div><div><dt>Target</dt><dd id="presentationContextTarget"></dd></div><div><dt>Ratio</dt><dd id="presentationContextRatio"></dd></div></dl>
           </section>
           <section class="context-panel" data-context-panel="build" hidden>
             <header class="context-heading"><div><p class="eyebrow">Build Status</p><h2 id="buildContextTitle">Checking PDF status…</h2></div><span id="buildStatusBadge" class="context-badge"></span></header>

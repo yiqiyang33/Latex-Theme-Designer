@@ -509,7 +509,7 @@ var init_stylePresets = __esm({
 });
 
 // src/schema.ts
-var TOGGLE_SCHEMA, CLASS_CONFIG_SCHEMA, COLOR_GROUPS, COLOR_ORDER, COLOR_SET, TOGGLE_IDS, CLASS_CONFIG_IDS, CLASS_CONFIG_COMMANDS, CLASS_CONFIG_DEFAULTS, CLASS_CONFIG_VALID_OPTIONS, BODY_FONT_SIZE_CONFIG, STARTER_TEMPLATE_DEFINITIONS, CHAPTER_CLASS_NAMES;
+var TOGGLE_SCHEMA, CLASS_CONFIG_SCHEMA, COLOR_GROUPS, COLOR_ORDER, COLOR_SET, TOGGLE_IDS, CLASS_CONFIG_IDS, CLASS_CONFIG_COMMANDS, CLASS_CONFIG_DEFAULTS, CLASS_CONFIG_VALID_OPTIONS, BODY_FONT_SIZE_CONFIG, STARTER_TEMPLATE_DEFINITIONS, BEAMER_DEFAULT_SETTINGS, CHAPTER_CLASS_NAMES;
 var init_schema = __esm({
   "src/schema.ts"() {
     "use strict";
@@ -683,10 +683,80 @@ var init_schema = __esm({
       default: 10
     };
     STARTER_TEMPLATE_DEFINITIONS = [
-      { id: "book-minimal", label: "Book Minimal", description: "Minimal book starter wired to theme.sty and theorem blocks.", filename: "book-minimal.tex" },
-      { id: "article-minimal", label: "Article Minimal", description: "Minimal article starter wired to theme.sty and theorem blocks.", filename: "article-minimal.tex" },
-      { id: "homework-assignment", label: "Homework Assignment", description: "Formal homework starter with problem, part, and solution environments.", filename: "homework-assignment.tex" }
+      {
+        id: "book-minimal",
+        kind: "book",
+        label: "Book Minimal",
+        description: "Minimal book starter wired to theme.sty and theorem blocks.",
+        filename: "book-minimal.tex",
+        assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib", "Fig/cover.png"],
+        capabilities: ["toolkit-theme", "book-structure"]
+      },
+      {
+        id: "article-minimal",
+        kind: "article",
+        label: "Article Minimal",
+        description: "Minimal article starter wired to theme.sty and theorem blocks.",
+        filename: "article-minimal.tex",
+        assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+        capabilities: ["toolkit-theme", "article-structure"]
+      },
+      {
+        id: "homework-assignment",
+        kind: "article",
+        label: "Homework Assignment",
+        description: "Formal homework starter with problem, part, and solution environments.",
+        filename: "homework-assignment.tex",
+        assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+        capabilities: ["toolkit-theme", "homework-structure"]
+      },
+      {
+        id: "beamer-uchicago",
+        kind: "beamer",
+        parentId: "beamer",
+        label: "UChicago",
+        description: "University of Chicago presentation starter using the supplied Ritsumeikan theme.",
+        filename: "beamer-uchicago.tex",
+        assetManifest: ["beamer/uchicago/Ritsumeikan.sty", "beamer/uchicago/pic/uchicago.png"],
+        capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"]
+      },
+      {
+        id: "beamer-blei",
+        kind: "beamer",
+        parentId: "beamer",
+        label: "Blei",
+        description: "Clean academic Beamer slides inspired by David Blei's presentations.",
+        filename: "beamer-blei.tex",
+        assetManifest: ["beamer/blei/beamerthemeblei.sty"],
+        capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"]
+      },
+      {
+        id: "beamer-gotham",
+        kind: "beamer",
+        parentId: "beamer",
+        label: "Gotham",
+        description: "Modern, minimal and extensible Beamer presentation starter.",
+        filename: "beamer-gotham.tex",
+        assetManifest: [
+          "beamer/gotham/beamerthemegotham.sty",
+          "beamer/gotham/beamerfontthemegotham.sty",
+          "beamer/gotham/beamercolorthemegotham.sty",
+          "beamer/gotham/beamerinnerthemegotham.sty",
+          "beamer/gotham/beamerouterthemegotham.sty",
+          "beamer/gotham/gotham-logo.pdf"
+        ],
+        capabilities: ["presentation-metadata", "aspect-ratio", "speaker-notes"]
+      }
     ];
+    BEAMER_DEFAULT_SETTINGS = {
+      title: "Presentation Title",
+      author: "Author Name",
+      institute: "Institute",
+      date: "\\today",
+      aspectRatio: "169",
+      notesMode: "hide",
+      sectionOutline: false
+    };
     CHAPTER_CLASS_NAMES = /* @__PURE__ */ new Set(["book", "report", "memoir", "scrbook", "scrreprt", "ctexbook", "ctexrep", "bxjsbook"]);
   }
 });
@@ -875,10 +945,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename15, pattern) {
+function matchesGlob(relPath, basename16, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename15);
+    return globToRegExp(pattern).test(basename16);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -1525,7 +1595,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path30, checkUnignored, mode) {
+      test(path31, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1534,7 +1604,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path30);
+          const matched = rule[mode].test(path31);
           if (!matched) {
             return;
           }
@@ -1555,17 +1625,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path30, originalPath, doThrow) => {
-      if (!isString(path30)) {
+    var checkPath = (path31, originalPath, doThrow) => {
+      if (!isString(path31)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path30) {
+      if (!path31) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path30)) {
+      if (checkPath.isNotRelative(path31)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1574,7 +1644,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path30) => REGEX_TEST_INVALID_PATH.test(path30);
+    var isNotRelative = (path31) => REGEX_TEST_INVALID_PATH.test(path31);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1604,19 +1674,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path30 = originalPath && checkPath.convert(originalPath);
+        const path31 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path30,
+          path31,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path30, cache, checkUnignored, slices);
+        return this._t(path31, cache, checkUnignored, slices);
       }
-      checkIgnore(path30) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path30)) {
-          return this.test(path30);
+      checkIgnore(path31) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path31)) {
+          return this.test(path31);
         }
-        const slices = path30.split(SLASH).filter(Boolean);
+        const slices = path31.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1629,18 +1699,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path30, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path31, false, MODE_CHECK_IGNORE);
       }
-      _t(path30, cache, checkUnignored, slices) {
-        if (path30 in cache) {
-          return cache[path30];
+      _t(path31, cache, checkUnignored, slices) {
+        if (path31 in cache) {
+          return cache[path31];
         }
         if (!slices) {
-          slices = path30.split(SLASH).filter(Boolean);
+          slices = path31.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path30] = this._rules.test(path30, checkUnignored, MODE_IGNORE);
+          return cache[path31] = this._rules.test(path31, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1648,29 +1718,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path30] = parent.ignored ? parent : this._rules.test(path30, checkUnignored, MODE_IGNORE);
+        return cache[path31] = parent.ignored ? parent : this._rules.test(path31, checkUnignored, MODE_IGNORE);
       }
-      ignores(path30) {
-        return this._test(path30, this._ignoreCache, false).ignored;
+      ignores(path31) {
+        return this._test(path31, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path30) => !this.ignores(path30);
+        return (path31) => !this.ignores(path31);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path30) {
-        return this._test(path30, this._testCache, true);
+      test(path31) {
+        return this._test(path31, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path30) => checkPath(path30 && checkPath.convert(path30), path30, RETURN_FALSE);
+    var isPathValid = (path31) => checkPath(path31 && checkPath.convert(path31), path31, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path30) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path30) || isNotRelative(path30);
+      checkPath.isNotRelative = (path31) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path31) || isNotRelative(path31);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10532,11 +10602,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path30) {
-      if (!path30 || typeof path30 !== "string") {
+    function lookup2(path31) {
+      if (!path31 || typeof path31 !== "string") {
         return false;
       }
-      var extension2 = extname8("x." + path30).toLowerCase().substr(1);
+      var extension2 = extname8("x." + path31).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11641,11 +11711,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path30 = require("path");
+    var path31 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs24 = require("fs");
+    var fs25 = require("fs");
     var Stream = require("stream").Stream;
     var crypto4 = require("crypto");
     var mime2 = require_mime_types();
@@ -11712,7 +11782,7 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs24.stat(value.path, function(err, stat4) {
+          fs25.stat(value.path, function(err, stat4) {
             if (err) {
               callback(err);
               return;
@@ -11769,11 +11839,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path30.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path31.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path30.basename(options.filename || value && (value.name || value.path));
+        filename = path31.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path30.basename(value.client._httpMessage.path || "");
+        filename = path31.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12686,14 +12756,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path30 = url.path;
-      if (path30.length === 0) {
+      const path31 = url.path;
+      if (path31.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path30.length === 1 && isNormalizedWindowsDriveLetter(path30[0])) {
+      if (url.scheme === "file" && path31.length === 1 && isNormalizedWindowsDriveLetter(path31[0])) {
         return;
       }
-      path30.pop();
+      path31.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -14013,7 +14083,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve16, reject) {
+      return new Body.Promise(function(resolve17, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14047,7 +14117,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve16(Buffer.concat(accum, accumBytes));
+            resolve17(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -14722,7 +14792,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve16, reject) {
+      return new fetch2.Promise(function(resolve17, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -14855,7 +14925,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve16(fetch2(new Request(locationURL, requestOpts)));
+                resolve17(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -14876,7 +14946,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve16(response);
+            resolve17(response);
             return;
           }
           const zlibOptions = {
@@ -14886,7 +14956,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve16(response);
+            resolve17(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -14898,12 +14968,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve16(response);
+              resolve17(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve16(response);
+                resolve17(response);
               }
             });
             return;
@@ -14911,11 +14981,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve16(response);
+            resolve17(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve16(response);
+          resolve17(response);
         });
         writeToStream(req, request);
       });
@@ -16429,8 +16499,8 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs23 = __toESM(require("node:fs"));
-var path29 = __toESM(require("node:path"));
+var fs24 = __toESM(require("node:fs"));
+var path30 = __toESM(require("node:path"));
 var vscode12 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
@@ -17123,7 +17193,7 @@ init_schema();
 init_utils();
 async function runCreateProjectWorkflow(service, registry, rootPath, templateId) {
   await import_node_fs4.promises.mkdir(rootPath, { recursive: true });
-  await service.handle("initialize-workspace", {});
+  await service.handle("initialize-workspace", { template_id: templateId });
   await service.handle("template-bootstrap", {
     template_id: templateId,
     output_target: "main.tex",
@@ -17173,6 +17243,13 @@ async function preflightCreateProject(draft, extensionDir) {
       const source = path4.join(extensionDir, "assets", "template", "templates", template.filename);
       const text = await import_node_fs4.promises.readFile(source, "utf8");
       if (!extractDocumentclassDeclaration(text)) errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
+      for (const asset of template.assetManifest) {
+        try {
+          await import_node_fs4.promises.access(path4.join(extensionDir, "assets", "template", asset));
+        } catch {
+          errors.push(`Starter template asset is unavailable: ${asset}`);
+        }
+      }
     } catch (err) {
       errors.push(`Starter template is unavailable: ${err.message}`);
     }
@@ -17184,16 +17261,13 @@ async function preflightCreateProject(draft, extensionDir) {
     targetEmpty,
     errors,
     warnings,
-    plannedFiles: [
+    plannedFiles: template ? [
       "main.tex",
-      "theme.sty",
-      "theorems.tex",
-      "commands.tex",
-      "references.bib",
-      ".vscode/settings.json",
-      "Fig/",
-      "templates/"
-    ]
+      ...template.assetManifest,
+      ".latex-editing-toolkit/template.json",
+      ...template.kind === "beamer" ? [".latex-editing-toolkit/beamer-class-options.tex", ".latex-editing-toolkit/beamer-settings.tex"] : [],
+      ".vscode/settings.json"
+    ] : ["main.tex", ".vscode/settings.json"]
   };
 }
 
@@ -17208,7 +17282,7 @@ var path6 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path30, callback = (err) => {
+function openExplorer(path31, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -17225,8 +17299,8 @@ function openExplorer(path30, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path30 = path30 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands7[platform3], [path30]);
+  path31 = path31 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands7[platform3], [path31]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -17311,26 +17385,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path30) {
+  function parse_path(path31) {
     if (platform3 == "win32") {
-      path30 = RegReplace(path30, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path31 = RegReplace(path31, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path30 = RegReplace(path30, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path31 = RegReplace(path31, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path30 = path30.replace(/\//g, "\\");
+      path31 = path31.replace(/\//g, "\\");
     }
-    return path30;
+    return path31;
   }
   if (platform3 == "win32") {
-    let path30 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path30 ? parse_path(path30) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path31 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path31 ? parse_path(path31) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path30 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path30 ? parse_path(path30) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path31 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path31 ? parse_path(path31) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path30 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path30 ? parse_path(path30) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path31 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path31 ? parse_path(path31) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -18911,8 +18985,8 @@ var snippetOutput;
 function isLatexLikeDocument(document) {
   return ["latex", "tex", "markdown"].includes(document.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path30) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path30);
+function getStringArrayConfiguration(path31) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path31);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -20151,8 +20225,8 @@ var SnippetService = class {
 };
 
 // src/toolkitService.ts
-var import_node_fs14 = require("node:fs");
-var path15 = __toESM(require("node:path"));
+var import_node_fs15 = require("node:fs");
+var path16 = __toESM(require("node:path"));
 
 // src/cleanup.ts
 var import_node_fs9 = require("node:fs");
@@ -20495,9 +20569,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path10.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename15 = path10.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename15, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename15, pattern))) {
+        const basename16 = path10.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename16, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename16, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -20649,12 +20723,11 @@ var CompileService = class {
   }
   async compileInternal(ctx) {
     const logs = [];
-    const pipeline = [
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]],
-      ["biber", [ctx.docstem]],
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]],
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]]
-    ];
+    const source = await import_node_fs10.promises.readFile(ctx.targetAbs, "utf8").catch(() => "");
+    const isBeamer = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(source);
+    const hasBibliography = /\\(?:addbibresource|bibliography)\b/i.test(source);
+    const latex = ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]];
+    const pipeline = isBeamer ? [latex] : [latex, ["biber", [ctx.docstem]], latex, latex];
     for (const [cmd, args] of pipeline) {
       const resolved = await this.resolveBinary(cmd);
       if (!resolved) {
@@ -20664,6 +20737,24 @@ var CompileService = class {
       const result = await this.runCommand(resolved, args, ctx.compileCwd);
       this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
       if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+    }
+    if (isBeamer) {
+      const bcfExists = await exists(path11.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
+      const remaining = [
+        ...hasBibliography || bcfExists ? [["biber", [ctx.docstem]]] : [],
+        latex,
+        latex
+      ];
+      for (const [cmd, args] of remaining) {
+        const resolved = await this.resolveBinary(cmd);
+        if (!resolved) {
+          logs.push(`[${cmd}] command not found in PATH.`);
+          return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+        }
+        const result = await this.runCommand(resolved, args, ctx.compileCwd);
+        this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
+        if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+      }
     }
     return this.finalizeCompileOutput(ctx, logs, ctx.defaultPdfRel);
   }
@@ -20786,7 +20877,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve16) => {
+    return new Promise((resolve17) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -20805,12 +20896,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve16({ code: 127, output: `${output}
+        resolve17({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve16({ code: code ?? 1, output });
+        resolve17({ code: code ?? 1, output });
       });
     });
   }
@@ -21172,9 +21263,245 @@ ${body.trimEnd()}
 
 // src/state.ts
 var import_node_crypto4 = require("node:crypto");
+var import_node_fs13 = require("node:fs");
+var path14 = __toESM(require("node:path"));
+init_schema();
+
+// src/beamer.ts
 var import_node_fs12 = require("node:fs");
 var path13 = __toESM(require("node:path"));
 init_schema();
+init_utils();
+var TEMPLATE_METADATA_REL = ".latex-editing-toolkit/template.json";
+var BEAMER_CONFIG_DIR = ".latex-editing-toolkit";
+var BEAMER_CLASS_OPTIONS_FILE = `${BEAMER_CONFIG_DIR}/beamer-class-options.tex`;
+var BEAMER_SETTINGS_FILE = `${BEAMER_CONFIG_DIR}/beamer-settings.tex`;
+var BEAMER_TEMPLATE_IDS = /* @__PURE__ */ new Set(["beamer-uchicago", "beamer-blei", "beamer-gotham"]);
+function templateMetadataPath(rootDir) {
+  return path13.join(rootDir, TEMPLATE_METADATA_REL);
+}
+function beamerConfigPaths(rootDir, targetRel) {
+  const targetDir = path13.dirname(path13.resolve(rootDir, targetRel));
+  const dir = path13.join(targetDir, BEAMER_CONFIG_DIR);
+  return {
+    dir,
+    classOptions: path13.join(dir, path13.basename(BEAMER_CLASS_OPTIONS_FILE)),
+    settings: path13.join(dir, path13.basename(BEAMER_SETTINGS_FILE))
+  };
+}
+async function readTemplateMetadata(rootDir) {
+  try {
+    const parsed = JSON.parse(await import_node_fs12.promises.readFile(templateMetadataPath(rootDir), "utf8"));
+    if (parsed.version !== 1 || typeof parsed.kind !== "string" || typeof parsed.templateId !== "string" || typeof parsed.target !== "string") return null;
+    if (parsed.kind !== "book" && parsed.kind !== "article" && parsed.kind !== "beamer") return null;
+    return {
+      version: 1,
+      kind: parsed.kind,
+      templateId: parsed.templateId,
+      target: parsed.target,
+      assetVersion: "bundled"
+    };
+  } catch {
+    return null;
+  }
+}
+async function writeTemplateMetadata(rootDir, metadata) {
+  const target = templateMetadataPath(rootDir);
+  const temporary = `${target}.tmp-${process.pid}`;
+  await import_node_fs12.promises.mkdir(path13.dirname(target), { recursive: true });
+  await import_node_fs12.promises.writeFile(temporary, `${JSON.stringify({ version: 1, ...metadata, assetVersion: "bundled" }, null, 2)}
+`, "utf8");
+  await import_node_fs12.promises.rename(temporary, target);
+}
+function starterTemplate(templateId) {
+  return STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId);
+}
+function detectTemplateFromSource(text) {
+  const clean = stripTexComments(text);
+  const declaration = extractDocumentclassDeclaration(clean);
+  const className = declaration?.className || "";
+  if (className === "beamer") {
+    if (/\\usetheme\s*\{\s*blei\s*\}/i.test(clean)) return exactBeamer("beamer-blei");
+    if (/\\usetheme\s*\{\s*gotham\s*\}/i.test(clean)) return exactBeamer("beamer-gotham");
+    if (/\\usepackage(?:\[[^\]]*\])?\s*\{\s*Ritsumeikan\s*\}/i.test(clean)) return exactBeamer("beamer-uchicago");
+    return {
+      kind: "beamer",
+      templateId: "beamer-generic",
+      detectionSource: "source",
+      confidence: "probable",
+      warning: "Beamer document detected, but no bundled child theme was identified."
+    };
+  }
+  if (isChapterCapableClass(className)) return { kind: "book", templateId: "book-minimal", detectionSource: "source", confidence: "probable" };
+  if (className) return { kind: "article", templateId: "article-minimal", detectionSource: "source", confidence: "probable" };
+  return { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" };
+}
+async function detectWorkspaceTemplate(rootDir, targetRel) {
+  const metadata = await readTemplateMetadata(rootDir);
+  let sourceState = { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" };
+  try {
+    sourceState = detectTemplateFromSource(await import_node_fs12.promises.readFile(path13.resolve(rootDir, targetRel), "utf8"));
+  } catch {
+  }
+  if (!metadata) return withBeamerAssetDiagnostics(rootDir, targetRel, sourceState);
+  const metadataTarget = path13.resolve(rootDir, metadata.target);
+  const currentTarget = path13.resolve(rootDir, targetRel);
+  if (!isSubpath(metadataTarget, rootDir) || metadataTarget !== currentTarget) {
+    return withBeamerAssetDiagnostics(rootDir, targetRel, sourceState);
+  }
+  const metadataState = {
+    kind: metadata.kind,
+    templateId: metadata.templateId,
+    detectionSource: "metadata",
+    confidence: BEAMER_TEMPLATE_IDS.has(metadata.templateId) || metadata.kind !== "beamer" ? "exact" : "probable"
+  };
+  if (sourceState.kind !== "unknown" && sourceState.kind !== metadata.kind) {
+    metadataState.warning = `Template metadata says ${metadata.kind}, but the target uses ${sourceState.kind}.`;
+  } else if (metadata.kind === "beamer" && sourceState.kind === "beamer" && sourceState.templateId !== "beamer-generic" && sourceState.templateId !== metadata.templateId) {
+    metadataState.warning = `Template metadata says ${metadata.templateId}, but the source appears to use ${sourceState.templateId}.`;
+  }
+  return withBeamerAssetDiagnostics(rootDir, targetRel, metadataState);
+}
+async function withBeamerAssetDiagnostics(rootDir, targetRel, state) {
+  if (state.kind !== "beamer") return state;
+  const definition = starterTemplate(state.templateId);
+  if (!definition || definition.kind !== "beamer") return state;
+  const targetDir = path13.dirname(path13.resolve(rootDir, targetRel));
+  const missingAssets = [];
+  for (const asset of definition.assetManifest) {
+    if (!await exists(path13.join(targetDir, asset))) missingAssets.push(asset);
+  }
+  if (missingAssets.length === 0) return { ...state, assetsComplete: true, missingAssets: [] };
+  const resourceWarning = `Bundled theme resources are missing: ${missingAssets.join(", ")}.`;
+  return {
+    ...state,
+    assetsComplete: false,
+    missingAssets,
+    warning: state.warning ? `${state.warning} ${resourceWarning}` : resourceWarning
+  };
+}
+function defaultBeamerSettings() {
+  return { ...BEAMER_DEFAULT_SETTINGS };
+}
+function normalizeBeamerSettings(raw, base = defaultBeamerSettings()) {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const aspectRatio = value.aspectRatio === "43" || value.aspectRatio === "169" ? value.aspectRatio : base.aspectRatio;
+  const notesMode = value.notesMode === "show-notes" || value.notesMode === "only-notes" || value.notesMode === "hide" ? value.notesMode : base.notesMode;
+  return {
+    title: typeof value.title === "string" ? value.title.trim() || base.title : base.title,
+    author: typeof value.author === "string" ? value.author.trim() || base.author : base.author,
+    institute: typeof value.institute === "string" ? value.institute.trim() || base.institute : base.institute,
+    date: typeof value.date === "string" ? value.date.trim() || base.date : base.date,
+    aspectRatio,
+    notesMode,
+    sectionOutline: typeof value.sectionOutline === "boolean" ? value.sectionOutline : base.sectionOutline
+  };
+}
+async function readBeamerSettings(rootDir, targetRel, sourceText = "") {
+  const settings = defaultBeamerSettings();
+  const paths = beamerConfigPaths(rootDir, targetRel);
+  const classOptions = await import_node_fs12.promises.readFile(paths.classOptions, "utf8").catch(() => "");
+  const runtime = await import_node_fs12.promises.readFile(paths.settings, "utf8").catch(() => "");
+  const source = stripTexComments(sourceText);
+  const aspect = /(aspectratio\s*=\s*(169|43)|aspectratio\s*=\s*(43|169))/i.exec(`${classOptions}
+${source}`)?.[2] || /(aspectratio\s*=\s*(43|169))/i.exec(`${classOptions}
+${source}`)?.[2];
+  if (aspect === "43" || aspect === "169") settings.aspectRatio = aspect;
+  settings.title = texMacro(runtime, "ToolkitBeamerTitle") || texCommand(source, "title") || settings.title;
+  settings.author = texMacro(runtime, "ToolkitBeamerAuthor") || texCommand(source, "author") || settings.author;
+  settings.institute = texMacro(runtime, "ToolkitBeamerInstitute") || texCommand(source, "institute") || settings.institute;
+  settings.date = texMacro(runtime, "ToolkitBeamerDate") || texCommand(source, "date") || settings.date;
+  if (/\\setbeameroption\s*\{\s*show\s+notes\s+on\s+second\s+screen/i.test(runtime)) settings.notesMode = "show-notes";
+  else if (/\\setbeameroption\s*\{\s*show\s+only\s+notes/i.test(runtime)) settings.notesMode = "only-notes";
+  settings.sectionOutline = /\\ToolkitBeamerSectionOutlinetrue/.test(runtime);
+  return settings;
+}
+async function writeBeamerSettings(rootDir, targetRel, settings) {
+  const paths = beamerConfigPaths(rootDir, targetRel);
+  await import_node_fs12.promises.mkdir(paths.dir, { recursive: true });
+  await writeAtomic(paths.classOptions, renderBeamerClassOptions(settings));
+  await writeAtomic(paths.settings, renderBeamerRuntimeSettings(settings));
+  return [workspaceRel(rootDir, paths.classOptions), workspaceRel(rootDir, paths.settings)];
+}
+function beamerHooksEnabled(sourceText) {
+  return sourceText.includes(BEAMER_CLASS_OPTIONS_FILE) && sourceText.includes(BEAMER_SETTINGS_FILE);
+}
+async function enableBeamerHooks(rootDir, targetRel) {
+  const target = path13.resolve(rootDir, targetRel);
+  const source = await import_node_fs12.promises.readFile(target, "utf8");
+  if (beamerHooksEnabled(source)) return;
+  const classHook = `\\IfFileExists{${BEAMER_CLASS_OPTIONS_FILE}}{\\input{${BEAMER_CLASS_OPTIONS_FILE}}}{}`;
+  const runtimeHook = [
+    `\\IfFileExists{${BEAMER_SETTINGS_FILE}}{\\input{${BEAMER_SETTINGS_FILE}}}{}`,
+    "\\title{\\ToolkitBeamerTitle}",
+    "\\author{\\ToolkitBeamerAuthor}",
+    "\\institute{\\ToolkitBeamerInstitute}",
+    "\\date{\\ToolkitBeamerDate}"
+  ].join("\n");
+  let updated = source;
+  if (!updated.includes(BEAMER_CLASS_OPTIONS_FILE)) {
+    const documentClass = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.exec(updated);
+    if (documentClass?.index !== void 0) updated = `${updated.slice(0, documentClass.index)}${classHook}
+${updated.slice(documentClass.index)}`;
+  }
+  if (!updated.includes(BEAMER_SETTINGS_FILE)) {
+    const beginDocument = /\\begin\s*\{document\}/i.exec(updated);
+    if (beginDocument?.index !== void 0) updated = `${updated.slice(0, beginDocument.index)}${runtimeHook}
+
+${updated.slice(beginDocument.index)}`;
+  }
+  const temporary = `${target}.tmp-${process.pid}`;
+  await import_node_fs12.promises.writeFile(temporary, updated, "utf8");
+  await import_node_fs12.promises.rename(temporary, target);
+}
+function renderBeamerClassOptions(settings) {
+  return [
+    "% Generated by LaTeX Editing Toolkit. Edit Presentation settings in Toolkit.",
+    `\\PassOptionsToClass{aspectratio=${settings.aspectRatio}}{beamer}`,
+    ""
+  ].join("\n");
+}
+function renderBeamerRuntimeSettings(settings) {
+  const notes = settings.notesMode === "show-notes" ? "\\setbeameroption{show notes on second screen=right}" : settings.notesMode === "only-notes" ? "\\setbeameroption{show only notes}" : "\\setbeameroption{hide notes}";
+  const outline = settings.sectionOutline ? [
+    "\\ToolkitBeamerSectionOutlinetrue",
+    "\\AtBeginSection[]{",
+    "  \\begin{frame}{Outline}",
+    "    \\tableofcontents[currentsection]",
+    "  \\end{frame}",
+    "}"
+  ] : ["\\ToolkitBeamerSectionOutlinefalse"];
+  return [
+    "% Generated by LaTeX Editing Toolkit. Edit Presentation settings in Toolkit.",
+    `\\def\\ToolkitBeamerTitle{${escapeTexValue(settings.title)}}`,
+    `\\def\\ToolkitBeamerAuthor{${escapeTexValue(settings.author)}}`,
+    `\\def\\ToolkitBeamerInstitute{${escapeTexValue(settings.institute)}}`,
+    `\\def\\ToolkitBeamerDate{${escapeTexValue(settings.date)}}`,
+    "\\newif\\ifToolkitBeamerSectionOutline",
+    ...outline,
+    notes,
+    ""
+  ].join("\n");
+}
+function exactBeamer(templateId) {
+  return { kind: "beamer", templateId, detectionSource: "source", confidence: "exact" };
+}
+function texMacro(text, name) {
+  return new RegExp(`\\\\def\\\\${name}\\{([^}]*)\\}`, "i").exec(text)?.[1]?.trim() || "";
+}
+function texCommand(text, name) {
+  return new RegExp(`\\\\${name}\\s*\\{([^}]*)\\}`, "i").exec(text)?.[1]?.trim() || "";
+}
+function escapeTexValue(value) {
+  return String(value || "").replace(/[\r\n{}]/g, " ").replace(/(?<!\\)%/g, "\\%");
+}
+async function writeAtomic(target, text) {
+  const temporary = `${target}.tmp-${process.pid}`;
+  await import_node_fs12.promises.writeFile(temporary, text, "utf8");
+  await import_node_fs12.promises.rename(temporary, target);
+}
+
+// src/state.ts
 init_utils();
 var StateService = class {
   constructor(rootDir, additionalStylePresets = []) {
@@ -21187,23 +21514,28 @@ var StateService = class {
     this.additionalStylePresets = presets.map((preset) => ({ ...preset, colors: { ...preset.colors } }));
   }
   configPath() {
-    return path13.join(this.rootDir, "theme.ui.json");
+    return path14.join(this.rootDir, "theme.ui.json");
   }
   toggleOverridePath() {
-    return path13.join(this.rootDir, "theme.overrides.tex");
+    return path14.join(this.rootDir, "theme.overrides.tex");
   }
   colorOverridePath() {
-    return path13.join(this.rootDir, "theme.colors.tex");
+    return path14.join(this.rootDir, "theme.colors.tex");
   }
   themePath() {
-    return path13.join(this.rootDir, "theme.sty");
+    return path14.join(this.rootDir, "theme.sty");
   }
   mainTexPath() {
-    return path13.join(this.rootDir, "main.tex");
+    return path14.join(this.rootDir, "main.tex");
   }
   async buildResponseState() {
     const state = await this.loadState();
     const starterTemplates = await this.starterTemplateMeta();
+    const starterTemplateGroups = [
+      { id: "book", label: "Book", templates: starterTemplates.filter((item) => item.kind === "book") },
+      { id: "article", label: "Article", templates: starterTemplates.filter((item) => item.kind === "article") },
+      { id: "beamer", label: "Beamer Slides", templates: starterTemplates.filter((item) => item.kind === "beamer") }
+    ];
     return {
       state,
       schema: {
@@ -21213,8 +21545,11 @@ var StateService = class {
         style_presets: this.stylePresetSchema(),
         body_font_size: BODY_FONT_SIZE_CONFIG,
         starter_templates: starterTemplates,
+        starter_template_groups: starterTemplateGroups,
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
-        starter_default_output_target: "main.tex"
+        starter_default_output_target: "main.tex",
+        workspace_template: state.workspace_template,
+        beamer_capabilities: this.beamerCapabilities(state.workspace_template.templateId)
       }
     };
   }
@@ -21222,7 +21557,10 @@ var StateService = class {
     if (!await exists(this.themePath())) {
       const fallback = {};
       for (const token of COLOR_ORDER) fallback[token] = "#808080";
-      warnings.push("theme.sty is missing; placeholder colors are being used.");
+      const mainText = await import_node_fs13.promises.readFile(this.mainTexPath(), "utf8").catch(() => "");
+      if (!/\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(mainText)) {
+        warnings.push("theme.sty is missing; placeholder colors are being used.");
+      }
       return fallback;
     }
     try {
@@ -21263,7 +21601,9 @@ var StateService = class {
       compile_last_success: null,
       detected_document_class: "(unknown)",
       detected_document_class_has_chapter: false,
-      effective_theme_class: "article"
+      effective_theme_class: "article",
+      workspace_template: { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" },
+      beamer_settings: defaultBeamerSettings()
     };
     await this.mergePersistedState(state);
     await this.mergeOverrideFiles(state);
@@ -21398,7 +21738,7 @@ var StateService = class {
     }
     let uiState = {};
     try {
-      const parsed = JSON.parse(await import_node_fs12.promises.readFile(this.configPath(), "utf8"));
+      const parsed = JSON.parse(await import_node_fs13.promises.readFile(this.configPath(), "utf8"));
       if (this.isRecord(parsed)) uiState = parsed;
     } catch (err) {
       if (err.code !== "ENOENT" && !(err instanceof SyntaxError)) throw err;
@@ -21454,7 +21794,7 @@ var StateService = class {
   async deleteOverrideFiles() {
     for (const file of [this.configPath(), this.toggleOverridePath(), this.colorOverridePath()]) {
       try {
-        await import_node_fs12.promises.unlink(file);
+        await import_node_fs13.promises.unlink(file);
       } catch (err) {
         if (err.code !== "ENOENT") throw err;
       }
@@ -21480,20 +21820,22 @@ var StateService = class {
     this.applyStylePreset(state, this.styleIdFromHeadingPreset(presetId));
   }
   async starterTemplateMeta() {
-    const templateDir = path13.join(this.rootDir, "templates");
-    const assetTemplateDir = path13.resolve(__dirname, "..", "assets", "template", "templates");
+    const templateDir = path14.join(this.rootDir, "templates");
+    const assetRoot = path14.resolve(__dirname, "..", "assets", "template");
+    const assetTemplateDir = path14.join(assetRoot, "templates");
     const out = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path13.join(templateDir, entry.filename)) || await exists(path13.join(assetTemplateDir, entry.filename))) {
-        out.push({ id: entry.id, label: entry.label, description: entry.description });
+      const source = await this.resolveTemplateSource(entry.filename, templateDir, assetTemplateDir);
+      if (source && await this.templateAssetsAvailable(entry, assetRoot)) {
+        out.push({ id: entry.id, label: entry.label, description: entry.description, kind: entry.kind, parent_id: entry.parentId, capabilities: entry.capabilities });
       }
     }
     return out;
   }
   async templateSourcePath(filename) {
-    const workspaceTemplate = path13.join(this.rootDir, "templates", filename);
+    const workspaceTemplate = path14.join(this.rootDir, "templates", filename);
     if (await exists(workspaceTemplate)) return workspaceTemplate;
-    return path13.resolve(__dirname, "..", "assets", "template", "templates", filename);
+    return path14.resolve(__dirname, "..", "assets", "template", "templates", filename);
   }
   async refreshDerivedState(state) {
     state.compile_recipe_name = state.compile_recipes.find((item) => item.id === state.compile_recipe)?.name ?? "";
@@ -21504,6 +21846,31 @@ var StateService = class {
     state.detected_document_class = detected || "(unknown)";
     state.detected_document_class_has_chapter = hasChapter;
     state.effective_theme_class = mode === "book" || mode === "article" ? mode : hasChapter ? "book" : "article";
+    state.workspace_template = await detectWorkspaceTemplate(this.rootDir, state.compile_target);
+    if (state.workspace_template.kind === "beamer") {
+      state.config_warnings = state.config_warnings.filter((warning) => !warning.startsWith("theme.sty is missing"));
+      const source = await import_node_fs13.promises.readFile(path14.resolve(this.rootDir, state.compile_target), "utf8").catch(() => "");
+      state.beamer_settings = await readBeamerSettings(this.rootDir, state.compile_target, source);
+      state.beamer_hooks_enabled = beamerHooksEnabled(source);
+    } else {
+      state.beamer_settings = defaultBeamerSettings();
+      state.beamer_hooks_enabled = void 0;
+    }
+  }
+  async resolveTemplateSource(filename, workspaceDir, assetDir) {
+    const workspace10 = path14.join(workspaceDir, filename);
+    if (await exists(workspace10)) return workspace10;
+    const bundled = path14.join(assetDir, filename);
+    return await exists(bundled) ? bundled : null;
+  }
+  async templateAssetsAvailable(entry, assetDir) {
+    for (const file of entry.assetManifest) {
+      if (!await exists(path14.join(assetDir, file))) return false;
+    }
+    return true;
+  }
+  beamerCapabilities(templateId) {
+    return starterTemplate(templateId)?.capabilities ?? (templateId === "beamer-generic" ? ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"] : []);
   }
   async expectedOutputPdfForSelection(state) {
     if (!state.compile_target) return "main.pdf";
@@ -21514,18 +21881,18 @@ var StateService = class {
       const catalog = await loadRecipeCatalog(this.rootDir);
       const recipe = catalog.recipes.find((item) => item.id === state.compile_recipe);
       if (!recipe) return compileOutputPdfRelpath(state.compile_target);
-      const targetAbs = path13.resolve(this.rootDir, state.compile_target);
-      const targetDir = path13.dirname(targetAbs);
-      const stem = path13.basename(targetAbs, ".tex");
+      const targetAbs = path14.resolve(this.rootDir, state.compile_target);
+      const targetDir = path14.dirname(targetAbs);
+      const stem = path14.basename(targetAbs, ".tex");
       for (const toolName of recipe.tools) {
         const tool = catalog.tools[toolName];
         if (!tool) continue;
         const outdir = this.extractRecipeOutdir(tool.args);
         if (!outdir) continue;
-        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path13.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
-        const outAbs = path13.isAbsolute(normalizedOutdir) ? path13.resolve(normalizedOutdir) : path13.resolve(targetDir, normalizedOutdir);
+        const normalizedOutdir = outdir === "%OUTDIR%" ? "." : outdir.replace(/%DOCFILE_NOEXT%/g, stem).replace(/%DOCFILE%/g, path14.basename(targetAbs)).replace(/%DOC%/g, targetAbs);
+        const outAbs = path14.isAbsolute(normalizedOutdir) ? path14.resolve(normalizedOutdir) : path14.resolve(targetDir, normalizedOutdir);
         if (!isSubpath(outAbs, this.rootDir)) return compileOutputPdfRelpath(state.compile_target);
-        return workspaceRel(this.rootDir, path13.join(outAbs, `${stem}.pdf`));
+        return workspaceRel(this.rootDir, path14.join(outAbs, `${stem}.pdf`));
       }
     } catch {
       return compileOutputPdfRelpath(state.compile_target);
@@ -21545,7 +21912,7 @@ var StateService = class {
   async detectTargetDocumentClass(targetRel) {
     if (!targetRel) return "";
     try {
-      const abs = path13.resolve(this.rootDir, targetRel);
+      const abs = path14.resolve(this.rootDir, targetRel);
       return await extractDocumentclassName(abs, this.rootDir);
     } catch {
       return "";
@@ -21555,7 +21922,7 @@ var StateService = class {
     const defaults2 = {};
     let text = "";
     try {
-      text = await import_node_fs12.promises.readFile(this.mainTexPath(), "utf8");
+      text = await import_node_fs13.promises.readFile(this.mainTexPath(), "utf8");
     } catch {
     }
     for (const entry of TOGGLE_SCHEMA) {
@@ -21572,7 +21939,7 @@ var StateService = class {
   async mergePersistedState(state) {
     let raw;
     try {
-      const parsed = JSON.parse(await import_node_fs12.promises.readFile(this.configPath(), "utf8"));
+      const parsed = JSON.parse(await import_node_fs13.promises.readFile(this.configPath(), "utf8"));
       if (!this.isRecord(parsed)) {
         this.addWarning(state, "theme.ui.json must contain a JSON object; defaults were used.");
         return;
@@ -21682,7 +22049,7 @@ var StateService = class {
   }
   async mergeOverrideFiles(state) {
     try {
-      const text = await import_node_fs12.promises.readFile(this.toggleOverridePath(), "utf8");
+      const text = await import_node_fs13.promises.readFile(this.toggleOverridePath(), "utf8");
       for (const entry of TOGGLE_SCHEMA) {
         const matches = Array.from(text.matchAll(new RegExp(`\\\\${entry.command}(true|false)`, "g")));
         if (matches.length > 0) state.toggles[entry.id] = boolFromTex(matches.at(-1)?.[1] ?? "") ?? state.toggles[entry.id];
@@ -21712,7 +22079,7 @@ var StateService = class {
       }
     }
     try {
-      const text = await import_node_fs12.promises.readFile(this.colorOverridePath(), "utf8");
+      const text = await import_node_fs13.promises.readFile(this.colorOverridePath(), "utf8");
       const defines = /* @__PURE__ */ new Map();
       for (const match2 of text.matchAll(/\\definecolor\{([^}]+)\}\{HTML\}\{([0-9A-Fa-f]{6})\}/g)) {
         defines.set(match2[1], `#${match2[2].toUpperCase()}`);
@@ -21777,12 +22144,12 @@ var StateService = class {
   }
   async writeFileAtomic(targetPath, text) {
     const tempPath = `${targetPath}.tmp-${process.pid}-${(0, import_node_crypto4.randomUUID)()}`;
-    await import_node_fs12.promises.mkdir(path13.dirname(targetPath), { recursive: true });
+    await import_node_fs13.promises.mkdir(path14.dirname(targetPath), { recursive: true });
     try {
-      await import_node_fs12.promises.writeFile(tempPath, text, "utf8");
-      await import_node_fs12.promises.rename(tempPath, targetPath);
+      await import_node_fs13.promises.writeFile(tempPath, text, "utf8");
+      await import_node_fs13.promises.rename(tempPath, targetPath);
     } catch (err) {
-      await import_node_fs12.promises.unlink(tempPath).catch(() => void 0);
+      await import_node_fs13.promises.unlink(tempPath).catch(() => void 0);
       throw err;
     }
   }
@@ -21848,12 +22215,12 @@ var StateService = class {
   }
 };
 async function copyDirectory(src, dest) {
-  await import_node_fs12.promises.mkdir(dest, { recursive: true });
-  for (const entry of await import_node_fs12.promises.readdir(src, { withFileTypes: true })) {
-    const srcPath = path13.join(src, entry.name);
-    const destPath = path13.join(dest, entry.name);
+  await import_node_fs13.promises.mkdir(dest, { recursive: true });
+  for (const entry of await import_node_fs13.promises.readdir(src, { withFileTypes: true })) {
+    const srcPath = path14.join(src, entry.name);
+    const destPath = path14.join(dest, entry.name);
     if (entry.isDirectory()) await copyDirectory(srcPath, destPath);
-    else if (entry.isFile()) await import_node_fs12.promises.copyFile(srcPath, destPath);
+    else if (entry.isFile()) await import_node_fs13.promises.copyFile(srcPath, destPath);
   }
 }
 async function copyMissingDirectory(src, dest, relLabel, copied) {
@@ -21862,39 +22229,54 @@ async function copyMissingDirectory(src, dest, relLabel, copied) {
     copied.push(`${relLabel}/`);
     return;
   }
-  for (const entry of await import_node_fs12.promises.readdir(src, { withFileTypes: true })) {
-    const source = path13.join(src, entry.name);
-    const target = path13.join(dest, entry.name);
+  for (const entry of await import_node_fs13.promises.readdir(src, { withFileTypes: true })) {
+    const source = path14.join(src, entry.name);
+    const target = path14.join(dest, entry.name);
     if (await exists(target)) continue;
     if (entry.isDirectory()) {
       await copyDirectory(source, target);
       copied.push(`${relLabel}/${entry.name}/`);
     } else if (entry.isFile()) {
-      await import_node_fs12.promises.copyFile(source, target);
+      await import_node_fs13.promises.copyFile(source, target);
       copied.push(`${relLabel}/${entry.name}`);
     }
   }
 }
-async function ensureWorkspaceTemplateAssets(rootDir, extensionDir) {
-  const assetRoot = path13.join(extensionDir, "assets", "template");
+async function ensureWorkspaceTemplateAssets(rootDir, extensionDir, templateId, destinationDir = rootDir) {
+  const assetRoot = path14.join(extensionDir, "assets", "template");
   const copied = [];
+  const selected = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : void 0;
+  if (templateId?.startsWith("beamer-") && !selected) return copied;
+  if (selected?.kind === "beamer") {
+    for (const file of selected.assetManifest) {
+      const source = path14.join(assetRoot, file);
+      const target = path14.join(destinationDir, file);
+      if (!isSubpath(target, rootDir)) throw new Error(`Template asset target is outside workspace: ${file}`);
+      if (!await exists(source)) throw new Error(`Bundled template asset is missing: ${file}`);
+      if (await exists(target)) continue;
+      await import_node_fs13.promises.mkdir(path14.dirname(target), { recursive: true });
+      await import_node_fs13.promises.copyFile(source, target);
+      copied.push(workspaceRel(rootDir, target));
+    }
+    return copied;
+  }
   const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
   for (const file of files) {
-    const target = path13.join(rootDir, file);
+    const target = path14.join(rootDir, file);
     if (!await exists(target)) {
-      await import_node_fs12.promises.copyFile(path13.join(assetRoot, file), target);
+      await import_node_fs13.promises.copyFile(path14.join(assetRoot, file), target);
       copied.push(file);
     }
   }
-  await copyMissingDirectory(path13.join(assetRoot, "Fig"), path13.join(rootDir, "Fig"), "Fig", copied);
-  await copyMissingDirectory(path13.join(assetRoot, "templates"), path13.join(rootDir, "templates"), "templates", copied);
-  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path13.join(rootDir, item)));
+  await copyMissingDirectory(path14.join(assetRoot, "Fig"), path14.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(path14.join(assetRoot, "templates"), path14.join(rootDir, "templates"), "templates", copied);
+  return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path14.join(rootDir, item)));
 }
 
 // src/template.ts
 var import_node_crypto5 = require("node:crypto");
-var import_node_fs13 = require("node:fs");
-var path14 = __toESM(require("node:path"));
+var import_node_fs14 = require("node:fs");
+var path15 = __toESM(require("node:path"));
 init_schema();
 init_utils();
 var UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
@@ -21908,8 +22290,8 @@ var TemplateService = class {
   rootDir;
   extensionDir;
   stateService;
-  async initializeWorkspace() {
-    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
+  async initializeWorkspace(templateId) {
+    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, templateId);
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
   }
@@ -21918,15 +22300,15 @@ var TemplateService = class {
     if (colorPolicy !== "preserve" && colorPolicy !== "default") {
       throw new Error(`Unknown upgrade color policy: ${String(colorPolicy)}`);
     }
-    const assetRoot = path14.join(this.extensionDir, "assets", "template");
-    const backupDir = path14.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
+    const assetRoot = path15.join(this.extensionDir, "assets", "template");
+    const backupDir = path15.join(this.rootDir, ".latex-editing-toolkit", "backups", this.timestamp());
     const upgradedFiles = [];
     const updatedOverrideFiles = [];
     const skippedMissingFiles = [];
     const assetReplacements = [];
     for (const file of UPGRADE_THEME_ASSET_FILES) {
-      const source = path14.join(assetRoot, file);
-      const target = path14.join(this.rootDir, file);
+      const source = path15.join(assetRoot, file);
+      const target = path15.join(this.rootDir, file);
       this.assertInsideWorkspace(target);
       if (!await exists(source)) {
         skippedMissingFiles.push(file);
@@ -21937,10 +22319,10 @@ var TemplateService = class {
     const state = colorPolicy === "default" ? await this.stateService.loadState() : void 0;
     const targets = assetReplacements.map((item) => item.target);
     if (colorPolicy === "default") {
-      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path14.join(this.rootDir, file)));
+      targets.push(...COLOR_OVERRIDE_FILES.map((file) => path15.join(this.rootDir, file)));
     }
     const existedBefore = /* @__PURE__ */ new Map();
-    await import_node_fs13.promises.mkdir(backupDir, { recursive: true });
+    await import_node_fs14.promises.mkdir(backupDir, { recursive: true });
     for (const target of targets) {
       this.assertInsideWorkspace(target);
       const existed = await exists(target);
@@ -21973,22 +22355,25 @@ var TemplateService = class {
     };
   }
   async createStarter(templateId, outputTarget, overwrite) {
-    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir);
     const normalizedTarget = this.normalizeOutputTarget(outputTarget);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === String(templateId || "").trim()) ?? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal") ?? STARTER_TEMPLATE_DEFINITIONS[0];
     if (!template) throw new Error("No starter templates available.");
-    const targetAbs = path14.resolve(this.rootDir, normalizedTarget);
+    const targetAbs = path15.resolve(this.rootDir, normalizedTarget);
+    const assetDestination = template.kind === "beamer" ? path15.dirname(targetAbs) : this.rootDir;
+    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat4 = await import_node_fs13.promises.stat(targetAbs);
+      const stat4 = await import_node_fs14.promises.stat(targetAbs);
       if (stat4.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
-    const text = await import_node_fs13.promises.readFile(source, "utf8");
+    const text = await import_node_fs14.promises.readFile(source, "utf8");
     if (!extractDocumentclassDeclaration(text)) throw new Error(`Starter template is missing a valid \\documentclass declaration: ${template.filename}`);
-    await import_node_fs13.promises.mkdir(path14.dirname(targetAbs), { recursive: true });
-    await import_node_fs13.promises.writeFile(targetAbs, text, "utf8");
+    await import_node_fs14.promises.mkdir(path15.dirname(targetAbs), { recursive: true });
+    await import_node_fs14.promises.writeFile(targetAbs, text, "utf8");
+    await writeTemplateMetadata(this.rootDir, { kind: template.kind, templateId: template.id, target: normalizedTarget });
+    if (template.kind === "beamer") await writeBeamerSettings(this.rootDir, normalizedTarget, defaultBeamerSettings());
     const state = await this.stateService.loadState();
     state.compile_targets = await this.stateService.listCandidateTexFiles();
     state.compile_target = normalizeCompileTarget(this.rootDir, normalizedTarget, state.compile_targets);
@@ -22003,31 +22388,31 @@ var TemplateService = class {
   normalizeOutputTarget(raw) {
     let target = String(raw ?? "").trim() || "main.tex";
     target = toPosixPath(target);
-    if (path14.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
-    if (!path14.extname(target)) target += ".tex";
-    if (path14.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
-    const resolved = path14.resolve(this.rootDir, target);
+    if (path15.isAbsolute(target)) throw new Error("Output target must be workspace-relative.");
+    if (!path15.extname(target)) target += ".tex";
+    if (path15.extname(target).toLowerCase() !== ".tex") throw new Error("Output target must end with .tex.");
+    const resolved = path15.resolve(this.rootDir, target);
     if (!isSubpath(resolved, this.rootDir)) throw new Error("Output target is outside workspace.");
     return workspaceRel(this.rootDir, resolved);
   }
   async backupFile(source, backupDir) {
     this.assertInsideWorkspace(source);
     const rel = workspaceRel(this.rootDir, source);
-    const backupPath = path14.join(backupDir, rel);
+    const backupPath = path15.join(backupDir, rel);
     this.assertInsideWorkspace(backupPath);
-    await import_node_fs13.promises.mkdir(path14.dirname(backupPath), { recursive: true });
-    await import_node_fs13.promises.copyFile(source, backupPath);
+    await import_node_fs14.promises.mkdir(path15.dirname(backupPath), { recursive: true });
+    await import_node_fs14.promises.copyFile(source, backupPath);
   }
   async replaceFileAtomic(source, target) {
     const tempPath = `${target}.tmp-${process.pid}-${(0, import_node_crypto5.randomUUID)()}`;
     this.assertInsideWorkspace(target);
     this.assertInsideWorkspace(tempPath);
-    await import_node_fs13.promises.mkdir(path14.dirname(target), { recursive: true });
+    await import_node_fs14.promises.mkdir(path15.dirname(target), { recursive: true });
     try {
-      await import_node_fs13.promises.copyFile(source, tempPath);
-      await import_node_fs13.promises.rename(tempPath, target);
+      await import_node_fs14.promises.copyFile(source, tempPath);
+      await import_node_fs14.promises.rename(tempPath, target);
     } catch (err) {
-      await import_node_fs13.promises.unlink(tempPath).catch(() => void 0);
+      await import_node_fs14.promises.unlink(tempPath).catch(() => void 0);
       throw err;
     }
   }
@@ -22036,10 +22421,10 @@ var TemplateService = class {
     for (const target of [...targets].reverse()) {
       try {
         if (existedBefore.get(target)) {
-          const backupPath = path14.join(backupDir, workspaceRel(this.rootDir, target));
+          const backupPath = path15.join(backupDir, workspaceRel(this.rootDir, target));
           await this.replaceFileAtomic(backupPath, target);
         } else {
-          await import_node_fs13.promises.unlink(target).catch((err) => {
+          await import_node_fs14.promises.unlink(target).catch((err) => {
             if (err.code !== "ENOENT") throw err;
           });
         }
@@ -22050,7 +22435,7 @@ var TemplateService = class {
     return errors;
   }
   assertInsideWorkspace(absPath) {
-    if (!isSubpath(path14.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
+    if (!isSubpath(path15.resolve(absPath), this.rootDir)) throw new Error("Theme asset path is outside workspace.");
   }
   timestamp() {
     return (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").replace(".", "-");
@@ -22058,6 +22443,7 @@ var TemplateService = class {
 };
 
 // src/toolkitService.ts
+init_schema();
 init_utils();
 var ToolkitService = class {
   constructor(rootDir, extensionDir, options = {}) {
@@ -22133,7 +22519,13 @@ var ToolkitService = class {
       case "template-bootstrap":
         return this.runSerialized(async () => {
           const output = this.template.normalizeOutputTarget(payload.output_target);
-          const paths = [...this.workspaceAssetPaths(), output, "theme.ui.json", ".vscode/settings.json"];
+          const templateId = String(payload.template_id || "book-minimal");
+          const paths = [...this.workspaceAssetPaths(templateId, output), output, "theme.ui.json", ".vscode/settings.json", templateMetadataPath(this.rootDir)];
+          const definition = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId);
+          if (definition?.kind === "beamer") {
+            const config = beamerConfigPaths(this.rootDir, output);
+            paths.push(config.classOptions, config.settings);
+          }
           const result = await this.history.runFileChange(command, "Generate starter", paths, async () => {
             const created = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite));
             return { ...created.response, generated_target: created.generated_target, overwrote_existing: created.overwrote_existing };
@@ -22159,9 +22551,9 @@ var ToolkitService = class {
           }
           const target = String(payload.compile_target ?? "");
           const preview = await this.splitter.splitCompileTarget(target, true, String(payload.sections_dir ?? "Sections"));
-          const backup = await this.nextSplitBackupPath(path15.resolve(this.rootDir, target));
+          const backup = await this.nextSplitBackupPath(path16.resolve(this.rootDir, target));
           const generated = preview.split.generated_subfile_targets;
-          const paths = [target, backup, ...generated, ...new Set(generated.map((item) => path15.dirname(item)))];
+          const paths = [target, backup, ...generated, ...new Set(generated.map((item) => path16.dirname(item)))];
           const result = await this.history.runFileChange(command, "Split LaTeX target", paths, async () => {
             const changed = await this.splitter.splitCompileTarget(target, false, String(payload.sections_dir ?? "Sections"));
             return { ...changed.response, split: changed.split };
@@ -22214,8 +22606,34 @@ var ToolkitService = class {
         return this.runSerialized(async () => this.cleanup.clean(Boolean(payload.dry_run)));
       case "compile":
         return this.runSerialized(async () => this.compile.compileFromPayload(payload));
+      case "beamer-settings":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (current.workspace_template.kind !== "beamer") throw new Error("Presentation settings are only available for Beamer targets.");
+          const target = String(payload.target || current.compile_target);
+          const settings = normalizeBeamerSettings(payload.settings, current.beamer_settings);
+          const config = beamerConfigPaths(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Edit Presentation settings", [config.dir, config.classOptions, config.settings], async () => {
+            await writeBeamerSettings(this.rootDir, target, settings);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
+      case "beamer-enable-hooks":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (current.workspace_template.kind !== "beamer") throw new Error("Presentation hooks are only available for Beamer targets.");
+          const target = String(payload.target || current.compile_target);
+          const config = beamerConfigPaths(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Enable Beamer Toolkit controls", [path16.resolve(this.rootDir, target), config.dir, config.classOptions, config.settings], async () => {
+            await writeBeamerSettings(this.rootDir, target, current.beamer_settings);
+            await enableBeamerHooks(this.rootDir, target);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
       case "initialize-workspace":
-        return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace());
+        return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(String(payload.template_id || "")), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace(String(payload.template_id || "") || void 0));
       case "upgrade-theme-assets":
         return this.runFileMutation(command, "Upgrade theme assets", ["theme.sty", "theorems.tex", "commands.tex", "theme.colors.tex", "theme.ui.json"], payload, async () => {
           const explicitPolicy = payload.color_policy;
@@ -22228,14 +22646,14 @@ var ToolkitService = class {
   }
   resolvePdfPath(rawPath) {
     const rel = rawPath.trim() || "main.pdf";
-    const resolved = path15.resolve(this.rootDir, rel);
+    const resolved = path16.resolve(this.rootDir, rel);
     if (!resolved.endsWith(".pdf")) throw new Error("PDF path must end with .pdf.");
-    if (!resolved.startsWith(path15.resolve(this.rootDir) + path15.sep) && resolved !== path15.resolve(this.rootDir)) throw new Error("PDF path is outside workspace.");
+    if (!resolved.startsWith(path16.resolve(this.rootDir) + path16.sep) && resolved !== path16.resolve(this.rootDir)) throw new Error("PDF path is outside workspace.");
     return resolved;
   }
   async readPdfIfExists(rawPath) {
     const pdf = this.resolvePdfPath(rawPath);
-    await import_node_fs14.promises.access(pdf);
+    await import_node_fs15.promises.access(pdf);
     return pdf;
   }
   async runStateMutation(command, label, payload, task) {
@@ -22257,7 +22675,16 @@ var ToolkitService = class {
     if (isRecord3(value)) return { ...value, history };
     return { value, history };
   }
-  workspaceAssetPaths() {
+  workspaceAssetPaths(templateId, outputTarget) {
+    const selected = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : void 0;
+    if (selected?.kind === "beamer") {
+      const baseDir = outputTarget ? path16.dirname(outputTarget) : ".";
+      return [
+        ...selected.assetManifest.map((asset) => path16.join(baseDir, asset)),
+        path16.join(baseDir, ".latex-editing-toolkit")
+      ];
+    }
+    if (templateId?.startsWith("beamer-")) return [".latex-editing-toolkit"];
     return [
       "theme.sty",
       "theorems.tex",
@@ -22266,9 +22693,7 @@ var ToolkitService = class {
       "Fig",
       "Fig/cover.png",
       "templates",
-      "templates/book-minimal.tex",
-      "templates/article-minimal.tex",
-      "templates/homework-assignment.tex"
+      ...STARTER_TEMPLATE_DEFINITIONS.map((entry) => `templates/${entry.filename}`)
     ];
   }
   async nextSplitBackupPath(rootAbs) {
@@ -22291,12 +22716,12 @@ function isRecord3(value) {
 }
 
 // src/overleaf/overleafService.ts
-var fs22 = __toESM(require("node:fs/promises"));
-var path28 = __toESM(require("node:path"));
+var fs23 = __toESM(require("node:fs/promises"));
+var path29 = __toESM(require("node:path"));
 var vscode11 = __toESM(require("vscode"));
 
 // src/overleaf/diagnostics.ts
-var path16 = __toESM(require("path"));
+var path17 = __toESM(require("path"));
 var vscode7 = __toESM(require("vscode"));
 var CompileDiagnosticProvider = class {
   collection;
@@ -22314,7 +22739,7 @@ var CompileDiagnosticProvider = class {
       if (!relPath) {
         continue;
       }
-      const uri = vscode7.Uri.file(path16.join(root, relPath));
+      const uri = vscode7.Uri.file(path17.join(root, relPath));
       const range = new vscode7.Range(Math.max(item.line - 1, 0), 0, Math.max(item.line - 1, 0), 120);
       const diagnostic = new vscode7.Diagnostic(range, item.message, item.severity);
       diagnostic.source = this.collection.name;
@@ -22369,13 +22794,13 @@ function parseLatexLog(log) {
 }
 
 // src/overleaf/compileService.ts
-var fs16 = __toESM(require("fs/promises"));
-var path22 = __toESM(require("path"));
+var fs17 = __toESM(require("fs/promises"));
+var path23 = __toESM(require("path"));
 var vscode9 = __toESM(require("vscode"));
 
 // src/overleaf/manifest.ts
-var fs14 = __toESM(require("fs/promises"));
-var path19 = __toESM(require("path"));
+var fs15 = __toESM(require("fs/promises"));
+var path20 = __toESM(require("path"));
 
 // node_modules/minimatch/dist/esm/index.js
 var import_brace_expansion = __toESM(require_brace_expansion(), 1);
@@ -23181,11 +23606,11 @@ var qmarksTestNoExtDot = ([$0]) => {
   return (f) => f.length === len && f !== "." && f !== "..";
 };
 var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-var path17 = {
+var path18 = {
   win32: { sep: "\\" },
   posix: { sep: "/" }
 };
-var sep6 = defaultPlatform === "win32" ? path17.win32.sep : path17.posix.sep;
+var sep6 = defaultPlatform === "win32" ? path18.win32.sep : path18.posix.sep;
 minimatch.sep = sep6;
 var GLOBSTAR = /* @__PURE__ */ Symbol("globstar **");
 minimatch.GLOBSTAR = GLOBSTAR;
@@ -23916,7 +24341,7 @@ var import_ignore = __toESM(require_ignore());
 // src/overleaf/util.ts
 var crypto = __toESM(require("crypto"));
 var os3 = __toESM(require("os"));
-var path18 = __toESM(require("path"));
+var path19 = __toESM(require("path"));
 var import_util = require("util");
 function normalizeServerUrl(raw) {
   const trimmed = raw.trim() || "https://www.overleaf.com/";
@@ -23927,8 +24352,8 @@ function expandHome(input) {
   if (input === "~") {
     return os3.homedir();
   }
-  if (input.startsWith(`~${path18.sep}`) || input.startsWith("~/")) {
-    return path18.join(os3.homedir(), input.slice(2));
+  if (input.startsWith(`~${path19.sep}`) || input.startsWith("~/")) {
+    return path19.join(os3.homedir(), input.slice(2));
   }
   return input;
 }
@@ -23940,7 +24365,7 @@ function gitBlobHash(content) {
   return crypto.createHash("sha1").update(`blob ${bytes.length}\0`, "utf8").update(bytes).digest("hex");
 }
 function isTextLike(filePath) {
-  const ext2 = path18.extname(filePath).toLowerCase();
+  const ext2 = path19.extname(filePath).toLowerCase();
   return [
     ".tex",
     ".ltx",
@@ -24123,26 +24548,26 @@ output.pdf
 `;
 var localIgnoreRules = /* @__PURE__ */ new WeakMap();
 function manifestPath(root) {
-  return path19.join(root, METADATA_DIR, MANIFEST_NAME);
+  return path20.join(root, METADATA_DIR, MANIFEST_NAME);
 }
 function metadataPath(root, ...parts) {
-  return path19.join(root, METADATA_DIR, ...parts);
+  return path20.join(root, METADATA_DIR, ...parts);
 }
 async function readManifest(root) {
-  const raw = await fs14.readFile(manifestPath(root), "utf8");
+  const raw = await fs15.readFile(manifestPath(root), "utf8");
   const manifest = migrateManifest(JSON.parse(raw));
   const ignoreContent = await ensureLocalIgnoreFile(root);
   localIgnoreRules.set(manifest, (0, import_ignore.default)().add(ignoreContent));
   return manifest;
 }
 async function ensureLocalIgnoreFile(root) {
-  const target = path19.join(root, LOCAL_IGNORE_NAME);
-  const existing = await fs14.readFile(target, "utf8").catch(() => void 0);
+  const target = path20.join(root, LOCAL_IGNORE_NAME);
+  const existing = await fs15.readFile(target, "utf8").catch(() => void 0);
   if (existing !== void 0) {
     return existing;
   }
-  await fs14.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: "utf8", flag: "wx" }).catch(() => void 0);
-  return fs14.readFile(target, "utf8").catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
+  await fs15.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: "utf8", flag: "wx" }).catch(() => void 0);
+  return fs15.readFile(target, "utf8").catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
 }
 async function writeManifest(root, manifest) {
   manifest.schemaVersion = 3;
@@ -24167,7 +24592,7 @@ function baseDocPath(root, docId) {
   return metadataPath(root, BASE_DIR, "docs", `${docId}.tex`);
 }
 async function readBaseDoc(root, docId) {
-  return fs14.readFile(baseDocPath(root, docId), "utf8").catch(() => void 0);
+  return fs15.readFile(baseDocPath(root, docId), "utf8").catch(() => void 0);
 }
 async function writeBaseDoc(root, docId, content) {
   const target = baseDocPath(root, docId);
@@ -24178,7 +24603,7 @@ function syncStatusPath(root) {
   return metadataPath(root, SYNC_STATUS_NAME);
 }
 async function readSyncStatus(root) {
-  const raw = await fs14.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
+  const raw = await fs15.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
   return raw ? JSON.parse(raw) : void 0;
 }
 async function writeSyncStatus(root, report) {
@@ -24188,13 +24613,13 @@ async function writeSyncStatus(root, report) {
 var metadataWriteQueues = /* @__PURE__ */ new Map();
 async function atomicWriteText(target, content) {
   return enqueueMetadataWrite(target, async () => {
-    await fs14.mkdir(path19.dirname(target), { recursive: true });
+    await fs15.mkdir(path20.dirname(target), { recursive: true });
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      await fs14.writeFile(temporary, content, "utf8");
-      await fs14.rename(temporary, target);
+      await fs15.writeFile(temporary, content, "utf8");
+      await fs15.rename(temporary, target);
     } finally {
-      await fs14.rm(temporary, { force: true }).catch(() => void 0);
+      await fs15.rm(temporary, { force: true }).catch(() => void 0);
     }
   });
 }
@@ -24237,15 +24662,15 @@ function filePathById(manifest, entityId) {
 }
 
 // src/overleaf/mirrorManager.ts
-var fs15 = __toESM(require("fs/promises"));
+var fs16 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
-var path21 = __toESM(require("path"));
+var path22 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
 var import_util3 = require("util");
 var vscode8 = __toESM(require("vscode"));
 
 // src/overleaf/tree.ts
-var path20 = __toESM(require("path"));
+var path21 = __toESM(require("path"));
 function getRootFolder(project) {
   const root = Array.isArray(project.rootFolder) ? project.rootFolder[0] : project.rootFolder;
   if (!root) {
@@ -24289,12 +24714,12 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
     parentFolderId
   });
   for (const child of folder.folders ?? []) {
-    const childPath = path20.posix.join(folderPath, child.name);
+    const childPath = path21.posix.join(folderPath, child.name);
     walkFolder(child, childPath, folder._id, folders, files);
   }
   for (const doc of folder.docs ?? []) {
     files.push({
-      path: path20.posix.join(folderPath, doc.name),
+      path: path21.posix.join(folderPath, doc.name),
       entityId: doc._id,
       entityType: "doc",
       parentFolderId: folder._id,
@@ -24304,7 +24729,7 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
   }
   for (const file of folder.fileRefs ?? []) {
     files.push({
-      path: path20.posix.join(folderPath, file.name),
+      path: path21.posix.join(folderPath, file.name),
       entityId: file._id,
       entityType: "file",
       parentFolderId: folder._id,
@@ -24370,7 +24795,7 @@ var MirrorManager = class {
     return expandHome(configured);
   }
   getProjectMirrorRoot(parentRoot, project) {
-    return path21.join(expandHome(parentRoot), sanitizeProjectFolderName(project.name, project.id));
+    return path22.join(expandHome(parentRoot), sanitizeProjectFolderName(project.name, project.id));
   }
   async mirrorProject(client, project, parentRoot) {
     const projectsRoot = parentRoot ? expandHome(parentRoot) : this.getConfiguredProjectsRoot();
@@ -24387,23 +24812,23 @@ var MirrorManager = class {
         project.name,
         joinedProject
       );
-      await fs15.mkdir(targetRoot, { recursive: true });
+      await fs16.mkdir(targetRoot, { recursive: true });
       for (const folder of index.folders) {
         if (folder.path) {
-          await fs15.mkdir(path21.join(targetRoot, folder.path), { recursive: true });
+          await fs16.mkdir(path22.join(targetRoot, folder.path), { recursive: true });
         }
       }
       for (const file of index.files) {
         await this.writeInitialFile(client, session, project.id, targetRoot, file);
       }
-      await fs15.mkdir(metadataPath(targetRoot), { recursive: true });
-      await fs15.mkdir(metadataPath(targetRoot, "output"), { recursive: true });
-      await fs15.mkdir(metadataPath(targetRoot, "conflicts"), { recursive: true });
-      await fs15.mkdir(metadataPath(targetRoot, "base", "docs"), { recursive: true });
-      await fs15.mkdir(metadataPath(targetRoot, "trash"), { recursive: true });
+      await fs16.mkdir(metadataPath(targetRoot), { recursive: true });
+      await fs16.mkdir(metadataPath(targetRoot, "output"), { recursive: true });
+      await fs16.mkdir(metadataPath(targetRoot, "conflicts"), { recursive: true });
+      await fs16.mkdir(metadataPath(targetRoot, "base", "docs"), { recursive: true });
+      await fs16.mkdir(metadataPath(targetRoot, "trash"), { recursive: true });
       await this.writeLocalVsCodeSettings(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
       await this.writeLocalLatexmkRc(targetRoot, index.manifest.rootDocPath);
-      await fs15.writeFile(path21.join(targetRoot, "AGENTS.md"), AGENTS_CONTENT, "utf8");
+      await fs16.writeFile(path22.join(targetRoot, "AGENTS.md"), AGENTS_CONTENT, "utf8");
       await ensureLocalIgnoreFile(targetRoot);
       await writeManifest(targetRoot, index.manifest);
       await this.initializeGitRepository(targetRoot, `Initial Overleaf mirror: ${project.name}`);
@@ -24450,9 +24875,9 @@ var MirrorManager = class {
     await this.context.globalState.update(LOCAL_MIRRORS_KEY, next);
   }
   async initializeGitRepository(root, commitMessage = "Initial Overleaf mirror") {
-    await fs15.mkdir(root, { recursive: true });
-    await fs15.writeFile(path21.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
-    const hasGit = await exists2(path21.join(root, ".git"));
+    await fs16.mkdir(root, { recursive: true });
+    await fs16.writeFile(path22.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
+    const hasGit = await exists2(path22.join(root, ".git"));
     if (!hasGit) {
       await runGit(root, ["init"]);
       await runGit(root, ["add", "-A"]);
@@ -24500,13 +24925,13 @@ var MirrorManager = class {
   }
   async scanConfiguredRootMirrors() {
     const projectsRoot = this.getConfiguredProjectsRoot();
-    const entries = await fs15.readdir(projectsRoot, { withFileTypes: true }).catch(() => []);
+    const entries = await fs16.readdir(projectsRoot, { withFileTypes: true }).catch(() => []);
     const mirrors = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) {
         continue;
       }
-      const mirror = await this.recordForMirrorRoot(path21.join(projectsRoot, entry.name));
+      const mirror = await this.recordForMirrorRoot(path22.join(projectsRoot, entry.name));
       if (mirror) {
         mirrors.push(mirror);
       }
@@ -24523,18 +24948,18 @@ var MirrorManager = class {
     }
     return {
       root,
-      name: manifest.projectName || path21.basename(root),
+      name: manifest.projectName || path22.basename(root),
       projectId: manifest.projectId,
       serverUrl: manifest.serverUrl,
       lastSyncAt: manifest.lastSyncAt
     };
   }
   async writeInitialFile(client, session, projectId, targetRoot, file) {
-    const targetPath = path21.join(targetRoot, file.path);
-    await fs15.mkdir(path21.dirname(targetPath), { recursive: true });
+    const targetPath = path22.join(targetRoot, file.path);
+    await fs16.mkdir(path22.dirname(targetPath), { recursive: true });
     if (file.entityType === "doc") {
       const doc = await session.joinDoc(file.entityId);
-      await fs15.writeFile(targetPath, doc.content, "utf8");
+      await fs16.writeFile(targetPath, doc.content, "utf8");
       file.version = doc.version;
       file.binary = !isTextLike(file.path);
       file.sha1 = sha1(doc.content);
@@ -24543,21 +24968,21 @@ var MirrorManager = class {
       return;
     }
     const content = await client.downloadProjectFile(projectId, file.entityId);
-    await fs15.writeFile(targetPath, content);
+    await fs16.writeFile(targetPath, content);
     file.binary = true;
     file.sha1 = sha1(content);
   }
   async writeLocalVsCodeSettings(root, rootDocPath, compiler) {
-    const settingsPath = path21.join(root, ".vscode", "settings.json");
-    await fs15.mkdir(path21.dirname(settingsPath), { recursive: true });
+    const settingsPath = path22.join(root, ".vscode", "settings.json");
+    await fs16.mkdir(path22.dirname(settingsPath), { recursive: true });
     const rootFile = rootDocPath ? `./${rootDocPath}` : void 0;
-    const rootDir = rootDocPath ? path21.posix.dirname(rootDocPath) : ".";
-    const texFile = rootDocPath ? path21.posix.basename(rootDocPath) : "%DOC%";
+    const rootDir = rootDocPath ? path22.posix.dirname(rootDocPath) : ".";
+    const texFile = rootDocPath ? path22.posix.basename(rootDocPath) : "%DOC%";
     const engine = compiler === "pdflatex" ? "-pdf" : compiler === "lualatex" ? "-lualatex" : "-xelatex";
     const outputDir = ".overleaf-codex/local-build";
-    const outputDirFromRootDoc = path21.posix.relative(rootDir, outputDir) || ".";
-    const workspaceFromRootDoc = path21.posix.relative(rootDir, ".") || ".";
-    const biberCacheDir = path21.join(os4.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
+    const outputDirFromRootDoc = path22.posix.relative(rootDir, outputDir) || ".";
+    const workspaceFromRootDoc = path22.posix.relative(rootDir, ".") || ".";
+    const biberCacheDir = path22.join(os4.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
     const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
     const compileCommand = [
       `mkdir -p ${shellQuote(outputDir)}`,
@@ -24615,17 +25040,17 @@ var MirrorManager = class {
         }
       ]
     };
-    await fs15.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
+    await fs16.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
   }
   async writeLocalLatexmkRc(root, rootDocPath) {
-    const rootDir = rootDocPath ? path21.posix.dirname(rootDocPath) : ".";
-    const rcPath = path21.join(root, rootDir, ".latexmkrc");
+    const rootDir = rootDocPath ? path22.posix.dirname(rootDocPath) : ".";
+    const rcPath = path22.join(root, rootDir, ".latexmkrc");
     const outputDir = ".overleaf-codex/local-build";
-    const outputDirFromRootDoc = path21.posix.relative(rootDir, outputDir) || ".";
-    const workspaceFromRootDoc = path21.posix.relative(rootDir, ".") || ".";
+    const outputDirFromRootDoc = path22.posix.relative(rootDir, outputDir) || ".";
+    const workspaceFromRootDoc = path22.posix.relative(rootDir, ".") || ".";
     const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
-    const biberCacheDir = path21.join(os4.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
+    const biberCacheDir = path22.join(os4.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
     const content = [
       "# Generated by Overleaf Codex for local VS Code/LaTeX Workshop builds.",
       "# This file is local-only and should not be synced back to Overleaf.",
@@ -24660,8 +25085,8 @@ var MirrorManager = class {
       "$ENV{'PAR_TEMP'} = $overleaf_codex_biber_cache;",
       ""
     ].join("\n");
-    await fs15.mkdir(path21.dirname(rcPath), { recursive: true });
-    await fs15.writeFile(rcPath, content, "utf8");
+    await fs16.mkdir(path22.dirname(rcPath), { recursive: true });
+    await fs16.writeFile(rcPath, content, "utf8");
   }
 };
 function shellQuote(value) {
@@ -24685,11 +25110,11 @@ function isLocalMirrorRecord(value) {
   return Boolean(value) && typeof value === "object" && typeof value.root === "string" && typeof value.projectId === "string" && typeof value.serverUrl === "string";
 }
 function normalizeRoot(root) {
-  return path21.resolve(expandHome(root));
+  return path22.resolve(expandHome(root));
 }
 async function exists2(filePath) {
   try {
-    await fs15.access(filePath);
+    await fs16.access(filePath);
     return true;
   } catch {
     return false;
@@ -24700,7 +25125,7 @@ function outputFileName(output) {
     return output.path;
   }
   if (output.url) {
-    return path21.posix.basename(output.url.split("?")[0]);
+    return path22.posix.basename(output.url.split("?")[0]);
   }
   return "output.bin";
 }
@@ -24721,8 +25146,8 @@ var CompileService2 = class {
       throw new Error(`Overleaf compile failed with status: ${response.status}`);
     }
     const outputRoot = metadataPath(root, OUTPUT_DIR);
-    await fs16.rm(outputRoot, { recursive: true, force: true });
-    await fs16.mkdir(outputRoot, { recursive: true });
+    await fs17.rm(outputRoot, { recursive: true, force: true });
+    await fs17.mkdir(outputRoot, { recursive: true });
     for (const output of response.outputFiles ?? []) {
       const url = output.url;
       if (!url) {
@@ -24730,17 +25155,17 @@ var CompileService2 = class {
       }
       const outputName = outputFileName(output);
       const content = await client.downloadCompileOutput(url, response);
-      const targetPath = path22.join(outputRoot, outputName);
-      await fs16.mkdir(path22.dirname(targetPath), { recursive: true });
-      await fs16.writeFile(targetPath, content);
+      const targetPath = path23.join(outputRoot, outputName);
+      await fs17.mkdir(path23.dirname(targetPath), { recursive: true });
+      await fs17.writeFile(targetPath, content);
       this.lastBuildId = this.lastBuildId ?? extractBuildId(url);
     }
-    const logPath = path22.join(outputRoot, "output.log");
-    const log = await fs16.readFile(logPath, "utf8").catch(() => "");
+    const logPath = path23.join(outputRoot, "output.log");
+    const log = await fs17.readFile(logPath, "utf8").catch(() => "");
     this.diagnostics.publish(root, rootDocPath, log);
   }
   async showLog(root) {
-    const logUri = vscode9.Uri.file(path22.join(metadataPath(root, OUTPUT_DIR), "output.log"));
+    const logUri = vscode9.Uri.file(path23.join(metadataPath(root, OUTPUT_DIR), "output.log"));
     await vscode9.window.showTextDocument(logUri, { preview: false, viewColumn: vscode9.ViewColumn.Beside });
   }
   getBuildId() {
@@ -24752,7 +25177,7 @@ var CompileService2 = class {
       if (!file.path.endsWith(".tex")) {
         continue;
       }
-      const content = await fs16.readFile(path22.join(root, file.path), "utf8").catch(() => "");
+      const content = await fs17.readFile(path23.join(root, file.path), "utf8").catch(() => "");
       if (/\\documentclass(?:\[[^\]]*\])?\{[^}]+\}/.test(content)) {
         return file.path;
       }
@@ -24767,7 +25192,7 @@ function extractBuildId(url) {
 // src/overleaf/overleafClient.ts
 var http = __toESM(require("http"));
 var https = __toESM(require("https"));
-var path23 = __toESM(require("path"));
+var path24 = __toESM(require("path"));
 var import_module = require("module");
 var import_stream = require("stream");
 var import_form_data = __toESM(require_form_data());
@@ -25135,7 +25560,7 @@ var OverleafClient = class {
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get("location");
         if (!location || redirects >= 5) {
-          throw new OverleafHttpError(`Overleaf download redirect failed for ${path23.basename(currentUrl)}.`, res.status);
+          throw new OverleafHttpError(`Overleaf download redirect failed for ${path24.basename(currentUrl)}.`, res.status);
         }
         currentUrl = new URL(location, currentUrl).toString();
         redirects += 1;
@@ -25200,7 +25625,7 @@ var OverleafSocketSession = class {
   constructor(serverUrl, identity, timeouts, query) {
     this.identity = identity;
     this.timeouts = timeouts;
-    const runtimeRoot = path23.join(__dirname, "vendor", "socket.io-client");
+    const runtimeRoot = path24.join(__dirname, "vendor", "socket.io-client");
     const socketIo = loadSocketIoClient(runtimeRoot);
     patchSocketIoHandshake(socketIo, runtimeRoot);
     const connect = socketIo.connect.bind(socketIo);
@@ -25235,7 +25660,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve16, reject) => {
+    return new Promise((resolve17, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -25248,7 +25673,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve16();
+        error ? reject(error) : resolve17();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -25273,7 +25698,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve16, reject) => {
+    return new Promise((resolve17, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -25285,7 +25710,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve16(project);
+        error ? reject(error) : resolve17(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -25337,7 +25762,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve16, reject) => {
+    return new Promise((resolve17, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -25347,7 +25772,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve16(values ?? []);
+        error ? reject(error) : resolve17(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -25416,9 +25841,9 @@ function parseContentRange(value) {
 function abortError(signal) {
   return signal?.reason instanceof Error ? signal.reason : new Error("Operation cancelled.");
 }
-function loadSocketIoClient(runtimeRoot = path23.join(__dirname, "vendor", "socket.io-client")) {
+function loadSocketIoClient(runtimeRoot = path24.join(__dirname, "vendor", "socket.io-client")) {
   const requireFromExtension = (0, import_module.createRequire)(__filename);
-  const entry = path23.join(runtimeRoot, "lib", "io.js");
+  const entry = path24.join(runtimeRoot, "lib", "io.js");
   let loaded;
   try {
     loaded = requireFromExtension(entry);
@@ -25446,14 +25871,14 @@ function loadSocketIoClient(runtimeRoot = path23.join(__dirname, "vendor", "sock
   throw new Error(`Could not load socket.io-client connect function. Loaded shape: ${shape || "empty"}.`);
 }
 function loadSocketIoWebSocket(runtimeRoot) {
-  const entry = path23.join(runtimeRoot, "lib", "io.js");
+  const entry = path24.join(runtimeRoot, "lib", "io.js");
   const requireFromRuntime = (0, import_module.createRequire)(entry);
   let loaded;
   try {
     loaded = requireFromRuntime("ws");
   } catch (error) {
     const message = formatUnknownError(error);
-    throw new Error(`Could not load the Overleaf WebSocket runtime from ${path23.join(runtimeRoot, "node_modules", "ws")}: ${message}. Rebuild or reinstall the extension.`);
+    throw new Error(`Could not load the Overleaf WebSocket runtime from ${path24.join(runtimeRoot, "node_modules", "ws")}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidate = loaded?.default ?? loaded;
   if (typeof candidate !== "function") {
@@ -25552,7 +25977,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve16) => setTimeout(resolve16, 250 * 2 ** attempt));
+      await new Promise((resolve17) => setTimeout(resolve17, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -25584,7 +26009,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve16, reject) => {
+  return new Promise((resolve17, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -25612,7 +26037,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve16({
+            resolve17({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -25706,7 +26131,7 @@ async function assertOk(res, route) {
     code = void 0;
   }
   throw new OverleafHttpError(
-    `Overleaf request failed (${res.status}) for ${path23.basename(route)}: ${body.slice(0, 500)}`,
+    `Overleaf request failed (${res.status}) for ${path24.basename(route)}: ${body.slice(0, 500)}`,
     res.status,
     code,
     body.slice(0, 500)
@@ -25714,12 +26139,12 @@ async function assertOk(res, route) {
 }
 
 // src/overleaf/realtimeSync.ts
-var fs21 = __toESM(require("fs/promises"));
-var path26 = __toESM(require("path"));
+var fs22 = __toESM(require("fs/promises"));
+var path27 = __toESM(require("path"));
 var vscode10 = __toESM(require("vscode"));
 
 // src/overleaf/binaryTransactions.ts
-var fs17 = __toESM(require("fs/promises"));
+var fs18 = __toESM(require("fs/promises"));
 var BinaryTransactionStore = class {
   constructor(root) {
     this.root = root;
@@ -25727,7 +26152,7 @@ var BinaryTransactionStore = class {
   root;
   queue = Promise.resolve();
   async list() {
-    const raw = await fs17.readFile(metadataPath(this.root, TRANSACTIONS_NAME), "utf8").catch(() => void 0);
+    const raw = await fs18.readFile(metadataPath(this.root, TRANSACTIONS_NAME), "utf8").catch(() => void 0);
     return raw ? JSON.parse(raw) : [];
   }
   async upsert(transaction) {
@@ -25757,8 +26182,8 @@ var BinaryTransactionStore = class {
 };
 
 // src/overleaf/syncStatus.ts
-var fs18 = __toESM(require("fs/promises"));
-var path24 = __toESM(require("path"));
+var fs19 = __toESM(require("fs/promises"));
+var path25 = __toESM(require("path"));
 function classifySyncStatus(input) {
   const entity = input.remoteFile ?? input.manifestFile;
   const baseHash = input.baseHash ?? input.manifestFile?.baseHash ?? input.manifestFile?.sha1;
@@ -25933,14 +26358,14 @@ async function listLocalProjectFiles(root, manifest) {
   await walk(root, "");
   return files.sort();
   async function walk(absDir, relDir) {
-    const entries = await fs18.readdir(absDir, { withFileTypes: true }).catch(() => []);
+    const entries = await fs19.readdir(absDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      const relPath = toPosixPath2(path24.posix.join(relDir, entry.name));
+      const relPath = toPosixPath2(path25.posix.join(relDir, entry.name));
       const tracked = isTrackedPathOrParent(manifest, relPath);
       if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) {
         continue;
       }
-      const absPath = path24.join(root, relPath);
+      const absPath = path25.join(root, relPath);
       if (entry.isDirectory()) {
         await walk(absPath, relPath);
       } else if (entry.isFile()) {
@@ -25957,11 +26382,11 @@ function isTrackedPathOrParent(manifest, relPath) {
   return Object.keys(manifest.files).some((item) => item.startsWith(prefix)) || Object.keys(manifest.folders).some((item) => item.startsWith(prefix));
 }
 async function fileHash(filePath) {
-  const content = await fs18.readFile(filePath).catch(() => void 0);
+  const content = await fs19.readFile(filePath).catch(() => void 0);
   return content ? sha1(content) : void 0;
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false) {
-  const stat4 = await fs18.stat(filePath).catch(() => void 0);
+  const stat4 = await fs19.stat(filePath).catch(() => void 0);
   if (!stat4?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
@@ -25990,7 +26415,7 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false) {
 }
 function trashPathFor(root, relPath) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  return path24.join(root, ".overleaf-codex", "trash", stamp, relPath);
+  return path25.join(root, ".overleaf-codex", "trash", stamp, relPath);
 }
 function shouldSkip(relPath) {
   return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
@@ -26011,12 +26436,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path30, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path30);
+  setPath(path31, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path31);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path30) {
-    this.paths.delete(toPosixPath2(path30));
+  clearPath(path31) {
+    this.paths.delete(toPosixPath2(path31));
   }
   clearPaths() {
     this.paths.clear();
@@ -26028,16 +26453,16 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path30 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path30, { ...entry, path: path30 });
+      const path31 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path31, { ...entry, path: path31 });
     }
   }
-  canSync(path30) {
+  canSync(path31) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path30) === void 0;
+    return this.findBlocking(path31) === void 0;
   }
-  findBlocking(path30) {
-    const normalized = toPosixPath2(path30);
+  findBlocking(path31) {
+    const normalized = toPosixPath2(path31);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -26057,7 +26482,7 @@ var SyncGate = class {
 };
 
 // src/overleaf/conflictStore.ts
-var fs19 = __toESM(require("fs/promises"));
+var fs20 = __toESM(require("fs/promises"));
 var ConflictStore = class {
   constructor(root) {
     this.root = root;
@@ -26065,7 +26490,7 @@ var ConflictStore = class {
   root;
   queue = Promise.resolve();
   async list() {
-    const raw = await fs19.readFile(metadataPath(this.root, CONFLICT_INDEX_NAME), "utf8").catch(() => void 0);
+    const raw = await fs20.readFile(metadataPath(this.root, CONFLICT_INDEX_NAME), "utf8").catch(() => void 0);
     return raw ? JSON.parse(raw) : [];
   }
   upsert(conflict) {
@@ -26105,8 +26530,8 @@ var ConflictStore = class {
 };
 
 // src/overleaf/manifestStore.ts
-var fs20 = __toESM(require("fs/promises"));
-var path25 = __toESM(require("path"));
+var fs21 = __toESM(require("fs/promises"));
+var path26 = __toESM(require("path"));
 var ManifestStore = class {
   constructor(root) {
     this.root = root;
@@ -26126,7 +26551,7 @@ var ManifestStore = class {
     return this.run(() => writeBaseDoc(this.root, docId, content));
   }
   async readJson(name, fallback) {
-    const raw = await fs20.readFile(metadataPath(this.root, name), "utf8").catch(() => void 0);
+    const raw = await fs21.readFile(metadataPath(this.root, name), "utf8").catch(() => void 0);
     return raw ? JSON.parse(raw) : fallback;
   }
   writeJson(name, value) {
@@ -26135,7 +26560,7 @@ var ManifestStore = class {
   }
   paths() {
     return {
-      manifest: path25.join(this.root, ".overleaf-codex", "manifest.json"),
+      manifest: path26.join(this.root, ".overleaf-codex", "manifest.json"),
       status: syncStatusPath(this.root),
       base: (docId) => baseDocPath(this.root, docId)
     };
@@ -26341,8 +26766,8 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path30) {
-    const normalized = toPosixPath2(path30);
+  forget(path31) {
+    const normalized = toPosixPath2(path31);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
@@ -26375,8 +26800,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path30, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path30);
+      for (const [path31, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path31);
       }
     }
   }
@@ -26405,13 +26830,13 @@ var SyncCheckScheduler = class {
       this.active = true;
       return this.runBatch(request).finally(() => this.pump());
     }
-    return new Promise((resolve16, reject) => {
+    return new Promise((resolve17, reject) => {
       if (!this.pending) {
         this.pending = { request: normalizeRequest(request), waiters: [] };
       } else {
         this.pending.request = mergeRequests(this.pending.request, request);
       }
-      this.pending.waiters.push({ resolve: resolve16, reject });
+      this.pending.waiters.push({ resolve: resolve17, reject });
     });
   }
   schedule(request, delayMs) {
@@ -26684,7 +27109,7 @@ var RealtimeSyncService = class {
       }
       const manifestFile = manifest.files[relPath];
       const remoteFile = remote.manifest.files[relPath];
-      const localAbs = path26.join(root, relPath);
+      const localAbs = path27.join(root, relPath);
       const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full");
       const localHash = localResult.hash;
       if (localResult.reused) localCacheReuseCount += 1;
@@ -26817,7 +27242,7 @@ var RealtimeSyncService = class {
       throw new Error(`${normalized} is excluded by ${LOCAL_IGNORE_NAME} and cannot be pushed to Overleaf.`);
     }
     await this.saveOpenLocalDocument(normalized);
-    const localContent = await fs21.readFile(this.abs(normalized)).catch(() => void 0);
+    const localContent = await fs22.readFile(this.abs(normalized)).catch(() => void 0);
     if (localContent === void 0) {
       if (!entry) {
         throw new Error(`${normalized} does not exist locally or in the manifest.`);
@@ -26911,10 +27336,10 @@ var RealtimeSyncService = class {
     if (remoteContent === void 0) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
-    const suffix = isTextLike(normalized) ? path26.extname(normalized) || ".tex" : ".remote";
+    const suffix = isTextLike(normalized) ? path27.extname(normalized) || ".tex" : ".remote";
     const diffPath = metadataPath(this.root, "conflicts", `${normalized.replace(/[\/\\]/g, "__")}.remote.${Date.now()}${suffix}`);
-    await fs21.mkdir(path26.dirname(diffPath), { recursive: true });
-    await fs21.writeFile(diffPath, remoteContent);
+    await fs22.mkdir(path27.dirname(diffPath), { recursive: true });
+    await fs22.writeFile(diffPath, remoteContent);
     await vscode10.commands.executeCommand(
       "vscode.diff",
       vscode10.Uri.file(diffPath),
@@ -27123,7 +27548,7 @@ var RealtimeSyncService = class {
     if (!relPath || !this.root) {
       return;
     }
-    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path26.join(this.root, relPath)));
+    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path27.join(this.root, relPath)));
     await vscode10.window.showTextDocument(document, {
       selection: new vscode10.Selection(picked.user.row ?? 0, picked.user.column ?? 0, picked.user.row ?? 0, picked.user.column ?? 0),
       preview: false
@@ -27180,7 +27605,7 @@ var RealtimeSyncService = class {
   async useLocalConflict(relPath) {
     const state = this.requireConflict(relPath);
     await this.saveOpenLocalDocument(relPath);
-    const localContent = await fs21.readFile(this.abs(relPath), "utf8");
+    const localContent = await fs22.readFile(this.abs(relPath), "utf8");
     state.paused = false;
     state.conflictPath = void 0;
     state.conflictReason = void 0;
@@ -27206,9 +27631,9 @@ var RealtimeSyncService = class {
     }
   }
   async saveOpenLocalDocument(relPath) {
-    const absPath = path26.normalize(this.abs(relPath));
+    const absPath = path27.normalize(this.abs(relPath));
     const document = vscode10.workspace.textDocuments.find(
-      (item) => path26.normalize(item.uri.fsPath) === absPath
+      (item) => path27.normalize(item.uri.fsPath) === absPath
     );
     if (document?.isDirty) {
       await document.save();
@@ -27251,7 +27676,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest || !this.session || event.selections.length === 0) {
       return;
     }
-    const relPath = toPosixPath2(path26.relative(this.root, event.textEditor.document.uri.fsPath));
+    const relPath = toPosixPath2(path27.relative(this.root, event.textEditor.document.uri.fsPath));
     if (!relPath || relPath.startsWith("..")) {
       return;
     }
@@ -27344,7 +27769,7 @@ var RealtimeSyncService = class {
           continue;
         }
         const relPath = filePathById(this.manifest, user.doc_id);
-        if (!relPath || path26.normalize(editor.document.uri.fsPath) !== path26.normalize(path26.join(this.root, relPath))) {
+        if (!relPath || path27.normalize(editor.document.uri.fsPath) !== path27.normalize(path27.join(this.root, relPath))) {
           continue;
         }
         const range = new vscode10.Range(user.row ?? 0, user.column ?? 0, user.row ?? 0, user.column ?? 0);
@@ -27378,7 +27803,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest) {
       return;
     }
-    const relPath = toPosixPath2(path26.relative(this.root, uri.fsPath));
+    const relPath = toPosixPath2(path27.relative(this.root, uri.fsPath));
     if (relPath === LOCAL_IGNORE_NAME) {
       void this.reloadLocalIgnoreFile();
       return;
@@ -27426,12 +27851,12 @@ var RealtimeSyncService = class {
     this.timers.set(relPath, timer);
   }
   async registerPotentialRenameCreate(relPath) {
-    const stat4 = await fs21.stat(this.abs(relPath)).catch(() => void 0);
+    const stat4 = await fs22.stat(this.abs(relPath)).catch(() => void 0);
     if (!stat4 || stat4.isDirectory()) {
       this.scheduleLocalChange(relPath, "create", 650);
       return;
     }
-    const content = await fs21.readFile(this.abs(relPath)).catch(() => void 0);
+    const content = await fs22.readFile(this.abs(relPath)).catch(() => void 0);
     if (!content) return;
     const detection = this.renameDetector.registerCreate({
       path: relPath,
@@ -27639,7 +28064,7 @@ var RealtimeSyncService = class {
       if (typeof content !== "string") {
         continue;
       }
-      const localContent = await fs21.readFile(this.abs(relPath), "utf8").catch(() => content);
+      const localContent = await fs22.readFile(this.abs(relPath), "utf8").catch(() => content);
       this.docStates.set(relPath, {
         relPath,
         docId: remoteFile.entityId,
@@ -27742,8 +28167,8 @@ var RealtimeSyncService = class {
   async handleVsCodeRenames(event) {
     if (!this.root || !this.manifest || !this.session) return;
     for (const file of event.files) {
-      const oldPath = toPosixPath2(path26.relative(this.root, file.oldUri.fsPath));
-      const newPath = toPosixPath2(path26.relative(this.root, file.newUri.fsPath));
+      const oldPath = toPosixPath2(path27.relative(this.root, file.oldUri.fsPath));
+      const newPath = toPosixPath2(path27.relative(this.root, file.newUri.fsPath));
       if (!oldPath || !newPath || oldPath.startsWith("..") || newPath.startsWith("..")) continue;
       this.cancelPathTimer(oldPath);
       this.cancelPathTimer(newPath);
@@ -27794,8 +28219,8 @@ var RealtimeSyncService = class {
         entity.entityId,
         oldParentFolderId,
         ensured.parentFolderId,
-        path26.posix.basename(normalizedOld),
-        path26.posix.basename(normalizedNew)
+        path27.posix.basename(normalizedOld),
+        path27.posix.basename(normalizedNew)
       );
     } catch (error) {
       await this.rollbackCreatedRemoteFolders(ensured.created);
@@ -27871,7 +28296,7 @@ var RealtimeSyncService = class {
     await this.remapRuntimePaths(oldPath, newPath, false);
   }
   async ensureRemoteParentFolders(relPath) {
-    const parentPath = path26.posix.dirname(toPosixPath2(relPath));
+    const parentPath = path27.posix.dirname(toPosixPath2(relPath));
     const normalizedParent = parentPath === "." ? "" : parentPath;
     const rootFolder = this.manifest.folders[""];
     if (!rootFolder) throw new Error("Overleaf project root folder is missing from the manifest.");
@@ -27920,7 +28345,7 @@ var RealtimeSyncService = class {
       return;
     }
     const absPath = this.abs(relPath);
-    const stat4 = await fs21.stat(absPath).catch(() => void 0);
+    const stat4 = await fs22.stat(absPath).catch(() => void 0);
     if (!stat4) {
       await this.handleLocalDelete(relPath);
       return;
@@ -27929,7 +28354,7 @@ var RealtimeSyncService = class {
       await this.handleLocalFolderCreate(relPath);
       return;
     }
-    const content = await fs21.readFile(absPath);
+    const content = await fs22.readFile(absPath);
     const bypassHash = this.bypassHashes.get(relPath);
     const currentHash = sha1(content);
     if (bypassHash && bypassHash === currentHash) {
@@ -27963,7 +28388,7 @@ var RealtimeSyncService = class {
     if (isTextLike(relPath)) {
       let doc;
       try {
-        doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path26.posix.basename(relPath));
+        doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path27.posix.basename(relPath));
       } catch (error) {
         await this.rollbackCreatedRemoteFolders(ensured.created);
         throw error;
@@ -27982,7 +28407,7 @@ var RealtimeSyncService = class {
     }
     let file;
     try {
-      file = await this.client.uploadFile(this.manifest.projectId, ensured.parentFolderId, path26.posix.basename(relPath), content);
+      file = await this.client.uploadFile(this.manifest.projectId, ensured.parentFolderId, path27.posix.basename(relPath), content);
     } catch (error) {
       await this.rollbackCreatedRemoteFolders(ensured.created);
       throw error;
@@ -28036,7 +28461,7 @@ var RealtimeSyncService = class {
       uploaded = await this.client.uploadFile(
         this.manifest.projectId,
         entry.parentFolderId,
-        path26.posix.basename(relPath),
+        path27.posix.basename(relPath),
         content
       );
     } catch (error) {
@@ -28071,7 +28496,7 @@ var RealtimeSyncService = class {
   }
   async replaceBinaryWithFallbackTransaction(relPath, content, entry, expectedBlobHash) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const finalName = path26.posix.basename(relPath);
+    const finalName = path27.posix.basename(relPath);
     const tempName = transactionName(finalName, `upload-${id}`);
     const backupName = transactionName(finalName, `backup-${id}`);
     const temporary = await this.client.uploadFile(this.manifest.projectId, entry.parentFolderId, tempName, content);
@@ -28203,7 +28628,7 @@ var RealtimeSyncService = class {
       await this.resyncOrConflict(relPath, "Remote version changed unexpectedly.");
       return;
     }
-    const localContent = await fs21.readFile(this.abs(relPath), "utf8").catch(() => state.localCache);
+    const localContent = await fs22.readFile(this.abs(relPath), "utf8").catch(() => state.localCache);
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
       await this.writeLocalFile(relPath, Buffer.from(remoteNext, "utf8"), true);
@@ -28232,7 +28657,7 @@ var RealtimeSyncService = class {
       await this.resyncOrConflict("", "Remote create used an unknown parent folder.");
       return;
     }
-    const relPath = path26.posix.join(parentPath, entity.name);
+    const relPath = path27.posix.join(parentPath, entity.name);
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
       return;
@@ -28276,7 +28701,7 @@ var RealtimeSyncService = class {
     if (parentPath === void 0) {
       return;
     }
-    const relPath = path26.posix.join(parentPath, folder.name);
+    const relPath = path27.posix.join(parentPath, folder.name);
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
       return;
@@ -28286,7 +28711,7 @@ var RealtimeSyncService = class {
       entityId: folder._id,
       parentFolderId
     });
-    await fs21.mkdir(this.abs(relPath), { recursive: true });
+    await fs22.mkdir(this.abs(relPath), { recursive: true });
     await this.persistManifest();
   }
   async handleRemoteRenamed(entityId, newName) {
@@ -28302,7 +28727,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path26.posix.join(path26.posix.dirname(oldPath), newName).replace(/^\.\//, "");
+      const newPath = path27.posix.join(path27.posix.dirname(oldPath), newName).replace(/^\.\//, "");
       delete this.manifest.files[oldPath];
       file.path = newPath;
       this.manifest.files[newPath] = file;
@@ -28312,7 +28737,7 @@ var RealtimeSyncService = class {
     }
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
-      const newPath = path26.posix.join(path26.posix.dirname(folder.path), newName).replace(/^\.\//, "");
+      const newPath = path27.posix.join(path27.posix.dirname(folder.path), newName).replace(/^\.\//, "");
       await this.remapFolderPath(folder.path, newPath);
     }
   }
@@ -28333,7 +28758,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path26.posix.join(parentPath, path26.posix.basename(oldPath));
+      const newPath = path27.posix.join(parentPath, path27.posix.basename(oldPath));
       delete this.manifest.files[oldPath];
       file.path = newPath;
       file.parentFolderId = newParentFolderId;
@@ -28344,7 +28769,7 @@ var RealtimeSyncService = class {
     }
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
-      await this.remapFolderPath(folder.path, path26.posix.join(parentPath, path26.posix.basename(folder.path)));
+      await this.remapFolderPath(folder.path, path27.posix.join(parentPath, path27.posix.basename(folder.path)));
     }
   }
   async handleRemoteRemoved(entityId) {
@@ -28411,12 +28836,12 @@ var RealtimeSyncService = class {
     const conflicts = await this.conflictStore?.list() ?? [];
     for (const conflict of conflicts) {
       const state = this.docStates.get(conflict.relPath);
-      const snapshotExists = await fs21.stat(conflict.remotePath).then(() => true, () => false);
+      const snapshotExists = await fs22.stat(conflict.remotePath).then(() => true, () => false);
       if (!state || state.docId !== conflict.docId || !snapshotExists) {
         await this.conflictStore?.remove(conflict.relPath);
         continue;
       }
-      const remoteContent = await fs21.readFile(conflict.remotePath, "utf8");
+      const remoteContent = await fs22.readFile(conflict.remotePath, "utf8");
       state.version = Math.max(state.version, conflict.remoteVersion);
       state.remoteCache = remoteContent;
       state.paused = true;
@@ -28435,7 +28860,7 @@ var RealtimeSyncService = class {
     }
     const state = await this.ensureDocState(relPath);
     const joined = await this.session.joinDoc(state.docId);
-    const localContent = await fs21.readFile(this.abs(relPath), "utf8").catch(() => "");
+    const localContent = await fs22.readFile(this.abs(relPath), "utf8").catch(() => "");
     if (localContent === state.localCache) {
       state.version = joined.version;
       state.remoteCache = joined.content;
@@ -28495,9 +28920,9 @@ var RealtimeSyncService = class {
     }
     await this.remapRuntimePaths(oldPath, newPath, true);
     if (renameLocalFs) {
-      await fs21.mkdir(path26.dirname(newAbs), { recursive: true });
-      await fs21.rename(oldAbs, newAbs).catch(async () => {
-        await fs21.mkdir(newAbs, { recursive: true });
+      await fs22.mkdir(path27.dirname(newAbs), { recursive: true });
+      await fs22.rename(oldAbs, newAbs).catch(async () => {
+        await fs22.mkdir(newAbs, { recursive: true });
       });
     }
     await this.persistManifest();
@@ -28529,31 +28954,31 @@ var RealtimeSyncService = class {
         item.path = nextPath;
         if (item.localPath) item.localPath = nextPath;
         if (item.remotePath) item.remotePath = nextPath;
-        item.changeKind = path26.posix.dirname(oldPath) === path26.posix.dirname(newPath) ? "rename" : "move";
+        item.changeKind = path27.posix.dirname(oldPath) === path27.posix.dirname(newPath) ? "rename" : "move";
       }
     }
   }
   async renameLocal(oldPath, newPath) {
     const oldAbs = this.abs(oldPath);
     const newAbs = this.abs(newPath);
-    await fs21.mkdir(path26.dirname(newAbs), { recursive: true });
-    await fs21.rename(oldAbs, newAbs).catch(() => void 0);
+    await fs22.mkdir(path27.dirname(newAbs), { recursive: true });
+    await fs22.rename(oldAbs, newAbs).catch(() => void 0);
   }
   async moveLocalToTrash(relPath) {
     const source = this.abs(relPath);
     const target = trashPathFor(this.root, relPath);
-    const exists4 = await fs21.stat(source).catch(() => void 0);
+    const exists4 = await fs22.stat(source).catch(() => void 0);
     if (!exists4) {
       return;
     }
-    await fs21.mkdir(path26.dirname(target), { recursive: true });
-    await fs21.rename(source, target).catch(async () => {
+    await fs22.mkdir(path27.dirname(target), { recursive: true });
+    await fs22.rename(source, target).catch(async () => {
       if (exists4.isDirectory()) {
-        await fs21.cp(source, target, { recursive: true });
-        await fs21.rm(source, { recursive: true, force: true });
+        await fs22.cp(source, target, { recursive: true });
+        await fs22.rm(source, { recursive: true, force: true });
       } else {
-        await fs21.copyFile(source, target);
-        await fs21.rm(source, { force: true });
+        await fs22.copyFile(source, target);
+        await fs22.rm(source, { force: true });
       }
     });
     this.log(`Moved ${relPath} to local trash: ${target}`);
@@ -28563,7 +28988,7 @@ var RealtimeSyncService = class {
     if (!entry || entry.entityType !== "doc") {
       return;
     }
-    const content = await fs21.readFile(this.abs(relPath), "utf8").catch(() => void 0);
+    const content = await fs22.readFile(this.abs(relPath), "utf8").catch(() => void 0);
     if (content === void 0) {
       return;
     }
@@ -28573,11 +28998,11 @@ var RealtimeSyncService = class {
   }
   async writeLocalFile(relPath, content, bypass) {
     const absPath = this.abs(relPath);
-    await fs21.mkdir(path26.dirname(absPath), { recursive: true });
+    await fs22.mkdir(path27.dirname(absPath), { recursive: true });
     if (bypass) {
       this.bypassHashes.set(relPath, sha1(content));
     }
-    await fs21.writeFile(absPath, content);
+    await fs22.writeFile(absPath, content);
   }
   async persistManifest() {
     await this.storeFor(this.root).writeManifest(this.manifest);
@@ -28589,7 +29014,7 @@ var RealtimeSyncService = class {
     return new ManifestStore(root);
   }
   abs(relPath) {
-    return path26.join(this.root, relPath);
+    return path27.join(this.root, relPath);
   }
   requireReady() {
     if (!this.root || !this.client || !this.manifest || !this.session) {
@@ -28680,8 +29105,8 @@ var RealtimeSyncService = class {
   }
 };
 function transactionName(filename, suffix) {
-  const ext2 = path26.posix.extname(filename);
-  const stem = path26.posix.basename(filename, ext2);
+  const ext2 = path27.posix.extname(filename);
+  const stem = path27.posix.basename(filename, ext2);
   const marker = `.overleaf-codex-${suffix}`;
   const maxStem = Math.max(1, 150 - ext2.length - marker.length);
   return `${stem.slice(0, maxStem)}${marker}${ext2}`;
@@ -28752,23 +29177,23 @@ var SecretStore = class {
 };
 
 // src/overleaf/mirrorRoots.ts
-var path27 = __toESM(require("path"));
+var path28 = __toESM(require("path"));
 function pathIsWithin(root, candidate) {
-  const relative6 = path27.relative(path27.resolve(root), path27.resolve(candidate));
-  return relative6 === "" || relative6 !== ".." && !relative6.startsWith(`..${path27.sep}`) && !path27.isAbsolute(relative6);
+  const relative6 = path28.relative(path28.resolve(root), path28.resolve(candidate));
+  return relative6 === "" || relative6 !== ".." && !relative6.startsWith(`..${path28.sep}`) && !path28.isAbsolute(relative6);
 }
 function firstWorkspaceMirrorRoot(workspaceRoots, hasManifest) {
   for (const workspaceRoot of workspaceRoots) {
-    const root = path27.resolve(workspaceRoot);
+    const root = path28.resolve(workspaceRoot);
     if (hasManifest(root)) return root;
   }
   return void 0;
 }
 function resolveMirrorRootForPath(candidate, workspaceRoots, hasManifest) {
-  const resolved = path27.resolve(candidate);
+  const resolved = path28.resolve(candidate);
   if (hasManifest(resolved)) return resolved;
   for (const workspaceRoot of workspaceRoots) {
-    const root = path27.resolve(workspaceRoot);
+    const root = path28.resolve(workspaceRoot);
     if (pathIsWithin(root, resolved) && hasManifest(root)) return root;
   }
   return void 0;
@@ -28919,7 +29344,7 @@ var OverleafService = class {
   async pdfStatus(candidate) {
     const root = await this.requireMirrorRoot(candidate);
     const pdf = await this.findPdf(root);
-    return { path: pdf ?? path28.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
+    return { path: pdf ?? path29.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
   }
   async handle(command, payload = {}) {
     switch (command) {
@@ -29322,14 +29747,14 @@ var OverleafService = class {
   }
   async pickMirrorParentFolder() {
     const defaultRoot = this.mirrorManager.getConfiguredProjectsRoot();
-    await fs22.mkdir(defaultRoot, { recursive: true }).catch(() => void 0);
+    await fs23.mkdir(defaultRoot, { recursive: true }).catch(() => void 0);
     const picked = await vscode11.window.showOpenDialog({ title: "Select Parent Folder for Local Mirror", openLabel: "Use This Folder", canSelectFiles: false, canSelectFolders: true, canSelectMany: false, defaultUri: vscode11.Uri.file(defaultRoot) });
     return picked?.[0]?.scheme === "file" ? picked[0].fsPath : void 0;
   }
   async pickMirror() {
     const mirrors = await this.listMirrors();
     if (!mirrors.length) return void 0;
-    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path28.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
+    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path29.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
     return picked?.mirror;
   }
   async pickStatus(statuses) {
@@ -29379,11 +29804,11 @@ var OverleafService = class {
   }
   async findPdf(root) {
     const outputRoot = metadataPath(root, OUTPUT_DIR);
-    const files = await fs22.readdir(outputRoot).catch(() => []);
+    const files = await fs23.readdir(outputRoot).catch(() => []);
     const candidate = files.find((name) => name.toLowerCase().endsWith(".pdf"));
     if (!candidate) return void 0;
-    const full = path28.join(outputRoot, candidate);
-    return (await fs22.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
+    const full = path29.join(outputRoot, candidate);
+    return (await fs23.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
   }
 };
 function existsSync4(filePath) {
@@ -29405,7 +29830,7 @@ function abortSignalFromToken(token) {
 }
 async function exists3(filePath) {
   try {
-    await fs22.access(filePath);
+    await fs23.access(filePath);
     return true;
   } catch {
     return false;
@@ -29508,7 +29933,9 @@ function activate(context) {
     command("latexEditingToolkit.initializeWorkspace", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const result = await service.handle("initialize-workspace", {});
+      const current = await service.handle("state", {});
+      const templateId = current.state?.workspace_template?.templateId;
+      const result = await service.handle("initialize-workspace", templateId && templateId !== "unknown" ? { template_id: templateId } : {});
       treeProvider.refresh();
       vscode12.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
     }),
@@ -29654,13 +30081,13 @@ async function createProjectWizard(context, registry, treeProvider, output) {
   for (const folder of vscode12.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path29.dirname(folder.uri.fsPath));
+      suggested.add(path30.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
   const location = await vscode12.window.showQuickPick(
     [
-      ...[...suggested].map((folderPath) => ({ label: path29.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...[...suggested].map((folderPath) => ({ label: path30.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
@@ -29693,14 +30120,23 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     }
   });
   if (!projectName) return;
+  const pickedKind = await vscode12.window.showQuickPick(
+    [
+      { label: "Book", description: "Long-form notes with chapters", documentKind: "book" },
+      { label: "Article", description: "Article and homework notes", documentKind: "article" },
+      { label: "Beamer Slides", description: "Presentation notes with a child theme", documentKind: "beamer" }
+    ],
+    { title: "Create Project (3/4): Document Type", placeHolder: "Choose the document type" }
+  );
+  if (!pickedKind) return;
   const pickedTemplate = await vscode12.window.showQuickPick(
-    STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+    STARTER_TEMPLATE_DEFINITIONS.filter((template) => template.kind === pickedKind.documentKind).map((template) => ({
       label: template.label,
       description: template.id,
       detail: template.description,
       template
     })),
-    { title: "Create Project (3/3): Template", placeHolder: "Choose the document structure" }
+    { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
@@ -29719,7 +30155,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const nextRecent = [parentPath, ...recent.filter((item) => path29.normalize(item) !== path29.normalize(parentPath))].slice(0, 8);
+  const nextRecent = [parentPath, ...recent.filter((item) => path30.normalize(item) !== path30.normalize(parentPath))].slice(0, 8);
   await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
@@ -29836,9 +30272,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path29.resolve(rootPath);
+  let canonical = path30.resolve(rootPath);
   try {
-    canonical = fs23.realpathSync.native(canonical);
+    canonical = fs24.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -29877,7 +30313,7 @@ async function openLocalProject(projectPathArg) {
     return;
   }
   try {
-    if (!(await fs23.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
+    if (!(await fs24.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
     vscode12.window.showWarningMessage(`Local note project not found: ${projectPath}`);
     return;
@@ -29912,7 +30348,7 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
     return;
   }
   const project = await registry.find(projectPath);
-  const label = project?.label ?? path29.basename(path29.normalize(projectPath));
+  const label = project?.label ?? path30.basename(path30.normalize(projectPath));
   const choice = await vscode12.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
     { modal: true },
@@ -29937,15 +30373,19 @@ function localProjectPathFromArgument(value) {
 async function createStarterInWorkspace(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
-  const templates = scoped.response.schema.starter_templates;
+  const pickedKind = await vscode12.window.showQuickPick(
+    scoped.response.schema.starter_template_groups.filter((group) => group.templates.length > 0).map((group) => ({ label: group.label, description: `${group.templates.length} starter(s)`, group })),
+    { title: "Select document type", placeHolder: "Choose the starter family" }
+  );
+  if (!pickedKind) return;
   const picked = await vscode12.window.showQuickPick(
-    templates.map((template) => ({
+    pickedKind.group.templates.map((template) => ({
       label: template.label,
       description: template.id,
       detail: template.description,
       template
     })),
-    { placeHolder: "Select starter template" }
+    { title: `Select ${pickedKind.label} starter`, placeHolder: "Choose starter template" }
   );
   if (!picked) return;
   const outputTarget = await vscode12.window.showInputBox({
@@ -29955,7 +30395,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs23.existsSync(path29.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs24.existsSync(path30.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode12.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -30185,7 +30625,7 @@ var ToolkitTreeProvider = class {
       return this.actionNode(
         `overleaf-mirror:${mirror.root}`,
         mirror.name,
-        `${status} \xB7 ${path29.basename(path29.dirname(mirror.root))}`,
+        `${status} \xB7 ${path30.basename(path30.dirname(mirror.root))}`,
         icon,
         "overleafCodex.openLocalMirror",
         [{ mirror }]
@@ -30211,11 +30651,13 @@ var ToolkitTreeProvider = class {
     );
   }
   localProjectNode(project, isOpen) {
-    const parent = path29.basename(path29.dirname(project.rootPath)) || path29.dirname(project.rootPath);
+    const parent = path30.basename(path30.dirname(project.rootPath)) || path30.dirname(project.rootPath);
+    const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
+    const presentationDescription = project.templateId === "beamer-generic" ? "Beamer \xB7 Generic Beamer \xB7 main.tex" : template?.kind === "beamer" ? `Beamer \xB7 ${template.label} \xB7 main.tex` : void 0;
     return {
       id: `local-project:${project.id}`,
       label: project.label,
-      description: project.missing ? "Missing" : isOpen ? `Open \xB7 ${parent}` : parent,
+      description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open \xB7 ${parent}` : parent),
       tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
       iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
       commandId: "latexEditingToolkit.openLocalProject",
@@ -30256,7 +30698,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     const activeSnippetProfile = vscode12.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path29.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path30.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -30278,36 +30720,54 @@ var ToolkitTreeProvider = class {
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
       ], vscode12.TreeItemCollapsibleState.Expanded),
-      this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
-        this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
-        this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
-        this.groupNode(`appearance-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => this.actionNode(
-          `toggle-theme-${toggle.id}`,
-          toggle.label,
-          state.toggles[toggle.id] ? "on" : "off",
-          state.toggles[toggle.id] ? "check" : "circle-slash",
-          "latexEditingToolkit.toggleThemeOption",
-          [folder.uri, toggle.id]
-        )))
-      ]),
-      this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
-        this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
-        this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => this.actionNode(
-          `pick-class-config-${field.id}`,
-          field.label,
-          this.optionLabel(field.options, state.class_config[field.id]),
-          "settings",
-          "latexEditingToolkit.pickClassConfig",
-          [folder.uri, field.id]
-        )))
-      ]),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
-        this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
-        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
-        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
-        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
-        this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
-      ]),
+      ...state.workspace_template.kind === "beamer" ? [
+        this.groupNode(`presentation:${folder.uri.toString()}`, "Presentation", "preview", [
+          this.infoNode(`presentation-template:${folder.uri.toString()}`, "Template", this.templateLabel(schema, state.workspace_template.templateId), "symbol-color"),
+          this.infoNode(`presentation-detection:${folder.uri.toString()}`, "Detection", state.workspace_template.detectionSource, state.workspace_template.warning ? "warning" : "pass-filled"),
+          this.infoNode(`presentation-capabilities:${folder.uri.toString()}`, "Capabilities", `${schema.beamer_capabilities.length} available`, "settings-gear")
+        ]),
+        this.groupNode(`document:${folder.uri.toString()}`, "Document", "device-camera-video", [
+          this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
+          this.infoNode(`presentation-ratio:${folder.uri.toString()}`, "Aspect Ratio", state.beamer_settings.aspectRatio === "43" ? "4:3" : "16:9", "screen-full")
+        ]),
+        this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
+          this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+          this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+          this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
+          this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+        ])
+      ] : [
+        this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
+          this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
+          this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
+          this.groupNode(`appearance-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => this.actionNode(
+            `toggle-theme-${toggle.id}`,
+            toggle.label,
+            state.toggles[toggle.id] ? "on" : "off",
+            state.toggles[toggle.id] ? "check" : "circle-slash",
+            "latexEditingToolkit.toggleThemeOption",
+            [folder.uri, toggle.id]
+          )))
+        ]),
+        this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
+          this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
+          this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => this.actionNode(
+            `pick-class-config-${field.id}`,
+            field.label,
+            this.optionLabel(field.options, state.class_config[field.id]),
+            "settings",
+            "latexEditingToolkit.pickClassConfig",
+            [folder.uri, field.id]
+          )))
+        ]),
+        this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
+          this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+          this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+          this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
+          this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
+          this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+        ])
+      ],
       this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
         this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
         this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
@@ -30337,6 +30797,9 @@ var ToolkitTreeProvider = class {
     if (state.compile_last_success === false) return "Build failed";
     if (state.compile_last_success === true) return "PDF ready";
     return "Not compiled";
+  }
+  templateLabel(schema, templateId) {
+    return schema.starter_templates.find((entry) => entry.id === templateId)?.label || (templateId === "beamer-generic" ? "Generic Beamer" : templateId);
   }
   workspaceErrorGroups(folder, error) {
     const folderArg = [folder.uri];
@@ -30463,8 +30926,8 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode12.Uri.file(path29.join(context.extensionPath, "dist")),
-          vscode12.Uri.file(path29.join(context.extensionPath, "dist", "monaco"))
+          vscode12.Uri.file(path30.join(context.extensionPath, "dist")),
+          vscode12.Uri.file(path30.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -30564,12 +31027,12 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists4 = false;
         try {
-          const stat4 = await fs23.promises.stat(pdfPath);
+          const stat4 = await fs24.promises.stat(pdfPath);
           exists4 = stat4.isFile();
         } catch {
           exists4 = false;
         }
-        data = { path: rawPath || path29.basename(pdfPath), exists: exists4 };
+        data = { path: rawPath || path30.basename(pdfPath), exists: exists4 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
@@ -30624,7 +31087,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const picked = await vscode12.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
         if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs23.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs24.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
           data = { ...await service.handle("state", {}), personal_style_import: summary };
@@ -30634,8 +31097,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode12.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode12.Uri.file(path29.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs23.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode12.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode12.Uri.file(path30.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs24.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
@@ -30676,10 +31139,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode12.Uri.file(path29.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode12.Uri.file(path29.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode12.Uri.file(path29.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode12.Uri.file(path29.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode12.Uri.file(path30.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode12.Uri.file(path30.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode12.Uri.file(path30.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode12.Uri.file(path30.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -30696,7 +31159,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs23.existsSync(path29.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs24.existsSync(path30.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

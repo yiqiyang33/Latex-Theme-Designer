@@ -7,6 +7,8 @@ import { CompileService } from "./compile";
 import { SplitterService } from "./splitter";
 import { StateService } from "./state";
 import { TemplateService } from "./template";
+import { beamerConfigPaths, enableBeamerHooks, normalizeBeamerSettings, templateMetadataPath, writeBeamerSettings } from "./beamer";
+import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { exists } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
 
@@ -88,7 +90,13 @@ export class ToolkitService {
       case "template-bootstrap":
         return this.runSerialized(async () => {
           const output = this.template.normalizeOutputTarget(payload.output_target);
-          const paths = [...this.workspaceAssetPaths(), output, "theme.ui.json", ".vscode/settings.json"];
+          const templateId = String(payload.template_id || "book-minimal");
+          const paths = [...this.workspaceAssetPaths(templateId, output), output, "theme.ui.json", ".vscode/settings.json", templateMetadataPath(this.rootDir)];
+          const definition = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId);
+          if (definition?.kind === "beamer") {
+            const config = beamerConfigPaths(this.rootDir, output);
+            paths.push(config.classOptions, config.settings);
+          }
           const result = await this.history.runFileChange(command, "Generate starter", paths, async () => {
             const created = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite));
             return { ...(created.response as ResponseState), generated_target: created.generated_target, overwrote_existing: created.overwrote_existing };
@@ -169,8 +177,34 @@ export class ToolkitService {
         return this.runSerialized(async (): Promise<CleanResult> => this.cleanup.clean(Boolean(payload.dry_run)));
       case "compile":
         return this.runSerialized(async (): Promise<CompileResult> => this.compile.compileFromPayload(payload));
+      case "beamer-settings":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (current.workspace_template.kind !== "beamer") throw new Error("Presentation settings are only available for Beamer targets.");
+          const target = String(payload.target || current.compile_target);
+          const settings = normalizeBeamerSettings(payload.settings, current.beamer_settings);
+          const config = beamerConfigPaths(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Edit Presentation settings", [config.dir, config.classOptions, config.settings], async () => {
+            await writeBeamerSettings(this.rootDir, target, settings);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
+      case "beamer-enable-hooks":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (current.workspace_template.kind !== "beamer") throw new Error("Presentation hooks are only available for Beamer targets.");
+          const target = String(payload.target || current.compile_target);
+          const config = beamerConfigPaths(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Enable Beamer Toolkit controls", [path.resolve(this.rootDir, target), config.dir, config.classOptions, config.settings], async () => {
+            await writeBeamerSettings(this.rootDir, target, current.beamer_settings);
+            await enableBeamerHooks(this.rootDir, target);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
       case "initialize-workspace":
-        return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace());
+        return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(String(payload.template_id || "")), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace(String(payload.template_id || "") || undefined));
       case "upgrade-theme-assets":
         return this.runFileMutation(command, "Upgrade theme assets", ["theme.sty", "theorems.tex", "commands.tex", "theme.colors.tex", "theme.ui.json"], payload, async () => {
           const explicitPolicy = payload.color_policy;
@@ -221,11 +255,20 @@ export class ToolkitService {
     return { value, history } as unknown as T & { history: typeof history };
   }
 
-  private workspaceAssetPaths(): string[] {
+  private workspaceAssetPaths(templateId?: string, outputTarget?: string): string[] {
+    const selected = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : undefined;
+    if (selected?.kind === "beamer") {
+      const baseDir = outputTarget ? path.dirname(outputTarget) : ".";
+      return [
+        ...selected.assetManifest.map((asset) => path.join(baseDir, asset)),
+        path.join(baseDir, ".latex-editing-toolkit")
+      ];
+    }
+    if (templateId?.startsWith("beamer-")) return [".latex-editing-toolkit"];
     return [
       "theme.sty", "theorems.tex", "commands.tex", "references.bib",
       "Fig", "Fig/cover.png", "templates",
-      "templates/book-minimal.tex", "templates/article-minimal.tex", "templates/homework-assignment.tex"
+      ...STARTER_TEMPLATE_DEFINITIONS.map((entry) => `templates/${entry.filename}`)
     ];
   }
 

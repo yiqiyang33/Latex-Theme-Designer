@@ -119,7 +119,9 @@ export function activate(context: vscode.ExtensionContext): void {
     command("latexEditingToolkit.initializeWorkspace", async (folderUri?: vscode.Uri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const result = await service.handle("initialize-workspace", {});
+      const current = await service.handle("state", {}) as { state?: { workspace_template?: { templateId?: string } } };
+      const templateId = current.state?.workspace_template?.templateId;
+      const result = await service.handle("initialize-workspace", templateId && templateId !== "unknown" ? { template_id: templateId } : {});
       treeProvider.refresh();
       vscode.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3000);
     }),
@@ -317,14 +319,23 @@ async function createProjectWizard(
   });
   if (!projectName) return;
 
-  const pickedTemplate = await vscode.window.showQuickPick(
-    STARTER_TEMPLATE_DEFINITIONS.map((template) => ({
+  const pickedKind = await vscode.window.showQuickPick<{ label: string; description: string; documentKind: "book" | "article" | "beamer" }>(
+    [
+      { label: "Book", description: "Long-form notes with chapters", documentKind: "book" },
+      { label: "Article", description: "Article and homework notes", documentKind: "article" },
+      { label: "Beamer Slides", description: "Presentation notes with a child theme", documentKind: "beamer" }
+    ],
+    { title: "Create Project (3/4): Document Type", placeHolder: "Choose the document type" }
+  );
+  if (!pickedKind) return;
+  const pickedTemplate = await vscode.window.showQuickPick<{ label: string; description: string; detail: string; template: typeof STARTER_TEMPLATE_DEFINITIONS[number] }>(
+    STARTER_TEMPLATE_DEFINITIONS.filter((template) => template.kind === pickedKind.documentKind).map((template) => ({
       label: template.label,
       description: template.id,
       detail: template.description,
       template
     })),
-    { title: "Create Project (3/3): Template", placeHolder: "Choose the document structure" }
+    { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
 
@@ -599,15 +610,21 @@ function localProjectPathFromArgument(value: unknown): string | undefined {
 async function createStarterInWorkspace(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
-  const templates = scoped.response.schema.starter_templates;
-  const picked = await vscode.window.showQuickPick(
-    templates.map((template) => ({
+  const pickedKind = await vscode.window.showQuickPick<{ label: string; description: string; group: typeof scoped.response.schema.starter_template_groups[number] }>(
+    scoped.response.schema.starter_template_groups
+      .filter((group: any) => group.templates.length > 0)
+      .map((group: any) => ({ label: group.label, description: `${group.templates.length} starter(s)`, group })),
+    { title: "Select document type", placeHolder: "Choose the starter family" }
+  );
+  if (!pickedKind) return;
+  const picked = await vscode.window.showQuickPick<{ label: string; description: string; detail: string; template: any }>(
+    pickedKind.group.templates.map((template: any) => ({
       label: template.label,
       description: template.id,
       detail: template.description,
       template
     })),
-    { placeHolder: "Select starter template" }
+    { title: `Select ${pickedKind.label} starter`, placeHolder: "Choose starter template" }
   );
   if (!picked) return;
   const outputTarget = await vscode.window.showInputBox({
@@ -914,10 +931,16 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
 
   private localProjectNode(project: LocalNoteProjectStatus, isOpen: boolean): ToolkitTreeNode {
     const parent = path.basename(path.dirname(project.rootPath)) || path.dirname(project.rootPath);
+    const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
+    const presentationDescription = project.templateId === "beamer-generic"
+      ? "Beamer · Generic Beamer · main.tex"
+      : template?.kind === "beamer"
+        ? `Beamer · ${template.label} · main.tex`
+        : undefined;
     return {
       id: `local-project:${project.id}`,
       label: project.label,
-      description: project.missing ? "Missing" : isOpen ? `Open · ${parent}` : parent,
+      description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open · ${parent}` : parent),
       tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
       iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
       commandId: "latexEditingToolkit.openLocalProject",
@@ -987,40 +1010,60 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
       ], vscode.TreeItemCollapsibleState.Expanded),
-      this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
-        this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
-        this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
-        this.groupNode(`appearance-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => (
-          this.actionNode(
-            `toggle-theme-${toggle.id}`,
-            toggle.label,
-            state.toggles[toggle.id] ? "on" : "off",
-            state.toggles[toggle.id] ? "check" : "circle-slash",
-            "latexEditingToolkit.toggleThemeOption",
-            [folder.uri, toggle.id]
-          )
-        )))
-      ]),
-      this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
-        this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
-        this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => (
-          this.actionNode(
-            `pick-class-config-${field.id}`,
-            field.label,
-            this.optionLabel(field.options, state.class_config[field.id]),
-            "settings",
-            "latexEditingToolkit.pickClassConfig",
-            [folder.uri, field.id]
-          )
-        )))
-      ]),
-      this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
-        this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
-        this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
-        this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
-        this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
-        this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
-      ]),
+      ...(state.workspace_template.kind === "beamer"
+        ? [
+          this.groupNode(`presentation:${folder.uri.toString()}`, "Presentation", "preview", [
+            this.infoNode(`presentation-template:${folder.uri.toString()}`, "Template", this.templateLabel(schema, state.workspace_template.templateId), "symbol-color"),
+            this.infoNode(`presentation-detection:${folder.uri.toString()}`, "Detection", state.workspace_template.detectionSource, state.workspace_template.warning ? "warning" : "pass-filled"),
+            this.infoNode(`presentation-capabilities:${folder.uri.toString()}`, "Capabilities", `${schema.beamer_capabilities.length} available`, "settings-gear")
+          ]),
+          this.groupNode(`document:${folder.uri.toString()}`, "Document", "device-camera-video", [
+            this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
+            this.infoNode(`presentation-ratio:${folder.uri.toString()}`, "Aspect Ratio", state.beamer_settings.aspectRatio === "43" ? "4:3" : "16:9", "screen-full")
+          ]),
+          this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
+            this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+            this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+            this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
+            this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+          ])
+        ]
+        : [
+          this.groupNode(`appearance:${folder.uri.toString()}`, "Appearance", "symbol-color", [
+            this.actionNode("pick-style-preset", "Style Preset", this.presetLabel(schema.style_presets, state.style_preset), "symbol-color", "latexEditingToolkit.pickStylePreset", folderArg),
+            this.actionNode("pick-body-font-size", "Body Font Size", `${formatPointSize(state.body_font_size_pt)} pt`, "text-size", "latexEditingToolkit.pickBodyFontSize", folderArg),
+            this.groupNode(`appearance-toggles:${folder.uri.toString()}`, "Feature Toggles", "checklist", schema.toggles.map((toggle) => (
+              this.actionNode(
+                `toggle-theme-${toggle.id}`,
+                toggle.label,
+                state.toggles[toggle.id] ? "on" : "off",
+                state.toggles[toggle.id] ? "check" : "circle-slash",
+                "latexEditingToolkit.toggleThemeOption",
+                [folder.uri, toggle.id]
+              )
+            )))
+          ]),
+          this.groupNode(`document:${folder.uri.toString()}`, "Document", "book", [
+            this.infoNode(`document-class:${folder.uri.toString()}`, "Detected Class", this.documentClassDescription(state), "symbol-class"),
+            this.groupNode(`document-class-config:${folder.uri.toString()}`, "Class Rules", "settings", schema.class_config.map((field) => (
+              this.actionNode(
+                `pick-class-config-${field.id}`,
+                field.label,
+                this.optionLabel(field.options, state.class_config[field.id]),
+                "settings",
+                "latexEditingToolkit.pickClassConfig",
+                [folder.uri, field.id]
+              )
+            )))
+          ]),
+          this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "tools", [
+            this.actionNode("generate-starter", "Generate Starter", schema.starter_default_output_target || "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
+            this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
+            this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
+            this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg),
+            this.actionNode("reset-overrides", "Reset All Toolkit Overrides", "deletes all generated settings", "discard", "latexEditingToolkit.resetOverrides", folderArg)
+          ])
+        ]),
       this.groupNode(`structure:${folder.uri.toString()}`, "Structure", "list-tree", [
         this.actionNode("split-current", "Split Current Target", "subfiles", "split-horizontal", "latexEditingToolkit.splitCurrentTarget", folderArg),
         this.actionNode("renumber-units", "Renumber Units", "references", "list-ordered", "latexEditingToolkit.renumberUnits", folderArg),
@@ -1051,6 +1094,10 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     if (state.compile_last_success === false) return "Build failed";
     if (state.compile_last_success === true) return "PDF ready";
     return "Not compiled";
+  }
+
+  private templateLabel(schema: ResponseState["schema"], templateId: string): string {
+    return schema.starter_templates.find((entry) => entry.id === templateId)?.label || (templateId === "beamer-generic" ? "Generic Beamer" : templateId);
   }
 
   private workspaceErrorGroups(folder: vscode.WorkspaceFolder, error: Error): ToolkitTreeNode[] {

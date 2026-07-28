@@ -16,7 +16,8 @@ import {
   TOGGLE_IDS,
   TOGGLE_SCHEMA
 } from "./schema";
-import type { PresetMeta, ResponseState, StylePresetDefinition, StylePresetSchema, ToolkitState } from "./types";
+import { beamerHooksEnabled, defaultBeamerSettings, detectWorkspaceTemplate, readBeamerSettings, starterTemplate } from "./beamer";
+import type { PresetMeta, ResponseState, StarterTemplateGroup, StarterTemplateMeta, StylePresetDefinition, StylePresetSchema, ToolkitState } from "./types";
 import {
   assertValidBodyFontSize,
   boolFromTex,
@@ -71,6 +72,11 @@ export class StateService {
   async buildResponseState(): Promise<ResponseState> {
     const state = await this.loadState();
     const starterTemplates = await this.starterTemplateMeta();
+    const starterTemplateGroups: StarterTemplateGroup[] = [
+      { id: "book", label: "Book", templates: starterTemplates.filter((item) => item.kind === "book") },
+      { id: "article", label: "Article", templates: starterTemplates.filter((item) => item.kind === "article") },
+      { id: "beamer", label: "Beamer Slides", templates: starterTemplates.filter((item) => item.kind === "beamer") }
+    ];
     return {
       state,
       schema: {
@@ -80,8 +86,11 @@ export class StateService {
         style_presets: this.stylePresetSchema(),
         body_font_size: BODY_FONT_SIZE_CONFIG,
         starter_templates: starterTemplates,
+        starter_template_groups: starterTemplateGroups,
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
-        starter_default_output_target: "main.tex"
+        starter_default_output_target: "main.tex",
+        workspace_template: state.workspace_template,
+        beamer_capabilities: this.beamerCapabilities(state.workspace_template.templateId)
       }
     };
   }
@@ -90,7 +99,10 @@ export class StateService {
     if (!(await exists(this.themePath()))) {
       const fallback: Record<string, string> = {};
       for (const token of COLOR_ORDER) fallback[token] = "#808080";
-      warnings.push("theme.sty is missing; placeholder colors are being used.");
+      const mainText = await fs.readFile(this.mainTexPath(), "utf8").catch(() => "");
+      if (!/\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(mainText)) {
+        warnings.push("theme.sty is missing; placeholder colors are being used.");
+      }
       return fallback;
     }
     try {
@@ -133,7 +145,9 @@ export class StateService {
       compile_last_success: null,
       detected_document_class: "(unknown)",
       detected_document_class_has_chapter: false,
-      effective_theme_class: "article"
+      effective_theme_class: "article",
+      workspace_template: { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" },
+      beamer_settings: defaultBeamerSettings()
     };
 
     await this.mergePersistedState(state);
@@ -366,13 +380,15 @@ export class StateService {
     this.applyStylePreset(state, this.styleIdFromHeadingPreset(presetId));
   }
 
-  async starterTemplateMeta(): Promise<PresetMeta[]> {
+  async starterTemplateMeta(): Promise<StarterTemplateMeta[]> {
     const templateDir = path.join(this.rootDir, "templates");
-    const assetTemplateDir = path.resolve(__dirname, "..", "assets", "template", "templates");
-    const out: PresetMeta[] = [];
+    const assetRoot = path.resolve(__dirname, "..", "assets", "template");
+    const assetTemplateDir = path.join(assetRoot, "templates");
+    const out: StarterTemplateMeta[] = [];
     for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      if (await exists(path.join(templateDir, entry.filename)) || await exists(path.join(assetTemplateDir, entry.filename))) {
-        out.push({ id: entry.id, label: entry.label, description: entry.description });
+      const source = await this.resolveTemplateSource(entry.filename, templateDir, assetTemplateDir);
+      if (source && await this.templateAssetsAvailable(entry, assetRoot)) {
+        out.push({ id: entry.id, label: entry.label, description: entry.description, kind: entry.kind, parent_id: entry.parentId, capabilities: entry.capabilities });
       }
     }
     return out;
@@ -393,6 +409,35 @@ export class StateService {
     state.detected_document_class = detected || "(unknown)";
     state.detected_document_class_has_chapter = hasChapter;
     state.effective_theme_class = mode === "book" || mode === "article" ? mode : hasChapter ? "book" : "article";
+    state.workspace_template = await detectWorkspaceTemplate(this.rootDir, state.compile_target);
+    if (state.workspace_template.kind === "beamer") {
+      state.config_warnings = state.config_warnings.filter((warning) => !warning.startsWith("theme.sty is missing"));
+      const source = await fs.readFile(path.resolve(this.rootDir, state.compile_target), "utf8").catch(() => "");
+      state.beamer_settings = await readBeamerSettings(this.rootDir, state.compile_target, source);
+      state.beamer_hooks_enabled = beamerHooksEnabled(source);
+    } else {
+      state.beamer_settings = defaultBeamerSettings();
+      state.beamer_hooks_enabled = undefined;
+    }
+  }
+
+  private async resolveTemplateSource(filename: string, workspaceDir: string, assetDir: string): Promise<string | null> {
+    const workspace = path.join(workspaceDir, filename);
+    if (await exists(workspace)) return workspace;
+    const bundled = path.join(assetDir, filename);
+    return await exists(bundled) ? bundled : null;
+  }
+
+  private async templateAssetsAvailable(entry: typeof STARTER_TEMPLATE_DEFINITIONS[number], assetDir: string): Promise<boolean> {
+    for (const file of entry.assetManifest) {
+      if (!(await exists(path.join(assetDir, file)))) return false;
+    }
+    return true;
+  }
+
+  private beamerCapabilities(templateId: string): string[] {
+    return starterTemplate(templateId)?.capabilities
+      ?? (templateId === "beamer-generic" ? ["presentation-metadata", "aspect-ratio", "speaker-notes", "section-outline"] : []);
   }
 
   private async expectedOutputPdfForSelection(state: ToolkitState): Promise<string> {
@@ -806,9 +851,24 @@ async function copyMissingDirectory(src: string, dest: string, relLabel: string,
   }
 }
 
-export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDir: string): Promise<string[]> {
+export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDir: string, templateId?: string, destinationDir = rootDir): Promise<string[]> {
   const assetRoot = path.join(extensionDir, "assets", "template");
   const copied: string[] = [];
+  const selected = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : undefined;
+  if (templateId?.startsWith("beamer-") && !selected) return copied;
+  if (selected?.kind === "beamer") {
+    for (const file of selected.assetManifest) {
+      const source = path.join(assetRoot, file);
+      const target = path.join(destinationDir, file);
+      if (!isSubpath(target, rootDir)) throw new Error(`Template asset target is outside workspace: ${file}`);
+      if (!(await exists(source))) throw new Error(`Bundled template asset is missing: ${file}`);
+      if (await exists(target)) continue;
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.copyFile(source, target);
+      copied.push(workspaceRel(rootDir, target));
+    }
+    return copied;
+  }
   const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
   for (const file of files) {
     const target = path.join(rootDir, file);

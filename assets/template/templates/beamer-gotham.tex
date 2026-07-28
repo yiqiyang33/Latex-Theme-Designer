@@ -1,0 +1,37 @@
+% Beamer starter: Gotham theme.
+\IfFileExists{.latex-editing-toolkit/beamer-class-options.tex}{\input{.latex-editing-toolkit/beamer-class-options.tex}}{}
+\documentclass{beamer}
+\providecommand{\ToolkitBeamerTitle}{Presentation Title}
+\providecommand{\ToolkitBeamerAuthor}{Author Name}
+\providecommand{\ToolkitBeamerInstitute}{Institute}
+\providecommand{\ToolkitBeamerDate}{\today}
+
+\usepackage{amsmath}
+\usepackage{hyperref}
+\makeatletter
+\def\input@path{{beamer/gotham/}}
+\makeatother
+\usetheme{gotham}
+\IfFileExists{.latex-editing-toolkit/beamer-settings.tex}{\input{.latex-editing-toolkit/beamer-settings.tex}}{}
+
+\title{\ToolkitBeamerTitle}
+\author{\ToolkitBeamerAuthor}
+\institute{\ToolkitBeamerInstitute}
+\date{\ToolkitBeamerDate}
+
+\begin{document}
+
+\begin{frame}
+  \maketitle
+\end{frame}
+
+\section{Getting Started}
+
+\begin{frame}{First Slide}
+  Replace this content with the main idea of your presentation.
+  \begin{block}{A useful block}
+    Gotham supports a clean presentation surface for equations, figures, and concise arguments.
+  \end{block}
+\end{frame}
+
+\end{document}

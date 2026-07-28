@@ -22,7 +22,17 @@ for (const expected of [
   "dist/vendor/socket.io-client/lib/io.js",
   "dist/vendor/socket.io-client/lib/parser.js",
   "dist/vendor/socket.io-client/node_modules/ws/index.js",
-  "dist/vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js"
+  "dist/vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js",
+  "assets/template/templates/beamer-uchicago.tex",
+  "assets/template/templates/beamer-blei.tex",
+  "assets/template/templates/beamer-gotham.tex",
+  "assets/template/beamer/uchicago/Ritsumeikan.sty",
+  "assets/template/beamer/uchicago/pic/uchicago.png",
+  "assets/template/beamer/blei/beamerthemeblei.sty",
+  "assets/template/beamer/gotham/beamerthemegotham.sty",
+  "assets/template/third-party/NOTICE",
+  "assets/template/third-party/LICENSES/beamerthemeblei-MIT.txt",
+  "assets/template/third-party/LICENSES/beamertheme-gotham-LPPL-1.3c.txt"
 ]) {
   if (!entries.some(line => line.includes(expected))) throw new Error(`Missing VSIX entry: ${expected}`);
 }

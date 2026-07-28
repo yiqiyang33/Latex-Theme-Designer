@@ -91,12 +91,13 @@ export class CompileService {
 
   private async compileInternal(ctx: CompileContext): Promise<{ success: boolean; output: string; pdfPath: string }> {
     const logs: string[] = [];
-    const pipeline = [
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]],
-      ["biber", [ctx.docstem]],
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]],
-      ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]]
-    ] as const;
+    const source = await fs.readFile(ctx.targetAbs, "utf8").catch(() => "");
+    const isBeamer = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(source);
+    const hasBibliography = /\\(?:addbibresource|bibliography)\b/i.test(source);
+    const latex = ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]] as const;
+    const pipeline: ReadonlyArray<readonly [string, readonly string[]]> = isBeamer
+      ? [latex]
+      : [latex, ["biber", [ctx.docstem]], latex, latex];
     for (const [cmd, args] of pipeline) {
       const resolved = await this.resolveBinary(cmd);
       if (!resolved) {
@@ -106,6 +107,24 @@ export class CompileService {
       const result = await this.runCommand(resolved, args, ctx.compileCwd);
       this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
       if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+    }
+    if (isBeamer) {
+      const bcfExists = await exists(path.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
+      const remaining: ReadonlyArray<readonly [string, readonly string[]]> = [
+        ...(hasBibliography || bcfExists ? [["biber", [ctx.docstem]] as const] : []),
+        latex,
+        latex
+      ];
+      for (const [cmd, args] of remaining) {
+        const resolved = await this.resolveBinary(cmd);
+        if (!resolved) {
+          logs.push(`[${cmd}] command not found in PATH.`);
+          return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+        }
+        const result = await this.runCommand(resolved, args, ctx.compileCwd);
+        this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
+        if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
+      }
     }
     return this.finalizeCompileOutput(ctx, logs, ctx.defaultPdfRel);
   }
