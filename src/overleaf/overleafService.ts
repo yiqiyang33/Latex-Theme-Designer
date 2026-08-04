@@ -335,7 +335,7 @@ export class OverleafService implements vscode.Disposable {
 
   private async pushLocalFile(candidate?: unknown): Promise<void> {
     await this.ensureRunning(candidate);
-    const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "diverged"]);
+    const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "remote deleted", "diverged"]);
     if (!item) return;
     if (this.isDestructive(item)) await this.confirmDestructive(`Push local deletion or conflict for ${item.path}?`);
     await this.realtimeSync.pushLocalFile(item.path);

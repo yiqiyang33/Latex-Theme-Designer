@@ -27264,6 +27264,17 @@ var RealtimeSyncService = class {
       }
       return;
     }
+    const latestReport = refreshStatus ? await this.checkTargeted([normalized], "pre-push") : this.syncStatusReport;
+    const latestItem = latestReport?.items.find((candidate) => candidate.path === normalized);
+    if (entry && latestItem?.status === "remote deleted") {
+      await this.restoreRemoteDeletedFile(normalized, localContent, entry);
+      if (refreshStatus) {
+        await this.checkTargeted([normalized], "post-restore");
+      } else {
+        this.syncGate.clearPath(normalized);
+      }
+      return;
+    }
     if (!entry) {
       this.log(`Creating remote file for local-only path ${normalized}.`);
       await this.handleLocalFileCreate(normalized, localContent, true);
@@ -28373,6 +28384,26 @@ var RealtimeSyncService = class {
       return;
     }
     await this.replaceBinaryFile(relPath, content, entry);
+  }
+  async restoreRemoteDeletedFile(relPath, content, previousEntry) {
+    this.log(`Restoring remote-deleted path ${relPath} from the local mirror.`);
+    const previousState = this.docStates.get(relPath);
+    this.docStates.delete(relPath);
+    this.documentSessions.delete(previousEntry.entityId);
+    delete this.manifest.files[relPath];
+    try {
+      await this.handleLocalFileCreate(relPath, content, true);
+      await this.refreshBaseAfterLocalPush(relPath);
+      vscode10.window.showInformationMessage(`Restored ${relPath} to Overleaf from the local mirror.`);
+    } catch (error) {
+      if (!this.manifest.files[relPath]) {
+        this.manifest.files[relPath] = previousEntry;
+        if (previousState) {
+          this.docStates.set(relPath, previousState);
+        }
+      }
+      throw error;
+    }
   }
   async handleLocalFolderCreate(relPath) {
     if (!this.manifest.folders[relPath]) {
@@ -29538,7 +29569,7 @@ var OverleafService = class {
   }
   async pushLocalFile(candidate) {
     await this.ensureRunning(candidate);
-    const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "diverged"]);
+    const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "remote deleted", "diverged"]);
     if (!item) return;
     if (this.isDestructive(item)) await this.confirmDestructive(`Push local deletion or conflict for ${item.path}?`);
     await this.realtimeSync.pushLocalFile(item.path);

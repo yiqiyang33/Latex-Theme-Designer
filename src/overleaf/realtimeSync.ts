@@ -492,6 +492,18 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
+    const latestReport = refreshStatus ? await this.checkTargeted([normalized], 'pre-push') : this.syncStatusReport;
+    const latestItem = latestReport?.items.find(candidate => candidate.path === normalized);
+    if (entry && latestItem?.status === 'remote deleted') {
+      await this.restoreRemoteDeletedFile(normalized, localContent, entry);
+      if (refreshStatus) {
+        await this.checkTargeted([normalized], 'post-restore');
+      } else {
+        this.syncGate.clearPath(normalized);
+      }
+      return;
+    }
+
     if (!entry) {
       this.log(`Creating remote file for local-only path ${normalized}.`);
       await this.handleLocalFileCreate(normalized, localContent, true);
@@ -1710,6 +1722,27 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
 
     await this.replaceBinaryFile(relPath, content, entry);
+  }
+
+  private async restoreRemoteDeletedFile(relPath: string, content: Uint8Array, previousEntry: ManifestFile): Promise<void> {
+    this.log(`Restoring remote-deleted path ${relPath} from the local mirror.`);
+    const previousState = this.docStates.get(relPath);
+    this.docStates.delete(relPath);
+    this.documentSessions.delete(previousEntry.entityId);
+    delete this.manifest!.files[relPath];
+    try {
+      await this.handleLocalFileCreate(relPath, content, true);
+      await this.refreshBaseAfterLocalPush(relPath);
+      vscode.window.showInformationMessage(`Restored ${relPath} to Overleaf from the local mirror.`);
+    } catch (error) {
+      if (!this.manifest!.files[relPath]) {
+        this.manifest!.files[relPath] = previousEntry;
+        if (previousState) {
+          this.docStates.set(relPath, previousState);
+        }
+      }
+      throw error;
+    }
   }
 
   private async handleLocalFolderCreate(relPath: string): Promise<void> {
