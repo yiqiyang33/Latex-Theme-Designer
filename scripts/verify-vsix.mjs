@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const vsix = process.argv[2] || "latex-editing-toolkit-2.0.1.vsix";
@@ -11,18 +11,25 @@ if (listing.split(/\r?\n/).some(line => /dist\/vendor\/socket\.io-client\/.*\.(?
   throw new Error("VSIX contains unused legacy Socket.IO/Flash development assets.");
 }
 const entries = listing.split(/\r?\n/);
-const unexpectedNodeModules = entries.filter(line => line.includes("node_modules/") && !line.includes("dist/vendor/socket.io-client/node_modules/"));
+const unexpectedNodeModules = entries.filter(line => line.includes("node_modules/")
+  && !line.includes("dist/vendor/socket.io-client/node_modules/")
+  && !line.includes("dist/cli-vendor/socket.io-client/node_modules/"));
 if (unexpectedNodeModules.length) throw new Error(`Unexpected VSIX node_modules entries: ${unexpectedNodeModules.join(", ")}`);
 for (const expected of [
   "assets/icon.png",
   "assets/activitybar.svg",
   "dist/extension.js",
+  "dist/cli.js",
   "dist/webview.js",
   "dist/monaco/vs/loader.js",
   "dist/vendor/socket.io-client/lib/io.js",
   "dist/vendor/socket.io-client/lib/parser.js",
   "dist/vendor/socket.io-client/node_modules/ws/index.js",
   "dist/vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js",
+  "dist/cli-vendor/socket.io-client/lib/io.js",
+  "dist/cli-vendor/socket.io-client/lib/parser.js",
+  "dist/cli-vendor/socket.io-client/node_modules/ws/index.js",
+  "dist/cli-vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js",
   "assets/template/templates/beamer-uchicago.tex",
   "assets/template/templates/beamer-blei.tex",
   "assets/template/templates/beamer-gotham.tex",
@@ -38,4 +45,14 @@ for (const expected of [
 }
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 if (manifest.version !== "2.0.1") throw new Error(`Unexpected package version ${manifest.version}`);
+if ((statSync('dist/cli.js').mode & 0o111) === 0) {
+  throw new Error('dist/cli.js is not executable.');
+}
+if (!readFileSync('dist/cli.js', 'utf8').startsWith('#!/usr/bin/env node\n')) {
+  throw new Error('dist/cli.js is missing its Node shebang.');
+}
+const zipDetails = execFileSync('unzip', ['-Z', '-v', vsix], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+if (!/extension\/dist\/cli\.js[\s\S]{0,1200}Unix file attributes \(100[1357][0-7][0-7] octal\)/.test(zipDetails)) {
+  throw new Error('VSIX did not preserve executable permission for dist/cli.js.');
+}
 console.log(`Verified ${vsix}`);

@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { Socket } from "node:net";
 import * as vscode from "vscode";
 import { CompileDiagnosticProvider } from "./diagnostics";
 import { CompileService } from "./compileService";
@@ -12,6 +13,7 @@ import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
 import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
 import { formatUnknownError, normalizeServerUrl } from "./util";
+import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
 
 export interface OverleafState {
   available: boolean;
@@ -39,6 +41,11 @@ export class OverleafService implements vscode.Disposable {
   readonly realtimeSync: RealtimeSyncService;
   readonly diagnostics: CompileDiagnosticProvider;
   readonly compileService: CompileService;
+  private readonly ownerCoordinator = new SyncOwnerCoordinator();
+  private ownerSubscription?: Socket;
+  private takeoverTimer?: NodeJS.Timeout;
+  private takeoverEnabled = false;
+  private externalSyncStatus?: SyncStatusReport;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -65,6 +72,9 @@ export class OverleafService implements vscode.Disposable {
         });
       })
     );
+    this.disposables.push(this.realtimeSync.onDidChangeSyncStatus(() => {
+      this.ownerCoordinator.emit("status", this.realtimeSync.getSyncStatusReport());
+    }));
   }
 
   registerCommands(register: CommandRegistrar): void {
@@ -125,9 +135,14 @@ export class OverleafService implements vscode.Disposable {
         projectName: manifest.projectName,
         mirrorRoot,
         rootDocument: manifest.rootDocPath,
-        running: this.realtimeSync.running && this.realtimeSync.currentRoot === mirrorRoot,
-        syncStatus: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getSyncStatusReport() : undefined,
-        syncItems: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getSyncStatusItems() : [],
+        running: (this.realtimeSync.running && this.realtimeSync.currentRoot === mirrorRoot)
+          || this.ownerCoordinator.currentRoot === mirrorRoot,
+        syncStatus: this.realtimeSync.currentRoot === mirrorRoot
+          ? this.realtimeSync.getSyncStatusReport()
+          : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus : undefined,
+        syncItems: this.realtimeSync.currentRoot === mirrorRoot
+          ? this.realtimeSync.getSyncStatusItems()
+          : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus?.items ?? [] : [],
         conflicts: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getConflicts() : [],
         collaborators: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getCollaborators() : [],
         lastSyncAt: manifest.lastSyncAt,
@@ -149,26 +164,22 @@ export class OverleafService implements vscode.Disposable {
   }
 
   async onWorkspaceChanged(): Promise<void> {
-    if (this.realtimeSync.running) {
-      if (this.isMirrorRootOpen(this.realtimeSync.currentRoot)) {
+    if (this.realtimeSync.running || this.ownerCoordinator.currentRoot) {
+      const activeRoot = this.realtimeSync.currentRoot ?? this.ownerCoordinator.currentRoot;
+      if (this.isMirrorRootOpen(activeRoot)) {
         this.onChanged();
         return;
       }
       await this.realtimeSync.stop();
+      this.takeoverEnabled = false;
+      this.ownerSubscription = undefined;
+      await this.ownerCoordinator.release();
       this.onChanged();
     }
     const state = await this.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
     if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
-    if (!this.realtimeSync.running || this.realtimeSync.currentRoot !== state.mirrorRoot) {
-      const manifest = await readManifest(state.mirrorRoot);
-      const client = await this.makeClient(manifest.serverUrl);
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "Starting Overleaf realtime sync", cancellable: true },
-        (progress, token) => this.realtimeSync.start(state.mirrorRoot!, client, progress, abortSignalFromToken(token))
-      );
-      this.onChanged();
-    }
+    if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
   }
 
   async listMirrors(): Promise<LocalMirrorRecord[]> {
@@ -220,11 +231,20 @@ export class OverleafService implements vscode.Disposable {
   }
 
   async disposeAsync(): Promise<void> {
+    this.takeoverEnabled = false;
+    if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.takeoverTimer = undefined;
+    this.ownerSubscription = undefined;
     await this.realtimeSync.stop().catch(() => undefined);
+    await this.ownerCoordinator.release().catch(() => undefined);
     this.dispose();
   }
 
   dispose(): void {
+    this.takeoverEnabled = false;
+    if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.ownerSubscription = undefined;
+    void this.ownerCoordinator.release();
     while (this.disposables.length) this.disposables.pop()?.dispose();
   }
 
@@ -297,24 +317,52 @@ export class OverleafService implements vscode.Disposable {
 
   private async startRealtimeSync(candidate?: unknown): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
-    const manifest = await readManifest(root);
-    const client = await this.makeClient(manifest.serverUrl);
-    await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "Starting Overleaf realtime sync", cancellable: true },
-      (progress, token) => this.realtimeSync.start(root, client, progress, abortSignalFromToken(token))
-    );
+    if (this.realtimeSync.running && this.realtimeSync.currentRoot === root && this.ownerCoordinator.isOwner) return;
+    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner && this.ownerSubscription) return;
+    this.takeoverEnabled = true;
+    this.ownerSubscription = undefined;
+    const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    if (role === "client") {
+      this.output.appendLine(`[${new Date().toISOString()}] Using existing sync owner for ${root}.`);
+      await this.connectToExistingOwner(root);
+      this.onChanged();
+      return;
+    }
+    try {
+      this.externalSyncStatus = undefined;
+      const manifest = await readManifest(root);
+      const client = await this.makeClient(manifest.serverUrl);
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Starting Overleaf realtime sync", cancellable: true },
+        (progress, token) => this.realtimeSync.start(root, client, progress, abortSignalFromToken(token))
+      );
+    } catch (error) {
+      await this.ownerCoordinator.release().catch(() => undefined);
+      throw error;
+    }
     this.onChanged();
   }
 
   private async stopRealtimeSync(candidate?: unknown): Promise<void> {
     const root = this.resolveMirrorRoot(candidate);
     if (root && this.realtimeSync.currentRoot && this.realtimeSync.currentRoot !== root) return;
+    this.takeoverEnabled = false;
+    if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.takeoverTimer = undefined;
+    this.ownerSubscription = undefined;
     await this.realtimeSync.stop();
+    await this.ownerCoordinator.release();
     this.onChanged();
   }
 
   private async checkSyncStatus(mode: "incremental" | "full", candidate?: unknown): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
+    await this.ensureRunning(root);
+    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+      await this.ownerCoordinator.request("status", { refresh: true, full: mode === "full" });
+      this.onChanged();
+      return;
+    }
     const manifest = await readManifest(root);
     const client = await this.makeClient(manifest.serverUrl);
     const report = await vscode.window.withProgress(
@@ -338,6 +386,11 @@ export class OverleafService implements vscode.Disposable {
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "remote deleted", "diverged"]);
     if (!item) return;
     if (this.isDestructive(item)) await this.confirmDestructive(`Push local deletion or conflict for ${item.path}?`);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("push", { path: item.path, force: this.isDestructive(item) });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.pushLocalFile(item.path);
     this.onChanged();
   }
@@ -347,6 +400,11 @@ export class OverleafService implements vscode.Disposable {
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["remote ahead", "remote only", "local deleted", "diverged"]);
     if (!item) return;
     if (this.isDestructive(item)) await this.confirmDestructive(`Replace local content with the remote version of ${item.path}?`);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("pull", { path: item.path, force: this.isDestructive(item) });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.pullRemoteFile(item.path);
     this.onChanged();
   }
@@ -360,14 +418,22 @@ export class OverleafService implements vscode.Disposable {
   private async resolveConflictUseLocal(candidate?: unknown): Promise<void> {
     await this.ensureRunning(candidate);
     const conflict = this.conflictFromArgument(candidate) ?? (await this.pickConflict());
-    if (conflict) await this.realtimeSync.useLocalConflict(conflict.relPath);
+    if (conflict) {
+      if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+        await this.ownerCoordinator.request("conflicts-resolve", { path: conflict.relPath, use: "local" });
+      } else await this.realtimeSync.useLocalConflict(conflict.relPath);
+    }
     this.onChanged();
   }
 
   private async resolveConflictAcceptRemote(candidate?: unknown): Promise<void> {
     await this.ensureRunning(candidate);
     const conflict = this.conflictFromArgument(candidate) ?? (await this.pickConflict());
-    if (conflict) await this.realtimeSync.acceptRemoteConflict(conflict.relPath);
+    if (conflict) {
+      if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+        await this.ownerCoordinator.request("conflicts-resolve", { path: conflict.relPath, use: "remote" });
+      } else await this.realtimeSync.acceptRemoteConflict(conflict.relPath);
+    }
     this.onChanged();
   }
 
@@ -494,9 +560,119 @@ export class OverleafService implements vscode.Disposable {
   private async ensureRunning(candidate?: unknown): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
     if (this.realtimeSync.running && this.realtimeSync.currentRoot === root) return;
-    const manifest = await readManifest(root);
-    const client = await this.makeClient(manifest.serverUrl);
-    await this.realtimeSync.start(root, client);
+    this.takeoverEnabled = true;
+    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+      if (!this.ownerSubscription) await this.connectToExistingOwner(root);
+      return;
+    }
+    this.ownerSubscription = undefined;
+    const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    if (role === "client") {
+      await this.connectToExistingOwner(root);
+      return;
+    }
+    try {
+      const manifest = await readManifest(root);
+      const client = await this.makeClient(manifest.serverUrl);
+      await this.realtimeSync.start(root, client);
+    } catch (error) {
+      await this.ownerCoordinator.release().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async connectToExistingOwner(root: string): Promise<void> {
+    const status = await this.ownerCoordinator.request("status").catch(() => undefined);
+    if (isSyncStatusReport(status)) this.externalSyncStatus = status;
+    let socket: Socket;
+    try {
+      socket = await this.ownerCoordinator.subscribe(event => {
+        if (event.event === "status" && isSyncStatusReport(event.data)) {
+          this.externalSyncStatus = event.data;
+          this.onChanged();
+        }
+      });
+    } catch (error) {
+      this.output.appendLine(`[${new Date().toISOString()}] Could not subscribe to sync owner: ${formatUnknownError(error)}`);
+      await this.ownerCoordinator.release().catch(() => undefined);
+      this.scheduleOwnerTakeover(root);
+      return;
+    }
+    this.ownerSubscription = socket;
+    socket.once("close", () => {
+      if (this.ownerSubscription !== socket) return;
+      this.ownerSubscription = undefined;
+      this.scheduleOwnerTakeover(root);
+    });
+  }
+
+  private scheduleOwnerTakeover(root: string): void {
+    if (!this.takeoverEnabled || !this.isMirrorRootOpen(root)) return;
+    if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.takeoverTimer = setTimeout(() => {
+      this.takeoverTimer = undefined;
+      void this.startRealtimeSync(root).catch(error => {
+        this.output.appendLine(`[${new Date().toISOString()}] Sync owner takeover failed: ${formatUnknownError(error)}`);
+        this.onChanged();
+      });
+    }, 500);
+  }
+
+  private async handleOwnerCommand(command: string, args: Record<string, unknown>): Promise<unknown> {
+    switch (command) {
+      case "status":
+        if (args.refresh || args.full) {
+          return this.realtimeSync.checkSyncStatus(
+            this.realtimeSync.currentRoot,
+            undefined,
+            undefined,
+            { mode: args.full ? "full" : "incremental", reason: "ipc" }
+          );
+        }
+        return this.realtimeSync.getSyncStatusReport();
+      case "sync-once":
+        return this.realtimeSync.checkSyncStatus(
+          this.realtimeSync.currentRoot,
+          undefined,
+          undefined,
+          { mode: "incremental", reason: "ipc-sync-once" }
+        );
+      case "push":
+        await this.assertIpcForceIfDestructive(String(args.path), "push", Boolean(args.force));
+        await this.realtimeSync.pushLocalFile(String(args.path), true, Boolean(args.force));
+        return this.realtimeSync.getSyncStatusReport();
+      case "pull":
+        await this.assertIpcForceIfDestructive(String(args.path), "pull", Boolean(args.force));
+        await this.realtimeSync.pullRemoteFile(String(args.path));
+        return this.realtimeSync.getSyncStatusReport();
+      case "conflicts-list":
+        return this.realtimeSync.getConflicts();
+      case "conflicts-resolve":
+        if (args.use === "remote") await this.realtimeSync.acceptRemoteConflict(String(args.path));
+        else await this.realtimeSync.useLocalConflict(String(args.path));
+        return this.realtimeSync.getConflicts();
+      default:
+        throw new Error(`Unsupported sync owner command: ${command}`);
+    }
+  }
+
+  private async assertIpcForceIfDestructive(
+    relPath: string,
+    operation: "push" | "pull",
+    force: boolean
+  ): Promise<void> {
+    if (force) return;
+    const report = await this.realtimeSync.checkSyncStatus(
+      this.realtimeSync.currentRoot,
+      undefined,
+      undefined,
+      { mode: "incremental", paths: [relPath], reason: "ipc-safety-check" }
+    );
+    const status = report.items.find(item => item.path === relPath)?.status;
+    const destructive = operation === "push"
+      ? status && ["remote ahead", "remote deleted", "diverged", "local deleted"].includes(status)
+      : status && ["local ahead", "local only", "diverged"].includes(status);
+    if (destructive) throw new Error(`${operation} ${relPath} requires explicit --force because its status is ${status}.`);
   }
 
   private async makeClient(serverUrl: string): Promise<OverleafClient> {
@@ -670,6 +846,12 @@ function existsSync(filePath: string): boolean {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.stack ?? error.message : formatUnknownError(error);
+}
+
+function isSyncStatusReport(value: unknown): value is SyncStatusReport {
+  return Boolean(value) && typeof value === "object"
+    && Array.isArray((value as SyncStatusReport).items)
+    && typeof (value as SyncStatusReport).hasBlocking === "boolean";
 }
 
 function abortSignalFromToken(token: vscode.CancellationToken): AbortSignal {

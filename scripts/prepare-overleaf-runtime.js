@@ -56,4 +56,8 @@ if (packet.type !== "message" || packet.data !== "ok") {
   throw new Error("Prepared Overleaf Socket.IO parser failed its round-trip smoke test.");
 }
 
+const cliRuntimeRoot = join("dist", "cli-vendor", "socket.io-client");
+rmSync(cliRuntimeRoot, { recursive: true, force: true });
+copyDirectory(targetRoot, cliRuntimeRoot);
+
 console.log("Prepared Overleaf Socket.IO runtime.");

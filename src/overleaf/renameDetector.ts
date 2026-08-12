@@ -1,6 +1,6 @@
 import { toPosixPath } from './util';
 
-export type RenameEntityType = 'doc' | 'file';
+export type RenameEntityType = 'doc' | 'file' | 'folder';
 
 export interface RenameCandidate {
   path: string;
@@ -35,6 +35,18 @@ export class RenameDetector {
     const normalized = toPosixPath(path);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
+  }
+
+  forgetSubtree(path: string): void {
+    const normalized = toPosixPath(path);
+    const prefix = `${normalized}/`;
+    for (const candidates of [this.deletes, this.creates]) {
+      for (const candidatePath of [...candidates.keys()]) {
+        if (candidatePath === normalized || candidatePath.startsWith(prefix)) {
+          candidates.delete(candidatePath);
+        }
+      }
+    }
   }
 
   private register(

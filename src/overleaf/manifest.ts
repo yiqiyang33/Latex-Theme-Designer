@@ -52,7 +52,7 @@ export function isToolkitOverridePath(relPath: string): boolean {
 
 export const TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   '.overleaf-codex/**', '.vscode/**', '**/.vscode/**', '.latexmkrc', '**/.latexmkrc',
-  'AGENTS.md', '**/AGENTS.md', '**/*.pdf', '**/*.aux', '**/*.log', '**/*.fls',
+  'AGENTS.md', '**/AGENTS.md', '**/*.aux', '**/*.log', '**/*.fls',
   '**/*.fdb_latexmk', '**/*.synctex.gz', 'build/**', 'out/**', 'dist/**',
   'node_modules/**', 'conflicts/**', 'trash/**', 'base/**', 'cache/**'
 ];

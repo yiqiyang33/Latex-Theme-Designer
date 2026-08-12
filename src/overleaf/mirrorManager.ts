@@ -9,6 +9,7 @@ import { ensureLocalIgnoreFile, manifestPath, metadataPath, readManifest, writeB
 import { buildProjectTreeIndex } from './tree';
 import { CompileOutputFile, ManifestFile, ProjectSummary } from './types';
 import { expandHome, isTextLike, sanitizeProjectFolderName, sha1 } from './util';
+import { registerSharedMirror } from './sharedState';
 
 const execFileAsync = promisify(execFile);
 const LOCAL_MIRRORS_KEY = 'overleafCodex.localMirrors.v1';
@@ -160,6 +161,7 @@ export class MirrorManager {
       ...registry.filter(item => normalizeRoot(item.root) !== normalizeRoot(root))
     ];
     await this.context.globalState.update(LOCAL_MIRRORS_KEY, next);
+    await registerSharedMirror(root);
     return mirror;
   }
 

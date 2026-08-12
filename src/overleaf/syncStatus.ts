@@ -171,6 +171,71 @@ export function classifyFolderStructure(
   return { items };
 }
 
+export interface FolderManifestRepair {
+  adopted: string[];
+  remapped: Array<{ oldPath: string; newPath: string }>;
+}
+
+/**
+ * Repairs folder metadata only when the local directory layout corroborates the
+ * remote tree. Entity identity makes renames unambiguous; exact-path adoption
+ * recovers a folder whose successful create was lost from a stale manifest write.
+ */
+export function repairFolderManifestFromRemote(
+  manifest: OverleafCodexManifest,
+  remote: OverleafCodexManifest,
+  localFolderPaths: Iterable<string>
+): FolderManifestRepair {
+  const local = new Set([...localFolderPaths].map(toPosixPath));
+  const adopted: string[] = [];
+  const remapped: Array<{ oldPath: string; newPath: string }> = [];
+  const remoteFolders = Object.values(remote.folders)
+    .filter(folder => folder.path)
+    .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
+
+  for (const remoteFolder of remoteFolders) {
+    if (manifest.folders[remoteFolder.path]) continue;
+    const oldFolder = Object.values(manifest.folders)
+      .find(folder => folder.entityId === remoteFolder.entityId);
+    if (!oldFolder?.path || !local.has(remoteFolder.path) || local.has(oldFolder.path)) continue;
+    const oldPath = oldFolder.path;
+    remapManifestSubtree(manifest, oldPath, remoteFolder.path);
+    const moved = manifest.folders[remoteFolder.path];
+    if (moved) moved.parentFolderId = remoteFolder.parentFolderId;
+    remapped.push({ oldPath, newPath: remoteFolder.path });
+  }
+
+  for (const remoteFolder of remoteFolders) {
+    if (manifest.folders[remoteFolder.path] || !local.has(remoteFolder.path)) continue;
+    if (Object.values(manifest.folders).some(folder => folder.entityId === remoteFolder.entityId)) continue;
+    manifest.folders[remoteFolder.path] = { ...remoteFolder };
+    adopted.push(remoteFolder.path);
+  }
+
+  return { adopted, remapped };
+}
+
+function remapManifestSubtree(manifest: OverleafCodexManifest, oldPath: string, newPath: string): void {
+  const oldPrefix = `${oldPath}/`;
+  for (const folder of Object.values(manifest.folders)) {
+    if (folder.path !== oldPath && !folder.path.startsWith(oldPrefix)) continue;
+    delete manifest.folders[folder.path];
+    folder.path = folder.path === oldPath
+      ? newPath
+      : `${newPath}/${folder.path.slice(oldPrefix.length)}`;
+    manifest.folders[folder.path] = folder;
+  }
+  for (const file of Object.values(manifest.files)) {
+    if (!file.path.startsWith(oldPrefix)) continue;
+    delete manifest.files[file.path];
+    file.path = `${newPath}/${file.path.slice(oldPrefix.length)}`;
+    manifest.files[file.path] = file;
+  }
+  if (manifest.rootDocPath?.startsWith(oldPrefix)) {
+    manifest.rootDocPath = `${newPath}/${manifest.rootDocPath.slice(oldPrefix.length)}`;
+  }
+}
+
 export function makeSyncStatusReport(
   manifest: OverleafCodexManifest,
   items: SyncStatusItem[],
@@ -244,6 +309,31 @@ export async function listLocalProjectFiles(root: string, manifest: OverleafCode
       } else if (entry.isFile()) {
         files.push(relPath);
       }
+    }
+  }
+}
+
+export async function listLocalProjectFolders(root: string, manifest: OverleafCodexManifest): Promise<string[]> {
+  const folders: string[] = [];
+  await walk(root, '');
+  return folders.sort();
+
+  async function walk(absDir: string, relDir: string): Promise<void> {
+    const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const relPath = toPosixPath(path.posix.join(relDir, entry.name));
+      const tracked = isTrackedPathOrParent(manifest, relPath);
+      if (
+        !relPath
+        || shouldSkip(relPath)
+        || shouldIgnore(manifest, relPath)
+        || (!tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath))
+      ) {
+        continue;
+      }
+      folders.push(relPath);
+      await walk(path.join(root, relPath), relPath);
     }
   }
 }

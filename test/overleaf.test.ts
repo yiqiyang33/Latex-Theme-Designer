@@ -8,6 +8,7 @@ import {
   migrateManifest,
   parseLocalIgnoreFile,
   readManifest,
+  shouldIgnore,
   shouldIgnoreUntrackedLocalPath
 } from "../src/overleaf/manifest";
 import {
@@ -15,7 +16,8 @@ import {
   classifyFolderStructure,
   classifySyncStatus,
   isBlockingStatus,
-  mergeTargetedSyncStatusReport
+  mergeTargetedSyncStatusReport,
+  repairFolderManifestFromRemote
 } from "../src/overleaf/syncStatus";
 import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalChangedSinceLastSync, hasRemoteChangedSinceLastSync } from "../src/overleaf/ot";
 import { OtDocumentSession, type OtDocumentTransport } from "../src/overleaf/otDocumentSession";
@@ -23,7 +25,16 @@ import { getWithLegacyFallback, hasExplicitConfigurationValue, type Configuratio
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
 import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
 import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
-import type { JoinDocResult, OtUpdate, OverleafCodexManifest, SyncStatusReport } from "../src/overleaf/types";
+import { RenameDetector } from "../src/overleaf/renameDetector";
+import {
+  addProjectTreeEntity,
+  buildProjectTreeIndex,
+  moveProjectTreeEntity,
+  removeProjectTreeEntity,
+  renameProjectTreeEntity,
+  updateProjectTreeDocVersion
+} from "../src/overleaf/tree";
+import type { JoinDocResult, OtUpdate, OverleafCodexManifest, OverleafProject, SyncStatusReport } from "../src/overleaf/types";
 
 class FakeConfig implements InspectableConfiguration {
   constructor(
@@ -58,6 +69,8 @@ describe("Overleaf integration primitives", () => {
     });
     expect(manifest.schemaVersion).toBe(3);
     expect(manifest.ignore).toContain(".overleaf-codex/**");
+    expect(shouldIgnore(manifest, "figures/input.pdf")).toBe(false);
+    expect(shouldIgnoreUntrackedLocalPath(manifest, "main.pdf")).toBe(true);
 
     const rules = parseLocalIgnoreFile("tmp/\n*.swp\n!tmp/keep.tex\n");
     expect(matchesLocalIgnoreRule("tmp/pdfs/output.pdf", rules[0])).toBe(true);
@@ -109,6 +122,59 @@ describe("Overleaf integration primitives", () => {
       files: {}, folders, ignore: [], lastSyncAt: "now"
     });
     expect(classifyFolderStructure(make({ "": { path: "", entityId: "a" } }), make({ "": { path: "", entityId: "b" } })).globalBlockReason).toMatch(/root folder/);
+  });
+
+  it("repairs corroborated folder renames and missing folder metadata", () => {
+    const make = (folders: OverleafCodexManifest["folders"], files: OverleafCodexManifest["files"] = {}): OverleafCodexManifest => ({
+      schemaVersion: 3, serverUrl: "https://www.overleaf.com/", projectId: "project", projectName: "Project",
+      files, folders, ignore: [], lastSyncAt: "now"
+    });
+    const manifest = make({
+      "": { path: "", entityId: "root" },
+      "old": { path: "old", entityId: "folder-1", parentFolderId: "root" }
+    }, {
+      "old/main.tex": { path: "old/main.tex", entityId: "doc-1", entityType: "doc", parentFolderId: "folder-1" }
+    });
+    const remote = make({
+      "": { path: "", entityId: "root" },
+      "new": { path: "new", entityId: "folder-1", parentFolderId: "root" },
+      "assets": { path: "assets", entityId: "folder-2", parentFolderId: "root" }
+    });
+
+    const repaired = repairFolderManifestFromRemote(manifest, remote, ["new", "assets"]);
+    expect(repaired.remapped).toEqual([{ oldPath: "old", newPath: "new" }]);
+    expect(repaired.adopted).toEqual(["assets"]);
+    expect(manifest.folders.old).toBeUndefined();
+    expect(manifest.files["new/main.tex"]?.entityId).toBe("doc-1");
+    expect(manifest.folders.assets?.entityId).toBe("folder-2");
+  });
+
+  it("pairs folder delete/create events as a rename", () => {
+    let now = 1000;
+    const detector = new RenameDetector(5000, () => now);
+    expect(detector.registerDelete({ path: "chapters", hash: "tree-hash", entityType: "folder" })).toEqual({ kind: "none" });
+    now += 250;
+    expect(detector.registerCreate({ path: "sections", hash: "tree-hash", entityType: "folder" })).toEqual({
+      kind: "matched", oldPath: "chapters", newPath: "sections"
+    });
+  });
+
+  it("keeps the realtime project tree current across entity events", () => {
+    const project: OverleafProject = {
+      rootFolder: { _id: "root", name: "root", docs: [], fileRefs: [], folders: [
+        { _id: "left", name: "left", docs: [], fileRefs: [], folders: [] },
+        { _id: "right", name: "right", docs: [], fileRefs: [], folders: [] }
+      ] }
+    };
+    expect(addProjectTreeEntity(project, "left", "doc", { _id: "doc-1", name: "draft.tex", version: 1 })).toBe(true);
+    expect(updateProjectTreeDocVersion(project, "doc-1", 2)).toBe(true);
+    expect(renameProjectTreeEntity(project, "doc-1", "main.tex")).toBe(true);
+    expect(moveProjectTreeEntity(project, "doc-1", "right")).toBe(true);
+    let indexed = buildProjectTreeIndex("https://www.overleaf.com/", "project", "Project", project).manifest;
+    expect(indexed.files["right/main.tex"]?.version).toBe(2);
+    expect(removeProjectTreeEntity(project, "doc-1")).toBe(true);
+    indexed = buildProjectTreeIndex("https://www.overleaf.com/", "project", "Project", project).manifest;
+    expect(indexed.files["right/main.tex"]).toBeUndefined();
   });
 
   it("round-trips OT text and computes Overleaf binary hashes", () => {

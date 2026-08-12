@@ -1,5 +1,6 @@
 import * as http from 'http';
 import * as https from 'https';
+import { existsSync } from 'fs';
 import * as path from 'path';
 import { createRequire } from 'module';
 import { Readable } from 'stream';
@@ -25,6 +26,13 @@ import {
   UploadFileResult
 } from './types';
 import { formatUnknownError, normalizeServerUrl } from './util';
+import {
+  addProjectTreeEntity,
+  moveProjectTreeEntity,
+  removeProjectTreeEntity,
+  renameProjectTreeEntity,
+  updateProjectTreeDocVersion
+} from './tree';
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE';
 type SocketHandler = (...args: unknown[]) => void;
@@ -499,7 +507,10 @@ export class OverleafSocketSession {
 
   constructor(serverUrl: string, private readonly identity: Identity, timeouts: NetworkTimeouts, query?: string) {
     this.timeouts = timeouts;
-    const runtimeRoot = path.join(__dirname, 'vendor', 'socket.io-client');
+    const cliRuntimeRoot = path.join(__dirname, 'cli-vendor', 'socket.io-client');
+    const runtimeRoot = existsSync(path.join(cliRuntimeRoot, 'lib', 'io.js'))
+      ? cliRuntimeRoot
+      : path.join(__dirname, 'vendor', 'socket.io-client');
     const socketIo = loadSocketIoClient(runtimeRoot);
     patchSocketIoHandshake(socketIo, runtimeRoot);
     const connect = socketIo.connect.bind(socketIo);
@@ -518,6 +529,42 @@ export class OverleafSocketSession {
     this.socket.on('connectionAccepted', (_payload: unknown, publicId: unknown) => {
       if (typeof publicId === 'string') {
         this.publicId = publicId;
+      }
+    });
+    this.socket.on('reciveNewDoc', (parentFolderId: unknown, doc: unknown) => {
+      if (this.project && typeof parentFolderId === 'string') {
+        addProjectTreeEntity(this.project, parentFolderId, 'doc', doc as OverleafDoc);
+      }
+    });
+    this.socket.on('reciveNewFile', (parentFolderId: unknown, file: unknown) => {
+      if (this.project && typeof parentFolderId === 'string') {
+        addProjectTreeEntity(this.project, parentFolderId, 'file', file as OverleafFileRef);
+      }
+    });
+    this.socket.on('reciveNewFolder', (parentFolderId: unknown, folder: unknown) => {
+      if (this.project && typeof parentFolderId === 'string') {
+        addProjectTreeEntity(this.project, parentFolderId, 'folder', folder as OverleafFolder);
+      }
+    });
+    this.socket.on('reciveEntityRename', (entityId: unknown, newName: unknown) => {
+      if (this.project && typeof entityId === 'string' && typeof newName === 'string') {
+        renameProjectTreeEntity(this.project, entityId, newName);
+      }
+    });
+    this.socket.on('reciveEntityMove', (entityId: unknown, newParentFolderId: unknown) => {
+      if (this.project && typeof entityId === 'string' && typeof newParentFolderId === 'string') {
+        moveProjectTreeEntity(this.project, entityId, newParentFolderId);
+      }
+    });
+    this.socket.on('removeEntity', (entityId: unknown) => {
+      if (this.project && typeof entityId === 'string') {
+        removeProjectTreeEntity(this.project, entityId);
+      }
+    });
+    this.socket.on('otUpdateApplied', (update: unknown) => {
+      const candidate = update as Partial<OtUpdate>;
+      if (this.project && typeof candidate.doc === 'string' && typeof candidate.v === 'number') {
+        updateProjectTreeDocVersion(this.project, candidate.doc, candidate.v + 1);
       }
     });
   }

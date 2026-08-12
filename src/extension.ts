@@ -15,6 +15,8 @@ import { ToolkitService } from "./toolkitService";
 import { OverleafService } from "./overleaf/overleafService";
 import { formatUnknownError } from "./overleaf/util";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
+import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
+import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
 
 let activePanel: ToolkitPanel | undefined;
 const toolkitServices = new Map<string, ToolkitService>();
@@ -45,6 +47,19 @@ export function activate(context: vscode.ExtensionContext): void {
       const folder = await selectWorkspaceFolder(folderUri);
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+    }),
+    command("latexEditingToolkit.installCli", async () => {
+      const result = await installCli(context.extensionPath, context.extension.packageJSON.version as string);
+      const suffix = result.pathConfigured
+        ? ""
+        : ` Add ${path.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      vscode.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}`);
+    }),
+    command("latexEditingToolkit.uninstallCli", async () => {
+      const result = await uninstallCli();
+      vscode.window.showInformationMessage(result.removed
+        ? `Removed LaTeX Toolkit CLI from ${result.commandPath}.`
+        : `No managed LaTeX Toolkit CLI was found at ${result.commandPath}.`);
     }),
     command("latexEditingToolkit.openSync", async (folderUri?: vscode.Uri) => {
       const folder = await selectWorkspaceFolder(folderUri);
@@ -222,16 +237,22 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
   overleafService.registerCommands((id, handler) => command(id, handler));
+  void initializeSharedConfigBridge(context, overleafService.mirrorManager).catch(error => {
+    output.appendLine(`[${new Date().toISOString()}] Shared Overleaf configuration migration failed: ${formatUnknownError(error)}`);
+  });
+  void updateManagedCliIfInstalled(context.extensionPath, context.extension.packageJSON.version as string).catch(error => {
+    output.appendLine(`[${new Date().toISOString()}] CLI auto-update skipped: ${formatUnknownError(error)}`);
+  });
   void autoStartOverleafMirror(overleafService, output);
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch(error => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
   activePanel?.dispose();
   activePanel = undefined;
   toolkitServices.clear();
   personalStyles = undefined;
-  overleafService?.dispose();
+  await overleafService?.disposeAsync();
   overleafService = undefined;
 }
 

@@ -116,11 +116,24 @@
     "onCommand:overleafCodex.acceptRemoteConflict",
     "onCommand:overleafCodex.useLocalConflict",
     "onCommand:overleafCodex.refreshViews",
-    "onCommand:overleafCodex.logout"
+    "onCommand:overleafCodex.logout",
+    "onCommand:latexEditingToolkit.installCli",
+    "onCommand:latexEditingToolkit.uninstallCli"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "latex-toolkit": "./dist/cli.js"
+  },
   "contributes": {
     "commands": [
+      {
+        "command": "latexEditingToolkit.installCli",
+        "title": "LaTeX Editing Toolkit: Install/Update CLI"
+      },
+      {
+        "command": "latexEditingToolkit.uninstallCli",
+        "title": "LaTeX Editing Toolkit: Uninstall CLI"
+      },
       {
         "command": "latexEditingToolkit.openToolkit",
         "title": "LaTeX Editing Toolkit: Open Toolkit"
@@ -570,8 +583,8 @@
         },
         "overleafCodex.syncBinaryFiles": {
           "type": "boolean",
-          "default": false,
-          "description": "Allow binary files to be uploaded during Overleaf synchronization."
+          "default": true,
+          "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
         },
         "overleafCodex.autoPushLocalAhead": {
           "type": "boolean",
@@ -636,8 +649,8 @@
         },
         "latexEditingToolkit.overleaf.syncBinaryFiles": {
           "type": "boolean",
-          "default": false,
-          "description": "Allow binary files to be synchronized with Overleaf."
+          "default": true,
+          "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
         },
         "latexEditingToolkit.overleaf.confirmDestructiveChanges": {
           "type": "boolean",
@@ -862,6 +875,7 @@
     "verify:vsix": "node scripts/verify-vsix.mjs latex-editing-toolkit-2.0.1.vsix"
   },
   "dependencies": {
+    "chokidar": "^4.0.3",
     "diff-match-patch": "^1.0.5",
     "ignore": "^7.0.6",
     "mime-types": "^2.1.35",

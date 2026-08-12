@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { mkdirSync, copyFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
 
 const watch = process.argv.includes("--watch");
@@ -29,6 +29,15 @@ const builds = [
     outfile: "dist/webview.js",
     platform: "browser",
     format: "iife"
+  }),
+  esbuild.context({
+    ...common,
+    entryPoints: ["src/cli.ts"],
+    outfile: "dist/cli.js",
+    platform: "node",
+    format: "cjs",
+    banner: { js: "#!/usr/bin/env node" },
+    external: ["socket.io-client"]
   })
 ];
 
@@ -50,4 +59,5 @@ if (watch) {
     await ctx.rebuild();
     await ctx.dispose();
   }
+  chmodSync("dist/cli.js", 0o755);
 }
