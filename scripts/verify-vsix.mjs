@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const vsix = process.argv[2] || "latex-editing-toolkit-2.0.1.vsix";
+const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+const vsix = process.argv[2] || `latex-editing-toolkit-${manifest.version}.vsix`;
 if (!existsSync(vsix)) throw new Error(`VSIX not found: ${vsix}`);
 const listing = execFileSync("npx", ["--no-install", "@vscode/vsce", "ls", vsix], { encoding: "utf8" });
 const forbidden = ["/cookie", "cookie-sjtu", "image 2.png", "src/", "test/", "out/", ".map"];
@@ -41,8 +42,6 @@ for (const expected of [
 if (entries.some(line => line.includes("dist/cli-vendor/"))) {
   throw new Error("VSIX contains the duplicate CLI Socket.IO runtime.");
 }
-const manifest = JSON.parse(readFileSync("package.json", "utf8"));
-if (manifest.version !== "2.0.1") throw new Error(`Unexpected package version ${manifest.version}`);
 if ((statSync('dist/cli.js').mode & 0o111) === 0) {
   throw new Error('dist/cli.js is not executable.');
 }
