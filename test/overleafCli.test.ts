@@ -2,13 +2,23 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { blockingExitCode, parseArgs } from '../src/cli';
+import { blockingExitCode, makeSuccessEnvelope, parseArgs } from '../src/cli';
 import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
 import { KEYCHAIN_SERVICE, MacKeychainCredentialStore, type SecurityRunner } from '../src/overleaf/keychainStore';
 import { defaultSharedState, readSharedState, registerSharedMirror, sharedStatePath, updateSharedState } from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
 import { writeManifest } from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
+import { OverleafSyncEngine } from '../src/overleaf/overleafSyncEngine';
+import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
+import { sha1 } from '../src/overleaf/util';
+import {
+  executeSyncCommand,
+  planSafeSyncActions,
+  selectRemoteWriteTarget,
+  syncOperationRequiresForce,
+  type SyncCommandBackend
+} from '../src/overleaf/syncCommandCore';
 
 const originalEnvironment = { ...process.env };
 
@@ -153,6 +163,112 @@ describe('Overleaf CLI parser and managed installation', () => {
   });
 });
 
+describe('Shared Overleaf sync command contract', () => {
+  it('uses the same authorization, mutation and targeted refresh sequence for every owner adapter', async () => {
+    const first = recordingBackend();
+    const second = recordingBackend();
+    const args = { path: 'main.tex', force: true };
+
+    const firstResult = await executeSyncCommand(first.backend, 'push', args);
+    const secondResult = await executeSyncCommand(second.backend, 'push', args);
+
+    expect(first.calls).toEqual(second.calls);
+    expect(first.calls).toEqual([
+      'authorize:push:main.tex:true',
+      'push:main.tex:true',
+      'status:true:false:main.tex:post-push'
+    ]);
+    expect(firstResult).toEqual(syncReport());
+    expect(secondResult).toEqual(firstResult);
+    expect(blockingExitCode(firstResult)).toBe(0);
+    expect(makeSuccessEnvelope('push', '/mirror', firstResult, [])).toMatchObject({
+      schemaVersion: 1,
+      ok: true,
+      command: 'push',
+      root: '/mirror',
+      data: firstResult,
+      warnings: []
+    });
+  });
+
+  it('keeps status read-only and plans only safe sync actions', async () => {
+    const owner = recordingBackend();
+    await executeSyncCommand(owner.backend, 'status', { refresh: true, full: true });
+    expect(owner.calls).toEqual(['status:true:true::ipc-status']);
+
+    const report = syncReport();
+    report.items = [
+      { path: 'remote.tex', entityType: 'doc', status: 'remote ahead', blocking: true },
+      { path: 'local.tex', entityType: 'doc', status: 'local ahead', blocking: true },
+      { path: 'figure.pdf', entityType: 'file', status: 'local only', blocking: true },
+      { path: 'conflict.tex', entityType: 'doc', status: 'diverged', blocking: true }
+    ];
+    const plan = planSafeSyncActions(report, { autoPushLocalAhead: true, syncBinaryFiles: false });
+    expect(plan.pulls.map(item => item.path)).toEqual(['remote.tex']);
+    expect(plan.pushes.map(item => item.path)).toEqual(['local.tex']);
+  });
+
+  it('never reuses a stale remote entity when force-restoring a deleted path', () => {
+    const stale = {
+      path: 'main.tex', entityId: 'deleted-doc', entityType: 'doc' as const, parentFolderId: 'root'
+    };
+    expect(() => selectRemoteWriteTarget('main.tex', stale, undefined, false)).toThrow(/deleted on Overleaf/);
+    expect(selectRemoteWriteTarget('main.tex', stale, undefined, true)).toBeUndefined();
+    const current = { ...stale, entityId: 'current-doc' };
+    expect(selectRemoteWriteTarget('main.tex', stale, current, false)).toBe(current);
+    expect(syncOperationRequiresForce('pull', 'remote deleted')).toBe(true);
+    expect(syncOperationRequiresForce('pull', 'remote ahead')).toBe(false);
+  });
+
+  it('keeps refreshed status read-only and reserves inferred remote renames for sync', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-status-read-only-'));
+    const content = 'same content\n';
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', folders: [], fileRefs: [],
+        docs: [{ _id: 'doc-1', name: 'old.tex', version: 1 }]
+      }
+    };
+    const remoteRenames: string[] = [];
+    const session = {
+      getProject: () => project,
+      joinDoc: async () => ({ content, version: 1 }),
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const client = {
+      connectSocket: async () => session,
+      renameEntity: async (_projectId: string, _entityType: string, _entityId: string, name: string) => {
+        remoteRenames.push(name);
+      }
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      client as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    try {
+      const state = manifest();
+      state.files['old.tex'] = {
+        path: 'old.tex', entityId: 'doc-1', entityType: 'doc', parentFolderId: 'root',
+        version: 1, sha1: sha1(content), baseHash: sha1(content)
+      };
+      await writeManifest(temporary, state);
+      await fs.writeFile(path.join(temporary, 'new.tex'), content, 'utf8');
+
+      await engine.status(true, false);
+      expect(remoteRenames).toEqual([]);
+
+      await engine.syncOnce();
+      expect(remoteRenames).toEqual(['new.tex']);
+    } finally {
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+});
+
 class MemorySecurityRunner implements SecurityRunner {
   readonly items = new Map<string, Identity>();
   readonly serviceNames = new Set<string>();
@@ -200,5 +316,27 @@ function syncReport(): SyncStatusReport {
     hasBlocking: false,
     completeness: 'complete',
     items: []
+  };
+}
+
+function recordingBackend(): { backend: SyncCommandBackend; calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls,
+    backend: {
+      status: async request => {
+        calls.push(`status:${request.refresh}:${request.full}:${request.paths?.join(',') ?? ''}:${request.reason ?? ''}`);
+        return syncReport();
+      },
+      syncOnce: async () => {
+        calls.push('sync-once');
+        return syncReport();
+      },
+      push: async (relPath, force) => { calls.push(`push:${relPath}:${force}`); },
+      pull: async (relPath, force) => { calls.push(`pull:${relPath}:${force}`); },
+      conflicts: async () => [],
+      resolveConflict: async (relPath, use) => { calls.push(`resolve:${relPath}:${use}`); },
+      authorize: async (command, relPath, force) => { calls.push(`authorize:${command}:${relPath}:${force}`); }
+    }
   };
 }

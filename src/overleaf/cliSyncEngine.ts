@@ -34,13 +34,16 @@ import {
   listLocalProjectFiles,
   listLocalProjectFolders,
   makeSyncStatusReport,
+  mergeTargetedSyncStatusReport,
   repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
 import { buildOtOperations } from './ot';
-import { ConflictStore } from './conflictStore';
+import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
 import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
+import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
+import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
@@ -88,34 +91,32 @@ export class OverleafSyncEngine {
     return () => this.events.off('event', listener);
   }
 
-  async status(refresh = false, full = false): Promise<SyncStatusReport | undefined> {
-    if (!refresh && !full) return readSyncStatus(this.root);
+  async status(
+    refresh = false,
+    full = false,
+    paths?: Iterable<string>,
+    reason = 'status'
+  ): Promise<SyncStatusReport | undefined> {
+    if (!refresh && !full && !paths) return readSyncStatus(this.root);
     await this.start();
-    return this.check(full ? 'full' : 'incremental');
+    return this.check(full ? 'full' : 'incremental', { intent: 'status', paths, reason });
   }
 
   async syncOnce(): Promise<SyncStatusReport> {
     await this.start();
-    let report = await this.check('incremental');
-    const safePull = report.items.filter(item => item.status === 'remote ahead' || item.status === 'remote only');
-    for (const item of safePull) {
+    let report = await this.check('incremental', { intent: 'sync', reason: 'sync-once' });
+    const plan = planSafeSyncActions(report, this.policy);
+    for (const item of plan.pulls) {
       if (item.entityType === 'folder') {
         await fs.mkdir(path.join(this.root, item.path), { recursive: true });
       } else {
         await this.pull(item.path, false);
       }
     }
-    if (this.policy.autoPushLocalAhead) {
-      const safePush = report.items.filter(item =>
-        item.status === 'local ahead' || item.status === 'local only'
-      );
-      for (const item of safePush) {
-        if (item.entityType === 'folder') continue;
-        if (!isTextLike(item.path) && !this.policy.syncBinaryFiles) continue;
-        await this.push(item.path, false);
-      }
+    for (const item of plan.pushes) {
+      await this.push(item.path, false);
     }
-    report = await this.check('incremental');
+    report = await this.check('incremental', { intent: 'sync', reason: 'post-sync-once' });
     this.emit('status', report);
     return report;
   }
@@ -141,7 +142,10 @@ export class OverleafSyncEngine {
     this.events.emit('stop');
   }
 
-  async check(mode: 'incremental' | 'full'): Promise<SyncStatusReport> {
+  async check(
+    mode: 'incremental' | 'full',
+    options: { intent?: 'status' | 'sync'; paths?: Iterable<string>; reason?: string } = {}
+  ): Promise<SyncStatusReport> {
     return this.serial(async () => {
       await this.start();
       this.manifest = await readManifest(this.root);
@@ -157,36 +161,41 @@ export class OverleafSyncEngine {
         listLocalProjectFiles(this.root, this.manifest),
         listLocalProjectFolders(this.root, this.manifest)
       ]);
-      await this.reconcileRemoteRenames(remote, localFiles, localFolders);
-      [localFiles, localFolders] = await Promise.all([
-        listLocalProjectFiles(this.root, this.manifest),
-        listLocalProjectFolders(this.root, this.manifest)
-      ]);
-      if (this.policy.autoPushLocalAhead) {
-        await this.reconcileLocalRenames(localFiles, localFolders);
+      if (options.intent === 'sync') {
+        await this.reconcileRemoteRenames(remote, localFiles, localFolders);
         [localFiles, localFolders] = await Promise.all([
           listLocalProjectFiles(this.root, this.manifest),
           listLocalProjectFolders(this.root, this.manifest)
         ]);
-        remote = buildProjectTreeIndex(
-          this.manifest.serverUrl,
-          this.manifest.projectId,
-          this.manifest.projectName,
-          project
-        ).manifest;
+        if (this.policy.autoPushLocalAhead) {
+          await this.reconcileLocalRenames(localFiles, localFolders);
+          [localFiles, localFolders] = await Promise.all([
+            listLocalProjectFiles(this.root, this.manifest),
+            listLocalProjectFolders(this.root, this.manifest)
+          ]);
+          remote = buildProjectTreeIndex(
+            this.manifest.serverUrl,
+            this.manifest.projectId,
+            this.manifest.projectName,
+            project
+          ).manifest;
+        }
       }
+      const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
       repairFolderManifestFromRemote(this.manifest, remote, localFolders);
-      const folderStatus = classifyFolderStructure(this.manifest, remote);
+      const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths);
       const paths = new Set([
         ...Object.keys(this.manifest.files),
         ...Object.keys(remote.files),
-        ...localFiles
+        ...localFiles,
+        ...(requestedPaths ?? [])
       ]);
       const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
       let completed = 0;
       for (const relPath of [...paths].sort()) {
+        if (requestedPaths && !requestedPaths.has(relPath)) continue;
         if (shouldIgnore(this.manifest, relPath)) continue;
         const manifestFile = this.manifest.files[relPath];
         const remoteFile = remote.files[relPath];
@@ -252,11 +261,14 @@ export class OverleafSyncEngine {
         completed += 1;
         this.host.progress({ phase: 'check', message: `Checked ${relPath}`, path: relPath, completed, total: paths.size });
       }
-      const report = makeSyncStatusReport(this.manifest, items, {
+      const targetedReport = makeSyncStatusReport(this.manifest, items, {
         mode,
         completeness: folderStatus.globalBlockReason ? 'failed' : 'complete',
         globalBlockReason: folderStatus.globalBlockReason
       });
+      const report = requestedPaths
+        ? mergeTargetedSyncStatusReport(await readSyncStatus(this.root), targetedReport, requestedPaths)
+        : targetedReport;
       await writeManifest(this.root, this.manifest);
       await writeSyncStatus(this.root, report);
       this.host.status(report);
@@ -283,7 +295,7 @@ export class OverleafSyncEngine {
         throw new Error(`${normalized} is excluded by .overleaf-codexignore.`);
       }
       const remote = await this.remoteFile(normalized);
-      const effectiveEntry = entry ?? remote?.file;
+      const effectiveEntry = selectRemoteWriteTarget(normalized, entry, remote?.file, force);
       if (remote && !force) {
         const base = entry?.baseHash ?? entry?.sha1;
         if (!entry && sha1(content) !== sha1(remote.content)) {
@@ -374,7 +386,7 @@ export class OverleafSyncEngine {
     });
   }
 
-  async conflicts(): Promise<ReturnType<ConflictStore['list']>> {
+  async conflicts(): Promise<PersistedConflict[]> {
     return new ConflictStore(this.root).list();
   }
 
@@ -466,30 +478,14 @@ export class OverleafSyncEngine {
 
   private async recoverBinaryTransactions(): Promise<void> {
     const store = new BinaryTransactionStore(this.root);
-    const records = await store.list();
-    for (const transaction of records) {
-      try {
-        if (transaction.stage === 'temp-uploaded') {
-          await this.client.deleteEntity(this.manifest!.projectId, 'file', transaction.tempEntityId).catch(() => undefined);
-        } else if (transaction.stage === 'original-backed-up') {
-          await this.client.renameEntity(
-            this.manifest!.projectId, 'file', transaction.originalEntityId, transaction.finalName
-          );
-          await this.client.deleteEntity(this.manifest!.projectId, 'file', transaction.tempEntityId).catch(() => undefined);
-        } else {
-          await this.client.deleteEntity(this.manifest!.projectId, 'file', transaction.originalEntityId).catch(() => undefined);
-          const entry = this.manifest!.files[transaction.path];
-          if (entry) {
-            entry.entityId = transaction.tempEntityId;
-            entry.remoteBlobHash = transaction.expectedBlobHash;
-          }
-        }
-        await store.remove(transaction.id);
-      } catch (error) {
-        this.host.log(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
-      }
-    }
-    if (records.length > 0) await writeManifest(this.root, this.manifest!);
+    const changed = await recoverBinaryTransactions(
+      this.client,
+      this.manifest!.projectId,
+      this.manifest!,
+      store,
+      { log: message => this.host.log(message) }
+    );
+    if (changed) await writeManifest(this.root, this.manifest!);
   }
 
   private async reconcileRemoteRenames(
@@ -580,9 +576,14 @@ export class OverleafSyncEngine {
     const entityType = oldFile?.entityType ?? 'folder';
     const oldName = path.posix.basename(oldPath);
     const newName = path.posix.basename(newPath);
-    await this.performRemotePathChange(
-      entityType, entity.entityId, entity.parentFolderId, parentFolderId, oldName, newName
-    );
+    await performRemotePathChange(this.client, this.manifest!.projectId, {
+      entityType,
+      entityId: entity.entityId,
+      oldParentFolderId: entity.parentFolderId,
+      newParentFolderId: parentFolderId,
+      oldName,
+      newName
+    });
     const project = this.session!.getProject();
     if (project) {
       if (oldName !== newName) renameProjectTreeEntity(project, entity.entityId, newName);
@@ -598,36 +599,6 @@ export class OverleafSyncEngine {
     }
     await writeManifest(this.root, this.manifest!);
     this.emit('renamed', { oldPath, newPath });
-  }
-
-  private async performRemotePathChange(
-    entityType: 'doc' | 'file' | 'folder',
-    entityId: string,
-    oldParentFolderId: string,
-    newParentFolderId: string,
-    oldName: string,
-    newName: string
-  ): Promise<void> {
-    const renamed = oldName !== newName;
-    const moved = oldParentFolderId !== newParentFolderId;
-    if (!renamed && !moved) return;
-    if (!renamed) return this.client.moveEntity(this.manifest!.projectId, entityType, entityId, newParentFolderId);
-    if (!moved) return this.client.renameEntity(this.manifest!.projectId, entityType, entityId, newName);
-    const temporary = transactionName(newName, `move-${Date.now()}`);
-    await this.client.renameEntity(this.manifest!.projectId, entityType, entityId, temporary);
-    try {
-      await this.client.moveEntity(this.manifest!.projectId, entityType, entityId, newParentFolderId);
-    } catch (error) {
-      await this.client.renameEntity(this.manifest!.projectId, entityType, entityId, oldName).catch(() => undefined);
-      throw error;
-    }
-    try {
-      await this.client.renameEntity(this.manifest!.projectId, entityType, entityId, newName);
-    } catch (error) {
-      await this.client.moveEntity(this.manifest!.projectId, entityType, entityId, oldParentFolderId).catch(() => undefined);
-      await this.client.renameEntity(this.manifest!.projectId, entityType, entityId, oldName).catch(() => undefined);
-      throw error;
-    }
   }
 
   private remapManifestFolder(oldPath: string, newPath: string, parentFolderId: string): void {
@@ -718,9 +689,3 @@ export class OverleafSyncEngine {
 
 /** @deprecated Use OverleafSyncEngine. Kept for source compatibility with early CLI builds. */
 export { OverleafSyncEngine as CliSyncEngine };
-
-function transactionName(name: string, suffix: string): string {
-  const ext = path.posix.extname(name);
-  const stem = ext ? name.slice(0, -ext.length) : name;
-  return `${stem}.overleaf-codex-${suffix}${ext}`;
-}

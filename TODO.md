@@ -8,11 +8,11 @@
 
 ## P1
 
-- [ ] 将 CLI `OverleafSyncEngine` 与扩展 `RealtimeSyncService` 的 reconcile、push/pull、rename、冲突和二进制事务逻辑抽取为真正共享的同步核心。
-- [ ] 统一 `sync --once` 在 CLI owner 和扩展 owner 下的行为，确保安全拉取和推送语义不随 VS Code 是否运行而改变。
-- [ ] `push`、`pull` 完成后执行 targeted status refresh，返回最新报告并给出正确退出码。
-- [ ] 支持通过 `push --force` 恢复已在远端删除、但本地仍保留的文件，不再复用失效 entity ID。
-- [ ] 保证 `status`、`status --refresh` 和 `status --full` 为只读操作；远端写入只允许由明确的 sync/push 命令或 watcher reconciliation 触发。
+- [x] 将 CLI `OverleafSyncEngine` 与扩展 `RealtimeSyncService` 的 reconcile、push/pull、rename、冲突和二进制事务逻辑抽取为真正共享的同步核心。
+- [x] 统一 `sync --once` 在 CLI owner 和扩展 owner 下的行为，确保安全拉取和推送语义不随 VS Code 是否运行而改变。
+- [x] `push`、`pull` 完成后执行 targeted status refresh，返回最新报告并给出正确退出码。
+- [x] 支持通过 `push --force` 恢复已在远端删除、但本地仍保留的文件，不再复用失效 entity ID。
+- [x] 保证 `status`、`status --refresh` 和 `status --full` 为只读操作；远端写入只允许由明确的 sync/push 命令或 watcher reconciliation 触发。
 
 ## P2
 
@@ -30,6 +30,7 @@
 ## 测试缺口
 
 - [x] 覆盖远端 rename/move 目标已存在、文件系统失败及 manifest 回滚。
-- [ ] 覆盖 CLI owner 与扩展 owner 的命令结果一致性。
-- [ ] 覆盖 push/pull 后的状态、JSON envelope 和退出码。
-- [ ] 覆盖远端删除后的强制恢复与 CLI incremental 远端缓存复用。
+- [x] 覆盖 CLI owner 与扩展 owner 的命令结果一致性。
+- [x] 覆盖 push/pull 后的状态、JSON envelope 和退出码。
+- [x] 覆盖远端删除后的强制恢复。
+- [ ] 覆盖 CLI incremental 远端缓存复用。

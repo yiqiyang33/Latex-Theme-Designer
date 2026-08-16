@@ -1595,7 +1595,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path37, checkUnignored, mode) {
+      test(path38, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1604,7 +1604,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path37);
+          const matched = rule[mode].test(path38);
           if (!matched) {
             return;
           }
@@ -1625,17 +1625,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path37, originalPath, doThrow) => {
-      if (!isString(path37)) {
+    var checkPath = (path38, originalPath, doThrow) => {
+      if (!isString(path38)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path37) {
+      if (!path38) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path37)) {
+      if (checkPath.isNotRelative(path38)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1644,7 +1644,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path37) => REGEX_TEST_INVALID_PATH.test(path37);
+    var isNotRelative = (path38) => REGEX_TEST_INVALID_PATH.test(path38);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1674,19 +1674,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path37 = originalPath && checkPath.convert(originalPath);
+        const path38 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path37,
+          path38,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path37, cache, checkUnignored, slices);
+        return this._t(path38, cache, checkUnignored, slices);
       }
-      checkIgnore(path37) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path37)) {
-          return this.test(path37);
+      checkIgnore(path38) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path38)) {
+          return this.test(path38);
         }
-        const slices = path37.split(SLASH).filter(Boolean);
+        const slices = path38.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1699,18 +1699,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path37, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path38, false, MODE_CHECK_IGNORE);
       }
-      _t(path37, cache, checkUnignored, slices) {
-        if (path37 in cache) {
-          return cache[path37];
+      _t(path38, cache, checkUnignored, slices) {
+        if (path38 in cache) {
+          return cache[path38];
         }
         if (!slices) {
-          slices = path37.split(SLASH).filter(Boolean);
+          slices = path38.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path37] = this._rules.test(path37, checkUnignored, MODE_IGNORE);
+          return cache[path38] = this._rules.test(path38, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1718,29 +1718,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path37] = parent.ignored ? parent : this._rules.test(path37, checkUnignored, MODE_IGNORE);
+        return cache[path38] = parent.ignored ? parent : this._rules.test(path38, checkUnignored, MODE_IGNORE);
       }
-      ignores(path37) {
-        return this._test(path37, this._ignoreCache, false).ignored;
+      ignores(path38) {
+        return this._test(path38, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path37) => !this.ignores(path37);
+        return (path38) => !this.ignores(path38);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path37) {
-        return this._test(path37, this._testCache, true);
+      test(path38) {
+        return this._test(path38, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path37) => checkPath(path37 && checkPath.convert(path37), path37, RETURN_FALSE);
+    var isPathValid = (path38) => checkPath(path38 && checkPath.convert(path38), path38, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path37) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path37) || isNotRelative(path37);
+      checkPath.isNotRelative = (path38) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path38) || isNotRelative(path38);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10602,11 +10602,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path37) {
-      if (!path37 || typeof path37 !== "string") {
+    function lookup2(path38) {
+      if (!path38 || typeof path38 !== "string") {
         return false;
       }
-      var extension2 = extname8("x." + path37).toLowerCase().substr(1);
+      var extension2 = extname8("x." + path38).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11711,7 +11711,7 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path37 = require("path");
+    var path38 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
@@ -11839,11 +11839,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path37.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path38.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path37.basename(options.filename || value && (value.name || value.path));
+        filename = path38.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path37.basename(value.client._httpMessage.path || "");
+        filename = path38.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12756,14 +12756,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path37 = url.path;
-      if (path37.length === 0) {
+      const path38 = url.path;
+      if (path38.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path37.length === 1 && isNormalizedWindowsDriveLetter(path37[0])) {
+      if (url.scheme === "file" && path38.length === 1 && isNormalizedWindowsDriveLetter(path38[0])) {
         return;
       }
-      path37.pop();
+      path38.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -16500,7 +16500,7 @@ __export(extension_exports, {
 });
 module.exports = __toCommonJS(extension_exports);
 var fs29 = __toESM(require("node:fs"));
-var path36 = __toESM(require("node:path"));
+var path37 = __toESM(require("node:path"));
 var vscode13 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
@@ -17282,7 +17282,7 @@ var path6 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path37, callback = (err) => {
+function openExplorer(path38, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -17299,8 +17299,8 @@ function openExplorer(path37, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path37 = path37 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands7[platform3], [path37]);
+  path38 = path38 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands7[platform3], [path38]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -17385,26 +17385,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path37) {
+  function parse_path(path38) {
     if (platform3 == "win32") {
-      path37 = RegReplace(path37, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path38 = RegReplace(path38, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path37 = RegReplace(path37, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path38 = RegReplace(path38, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path37 = path37.replace(/\//g, "\\");
+      path38 = path38.replace(/\//g, "\\");
     }
-    return path37;
+    return path38;
   }
   if (platform3 == "win32") {
-    let path37 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path37 ? parse_path(path37) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path38 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path38 ? parse_path(path38) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path37 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path37 ? parse_path(path37) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path38 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path38 ? parse_path(path38) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path37 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path37 ? parse_path(path37) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path38 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path38 ? parse_path(path38) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -18985,8 +18985,8 @@ var snippetOutput;
 function isLatexLikeDocument(document) {
   return ["latex", "tex", "markdown"].includes(document.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path37) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path37);
+function getStringArrayConfiguration(path38) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path38);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -22717,7 +22717,7 @@ function isRecord3(value) {
 
 // src/overleaf/overleafService.ts
 var fs27 = __toESM(require("node:fs/promises"));
-var path33 = __toESM(require("node:path"));
+var path34 = __toESM(require("node:path"));
 var vscode11 = __toESM(require("vscode"));
 
 // src/overleaf/diagnostics.ts
@@ -26342,7 +26342,7 @@ async function assertOk(res, route) {
 
 // src/overleaf/realtimeSync.ts
 var fs25 = __toESM(require("fs/promises"));
-var path30 = __toESM(require("path"));
+var path31 = __toESM(require("path"));
 var vscode10 = __toESM(require("vscode"));
 
 // src/overleaf/binaryTransactions.ts
@@ -26697,12 +26697,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path37, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path37);
+  setPath(path38, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path38);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path37) {
-    this.paths.delete(toPosixPath2(path37));
+  clearPath(path38) {
+    this.paths.delete(toPosixPath2(path38));
   }
   clearPaths() {
     this.paths.clear();
@@ -26714,16 +26714,16 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path37 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path37, { ...entry, path: path37 });
+      const path38 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path38, { ...entry, path: path38 });
     }
   }
-  canSync(path37) {
+  canSync(path38) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path37) === void 0;
+    return this.findBlocking(path38) === void 0;
   }
-  findBlocking(path37) {
-    const normalized = toPosixPath2(path37);
+  findBlocking(path38) {
+    const normalized = toPosixPath2(path38);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -27027,13 +27027,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path37) {
-    const normalized = toPosixPath2(path37);
+  forget(path38) {
+    const normalized = toPosixPath2(path38);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path37) {
-    const normalized = toPosixPath2(path37);
+  forgetSubtree(path38) {
+    const normalized = toPosixPath2(path38);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -27072,8 +27072,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path37, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path37);
+      for (const [path38, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path38);
       }
     }
   }
@@ -27281,6 +27281,134 @@ function resolveWithinRoot(root, relPath) {
   return absolute;
 }
 
+// src/overleaf/syncCommandCore.ts
+function planSafeSyncActions(report, policy) {
+  return {
+    pulls: report.items.filter((item) => item.status === "remote ahead" || item.status === "remote only"),
+    pushes: policy.autoPushLocalAhead ? report.items.filter(
+      (item) => item.entityType !== "folder" && (item.status === "local ahead" || item.status === "local only") && (isTextLike(item.path) || policy.syncBinaryFiles)
+    ) : []
+  };
+}
+function syncOperationRequiresForce(operation, status) {
+  if (!status) return false;
+  return operation === "push" ? ["remote ahead", "remote deleted", "diverged", "local deleted"].includes(status) : ["local ahead", "local only", "remote deleted", "diverged"].includes(status);
+}
+async function executeSyncCommand(backend, command, args = {}) {
+  switch (command) {
+    case "status":
+      return backend.status({
+        refresh: Boolean(args.refresh),
+        full: Boolean(args.full),
+        paths: stringArray(args.paths),
+        reason: typeof args.reason === "string" ? args.reason : "ipc-status"
+      });
+    case "sync-once":
+      return backend.syncOnce();
+    case "push":
+    case "pull": {
+      const path38 = requiredPath(args.path);
+      const force = Boolean(args.force);
+      await backend.authorize?.(command, path38, force);
+      await backend[command](path38, force);
+      return backend.status({
+        refresh: true,
+        full: false,
+        paths: [path38],
+        reason: `post-${command}`
+      });
+    }
+    case "conflicts-list":
+      return backend.conflicts();
+    case "conflicts-resolve": {
+      const path38 = requiredPath(args.path);
+      await backend.resolveConflict(path38, args.use === "remote" ? "remote" : "local");
+      return backend.conflicts();
+    }
+    default:
+      throw new Error(`Unsupported sync owner command: ${command}`);
+  }
+}
+function requiredPath(value) {
+  if (typeof value !== "string" || !value.trim()) throw new Error("A project-relative path is required.");
+  return value;
+}
+function stringArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : void 0;
+}
+
+// src/overleaf/remoteMutationCore.ts
+var path30 = __toESM(require("path"));
+async function performRemotePathChange(client, projectId, change, beforeMutation = () => void 0) {
+  const renamed = change.oldName !== change.newName;
+  const moved = change.oldParentFolderId !== change.newParentFolderId;
+  if (!renamed && !moved) return;
+  if (!renamed) {
+    beforeMutation(change.entityId);
+    await client.moveEntity(projectId, change.entityType, change.entityId, change.newParentFolderId);
+    return;
+  }
+  if (!moved) {
+    beforeMutation(change.entityId);
+    await client.renameEntity(projectId, change.entityType, change.entityId, change.newName);
+    return;
+  }
+  const temporary = transactionName(change.newName, `move-${Date.now()}`);
+  beforeMutation(change.entityId);
+  await client.renameEntity(projectId, change.entityType, change.entityId, temporary);
+  try {
+    beforeMutation(change.entityId);
+    await client.moveEntity(projectId, change.entityType, change.entityId, change.newParentFolderId);
+  } catch (error) {
+    beforeMutation(change.entityId);
+    await client.renameEntity(projectId, change.entityType, change.entityId, change.oldName).catch(() => void 0);
+    throw error;
+  }
+  try {
+    beforeMutation(change.entityId);
+    await client.renameEntity(projectId, change.entityType, change.entityId, change.newName);
+  } catch (error) {
+    beforeMutation(change.entityId);
+    await client.moveEntity(projectId, change.entityType, change.entityId, change.oldParentFolderId).catch(() => void 0);
+    beforeMutation(change.entityId);
+    await client.renameEntity(projectId, change.entityType, change.entityId, change.oldName).catch(() => void 0);
+    throw error;
+  }
+}
+async function recoverBinaryTransactions(client, projectId, manifest, store, options = {}) {
+  const records = await store.list();
+  for (const transaction of records) {
+    options.beforeMutation?.(transaction.originalEntityId);
+    options.beforeMutation?.(transaction.tempEntityId);
+    try {
+      if (transaction.stage === "temp-uploaded") {
+        await client.deleteEntity(projectId, "file", transaction.tempEntityId).catch(() => void 0);
+      } else if (transaction.stage === "original-backed-up") {
+        await client.renameEntity(projectId, "file", transaction.originalEntityId, transaction.finalName);
+        await client.deleteEntity(projectId, "file", transaction.tempEntityId).catch(() => void 0);
+      } else {
+        await client.deleteEntity(projectId, "file", transaction.originalEntityId).catch(() => void 0);
+        const entry = manifest.files[transaction.path];
+        if (entry) {
+          entry.entityId = transaction.tempEntityId;
+          entry.remoteBlobHash = transaction.expectedBlobHash;
+        }
+      }
+      await store.remove(transaction.id);
+    } catch (error) {
+      options.log?.(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
+    }
+  }
+  return records.length > 0;
+}
+function transactionName(filename, suffix) {
+  const ext2 = path30.posix.extname(filename);
+  const stem = path30.posix.basename(filename, ext2);
+  const marker = `.overleaf-codex-${suffix}`;
+  const maxStem = Math.max(1, 150 - ext2.length - marker.length);
+  return `${stem.slice(0, maxStem)}${marker}${ext2}`;
+}
+
 // src/overleaf/realtimeSync.ts
 var RealtimeSyncService = class {
   constructor(context, output) {
@@ -27388,6 +27516,9 @@ var RealtimeSyncService = class {
       reason: state.conflictReason
     }));
   }
+  async getPersistedConflicts() {
+    return this.conflictStore?.list() ?? [];
+  }
   async checkSyncStatus(root = this.root, client = this.client, progress, options = {}) {
     if (!root) {
       throw new Error("Open a local Overleaf Codex mirror folder first.");
@@ -27399,24 +27530,57 @@ var RealtimeSyncService = class {
     }
     if (this.root === root && this.session && !this.stopping) {
       const expectedGeneration = this.generation;
-      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
+      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
         ...options,
         expectedGeneration
       })).report;
-      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     }
     progress?.report({ message: "Connecting for sync health check" });
     const session = await activeClient.connectSocket(manifest.projectId, options.signal);
     try {
       const expectedGeneration = this.root === root ? this.generation : void 0;
-      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
+      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
         ...options,
         expectedGeneration
       })).report;
-      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     } finally {
       session.disconnect();
     }
+  }
+  async syncOnce(progress, signal) {
+    this.requireReady();
+    const report = await this.checkSyncStatus(this.root, this.client, progress, {
+      mode: "incremental",
+      reason: "sync-once",
+      signal
+    });
+    const plan = planSafeSyncActions(report, {
+      autoPushLocalAhead: this.canAutoPushLocalAhead(),
+      syncBinaryFiles: this.canSyncBinaryFiles()
+    });
+    let pulled = 0;
+    for (const item of plan.pulls) {
+      if (signal?.aborted) throw signal.reason ?? new Error("Operation cancelled.");
+      progress?.report({ message: `Pulling safe remote changes ${pulled + 1}/${plan.pulls.length}: ${item.path}` });
+      if (item.entityType === "folder") {
+        await fs25.mkdir(this.abs(item.path), { recursive: true });
+      } else {
+        await this.pullRemoteFile(item.path, false);
+      }
+      pulled += 1;
+    }
+    let pushed = 0;
+    for (const item of plan.pushes) {
+      if (signal?.aborted) throw signal.reason ?? new Error("Operation cancelled.");
+      progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${plan.pushes.length}: ${item.path}` });
+      await this.pushLocalFile(item.path, false);
+      pushed += 1;
+    }
+    return this.checkSyncStatus(this.root, this.client, progress, {
+      mode: "incremental",
+      reason: "post-sync-once",
+      signal
+    });
   }
   async checkSyncStatusWithSession(root, manifest, activeClient, session, progress, options = {}) {
     const startedAt = Date.now();
@@ -27462,7 +27626,7 @@ var RealtimeSyncService = class {
       }
       const manifestFile = manifest.files[relPath];
       const remoteFile = remote.manifest.files[relPath];
-      const localAbs = path30.join(root, relPath);
+      const localAbs = path31.join(root, relPath);
       const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full");
       const localHash = localResult.hash;
       if (localResult.reused) localCacheReuseCount += 1;
@@ -27683,7 +27847,7 @@ var RealtimeSyncService = class {
       this.syncGate.clearPath(normalized);
     }
   }
-  async pullRemoteFile(relPath) {
+  async pullRemoteFile(relPath, refreshStatus = true) {
     this.requireReady();
     const normalized = toPosixPath2(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === "error") {
@@ -27715,8 +27879,10 @@ var RealtimeSyncService = class {
     }
     await this.persistManifest();
     this.syncGate.clearPath(normalized);
-    await this.checkTargeted([normalized], "post-pull");
-    vscode10.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+    if (refreshStatus) {
+      await this.checkTargeted([normalized], "post-pull");
+      vscode10.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+    }
   }
   async openSyncDiff(relPath) {
     this.requireReady();
@@ -27730,9 +27896,9 @@ var RealtimeSyncService = class {
     if (remoteContent === void 0) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
-    const suffix = isTextLike(normalized) ? path30.extname(normalized) || ".tex" : ".remote";
+    const suffix = isTextLike(normalized) ? path31.extname(normalized) || ".tex" : ".remote";
     const diffPath = metadataPath(this.root, "conflicts", `${normalized.replace(/[\/\\]/g, "__")}.remote.${Date.now()}${suffix}`);
-    await fs25.mkdir(path30.dirname(diffPath), { recursive: true });
+    await fs25.mkdir(path31.dirname(diffPath), { recursive: true });
     await fs25.writeFile(diffPath, remoteContent);
     await vscode10.commands.executeCommand(
       "vscode.diff",
@@ -27944,7 +28110,7 @@ var RealtimeSyncService = class {
     if (!relPath || !this.root) {
       return;
     }
-    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path30.join(this.root, relPath)));
+    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path31.join(this.root, relPath)));
     await vscode10.window.showTextDocument(document, {
       selection: new vscode10.Selection(picked.user.row ?? 0, picked.user.column ?? 0, picked.user.row ?? 0, picked.user.column ?? 0),
       preview: false
@@ -28027,9 +28193,9 @@ var RealtimeSyncService = class {
     }
   }
   async saveOpenLocalDocument(relPath) {
-    const absPath = path30.normalize(this.abs(relPath));
+    const absPath = path31.normalize(this.abs(relPath));
     const document = vscode10.workspace.textDocuments.find(
-      (item) => path30.normalize(item.uri.fsPath) === absPath
+      (item) => path31.normalize(item.uri.fsPath) === absPath
     );
     if (document?.isDirty) {
       await document.save();
@@ -28072,7 +28238,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest || !this.session || event.selections.length === 0) {
       return;
     }
-    const relPath = toPosixPath2(path30.relative(this.root, event.textEditor.document.uri.fsPath));
+    const relPath = toPosixPath2(path31.relative(this.root, event.textEditor.document.uri.fsPath));
     if (!relPath || relPath.startsWith("..")) {
       return;
     }
@@ -28165,7 +28331,7 @@ var RealtimeSyncService = class {
           continue;
         }
         const relPath = filePathById(this.manifest, user.doc_id);
-        if (!relPath || path30.normalize(editor.document.uri.fsPath) !== path30.normalize(path30.join(this.root, relPath))) {
+        if (!relPath || path31.normalize(editor.document.uri.fsPath) !== path31.normalize(path31.join(this.root, relPath))) {
           continue;
         }
         const range = new vscode10.Range(user.row ?? 0, user.column ?? 0, user.row ?? 0, user.column ?? 0);
@@ -28199,7 +28365,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest) {
       return;
     }
-    const relPath = toPosixPath2(path30.relative(this.root, uri.fsPath));
+    const relPath = toPosixPath2(path31.relative(this.root, uri.fsPath));
     if (relPath === LOCAL_IGNORE_NAME) {
       void this.reloadLocalIgnoreFile();
       return;
@@ -28359,14 +28525,14 @@ var RealtimeSyncService = class {
     const walk = async (absDir, relativeDir) => {
       const entries = await fs25.readdir(absDir, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
-        const relative8 = toPosixPath2(path30.posix.join(relativeDir, entry.name));
-        const projectPath = toPosixPath2(path30.posix.join(relPath, relative8));
+        const relative8 = toPosixPath2(path31.posix.join(relativeDir, entry.name));
+        const projectPath = toPosixPath2(path31.posix.join(relPath, relative8));
         if (isAlwaysLocal(projectPath) || shouldIgnore(this.manifest, projectPath) || shouldIgnoreUntrackedLocalPath(this.manifest, projectPath)) continue;
         if (entry.isDirectory()) {
           parts.push(`D\0${relative8}`);
-          await walk(path30.join(absDir, entry.name), relative8);
+          await walk(path31.join(absDir, entry.name), relative8);
         } else if (entry.isFile()) {
-          const content = await fs25.readFile(path30.join(absDir, entry.name));
+          const content = await fs25.readFile(path31.join(absDir, entry.name));
           parts.push(`F\0${relative8}\0${isTextLike(relative8) ? "doc" : "file"}\0${sha1(content)}`);
         }
       }
@@ -28428,11 +28594,10 @@ var RealtimeSyncService = class {
     if (!this.canAutoPushLocalAhead()) {
       return report;
     }
-    const candidates = report.items.filter((item) => {
-      const safeLocalChange = item.status === "local ahead" || item.status === "local only";
-      const binaryAllowed = isTextLike(item.path) || this.canSyncBinaryFiles();
-      return safeLocalChange && binaryAllowed && !this.docStates.get(item.path)?.paused;
-    });
+    const candidates = planSafeSyncActions(report, {
+      autoPushLocalAhead: true,
+      syncBinaryFiles: this.canSyncBinaryFiles()
+    }).pushes.filter((item) => !this.docStates.get(item.path)?.paused);
     let pushed = 0;
     for (const item of candidates) {
       progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${candidates.length}` });
@@ -28449,12 +28614,6 @@ var RealtimeSyncService = class {
       paths: candidates.map((item) => item.path),
       reason: "post-auto-push"
     });
-  }
-  async autoPushLocalAheadAfterCheck(root, report, progress, options = {}) {
-    if (options.reason === "post-auto-push" || root !== this.root || !this.session || !this.client || this.stopping) {
-      return report;
-    }
-    return this.autoPushLocalAhead(report, progress);
   }
   async fetchRemoteSnapshot(manifest, session, client = this.client, progress, options = {}) {
     const signal = options.signal;
@@ -28660,8 +28819,8 @@ var RealtimeSyncService = class {
   async handleVsCodeRenames(event) {
     if (!this.root || !this.manifest || !this.session) return;
     for (const file of event.files) {
-      const oldPath = toPosixPath2(path30.relative(this.root, file.oldUri.fsPath));
-      const newPath = toPosixPath2(path30.relative(this.root, file.newUri.fsPath));
+      const oldPath = toPosixPath2(path31.relative(this.root, file.oldUri.fsPath));
+      const newPath = toPosixPath2(path31.relative(this.root, file.newUri.fsPath));
       if (!oldPath || !newPath || oldPath.startsWith("..") || newPath.startsWith("..")) continue;
       const subtree = Boolean(this.manifest.folders[oldPath]);
       this.pendingFolderRenameRoots.delete(oldPath);
@@ -28713,14 +28872,14 @@ var RealtimeSyncService = class {
       throw new Error(`Cannot rename the Overleaf project root folder.`);
     }
     try {
-      await this.performRemotePathChange(
+      await performRemotePathChange(this.client, this.manifest.projectId, {
         entityType,
-        entity.entityId,
+        entityId: entity.entityId,
         oldParentFolderId,
-        ensured.parentFolderId,
-        path30.posix.basename(normalizedOld),
-        path30.posix.basename(normalizedNew)
-      );
+        newParentFolderId: ensured.parentFolderId,
+        oldName: path31.posix.basename(normalizedOld),
+        newName: path31.posix.basename(normalizedNew)
+      }, (entityId) => this.markLocalMutation(entityId));
     } catch (error) {
       const reason = `Remote rename/move failed for ${normalizedOld}; no delete/create fallback was used.`;
       this.syncGate.setPath(normalizedOld, "error", reason, Boolean(folder));
@@ -28736,42 +28895,6 @@ var RealtimeSyncService = class {
     await this.persistManifest();
     this.log(`Renamed/moved ${normalizedOld} to ${normalizedNew} on Overleaf.`);
     this.scheduleSyncStatusCheck(100, [normalizedOld, normalizedNew]);
-  }
-  async performRemotePathChange(entityType, entityId, oldParentFolderId, newParentFolderId, oldName, newName) {
-    const renamed = oldName !== newName;
-    const moved = oldParentFolderId !== newParentFolderId;
-    if (!renamed && !moved) return;
-    if (!renamed) {
-      this.markLocalMutation(entityId);
-      await this.client.moveEntity(this.manifest.projectId, entityType, entityId, newParentFolderId);
-      return;
-    }
-    if (!moved) {
-      this.markLocalMutation(entityId);
-      await this.client.renameEntity(this.manifest.projectId, entityType, entityId, newName);
-      return;
-    }
-    const tempName = transactionName(newName, `move-${Date.now()}`);
-    this.markLocalMutation(entityId);
-    await this.client.renameEntity(this.manifest.projectId, entityType, entityId, tempName);
-    try {
-      this.markLocalMutation(entityId);
-      await this.client.moveEntity(this.manifest.projectId, entityType, entityId, newParentFolderId);
-    } catch (error) {
-      this.markLocalMutation(entityId);
-      await this.client.renameEntity(this.manifest.projectId, entityType, entityId, oldName).catch(() => void 0);
-      throw error;
-    }
-    try {
-      this.markLocalMutation(entityId);
-      await this.client.renameEntity(this.manifest.projectId, entityType, entityId, newName);
-    } catch (error) {
-      this.markLocalMutation(entityId);
-      await this.client.moveEntity(this.manifest.projectId, entityType, entityId, oldParentFolderId).catch(() => void 0);
-      this.markLocalMutation(entityId);
-      await this.client.renameEntity(this.manifest.projectId, entityType, entityId, oldName).catch(() => void 0);
-      throw error;
-    }
   }
   async remapFilePath(oldPath, newPath, parentFolderId) {
     const file = this.manifest.files[oldPath];
@@ -28799,7 +28922,7 @@ var RealtimeSyncService = class {
     return current;
   }
   async ensureRemoteParentFoldersNow(relPath) {
-    const parentPath = path30.posix.dirname(toPosixPath2(relPath));
+    const parentPath = path31.posix.dirname(toPosixPath2(relPath));
     const normalizedParent = parentPath === "." ? "" : parentPath;
     const rootFolder = this.manifest.folders[""];
     if (!rootFolder) throw new Error("Overleaf project root folder is missing from the manifest.");
@@ -28928,7 +29051,7 @@ var RealtimeSyncService = class {
     if (isTextLike(relPath)) {
       this.pendingLocalCreates.add(relPath);
       try {
-        const doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path30.posix.basename(relPath));
+        const doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path31.posix.basename(relPath));
         const entry = {
           path: relPath,
           entityId: doc._id,
@@ -28946,7 +29069,7 @@ var RealtimeSyncService = class {
     }
     this.pendingLocalCreates.add(relPath);
     try {
-      const file = await this.client.uploadFile(this.manifest.projectId, ensured.parentFolderId, path30.posix.basename(relPath), content);
+      const file = await this.client.uploadFile(this.manifest.projectId, ensured.parentFolderId, path31.posix.basename(relPath), content);
       addOrUpdateFile(this.manifest, {
         path: relPath,
         entityId: file._id,
@@ -29002,7 +29125,7 @@ var RealtimeSyncService = class {
         uploaded = await this.client.uploadFile(
           this.manifest.projectId,
           entry.parentFolderId,
-          path30.posix.basename(relPath),
+          path31.posix.basename(relPath),
           content
         );
       } catch (error) {
@@ -29040,10 +29163,10 @@ var RealtimeSyncService = class {
   }
   async replaceBinaryWithFallbackTransaction(relPath, content, entry, expectedBlobHash) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const finalName = path30.posix.basename(relPath);
+    const finalName = path31.posix.basename(relPath);
     const tempName = transactionName(finalName, `upload-${id}`);
     const backupName = transactionName(finalName, `backup-${id}`);
-    const tempPath = path30.posix.join(path30.posix.dirname(relPath), tempName).replace(/^\.\//, "");
+    const tempPath = path31.posix.join(path31.posix.dirname(relPath), tempName).replace(/^\.\//, "");
     this.pendingLocalCreates.add(tempPath);
     setTimeout(() => this.pendingLocalCreates.delete(tempPath), 3e4);
     const temporary = await this.client.uploadFile(this.manifest.projectId, entry.parentFolderId, tempName, content);
@@ -29105,30 +29228,17 @@ var RealtimeSyncService = class {
     return true;
   }
   async recoverBinaryTransactions() {
-    const records = await this.binaryTransactions?.list() ?? [];
-    for (const transaction of records) {
-      this.markLocalMutation(transaction.originalEntityId);
-      this.markLocalMutation(transaction.tempEntityId);
-      try {
-        if (transaction.stage === "temp-uploaded") {
-          await this.client.deleteEntity(this.manifest.projectId, "file", transaction.tempEntityId).catch(() => void 0);
-        } else if (transaction.stage === "original-backed-up") {
-          await this.client.renameEntity(this.manifest.projectId, "file", transaction.originalEntityId, transaction.finalName);
-          await this.client.deleteEntity(this.manifest.projectId, "file", transaction.tempEntityId).catch(() => void 0);
-        } else {
-          await this.client.deleteEntity(this.manifest.projectId, "file", transaction.originalEntityId).catch(() => void 0);
-          const entry = this.manifest.files[transaction.path];
-          if (entry) {
-            entry.entityId = transaction.tempEntityId;
-            entry.remoteBlobHash = transaction.expectedBlobHash;
-          }
-        }
-        await this.binaryTransactions.remove(transaction.id);
-      } catch (error) {
-        this.log(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
+    const changed = await recoverBinaryTransactions(
+      this.client,
+      this.manifest.projectId,
+      this.manifest,
+      this.binaryTransactions,
+      {
+        beforeMutation: (entityId) => this.markLocalMutation(entityId),
+        log: (message) => this.log(message)
       }
-    }
-    if (records.length > 0) await this.persistManifest();
+    );
+    if (changed) await this.persistManifest();
   }
   async syncDocContent(relPath, content, force = false) {
     const state = await this.ensureDocState(relPath);
@@ -29207,7 +29317,7 @@ var RealtimeSyncService = class {
       await this.resyncOrConflict("", "Remote create used an unknown parent folder.");
       return;
     }
-    const relPath = path30.posix.join(parentPath, entity.name);
+    const relPath = path31.posix.join(parentPath, entity.name);
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
@@ -29252,7 +29362,7 @@ var RealtimeSyncService = class {
     if (parentPath === void 0) {
       return;
     }
-    const relPath = path30.posix.join(parentPath, folder.name);
+    const relPath = path31.posix.join(parentPath, folder.name);
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
@@ -29279,7 +29389,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path30.posix.join(path30.posix.dirname(oldPath), newName).replace(/^\.\//, "");
+      const newPath = path31.posix.join(path31.posix.dirname(oldPath), newName).replace(/^\.\//, "");
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, file.parentFolderId);
       } catch (error) {
@@ -29289,7 +29399,7 @@ var RealtimeSyncService = class {
     }
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
-      const newPath = path30.posix.join(path30.posix.dirname(folder.path), newName).replace(/^\.\//, "");
+      const newPath = path31.posix.join(path31.posix.dirname(folder.path), newName).replace(/^\.\//, "");
       const oldPath2 = folder.path;
       try {
         await this.remapFolderPath(oldPath2, newPath, true, folder.parentFolderId);
@@ -29315,7 +29425,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path30.posix.join(parentPath, path30.posix.basename(oldPath));
+      const newPath = path31.posix.join(parentPath, path31.posix.basename(oldPath));
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, newParentFolderId);
       } catch (error) {
@@ -29326,7 +29436,7 @@ var RealtimeSyncService = class {
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
       const oldPath2 = folder.path;
-      const newPath = path30.posix.join(parentPath, path30.posix.basename(oldPath2));
+      const newPath = path31.posix.join(parentPath, path31.posix.basename(oldPath2));
       try {
         await this.remapFolderPath(oldPath2, newPath, true, newParentFolderId);
       } catch (error) {
@@ -29533,7 +29643,7 @@ var RealtimeSyncService = class {
         item.path = nextPath;
         if (item.localPath) item.localPath = nextPath;
         if (item.remotePath) item.remotePath = nextPath;
-        item.changeKind = path30.posix.dirname(oldPath) === path30.posix.dirname(newPath) ? "rename" : "move";
+        item.changeKind = path31.posix.dirname(oldPath) === path31.posix.dirname(newPath) ? "rename" : "move";
       }
     }
   }
@@ -29581,7 +29691,7 @@ var RealtimeSyncService = class {
     if (!exists4) {
       return;
     }
-    await fs25.mkdir(path30.dirname(target), { recursive: true });
+    await fs25.mkdir(path31.dirname(target), { recursive: true });
     await fs25.rename(source, target).catch(async () => {
       if (exists4.isDirectory()) {
         await fs25.cp(source, target, { recursive: true });
@@ -29608,7 +29718,7 @@ var RealtimeSyncService = class {
   }
   async writeLocalFile(relPath, content, bypass) {
     const absPath = this.abs(relPath);
-    await fs25.mkdir(path30.dirname(absPath), { recursive: true });
+    await fs25.mkdir(path31.dirname(absPath), { recursive: true });
     if (bypass) {
       this.bypassHashes.set(relPath, sha1(content));
     }
@@ -29625,7 +29735,7 @@ var RealtimeSyncService = class {
     return new ManifestStore(root);
   }
   abs(relPath) {
-    return path30.join(this.root, relPath);
+    return path31.join(this.root, relPath);
   }
   requireReady() {
     if (!this.root || !this.client || !this.manifest || !this.session) {
@@ -29715,13 +29825,6 @@ var RealtimeSyncService = class {
     return true;
   }
 };
-function transactionName(filename, suffix) {
-  const ext2 = path30.posix.extname(filename);
-  const stem = path30.posix.basename(filename, ext2);
-  const marker = `.overleaf-codex-${suffix}`;
-  const maxStem = Math.max(1, 150 - ext2.length - marker.length);
-  return `${stem.slice(0, maxStem)}${marker}${ext2}`;
-}
 async function mapWithConcurrency(items, concurrency, handler) {
   let nextIndex = 0;
   const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
@@ -29742,8 +29845,8 @@ function isAlwaysLocal(relPath) {
 
 // src/overleaf/keychainStore.ts
 var import_child_process3 = require("child_process");
-var import_util16 = require("util");
-var execFileAsync2 = (0, import_util16.promisify)(import_child_process3.execFile);
+var import_util18 = require("util");
+var execFileAsync2 = (0, import_util18.promisify)(import_child_process3.execFile);
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
 var systemSecurity = {
   async run(args) {
@@ -29872,23 +29975,23 @@ var SecretStore = class {
 };
 
 // src/overleaf/mirrorRoots.ts
-var path31 = __toESM(require("path"));
+var path32 = __toESM(require("path"));
 function pathIsWithin(root, candidate) {
-  const relative8 = path31.relative(path31.resolve(root), path31.resolve(candidate));
-  return relative8 === "" || relative8 !== ".." && !relative8.startsWith(`..${path31.sep}`) && !path31.isAbsolute(relative8);
+  const relative8 = path32.relative(path32.resolve(root), path32.resolve(candidate));
+  return relative8 === "" || relative8 !== ".." && !relative8.startsWith(`..${path32.sep}`) && !path32.isAbsolute(relative8);
 }
 function firstWorkspaceMirrorRoot(workspaceRoots, hasManifest) {
   for (const workspaceRoot of workspaceRoots) {
-    const root = path31.resolve(workspaceRoot);
+    const root = path32.resolve(workspaceRoot);
     if (hasManifest(root)) return root;
   }
   return void 0;
 }
 function resolveMirrorRootForPath(candidate, workspaceRoots, hasManifest) {
-  const resolved = path31.resolve(candidate);
+  const resolved = path32.resolve(candidate);
   if (hasManifest(resolved)) return resolved;
   for (const workspaceRoot of workspaceRoots) {
-    const root = path31.resolve(workspaceRoot);
+    const root = path32.resolve(workspaceRoot);
     if (pathIsWithin(root, resolved) && hasManifest(root)) return root;
   }
   return void 0;
@@ -29901,11 +30004,11 @@ function workspaceContainsPath(candidate, workspaceRoots) {
 var crypto4 = __toESM(require("crypto"));
 var fs26 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
-var path32 = __toESM(require("path"));
+var path33 = __toESM(require("path"));
 var import_events = require("events");
 var import_child_process4 = require("child_process");
-var import_util19 = require("util");
-var execFileAsync3 = (0, import_util19.promisify)(import_child_process4.execFile);
+var import_util21 = require("util");
+var execFileAsync3 = (0, import_util21.promisify)(import_child_process4.execFile);
 var SyncOwnerCoordinator = class {
   root;
   metadata;
@@ -29923,7 +30026,7 @@ var SyncOwnerCoordinator = class {
   }
   async claim(root, handler) {
     await this.release();
-    this.root = await fs26.realpath(path32.resolve(root)).catch(() => path32.resolve(root));
+    this.root = await fs26.realpath(path33.resolve(root)).catch(() => path33.resolve(root));
     this.handler = handler;
     await fs26.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
     await fs26.chmod(runtimeRoot(), 448).catch(() => void 0);
@@ -30057,7 +30160,7 @@ var SyncOwnerCoordinator = class {
     });
   }
   async handleSocketRequest(socket, value) {
-    if (!isOwnerRequest(value) || !this.root || path32.resolve(value.root) !== path32.resolve(this.root)) {
+    if (!isOwnerRequest(value) || !this.root || path33.resolve(value.root) !== path33.resolve(this.root)) {
       socket.write(`${JSON.stringify(errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."))}
 `);
       return;
@@ -30093,15 +30196,15 @@ var SyncOwnerCoordinator = class {
   }
 };
 function runtimePaths(root) {
-  const hash2 = crypto4.createHash("sha256").update(path32.resolve(root)).digest("hex").slice(0, 32);
-  const lockPath = path32.join(runtimeRoot(), `${hash2}.lock`);
+  const hash2 = crypto4.createHash("sha256").update(path33.resolve(root)).digest("hex").slice(0, 32);
+  const lockPath = path33.join(runtimeRoot(), `${hash2}.lock`);
   return {
     lockPath,
-    metadataPath: path32.join(lockPath, "owner.json"),
+    metadataPath: path33.join(lockPath, "owner.json"),
     // macOS limits AF_UNIX paths to roughly 104 bytes. The lock retains the
     // full 128-bit hash; the socket uses 64 bits and no suffix to leave room
     // for the user's absolute cache directory.
-    socketPath: path32.join(runtimeRoot(), hash2.slice(0, 16))
+    socketPath: path33.join(runtimeRoot(), hash2.slice(0, 16))
   };
 }
 function sendRequest(socketPath, request, timeoutMs) {
@@ -30351,7 +30454,7 @@ var OverleafService = class {
   async pdfStatus(candidate) {
     const root = await this.requireMirrorRoot(candidate);
     const pdf = await this.findPdf(root);
-    return { path: pdf ?? path33.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
+    return { path: pdf ?? path34.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
   }
   async handle(command, payload = {}) {
     switch (command) {
@@ -30786,44 +30889,38 @@ var OverleafService = class {
     }, 500);
   }
   async handleOwnerCommand(command, args) {
-    switch (command) {
-      case "status":
-        if (args.refresh || args.full) {
-          return this.realtimeSync.checkSyncStatus(
-            this.realtimeSync.currentRoot,
-            void 0,
-            void 0,
-            { mode: args.full ? "full" : "incremental", reason: "ipc" }
-          );
+    const backend = {
+      status: (request) => request.refresh || request.full || request.paths ? this.realtimeSync.checkSyncStatus(
+        this.realtimeSync.currentRoot,
+        void 0,
+        void 0,
+        {
+          mode: request.full ? "full" : "incremental",
+          paths: request.paths,
+          reason: request.reason ?? "ipc-status"
         }
-        return this.realtimeSync.getSyncStatusReport();
-      case "sync-once":
-        return this.realtimeSync.checkSyncStatus(
-          this.realtimeSync.currentRoot,
-          void 0,
-          void 0,
-          { mode: "incremental", reason: "ipc-sync-once" }
-        );
-      case "push":
-        await this.assertIpcForceIfDestructive(String(args.path), "push", Boolean(args.force));
-        await this.realtimeSync.pushLocalFile(String(args.path), true, Boolean(args.force));
-        return this.realtimeSync.getSyncStatusReport();
-      case "pull":
-        await this.assertIpcForceIfDestructive(String(args.path), "pull", Boolean(args.force));
-        await this.realtimeSync.pullRemoteFile(String(args.path));
-        return this.realtimeSync.getSyncStatusReport();
-      case "conflicts-list":
-        return this.realtimeSync.getConflicts();
-      case "conflicts-resolve":
-        if (args.use === "remote") await this.realtimeSync.acceptRemoteConflict(String(args.path));
-        else await this.realtimeSync.useLocalConflict(String(args.path));
-        return this.realtimeSync.getConflicts();
-      default:
-        throw new Error(`Unsupported sync owner command: ${command}`);
+      ) : Promise.resolve(this.realtimeSync.getSyncStatusReport()),
+      syncOnce: () => this.realtimeSync.syncOnce(),
+      push: (relPath, force) => this.realtimeSync.pushLocalFile(relPath, false, force),
+      pull: (relPath, force) => this.pullForOwnerCommand(relPath, force),
+      conflicts: () => this.realtimeSync.getPersistedConflicts(),
+      resolveConflict: async (relPath, use) => {
+        if (use === "remote") await this.realtimeSync.acceptRemoteConflict(relPath);
+        else await this.realtimeSync.useLocalConflict(relPath);
+      },
+      authorize: (ownerCommand, relPath, force) => this.assertIpcForceIfDestructive(relPath, ownerCommand, force)
+    };
+    return executeSyncCommand(backend, command, args);
+  }
+  async pullForOwnerCommand(relPath, force) {
+    const status = this.realtimeSync.getSyncStatusItems().find((item) => item.path === relPath)?.status;
+    if (force && status === "remote deleted") {
+      await this.realtimeSync.moveRemoteDeletedToTrash(relPath);
+      return;
     }
+    await this.realtimeSync.pullRemoteFile(relPath, false);
   }
   async assertIpcForceIfDestructive(relPath, operation, force) {
-    if (force) return;
     const report = await this.realtimeSync.checkSyncStatus(
       this.realtimeSync.currentRoot,
       void 0,
@@ -30831,8 +30928,10 @@ var OverleafService = class {
       { mode: "incremental", paths: [relPath], reason: "ipc-safety-check" }
     );
     const status = report.items.find((item) => item.path === relPath)?.status;
-    const destructive = operation === "push" ? status && ["remote ahead", "remote deleted", "diverged", "local deleted"].includes(status) : status && ["local ahead", "local only", "diverged"].includes(status);
-    if (destructive) throw new Error(`${operation} ${relPath} requires explicit --force because its status is ${status}.`);
+    if (force) return;
+    if (syncOperationRequiresForce(operation, status)) {
+      throw new Error(`${operation} ${relPath} requires explicit --force because its status is ${status}.`);
+    }
   }
   async makeClient(serverUrl) {
     const normalized = normalizeServerUrl(serverUrl);
@@ -30916,7 +31015,7 @@ var OverleafService = class {
   async pickMirror() {
     const mirrors = await this.listMirrors();
     if (!mirrors.length) return void 0;
-    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path33.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
+    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path34.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
     return picked?.mirror;
   }
   async pickStatus(statuses) {
@@ -30969,7 +31068,7 @@ var OverleafService = class {
     const files = await fs27.readdir(outputRoot).catch(() => []);
     const candidate = files.find((name) => name.toLowerCase().endsWith(".pdf"));
     if (!candidate) return void 0;
-    const full = path33.join(outputRoot, candidate);
+    const full = path34.join(outputRoot, candidate);
     return (await fs27.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
   }
 };
@@ -31005,30 +31104,30 @@ async function exists3(filePath) {
 // src/overleaf/cliInstaller.ts
 var fs28 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
-var path34 = __toESM(require("path"));
+var path35 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
-var import_util22 = require("util");
-var execFileAsync4 = (0, import_util22.promisify)(import_child_process5.execFile);
+var import_util24 = require("util");
+var execFileAsync4 = (0, import_util24.promisify)(import_child_process5.execFile);
 var MARKER = ".latex-editing-toolkit-cli.json";
 async function installCli(extensionRoot, version) {
   await assertNode20();
   const supportRoot = cliSupportRoot();
-  const installRoot = path34.join(supportRoot, version);
+  const installRoot = path35.join(supportRoot, version);
   const commandPath = cliCommandPath();
-  const commandDir = path34.dirname(commandPath);
+  const commandDir = path35.dirname(commandPath);
   await assertManagedDestination(commandPath, supportRoot);
   await fs28.mkdir(supportRoot, { recursive: true });
-  const stagingRoot = path34.join(supportRoot, `.staging-${version}-${process.pid}-${Date.now()}`);
-  const backupRoot = path34.join(supportRoot, `.backup-${version}-${process.pid}-${Date.now()}`);
+  const stagingRoot = path35.join(supportRoot, `.staging-${version}-${process.pid}-${Date.now()}`);
+  const backupRoot = path35.join(supportRoot, `.backup-${version}-${process.pid}-${Date.now()}`);
   await fs28.mkdir(stagingRoot, { recursive: true });
   try {
     await Promise.all([
-      fs28.copyFile(path34.join(extensionRoot, "dist", "cli.js"), path34.join(stagingRoot, "cli.js")),
-      fs28.cp(path34.join(extensionRoot, "dist", "cli-vendor"), path34.join(stagingRoot, "cli-vendor"), { recursive: true, force: true })
+      fs28.copyFile(path35.join(extensionRoot, "dist", "cli.js"), path35.join(stagingRoot, "cli.js")),
+      fs28.cp(path35.join(extensionRoot, "dist", "cli-vendor"), path35.join(stagingRoot, "cli-vendor"), { recursive: true, force: true })
     ]);
-    await fs28.writeFile(path34.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
+    await fs28.writeFile(path35.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
 `, "utf8");
-    await fs28.chmod(path34.join(stagingRoot, "cli.js"), 493);
+    await fs28.chmod(path35.join(stagingRoot, "cli.js"), 493);
     if (await fs28.stat(installRoot).then(() => true, () => false)) await fs28.rename(installRoot, backupRoot);
     try {
       await fs28.rename(stagingRoot, installRoot);
@@ -31043,12 +31142,12 @@ async function installCli(extensionRoot, version) {
   await fs28.mkdir(commandDir, { recursive: true });
   const temporary = `${commandPath}.tmp-${process.pid}`;
   await fs28.rm(temporary, { force: true });
-  await fs28.symlink(path34.join(installRoot, "cli.js"), temporary);
+  await fs28.symlink(path35.join(installRoot, "cli.js"), temporary);
   await fs28.rename(temporary, commandPath);
   return {
     installRoot,
     commandPath,
-    pathConfigured: (process.env.PATH ?? "").split(path34.delimiter).includes(commandDir)
+    pathConfigured: (process.env.PATH ?? "").split(path35.delimiter).includes(commandDir)
   };
 }
 async function uninstallCli() {
@@ -31072,11 +31171,11 @@ async function assertNode20() {
   if (!Number.isFinite(major) || major < 20) throw new Error("Installing the CLI requires Node.js 20 or newer on PATH.");
 }
 function cliSupportRoot() {
-  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path34.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : path34.join(os6.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli");
+  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path35.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : path35.join(os6.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli");
 }
 function cliCommandPath() {
-  return path34.join(
-    process.env.LATEX_TOOLKIT_BIN_HOME ? path34.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path34.join(os6.homedir(), ".local", "bin"),
+  return path35.join(
+    process.env.LATEX_TOOLKIT_BIN_HOME ? path35.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path35.join(os6.homedir(), ".local", "bin"),
     "latex-toolkit"
   );
 }
@@ -31091,17 +31190,17 @@ async function isManagedLink(commandPath, supportRoot) {
   const stat6 = await fs28.lstat(commandPath).catch(() => void 0);
   if (!stat6?.isSymbolicLink()) return false;
   const target = await fs28.realpath(commandPath).catch(() => void 0);
-  const canonicalSupportRoot = await fs28.realpath(supportRoot).catch(() => path34.resolve(supportRoot));
+  const canonicalSupportRoot = await fs28.realpath(supportRoot).catch(() => path35.resolve(supportRoot));
   if (!target || !isWithin(canonicalSupportRoot, target)) return false;
-  return fs28.stat(path34.join(path34.dirname(target), MARKER)).then(() => true, () => false);
+  return fs28.stat(path35.join(path35.dirname(target), MARKER)).then(() => true, () => false);
 }
 function isWithin(root, candidate) {
-  const relative8 = path34.relative(path34.resolve(root), path34.resolve(candidate));
-  return relative8 === "" || !relative8.startsWith("..") && !path34.isAbsolute(relative8);
+  const relative8 = path35.relative(path35.resolve(root), path35.resolve(candidate));
+  return relative8 === "" || !relative8.startsWith("..") && !path35.isAbsolute(relative8);
 }
 
 // src/overleaf/sharedConfigBridge.ts
-var path35 = __toESM(require("path"));
+var path36 = __toESM(require("path"));
 var os7 = __toESM(require("os"));
 var vscode12 = __toESM(require("vscode"));
 var MIGRATION_KEY = "latexEditingToolkit.overleaf.sharedStateMigrated.v1";
@@ -31180,7 +31279,7 @@ function explicitValue(configuration, section) {
 }
 function expandHome2(value) {
   if (value === "~") return os7.homedir();
-  return value.startsWith("~/") ? path35.join(os7.homedir(), value.slice(2)) : path35.resolve(value);
+  return value.startsWith("~/") ? path36.join(os7.homedir(), value.slice(2)) : path36.resolve(value);
 }
 
 // src/extension.ts
@@ -31212,7 +31311,7 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path36.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path37.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
@@ -31442,13 +31541,13 @@ async function createProjectWizard(context, registry, treeProvider, output) {
   for (const folder of vscode13.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path36.dirname(folder.uri.fsPath));
+      suggested.add(path37.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
   const location = await vscode13.window.showQuickPick(
     [
-      ...[...suggested].map((folderPath) => ({ label: path36.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...[...suggested].map((folderPath) => ({ label: path37.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
@@ -31516,7 +31615,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const nextRecent = [parentPath, ...recent.filter((item) => path36.normalize(item) !== path36.normalize(parentPath))].slice(0, 8);
+  const nextRecent = [parentPath, ...recent.filter((item) => path37.normalize(item) !== path37.normalize(parentPath))].slice(0, 8);
   await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
@@ -31633,7 +31732,7 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path36.resolve(rootPath);
+  let canonical = path37.resolve(rootPath);
   try {
     canonical = fs29.realpathSync.native(canonical);
   } catch {
@@ -31709,7 +31808,7 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
     return;
   }
   const project = await registry.find(projectPath);
-  const label = project?.label ?? path36.basename(path36.normalize(projectPath));
+  const label = project?.label ?? path37.basename(path37.normalize(projectPath));
   const choice = await vscode13.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
     { modal: true },
@@ -31756,7 +31855,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs29.existsSync(path36.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs29.existsSync(path37.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode13.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -31986,7 +32085,7 @@ var ToolkitTreeProvider = class {
       return this.actionNode(
         `overleaf-mirror:${mirror.root}`,
         mirror.name,
-        `${status} \xB7 ${path36.basename(path36.dirname(mirror.root))}`,
+        `${status} \xB7 ${path37.basename(path37.dirname(mirror.root))}`,
         icon,
         "overleafCodex.openLocalMirror",
         [{ mirror }]
@@ -32012,7 +32111,7 @@ var ToolkitTreeProvider = class {
     );
   }
   localProjectNode(project, isOpen) {
-    const parent = path36.basename(path36.dirname(project.rootPath)) || path36.dirname(project.rootPath);
+    const parent = path37.basename(path37.dirname(project.rootPath)) || path37.dirname(project.rootPath);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
     const presentationDescription = project.templateId === "beamer-generic" ? "Beamer \xB7 Generic Beamer \xB7 main.tex" : template?.kind === "beamer" ? `Beamer \xB7 ${template.label} \xB7 main.tex` : void 0;
     return {
@@ -32059,7 +32158,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     const activeSnippetProfile = vscode13.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path36.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path37.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -32287,8 +32386,8 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode13.Uri.file(path36.join(context.extensionPath, "dist")),
-          vscode13.Uri.file(path36.join(context.extensionPath, "dist", "monaco"))
+          vscode13.Uri.file(path37.join(context.extensionPath, "dist")),
+          vscode13.Uri.file(path37.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -32393,7 +32492,7 @@ var ToolkitPanel = class _ToolkitPanel {
         } catch {
           exists4 = false;
         }
-        data = { path: rawPath || path36.basename(pdfPath), exists: exists4 };
+        data = { path: rawPath || path37.basename(pdfPath), exists: exists4 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
@@ -32458,7 +32557,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode13.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode13.Uri.file(path36.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        const target = await vscode13.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode13.Uri.file(path37.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
         if (target) await fs29.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
@@ -32500,10 +32599,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode13.Uri.file(path36.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode13.Uri.file(path36.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode13.Uri.file(path36.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode13.Uri.file(path36.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode13.Uri.file(path37.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode13.Uri.file(path37.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode13.Uri.file(path37.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode13.Uri.file(path37.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -32520,7 +32619,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs29.existsSync(path36.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs29.existsSync(path37.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

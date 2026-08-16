@@ -48,7 +48,7 @@ import {
 } from './syncStatus';
 import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
 import { SyncGate } from './syncGate';
-import { ConflictStore } from './conflictStore';
+import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
@@ -56,6 +56,8 @@ import { SyncCheckScheduler } from './syncCheckScheduler';
 import { SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
+import { planSafeSyncActions } from './syncCommandCore';
+import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import {
   applyOtOperations,
   buildOtOperations,
@@ -243,6 +245,10 @@ export class RealtimeSyncService implements vscode.Disposable {
       }));
   }
 
+  async getPersistedConflicts(): Promise<PersistedConflict[]> {
+    return this.conflictStore?.list() ?? [];
+  }
+
   async checkSyncStatus(
     root = this.root,
     client = this.client,
@@ -260,25 +266,59 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     if (this.root === root && this.session && !this.stopping) {
       const expectedGeneration = this.generation;
-      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
+      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
         ...options,
         expectedGeneration
       })).report;
-      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     }
     progress?.report({ message: 'Connecting for sync health check' });
     const session = await activeClient.connectSocket(manifest.projectId, options.signal);
 
     try {
       const expectedGeneration = this.root === root ? this.generation : undefined;
-      const report = (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
+      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
         ...options,
         expectedGeneration
       })).report;
-      return await this.autoPushLocalAheadAfterCheck(root, report, progress, options);
     } finally {
       session.disconnect();
     }
+  }
+
+  async syncOnce(progress?: SyncProgress, signal?: AbortSignal): Promise<SyncStatusReport> {
+    this.requireReady();
+    const report = await this.checkSyncStatus(this.root, this.client, progress, {
+      mode: 'incremental',
+      reason: 'sync-once',
+      signal
+    });
+    const plan = planSafeSyncActions(report, {
+      autoPushLocalAhead: this.canAutoPushLocalAhead(),
+      syncBinaryFiles: this.canSyncBinaryFiles()
+    });
+    let pulled = 0;
+    for (const item of plan.pulls) {
+      if (signal?.aborted) throw signal.reason ?? new Error('Operation cancelled.');
+      progress?.report({ message: `Pulling safe remote changes ${pulled + 1}/${plan.pulls.length}: ${item.path}` });
+      if (item.entityType === 'folder') {
+        await fs.mkdir(this.abs(item.path), { recursive: true });
+      } else {
+        await this.pullRemoteFile(item.path, false);
+      }
+      pulled += 1;
+    }
+    let pushed = 0;
+    for (const item of plan.pushes) {
+      if (signal?.aborted) throw signal.reason ?? new Error('Operation cancelled.');
+      progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${plan.pushes.length}: ${item.path}` });
+      await this.pushLocalFile(item.path, false);
+      pushed += 1;
+    }
+    return this.checkSyncStatus(this.root, this.client, progress, {
+      mode: 'incremental',
+      reason: 'post-sync-once',
+      signal
+    });
   }
 
   private async checkSyncStatusWithSession(
@@ -589,7 +629,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
   }
 
-  async pullRemoteFile(relPath: string): Promise<void> {
+  async pullRemoteFile(relPath: string, refreshStatus = true): Promise<void> {
     this.requireReady();
     const normalized = toPosixPath(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === 'error') {
@@ -624,8 +664,10 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     await this.persistManifest();
     this.syncGate.clearPath(normalized);
-    await this.checkTargeted([normalized], 'post-pull');
-    vscode.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+    if (refreshStatus) {
+      await this.checkTargeted([normalized], 'post-pull');
+      vscode.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+    }
   }
 
   async openSyncDiff(relPath: string): Promise<void> {
@@ -1392,13 +1434,10 @@ export class RealtimeSyncService implements vscode.Disposable {
       return report;
     }
 
-    const candidates = report.items.filter(item => {
-      const safeLocalChange = item.status === 'local ahead' || item.status === 'local only';
-      const binaryAllowed = isTextLike(item.path) || this.canSyncBinaryFiles();
-      return safeLocalChange
-        && binaryAllowed
-        && !this.docStates.get(item.path)?.paused;
-    });
+    const candidates = planSafeSyncActions(report, {
+      autoPushLocalAhead: true,
+      syncBinaryFiles: this.canSyncBinaryFiles()
+    }).pushes.filter(item => !this.docStates.get(item.path)?.paused);
     let pushed = 0;
     for (const item of candidates) {
       progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${candidates.length}` });
@@ -1416,22 +1455,6 @@ export class RealtimeSyncService implements vscode.Disposable {
       paths: candidates.map(item => item.path),
       reason: 'post-auto-push'
     });
-  }
-
-  private async autoPushLocalAheadAfterCheck(
-    root: string,
-    report: SyncStatusReport,
-    progress?: SyncProgress,
-    options: SyncCheckOptions = {}
-  ): Promise<SyncStatusReport> {
-    if (options.reason === 'post-auto-push'
-      || root !== this.root
-      || !this.session
-      || !this.client
-      || this.stopping) {
-      return report;
-    }
-    return this.autoPushLocalAhead(report, progress);
   }
 
   private async fetchRemoteSnapshot(
@@ -1712,14 +1735,14 @@ export class RealtimeSyncService implements vscode.Disposable {
       throw new Error(`Cannot rename the Overleaf project root folder.`);
     }
     try {
-      await this.performRemotePathChange(
+      await performRemotePathChange(this.client!, this.manifest!.projectId, {
         entityType,
-        entity.entityId,
+        entityId: entity.entityId,
         oldParentFolderId,
-        ensured.parentFolderId,
-        path.posix.basename(normalizedOld),
-        path.posix.basename(normalizedNew)
-      );
+        newParentFolderId: ensured.parentFolderId,
+        oldName: path.posix.basename(normalizedOld),
+        newName: path.posix.basename(normalizedNew)
+      }, entityId => this.markLocalMutation(entityId));
     } catch (error) {
       const reason = `Remote rename/move failed for ${normalizedOld}; no delete/create fallback was used.`;
       this.syncGate.setPath(normalizedOld, 'error', reason, Boolean(folder));
@@ -1736,51 +1759,6 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.persistManifest();
     this.log(`Renamed/moved ${normalizedOld} to ${normalizedNew} on Overleaf.`);
     this.scheduleSyncStatusCheck(100, [normalizedOld, normalizedNew]);
-  }
-
-  private async performRemotePathChange(
-    entityType: 'doc' | 'file' | 'folder',
-    entityId: string,
-    oldParentFolderId: string,
-    newParentFolderId: string,
-    oldName: string,
-    newName: string
-  ): Promise<void> {
-    const renamed = oldName !== newName;
-    const moved = oldParentFolderId !== newParentFolderId;
-    if (!renamed && !moved) return;
-    if (!renamed) {
-      this.markLocalMutation(entityId);
-      await this.client!.moveEntity(this.manifest!.projectId, entityType, entityId, newParentFolderId);
-      return;
-    }
-    if (!moved) {
-      this.markLocalMutation(entityId);
-      await this.client!.renameEntity(this.manifest!.projectId, entityType, entityId, newName);
-      return;
-    }
-
-    const tempName = transactionName(newName, `move-${Date.now()}`);
-    this.markLocalMutation(entityId);
-    await this.client!.renameEntity(this.manifest!.projectId, entityType, entityId, tempName);
-    try {
-      this.markLocalMutation(entityId);
-      await this.client!.moveEntity(this.manifest!.projectId, entityType, entityId, newParentFolderId);
-    } catch (error) {
-      this.markLocalMutation(entityId);
-      await this.client!.renameEntity(this.manifest!.projectId, entityType, entityId, oldName).catch(() => undefined);
-      throw error;
-    }
-    try {
-      this.markLocalMutation(entityId);
-      await this.client!.renameEntity(this.manifest!.projectId, entityType, entityId, newName);
-    } catch (error) {
-      this.markLocalMutation(entityId);
-      await this.client!.moveEntity(this.manifest!.projectId, entityType, entityId, oldParentFolderId).catch(() => undefined);
-      this.markLocalMutation(entityId);
-      await this.client!.renameEntity(this.manifest!.projectId, entityType, entityId, oldName).catch(() => undefined);
-      throw error;
-    }
   }
 
   private async remapFilePath(oldPath: string, newPath: string, parentFolderId: string): Promise<void> {
@@ -2153,30 +2131,17 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async recoverBinaryTransactions(): Promise<void> {
-    const records = await this.binaryTransactions?.list() ?? [];
-    for (const transaction of records) {
-      this.markLocalMutation(transaction.originalEntityId);
-      this.markLocalMutation(transaction.tempEntityId);
-      try {
-        if (transaction.stage === 'temp-uploaded') {
-          await this.client!.deleteEntity(this.manifest!.projectId, 'file', transaction.tempEntityId).catch(() => undefined);
-        } else if (transaction.stage === 'original-backed-up') {
-          await this.client!.renameEntity(this.manifest!.projectId, 'file', transaction.originalEntityId, transaction.finalName);
-          await this.client!.deleteEntity(this.manifest!.projectId, 'file', transaction.tempEntityId).catch(() => undefined);
-        } else {
-          await this.client!.deleteEntity(this.manifest!.projectId, 'file', transaction.originalEntityId).catch(() => undefined);
-          const entry = this.manifest!.files[transaction.path];
-          if (entry) {
-            entry.entityId = transaction.tempEntityId;
-            entry.remoteBlobHash = transaction.expectedBlobHash;
-          }
-        }
-        await this.binaryTransactions!.remove(transaction.id);
-      } catch (error) {
-        this.log(`Could not recover binary transaction ${transaction.id}: ${formatUnknownError(error)}`);
+    const changed = await recoverBinaryTransactions(
+      this.client!,
+      this.manifest!.projectId,
+      this.manifest!,
+      this.binaryTransactions!,
+      {
+        beforeMutation: entityId => this.markLocalMutation(entityId),
+        log: message => this.log(message)
       }
-    }
-    if (records.length > 0) await this.persistManifest();
+    );
+    if (changed) await this.persistManifest();
   }
 
   private async syncDocContent(relPath: string, content: string, force = false): Promise<void> {
@@ -2824,14 +2789,6 @@ export class RealtimeSyncService implements vscode.Disposable {
     else this.localMutationIds.delete(entityId);
     return true;
   }
-}
-
-function transactionName(filename: string, suffix: string): string {
-  const ext = path.posix.extname(filename);
-  const stem = path.posix.basename(filename, ext);
-  const marker = `.overleaf-codex-${suffix}`;
-  const maxStem = Math.max(1, 150 - ext.length - marker.length);
-  return `${stem.slice(0, maxStem)}${marker}${ext}`;
 }
 
 async function mapWithConcurrency<T>(

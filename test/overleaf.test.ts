@@ -26,6 +26,7 @@ import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPa
 import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
 import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
 import { RenameDetector } from "../src/overleaf/renameDetector";
+import { performRemotePathChange, transactionName } from "../src/overleaf/remoteMutationCore";
 import {
   LocalRenameConflictError,
   renameLocalPathSafely,
@@ -162,6 +163,53 @@ describe("Overleaf integration primitives", () => {
     expect(detector.registerCreate({ path: "sections", hash: "tree-hash", entityType: "folder" })).toEqual({
       kind: "matched", oldPath: "chapters", newPath: "sections"
     });
+  });
+
+  it("uses one rollback-safe remote rename/move transaction for CLI and extension adapters", async () => {
+    const calls: string[] = [];
+    const client = {
+      renameEntity: async (_projectId: string, _type: string, entityId: string, name: string) => {
+        calls.push(`rename:${entityId}:${name}`);
+      },
+      moveEntity: async (_projectId: string, _type: string, entityId: string, parentId: string) => {
+        calls.push(`move:${entityId}:${parentId}`);
+      },
+      deleteEntity: async () => undefined
+    };
+    await performRemotePathChange(client as never, "project", {
+      entityType: "doc",
+      entityId: "doc-1",
+      oldParentFolderId: "left",
+      newParentFolderId: "right",
+      oldName: "old.tex",
+      newName: "new.tex"
+    });
+    expect(calls[0]).toMatch(/^rename:doc-1:new\.overleaf-codex-move-\d+\.tex$/);
+    expect(calls.slice(1)).toEqual(["move:doc-1:right", "rename:doc-1:new.tex"]);
+    expect(transactionName(`${"a".repeat(200)}.pdf`, "upload-id").length).toBeLessThanOrEqual(150);
+  });
+
+  it("restores the original remote name when a combined rename/move fails", async () => {
+    const calls: string[] = [];
+    const client = {
+      renameEntity: async (_projectId: string, _type: string, _entityId: string, name: string) => {
+        calls.push(`rename:${name}`);
+      },
+      moveEntity: async () => {
+        calls.push("move:failed");
+        throw new Error("move failed");
+      },
+      deleteEntity: async () => undefined
+    };
+    await expect(performRemotePathChange(client as never, "project", {
+      entityType: "file",
+      entityId: "file-1",
+      oldParentFolderId: "left",
+      newParentFolderId: "right",
+      oldName: "old.pdf",
+      newName: "new.pdf"
+    })).rejects.toThrow("move failed");
+    expect(calls.at(-1)).toBe("rename:old.pdf");
   });
 
   it("applies local remote-renames without overwriting an existing target", async () => {

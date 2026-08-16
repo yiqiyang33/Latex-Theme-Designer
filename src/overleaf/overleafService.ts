@@ -14,6 +14,7 @@ import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, works
 import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
 import { formatUnknownError, normalizeServerUrl } from "./util";
 import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
+import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
 
 export interface OverleafState {
   available: boolean;
@@ -619,41 +620,39 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async handleOwnerCommand(command: string, args: Record<string, unknown>): Promise<unknown> {
-    switch (command) {
-      case "status":
-        if (args.refresh || args.full) {
-          return this.realtimeSync.checkSyncStatus(
-            this.realtimeSync.currentRoot,
-            undefined,
-            undefined,
-            { mode: args.full ? "full" : "incremental", reason: "ipc" }
-          );
-        }
-        return this.realtimeSync.getSyncStatusReport();
-      case "sync-once":
-        return this.realtimeSync.checkSyncStatus(
+    const backend: SyncCommandBackend = {
+      status: request => request.refresh || request.full || request.paths
+        ? this.realtimeSync.checkSyncStatus(
           this.realtimeSync.currentRoot,
           undefined,
           undefined,
-          { mode: "incremental", reason: "ipc-sync-once" }
-        );
-      case "push":
-        await this.assertIpcForceIfDestructive(String(args.path), "push", Boolean(args.force));
-        await this.realtimeSync.pushLocalFile(String(args.path), true, Boolean(args.force));
-        return this.realtimeSync.getSyncStatusReport();
-      case "pull":
-        await this.assertIpcForceIfDestructive(String(args.path), "pull", Boolean(args.force));
-        await this.realtimeSync.pullRemoteFile(String(args.path));
-        return this.realtimeSync.getSyncStatusReport();
-      case "conflicts-list":
-        return this.realtimeSync.getConflicts();
-      case "conflicts-resolve":
-        if (args.use === "remote") await this.realtimeSync.acceptRemoteConflict(String(args.path));
-        else await this.realtimeSync.useLocalConflict(String(args.path));
-        return this.realtimeSync.getConflicts();
-      default:
-        throw new Error(`Unsupported sync owner command: ${command}`);
+          {
+            mode: request.full ? "full" : "incremental",
+            paths: request.paths,
+            reason: request.reason ?? "ipc-status"
+          }
+        )
+        : Promise.resolve(this.realtimeSync.getSyncStatusReport()),
+      syncOnce: () => this.realtimeSync.syncOnce(),
+      push: (relPath, force) => this.realtimeSync.pushLocalFile(relPath, false, force),
+      pull: (relPath, force) => this.pullForOwnerCommand(relPath, force),
+      conflicts: () => this.realtimeSync.getPersistedConflicts(),
+      resolveConflict: async (relPath, use) => {
+        if (use === "remote") await this.realtimeSync.acceptRemoteConflict(relPath);
+        else await this.realtimeSync.useLocalConflict(relPath);
+      },
+      authorize: (ownerCommand, relPath, force) => this.assertIpcForceIfDestructive(relPath, ownerCommand, force)
+    };
+    return executeSyncCommand(backend, command, args);
+  }
+
+  private async pullForOwnerCommand(relPath: string, force: boolean): Promise<void> {
+    const status = this.realtimeSync.getSyncStatusItems().find(item => item.path === relPath)?.status;
+    if (force && status === "remote deleted") {
+      await this.realtimeSync.moveRemoteDeletedToTrash(relPath);
+      return;
     }
+    await this.realtimeSync.pullRemoteFile(relPath, false);
   }
 
   private async assertIpcForceIfDestructive(
@@ -661,7 +660,6 @@ export class OverleafService implements vscode.Disposable {
     operation: "push" | "pull",
     force: boolean
   ): Promise<void> {
-    if (force) return;
     const report = await this.realtimeSync.checkSyncStatus(
       this.realtimeSync.currentRoot,
       undefined,
@@ -669,10 +667,10 @@ export class OverleafService implements vscode.Disposable {
       { mode: "incremental", paths: [relPath], reason: "ipc-safety-check" }
     );
     const status = report.items.find(item => item.path === relPath)?.status;
-    const destructive = operation === "push"
-      ? status && ["remote ahead", "remote deleted", "diverged", "local deleted"].includes(status)
-      : status && ["local ahead", "local only", "diverged"].includes(status);
-    if (destructive) throw new Error(`${operation} ${relPath} requires explicit --force because its status is ${status}.`);
+    if (force) return;
+    if (syncOperationRequiresForce(operation, status)) {
+      throw new Error(`${operation} ${relPath} requires explicit --force because its status is ${status}.`);
+    }
   }
 
   private async makeClient(serverUrl: string): Promise<OverleafClient> {

@@ -24,6 +24,7 @@ import {
 import type { SyncStatusReport } from './overleaf/types';
 import type { SharedOverleafState } from './overleaf/sharedState';
 import { formatUnknownError, normalizeServerUrl } from './overleaf/util';
+import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from './overleaf/syncCommandCore';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,9 +69,7 @@ class Output {
 
   success(data?: unknown): void {
     if (this.json) {
-      const envelope: CliEnvelope = {
-        schemaVersion: 1, ok: true, command: this.command, root: this.root, data, warnings: this.warnings
-      };
+      const envelope = makeSuccessEnvelope(this.command, this.root, data, this.warnings);
       process.stdout.write(`${JSON.stringify(envelope)}\n`);
     } else if (data !== undefined) {
       process.stdout.write(`${humanValue(data)}\n`);
@@ -90,6 +89,15 @@ class Output {
       process.stdout.write(`${JSON.stringify(envelope)}\n`);
     } else process.stderr.write(`Error: ${error.message}\n`);
   }
+}
+
+function makeSuccessEnvelope(
+  command: string,
+  root: string | undefined,
+  data: unknown,
+  warnings: string[]
+): CliEnvelope {
+  return { schemaVersion: 1, ok: true, command, root, data, warnings: [...warnings] };
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {
@@ -287,17 +295,15 @@ class OwnerFacade {
 
   private async handle(command: string, args: Record<string, unknown>): Promise<unknown> {
     const engine = await this.getEngine();
-    switch (command) {
-      case 'status': return engine.status(Boolean(args.refresh), Boolean(args.full));
-      case 'sync-once': return engine.syncOnce();
-      case 'push': await engine.push(String(args.path), Boolean(args.force)); return engine.status(false);
-      case 'pull': await engine.pull(String(args.path), Boolean(args.force)); return engine.status(false);
-      case 'conflicts-list': return engine.conflicts();
-      case 'conflicts-resolve':
-        await engine.resolveConflict(String(args.path), args.use === 'remote' ? 'remote' : 'local');
-        return engine.conflicts();
-      default: throw usageError(`Unsupported owner command: ${command}`);
-    }
+    const backend: SyncCommandBackend = {
+      status: request => engine.status(request.refresh, request.full, request.paths, request.reason),
+      syncOnce: () => engine.syncOnce(),
+      push: (relPath, force) => engine.push(relPath, force),
+      pull: (relPath, force) => engine.pull(relPath, force),
+      conflicts: () => engine.conflicts(),
+      resolveConflict: (relPath, use) => engine.resolveConflict(relPath, use)
+    };
+    return executeSyncCommand(backend, command, args);
   }
 
   private async getEngine(): Promise<OverleafSyncEngine> {
@@ -436,10 +442,7 @@ async function resolveMirrorRoot(candidate: string): Promise<string> {
 async function operationIsDestructive(root: string, relPath: string, operation: 'push' | 'pull'): Promise<boolean> {
   const status = await readSyncStatus(root);
   const item = status?.items.find(candidate => candidate.path === toPosix(relPath));
-  if (!item) return false;
-  return operation === 'push'
-    ? ['remote ahead', 'remote deleted', 'diverged', 'local deleted'].includes(item.status)
-    : ['local ahead', 'local only', 'diverged'].includes(item.status);
+  return syncOperationRequiresForce(operation, item?.status);
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -600,4 +603,4 @@ if (require.main === module) {
   void main().then(code => { process.exitCode = code; });
 }
 
-export { main, parseArgs, blockingExitCode };
+export { main, parseArgs, blockingExitCode, makeSuccessEnvelope };
