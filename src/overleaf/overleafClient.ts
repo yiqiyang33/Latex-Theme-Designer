@@ -1,6 +1,5 @@
 import * as http from 'http';
 import * as https from 'https';
-import { existsSync } from 'fs';
 import * as path from 'path';
 import { createRequire } from 'module';
 import { Readable } from 'stream';
@@ -507,10 +506,7 @@ export class OverleafSocketSession {
 
   constructor(serverUrl: string, private readonly identity: Identity, timeouts: NetworkTimeouts, query?: string) {
     this.timeouts = timeouts;
-    const cliRuntimeRoot = path.join(__dirname, 'cli-vendor', 'socket.io-client');
-    const runtimeRoot = existsSync(path.join(cliRuntimeRoot, 'lib', 'io.js'))
-      ? cliRuntimeRoot
-      : path.join(__dirname, 'vendor', 'socket.io-client');
+    const runtimeRoot = path.join(__dirname, 'vendor', 'socket.io-client');
     const socketIo = loadSocketIoClient(runtimeRoot);
     patchSocketIoHandshake(socketIo, runtimeRoot);
     const connect = socketIo.connect.bind(socketIo);

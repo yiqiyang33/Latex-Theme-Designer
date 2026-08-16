@@ -12,8 +12,7 @@ if (listing.split(/\r?\n/).some(line => /dist\/vendor\/socket\.io-client\/.*\.(?
 }
 const entries = listing.split(/\r?\n/);
 const unexpectedNodeModules = entries.filter(line => line.includes("node_modules/")
-  && !line.includes("dist/vendor/socket.io-client/node_modules/")
-  && !line.includes("dist/cli-vendor/socket.io-client/node_modules/"));
+  && !line.includes("dist/vendor/socket.io-client/node_modules/"));
 if (unexpectedNodeModules.length) throw new Error(`Unexpected VSIX node_modules entries: ${unexpectedNodeModules.join(", ")}`);
 for (const expected of [
   "assets/icon.png",
@@ -26,10 +25,6 @@ for (const expected of [
   "dist/vendor/socket.io-client/lib/parser.js",
   "dist/vendor/socket.io-client/node_modules/ws/index.js",
   "dist/vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js",
-  "dist/cli-vendor/socket.io-client/lib/io.js",
-  "dist/cli-vendor/socket.io-client/lib/parser.js",
-  "dist/cli-vendor/socket.io-client/node_modules/ws/index.js",
-  "dist/cli-vendor/socket.io-client/node_modules/xmlhttprequest/lib/XMLHttpRequest.js",
   "assets/template/templates/beamer-uchicago.tex",
   "assets/template/templates/beamer-blei.tex",
   "assets/template/templates/beamer-gotham.tex",
@@ -42,6 +37,9 @@ for (const expected of [
   "assets/template/third-party/LICENSES/beamertheme-gotham-LPPL-1.3c.txt"
 ]) {
   if (!entries.some(line => line.includes(expected))) throw new Error(`Missing VSIX entry: ${expected}`);
+}
+if (entries.some(line => line.includes("dist/cli-vendor/"))) {
+  throw new Error("VSIX contains the duplicate CLI Socket.IO runtime.");
 }
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 if (manifest.version !== "2.0.1") throw new Error(`Unexpected package version ${manifest.version}`);

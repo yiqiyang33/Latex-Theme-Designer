@@ -1,20 +1,13 @@
-const { copyFileSync, cpSync, mkdirSync, rmSync } = require("node:fs");
+const { copyFileSync, mkdirSync, rmSync } = require("node:fs");
 const { dirname, join } = require("node:path");
 
 const targetRoot = join("dist", "vendor", "socket.io-client");
 rmSync(targetRoot, { recursive: true, force: true });
+rmSync(join("dist", "cli-vendor"), { recursive: true, force: true });
 
 function copy(source, target) {
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
-}
-
-function copyDirectory(source, target) {
-  mkdirSync(target, { recursive: true });
-  cpSync(source, target, {
-    recursive: true,
-    filter: entry => !entry.endsWith(".DS_Store")
-  });
 }
 
 copy("node_modules/socket.io-client/package.json", join(targetRoot, "package.json"));
@@ -55,9 +48,5 @@ const packet = runtime.parser.decodePacket(runtime.parser.encodePacket({ type: "
 if (packet.type !== "message" || packet.data !== "ok") {
   throw new Error("Prepared Overleaf Socket.IO parser failed its round-trip smoke test.");
 }
-
-const cliRuntimeRoot = join("dist", "cli-vendor", "socket.io-client");
-rmSync(cliRuntimeRoot, { recursive: true, force: true });
-copyDirectory(targetRoot, cliRuntimeRoot);
 
 console.log("Prepared Overleaf Socket.IO runtime.");

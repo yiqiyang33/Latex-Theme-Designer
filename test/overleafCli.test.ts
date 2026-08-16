@@ -6,14 +6,16 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { blockingExitCode, makeSuccessEnvelope, parseArgs } from '../src/cli';
 import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
 import { KEYCHAIN_SERVICE, MacKeychainCredentialStore, type SecurityRunner } from '../src/overleaf/keychainStore';
+import { SecretStore } from '../src/overleaf/secretStore';
 import { defaultSharedState, readSharedState, registerSharedMirror, sharedStatePath, updateSharedState } from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
-import { readManifest, writeManifest } from '../src/overleaf/manifest';
+import { metadataPath, OUTPUT_DIR, readManifest, writeManifest } from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
 import { OverleafSyncEngine } from '../src/overleaf/overleafSyncEngine';
 import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
 import { sha1 } from '../src/overleaf/util';
 import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCore';
+import { compileRemoteProject, latestRemotePdf } from '../src/overleaf/compileCore';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -92,6 +94,9 @@ describe('Overleaf CLI shared infrastructure', () => {
     try {
       await store.saveIdentity('https://example.test', identity);
       expect(runner.items.get(`https://example.test/`)?.cookies).toBe('session=private');
+      expect(runner.lastAddArgs).not.toContain(JSON.stringify(identity));
+      expect(runner.lastAddArgs?.at(-1)).toBe('-w');
+      expect(runner.lastStdin).toBe(JSON.stringify(identity));
       expect(await store.getIdentity('https://example.test/')).toEqual(identity);
       await store.deleteIdentity('https://example.test');
       expect(await store.getIdentity('https://example.test')).toBeUndefined();
@@ -99,6 +104,41 @@ describe('Overleaf CLI shared infrastructure', () => {
       expect(shared.credentialTombstones).toContain('https://example.test/');
       expect(shared.credentialMigrations).toContain('https://example.test/');
       expect(runner.serviceNames).toEqual(new Set([KEYCHAIN_SERVICE]));
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates SecretStorage identities once and keeps Keychain as the only credential copy', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-migration-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN = '1';
+    const identity: Identity = { cookies: 'legacy=private', csrfToken: 'legacy-csrf' };
+    const legacyServer = 'https://legacy.example/';
+    const values = new Map<string, string>([
+      ['overleafCodex.servers', JSON.stringify([legacyServer])],
+      [`overleafCodex.identity.${legacyServer}`, JSON.stringify(identity)]
+    ]);
+    const secrets = {
+      get: async (key: string) => values.get(key),
+      store: async (key: string, value: string) => { values.set(key, value); },
+      delete: async (key: string) => { values.delete(key); },
+      onDidChange: (() => ({ dispose: () => undefined })) as never
+    };
+    const runner = new MemorySecurityRunner();
+    const keychain = new MacKeychainCredentialStore(runner);
+    const store = new SecretStore({ secrets } as never, keychain);
+    try {
+      expect(await store.listServers()).toEqual([legacyServer]);
+      expect(await store.getIdentity(legacyServer)).toEqual(identity);
+      expect(values.has('overleafCodex.servers')).toBe(false);
+      expect(values.has(`overleafCodex.identity.${legacyServer}`)).toBe(false);
+      expect(runner.items.get(legacyServer)).toEqual(identity);
+
+      const current: Identity = { cookies: 'current=private', csrfToken: 'current-csrf' };
+      await store.saveIdentity('https://current.example', current);
+      expect([...values.keys()].filter(key => key.startsWith('overleafCodex.identity.'))).toEqual([]);
+      expect(runner.items.get('https://current.example/')).toEqual(current);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -256,6 +296,58 @@ describe('Shared Overleaf mirror creation', () => {
   });
 });
 
+describe('Remote Overleaf compile output transactions', () => {
+  it('atomically replaces complete outputs, preserves duplicate names, and selects the newest PDF', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-compile-output-'));
+    const outputRoot = metadataPath(temporary, OUTPUT_DIR);
+    await writeManifest(temporary, manifest());
+    await fs.mkdir(outputRoot, { recursive: true });
+    await fs.writeFile(path.join(outputRoot, 'old.pdf'), 'old');
+    const response = {
+      status: 'success' as const,
+      compileGroup: 'compile-1',
+      outputFiles: [
+        { path: 'main.pdf', url: '/first/main.pdf' },
+        { path: 'nested/main.pdf', url: '/second/main.pdf' },
+        { path: 'output.log', url: '/output.log' }
+      ]
+    };
+    const client = {
+      compile: async () => response,
+      downloadCompileOutput: async (url: string) => Buffer.from(`download:${url}`)
+    };
+    try {
+      const result = await compileRemoteProject(temporary, client as never);
+      expect(result.files.map(file => path.basename(file))).toEqual(['main.pdf', 'main-2.pdf', 'output.log']);
+      expect(path.basename(result.pdfPath!)).toBe('main-2.pdf');
+      await expect(fs.stat(path.join(outputRoot, 'old.pdf'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await fs.readFile(path.join(outputRoot, 'main.pdf'), 'utf8')).toContain('/first/main.pdf');
+      expect(await fs.readFile(path.join(outputRoot, 'main-2.pdf'), 'utf8')).toContain('/second/main.pdf');
+
+      const oldTime = new Date(Date.now() - 60_000);
+      const newTime = new Date();
+      await fs.utimes(path.join(outputRoot, 'main-2.pdf'), oldTime, oldTime);
+      await fs.utimes(path.join(outputRoot, 'main.pdf'), newTime, newTime);
+      expect(await latestRemotePdf(temporary)).toBe(path.join(outputRoot, 'main.pdf'));
+
+      await fs.writeFile(path.join(outputRoot, 'preserve.txt'), 'trusted-old-output');
+      const failing = {
+        compile: async () => response,
+        downloadCompileOutput: async (url: string) => {
+          if (url.includes('second')) throw new Error('download failed');
+          return Buffer.from('partial');
+        }
+      };
+      await expect(compileRemoteProject(temporary, failing as never)).rejects.toThrow('download failed');
+      expect(await fs.readFile(path.join(outputRoot, 'preserve.txt'), 'utf8')).toBe('trusted-old-output');
+      const metadataEntries = await fs.readdir(metadataPath(temporary));
+      expect(metadataEntries.filter(name => /output\.(?:staging|backup)-/.test(name))).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Overleaf CLI parser and managed installation', () => {
   it('parses global options independently from command positionals and reserves exit code 2 for blocking reports', () => {
     const parsed = parseArgs(['--root', '/tmp/mirror', 'sync', '--once', '--json']);
@@ -275,13 +367,16 @@ describe('Overleaf CLI parser and managed installation', () => {
     const binRoot = path.join(temporary, 'bin');
     process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME = path.join(temporary, 'support', 'cli');
     process.env.LATEX_TOOLKIT_BIN_HOME = binRoot;
-    await fs.mkdir(path.join(extensionRoot, 'dist', 'cli-vendor', 'socket.io-client', 'lib'), { recursive: true });
+    await fs.mkdir(path.join(extensionRoot, 'dist', 'vendor', 'socket.io-client', 'lib'), { recursive: true });
     await fs.writeFile(path.join(extensionRoot, 'dist', 'cli.js'), '#!/usr/bin/env node\nconsole.log("one")\n');
-    await fs.writeFile(path.join(extensionRoot, 'dist', 'cli-vendor', 'socket.io-client', 'lib', 'io.js'), 'module.exports = {}\n');
+    await fs.writeFile(path.join(extensionRoot, 'dist', 'vendor', 'socket.io-client', 'lib', 'io.js'), 'module.exports = {}\n');
     try {
       const installed = await installCli(extensionRoot, '1.0.0');
       expect((await fs.lstat(installed.commandPath)).isSymbolicLink()).toBe(true);
       expect((await fs.stat(path.join(installed.installRoot, 'cli.js'))).mode & 0o111).not.toBe(0);
+      expect(await fs.readFile(path.join(installed.installRoot, 'vendor', 'socket.io-client', 'lib', 'io.js'), 'utf8'))
+        .toContain('module.exports');
+      await expect(fs.stat(path.join(installed.installRoot, 'cli-vendor'))).rejects.toMatchObject({ code: 'ENOENT' });
       await fs.writeFile(path.join(extensionRoot, 'dist', 'cli.js'), '#!/usr/bin/env node\nconsole.log("two")\n');
       await installCli(extensionRoot, '1.0.0');
       expect(await fs.readFile(path.join(installed.installRoot, 'cli.js'), 'utf8')).toContain('two');
@@ -472,13 +567,17 @@ describe('Shared Overleaf sync command contract', () => {
 class MemorySecurityRunner implements SecurityRunner {
   readonly items = new Map<string, Identity>();
   readonly serviceNames = new Set<string>();
+  lastAddArgs?: string[];
+  lastStdin?: string;
 
-  async run(args: string[]): Promise<string> {
+  async run(args: string[], stdin?: string): Promise<string> {
     const service = args[args.indexOf('-s') + 1];
     const account = args[args.indexOf('-a') + 1];
     this.serviceNames.add(service);
     if (args[0] === 'add-generic-password') {
-      this.items.set(account, JSON.parse(args[args.indexOf('-w') + 1]) as Identity);
+      this.lastAddArgs = [...args];
+      this.lastStdin = stdin;
+      this.items.set(account, JSON.parse(stdin ?? '') as Identity);
       return '';
     }
     if (args[0] === 'find-generic-password') {

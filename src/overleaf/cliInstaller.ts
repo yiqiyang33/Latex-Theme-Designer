@@ -27,7 +27,7 @@ export async function installCli(extensionRoot: string, version: string): Promis
   try {
     await Promise.all([
       fs.copyFile(path.join(extensionRoot, 'dist', 'cli.js'), path.join(stagingRoot, 'cli.js')),
-      fs.cp(path.join(extensionRoot, 'dist', 'cli-vendor'), path.join(stagingRoot, 'cli-vendor'), { recursive: true, force: true })
+      fs.cp(path.join(extensionRoot, 'dist', 'vendor'), path.join(stagingRoot, 'vendor'), { recursive: true, force: true })
     ]);
     await fs.writeFile(path.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}\n`, 'utf8');
     await fs.chmod(path.join(stagingRoot, 'cli.js'), 0o755);

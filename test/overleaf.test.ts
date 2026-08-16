@@ -21,7 +21,7 @@ import {
 } from "../src/overleaf/syncStatus";
 import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalChangedSinceLastSync, hasRemoteChangedSinceLastSync } from "../src/overleaf/ot";
 import { OtDocumentSession, type OtDocumentTransport } from "../src/overleaf/otDocumentSession";
-import { getWithLegacyFallback, hasExplicitConfigurationValue, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
+import { getWithLegacyFallback, hasExplicitConfigurationValue, needsGlobalConfigurationUpdate, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
 import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
 import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
@@ -381,6 +381,9 @@ describe("Overleaf integration primitives", () => {
       { autoPushLocalAhead: { defaultValue: true } }
     );
     expect(getWithLegacyFallback(newAutoPushDefaultOnly, "autoPushLocalAhead", legacyDisabled, "autoPushLocalAhead", true)).toBe(false);
+    expect(needsGlobalConfigurationUpdate({ defaultValue: true }, true, true)).toBe(false);
+    expect(needsGlobalConfigurationUpdate({ globalValue: false }, false, false)).toBe(false);
+    expect(needsGlobalConfigurationUpdate({ globalValue: false }, false, true)).toBe(true);
   });
 
   it("resolves saved file paths to their owning Overleaf mirror", async () => {

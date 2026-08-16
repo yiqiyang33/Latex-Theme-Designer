@@ -23,9 +23,9 @@
 
 ## P3
 
-- [ ] 去除 VSIX 中重复的 `dist/vendor` 与 `dist/cli-vendor` Socket.IO runtime，保留单一来源并在 CLI 安装时复用。
-- [ ] 远端编译产物先下载到 staging 目录，全部成功后再原子替换旧输出；按修改时间选择最新 PDF，并避免同名输出覆盖。
-- [ ] 减少 Keychain、SecretStorage 和共享设置桥接中的重复状态，避免凭据作为子进程参数暴露并减少无变化的 VS Code 全局设置写入。
+- [x] 去除 VSIX 中重复的 `dist/vendor` 与 `dist/cli-vendor` Socket.IO runtime，保留单一来源并在 CLI 安装时复用。
+- [x] 远端编译产物先下载到 staging 目录，全部成功后再原子替换旧输出；按修改时间选择最新 PDF，并避免同名输出覆盖。
+- [x] 减少 Keychain、SecretStorage 和共享设置桥接中的重复状态，避免凭据作为子进程参数暴露并减少无变化的 VS Code 全局设置写入。
 
 ## 测试缺口
 

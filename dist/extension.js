@@ -945,10 +945,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename17, pattern) {
+function matchesGlob(relPath, basename18, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename17);
+    return globToRegExp(pattern).test(basename18);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -10552,7 +10552,7 @@ var require_mime_types = __commonJS({
   "node_modules/mime-types/index.js"(exports2) {
     "use strict";
     var db = require_mime_db();
-    var extname8 = require("path").extname;
+    var extname9 = require("path").extname;
     var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/;
     var TEXT_TYPE_REGEXP = /^text\//i;
     exports2.charset = charset;
@@ -10606,7 +10606,7 @@ var require_mime_types = __commonJS({
       if (!path39 || typeof path39 !== "string") {
         return false;
       }
-      var extension2 = extname8("x." + path39).toLowerCase().substr(1);
+      var extension2 = extname9("x." + path39).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11717,7 +11717,7 @@ var require_form_data = __commonJS({
     var parseUrl = require("url").parse;
     var fs31 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto6 = require("crypto");
+    var crypto7 = require("crypto");
     var mime2 = require_mime_types();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -11782,12 +11782,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs31.stat(value.path, function(err, stat8) {
+          fs31.stat(value.path, function(err, stat9) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat8.size - (value.start ? value.start : 0);
+            var fileSize = stat9.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -11923,7 +11923,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData2.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto6.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto7.randomBytes(12).toString("hex");
     };
     FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -16645,18 +16645,18 @@ var ChangeHistoryService = class {
   }
   async captureValue(target) {
     try {
-      const stat8 = await import_node_fs2.promises.lstat(target);
-      if (stat8.isSymbolicLink()) {
+      const stat9 = await import_node_fs2.promises.lstat(target);
+      if (stat9.isSymbolicLink()) {
         const link = await import_node_fs2.promises.readlink(target);
-        return { kind: "symlink", link_target: link, mode: stat8.mode, fingerprint: hash(`symlink:${link}`) };
+        return { kind: "symlink", link_target: link, mode: stat9.mode, fingerprint: hash(`symlink:${link}`) };
       }
-      if (stat8.isDirectory()) {
+      if (stat9.isDirectory()) {
         const entries = (await import_node_fs2.promises.readdir(target)).sort();
-        return { kind: "directory", mode: stat8.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
+        return { kind: "directory", mode: stat9.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
       }
-      if (stat8.isFile()) {
+      if (stat9.isFile()) {
         const content = await import_node_fs2.promises.readFile(target);
-        return { kind: "file", content_base64: content.toString("base64"), mode: stat8.mode, fingerprint: hashBuffer(content) };
+        return { kind: "file", content_base64: content.toString("base64"), mode: stat9.mode, fingerprint: hashBuffer(content) };
       }
       return { kind: "missing", fingerprint: hash("missing") };
     } catch (err) {
@@ -16684,8 +16684,8 @@ var ChangeHistoryService = class {
     const missing = entries.filter((entry) => entry.value.kind === "missing");
     for (const { target } of missing) {
       try {
-        const stat8 = await import_node_fs2.promises.lstat(target);
-        if (!stat8.isDirectory()) await import_node_fs2.promises.unlink(target);
+        const stat9 = await import_node_fs2.promises.lstat(target);
+        if (!stat9.isDirectory()) await import_node_fs2.promises.unlink(target);
       } catch (err) {
         const code = err.code;
         if (code !== "ENOENT") throw err;
@@ -17216,8 +17216,8 @@ async function preflightCreateProject(draft, extensionDir) {
   const rootPath = path4.resolve(parentPath, projectName || "New Notes");
   if (path4.dirname(rootPath) !== path4.normalize(parentPath)) errors.push("Project path must remain directly inside the selected parent folder.");
   try {
-    const stat8 = await import_node_fs4.promises.stat(parentPath);
-    if (!stat8.isDirectory()) errors.push("Selected parent location is not a directory.");
+    const stat9 = await import_node_fs4.promises.stat(parentPath);
+    if (!stat9.isDirectory()) errors.push("Selected parent location is not a directory.");
     else await import_node_fs4.promises.access(parentPath, import_node_fs4.constants.W_OK);
   } catch (err) {
     errors.push(`Parent location is not writable: ${err.message}`);
@@ -17225,9 +17225,9 @@ async function preflightCreateProject(draft, extensionDir) {
   let targetExists = false;
   let targetEmpty = false;
   try {
-    const stat8 = await import_node_fs4.promises.lstat(rootPath);
+    const stat9 = await import_node_fs4.promises.lstat(rootPath);
     targetExists = true;
-    if (!stat8.isDirectory()) errors.push("A non-directory item already exists at the project path.");
+    if (!stat9.isDirectory()) errors.push("A non-directory item already exists at the project path.");
     else {
       const entries = await import_node_fs4.promises.readdir(rootPath);
       targetEmpty = entries.length === 0;
@@ -20433,8 +20433,8 @@ async function loadRecipeCatalog(rootDir) {
 async function generateVscodeSettingsIfMissing(rootDir) {
   const settingsPath = path9.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat8 = await import_node_fs8.promises.stat(settingsPath);
-    if (stat8.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
+    const stat9 = await import_node_fs8.promises.stat(settingsPath);
+    if (stat9.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
@@ -20569,9 +20569,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path10.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename17 = path10.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename17, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename17, pattern))) {
+        const basename18 = path10.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename18, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename18, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -22363,8 +22363,8 @@ var TemplateService = class {
     await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat8 = await import_node_fs14.promises.stat(targetAbs);
-      if (stat8.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
+      const stat9 = await import_node_fs14.promises.stat(targetAbs);
+      if (stat9.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
@@ -24661,6 +24661,7 @@ function filePathById(manifest, entityId) {
 }
 
 // src/overleaf/compileCore.ts
+var crypto2 = __toESM(require("crypto"));
 var fs16 = __toESM(require("fs/promises"));
 var path21 = __toESM(require("path"));
 async function compileRemoteProject(root, client, rootDocOverride) {
@@ -24669,19 +24670,77 @@ async function compileRemoteProject(root, client, rootDocOverride) {
   const response = await client.compile(manifest.projectId, rootDocPath ?? null);
   if (response.status !== "success") throw new Error(`Overleaf compile failed with status: ${response.status}`);
   const outputRoot = metadataPath(root, OUTPUT_DIR);
-  await fs16.rm(outputRoot, { recursive: true, force: true });
-  await fs16.mkdir(outputRoot, { recursive: true });
-  const files = [];
-  for (const output of response.outputFiles ?? []) {
-    if (!output.url) continue;
-    const target = path21.join(outputRoot, compileOutputName(output));
-    await fs16.mkdir(path21.dirname(target), { recursive: true });
-    await fs16.writeFile(target, await client.downloadCompileOutput(output.url, response));
-    files.push(target);
+  const token = `${process.pid}-${Date.now()}-${crypto2.randomBytes(6).toString("hex")}`;
+  const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
+  const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
+  const stagedFiles = [];
+  const usedNames = /* @__PURE__ */ new Set();
+  let committed = false;
+  await fs16.mkdir(stagingRoot, { recursive: true });
+  try {
+    for (const output of response.outputFiles ?? []) {
+      if (!output.url) continue;
+      const name = uniqueCompileOutputName(output, usedNames);
+      const target = path21.join(stagingRoot, name);
+      await fs16.writeFile(target, await client.downloadCompileOutput(output.url, response));
+      stagedFiles.push(target);
+    }
+    await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
+    committed = true;
+  } finally {
+    await fs16.rm(stagingRoot, { recursive: true, force: true });
+    if (committed) await fs16.rm(backupRoot, { recursive: true, force: true }).catch(() => void 0);
   }
-  const pdfPath = files.find((file) => file.toLowerCase().endsWith(".pdf"));
-  const logPath = files.find((file) => file.toLowerCase().endsWith(".log"));
+  const files = stagedFiles.map((file) => path21.join(outputRoot, path21.basename(file)));
+  const pdfPath = await latestPathByExtension(files, ".pdf");
+  const logPath = await latestPathByExtension(files, ".log");
   return { rootDocPath, outputRoot, files, pdfPath, logPath };
+}
+async function replaceOutputDirectory(outputRoot, stagingRoot, backupRoot) {
+  const hadPreviousOutput = await exists2(outputRoot);
+  if (hadPreviousOutput) await fs16.rename(outputRoot, backupRoot);
+  try {
+    await fs16.rename(stagingRoot, outputRoot);
+  } catch (error) {
+    if (hadPreviousOutput) {
+      try {
+        await restoreOutputBackup(outputRoot, backupRoot);
+      } catch (restoreError) {
+        const detail = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        throw new Error(`Could not install new compile output or restore the previous output. Backup retained at ${backupRoot}: ${detail}`, {
+          cause: error
+        });
+      }
+    }
+    throw error;
+  }
+}
+async function restoreOutputBackup(outputRoot, backupRoot) {
+  if (!await exists2(backupRoot)) return;
+  await fs16.rm(outputRoot, { recursive: true, force: true });
+  await fs16.rename(backupRoot, outputRoot);
+}
+async function latestPathByExtension(files, extension) {
+  const candidates = await Promise.all(files.filter((file) => file.toLowerCase().endsWith(extension)).map(async (file, index) => ({
+    file,
+    index,
+    mtimeMs: (await fs16.stat(file).catch(() => void 0))?.mtimeMs ?? Number.NEGATIVE_INFINITY
+  })));
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || b.index - a.index || b.file.localeCompare(a.file));
+  return candidates[0]?.file;
+}
+function uniqueCompileOutputName(output, used) {
+  const candidate = compileOutputName(output);
+  const extension = path21.extname(candidate);
+  const stem = extension ? candidate.slice(0, -extension.length) : candidate;
+  let name = candidate;
+  let suffix = 2;
+  while (used.has(name.toLowerCase())) {
+    name = `${stem}-${suffix}${extension}`;
+    suffix += 1;
+  }
+  used.add(name.toLowerCase());
+  return name;
 }
 async function detectRootDoc(root) {
   const manifest = await readManifest(root);
@@ -24693,9 +24752,13 @@ async function detectRootDoc(root) {
   return void 0;
 }
 function compileOutputName(output) {
-  const raw = output.path || output.type || output.build || output.url || "output.bin";
-  const clean = raw.split("?")[0].replace(/^.*\//, "");
-  return clean || "output.bin";
+  const raw = output.path || output.url || output.build || output.type || "output.bin";
+  const clean = path21.posix.basename(raw.split("?")[0].replace(/\\/g, "/"));
+  if (clean) return clean;
+  return output.type ? `output.${output.type.replace(/^\./, "")}` : "output.bin";
+}
+async function exists2(target) {
+  return fs16.stat(target).then(() => true, () => false);
 }
 
 // src/overleaf/compileService.ts
@@ -24723,7 +24786,7 @@ var path26 = __toESM(require("path"));
 var vscode9 = __toESM(require("vscode"));
 
 // src/overleaf/sharedState.ts
-var crypto2 = __toESM(require("crypto"));
+var crypto3 = __toESM(require("crypto"));
 var fs18 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
@@ -24844,7 +24907,7 @@ async function acquireSharedStateLock() {
   while (true) {
     const metadata = {
       pid: process.pid,
-      nonce: crypto2.randomBytes(16).toString("hex"),
+      nonce: crypto3.randomBytes(16).toString("hex"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     try {
@@ -24892,8 +24955,8 @@ async function acquireReclaimGuard(guardPath) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat8 = await fs18.stat(guardPath).catch(() => void 0);
-  if (!stat8 || Date.now() - stat8.mtimeMs < SHARED_STATE_LOCK_TIMEOUT_MS * 2) return false;
+  const stat9 = await fs18.stat(guardPath).catch(() => void 0);
+  if (!stat9 || Date.now() - stat9.mtimeMs < SHARED_STATE_LOCK_TIMEOUT_MS * 2) return false;
   await fs18.rm(guardPath, { recursive: true, force: true });
   try {
     await fs18.mkdir(guardPath, { mode: 448 });
@@ -24906,8 +24969,8 @@ async function acquireReclaimGuard(guardPath) {
 async function sharedStateLockIsStale(lockPath, metadataPath2) {
   const metadata = await readSharedStateLockMetadata(metadataPath2);
   if (metadata) return !processAlive(metadata.pid);
-  const stat8 = await fs18.stat(lockPath).catch(() => void 0);
-  return Boolean(stat8 && Date.now() - stat8.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+  const stat9 = await fs18.stat(lockPath).catch(() => void 0);
+  return Boolean(stat9 && Date.now() - stat9.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
   const raw = await fs18.readFile(target, "utf8").catch(() => void 0);
@@ -25199,7 +25262,7 @@ async function writeMirrorSupportFiles(root, rootDocPath, compiler) {
 async function initializeMirrorGitRepository(root, commitMessage = "Initial Overleaf mirror") {
   await fs19.mkdir(root, { recursive: true });
   await fs19.writeFile(path25.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
-  if (!await exists2(path25.join(root, ".git"))) {
+  if (!await exists3(path25.join(root, ".git"))) {
     await runGit(root, ["init"]);
     await runGit(root, ["add", "-A"]);
     const staged = await runGit(root, ["diff", "--cached", "--quiet"]).then(
@@ -25340,7 +25403,7 @@ async function runGit(cwd, args) {
 function isGitDiffExitCode(error) {
   return Boolean(error) && typeof error === "object" && error.code === 1;
 }
-async function exists2(target) {
+async function exists3(target) {
   return fs19.stat(target).then(() => true, () => false);
 }
 
@@ -25427,7 +25490,7 @@ var MirrorManager = class {
     return mirrors;
   }
   async recordForMirrorRoot(root) {
-    if (!await exists3(manifestPath(root))) return void 0;
+    if (!await exists4(manifestPath(root))) return void 0;
     const manifest = await readManifest(root).catch(() => void 0);
     if (!manifest) return void 0;
     return {
@@ -25445,14 +25508,13 @@ function isLocalMirrorRecord(value) {
 function normalizeRoot(root) {
   return path26.resolve(expandHome(root));
 }
-async function exists3(filePath) {
+async function exists4(filePath) {
   return fs20.access(filePath).then(() => true, () => false);
 }
 
 // src/overleaf/overleafClient.ts
 var http = __toESM(require("http"));
 var https = __toESM(require("https"));
-var import_fs3 = require("fs");
 var path27 = __toESM(require("path"));
 var import_module = require("module");
 var import_stream = require("stream");
@@ -25886,8 +25948,7 @@ var OverleafSocketSession = class {
   constructor(serverUrl, identity, timeouts, query) {
     this.identity = identity;
     this.timeouts = timeouts;
-    const cliRuntimeRoot = path27.join(__dirname, "cli-vendor", "socket.io-client");
-    const runtimeRoot2 = (0, import_fs3.existsSync)(path27.join(cliRuntimeRoot, "lib", "io.js")) ? cliRuntimeRoot : path27.join(__dirname, "vendor", "socket.io-client");
+    const runtimeRoot2 = path27.join(__dirname, "vendor", "socket.io-client");
     const socketIo = loadSocketIoClient(runtimeRoot2);
     patchSocketIoHandshake(socketIo, runtimeRoot2);
     const connect = socketIo.connect.bind(socketIo);
@@ -26743,8 +26804,8 @@ async function fileHash(filePath) {
   return content ? sha1(content) : void 0;
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false) {
-  const stat8 = await fs22.stat(filePath).catch(() => void 0);
-  if (!stat8?.isFile()) {
+  const stat9 = await fs22.stat(filePath).catch(() => void 0);
+  if (!stat9?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -26756,17 +26817,17 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false) {
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat8.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat8.size && manifestFile.localMtimeMs === stat8.mtimeMs && manifestFile.localCtimeMs === stat8.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat9.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat9.size && manifestFile.localMtimeMs === stat9.mtimeMs && manifestFile.localCtimeMs === stat9.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash2 = await fileHash(filePath);
   if (!manifestFile) return { hash: hash2, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat8.size || manifestFile.localMtimeMs !== stat8.mtimeMs || manifestFile.localCtimeMs !== stat8.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat9.size || manifestFile.localMtimeMs !== stat9.mtimeMs || manifestFile.localCtimeMs !== stat9.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash2;
-  manifestFile.localSize = stat8.size;
-  manifestFile.localMtimeMs = stat8.mtimeMs;
-  manifestFile.localCtimeMs = stat8.ctimeMs;
+  manifestFile.localSize = stat9.size;
+  manifestFile.localMtimeMs = stat9.mtimeMs;
+  manifestFile.localCtimeMs = stat9.ctimeMs;
   manifestFile.localInode = inode;
   return { hash: hash2, cacheChanged, reused: false };
 }
@@ -27319,6 +27380,10 @@ function getWithLegacyFallback(primary, primarySection, legacy, legacySection, d
     return primary.get(primarySection, defaultValue);
   }
   return legacy.get(legacySection, defaultValue);
+}
+function needsGlobalConfigurationUpdate(inspection, effectiveValue, desiredValue) {
+  if (Object.is(inspection?.globalValue, desiredValue)) return false;
+  return !(inspection?.globalValue === void 0 && Object.is(effectiveValue, desiredValue));
 }
 
 // src/overleaf/localRename.ts
@@ -28546,13 +28611,13 @@ var RealtimeSyncService = class {
     this.timers.set(relPath, timer);
   }
   async registerPotentialRenameCreate(relPath) {
-    const stat8 = await fs26.stat(this.abs(relPath)).catch(() => void 0);
-    if (!stat8) return;
+    const stat9 = await fs26.stat(this.abs(relPath)).catch(() => void 0);
+    if (!stat9) return;
     if (this.hasPendingFolderRenameAncestor(relPath)) {
       this.scheduleLocalChange(relPath, "create", 1e3);
       return;
     }
-    if (stat8.isDirectory()) {
+    if (stat9.isDirectory()) {
       this.pendingFolderRenameRoots.add(relPath);
       const detection2 = this.renameDetector.registerCreate({
         path: relPath,
@@ -29083,12 +29148,12 @@ var RealtimeSyncService = class {
       return;
     }
     const absPath = this.abs(relPath);
-    const stat8 = await fs26.stat(absPath).catch(() => void 0);
-    if (!stat8) {
+    const stat9 = await fs26.stat(absPath).catch(() => void 0);
+    if (!stat9) {
       await this.handleLocalDelete(relPath);
       return;
     }
-    if (stat8.isDirectory()) {
+    if (stat9.isDirectory()) {
       await this.handleLocalFolderCreate(relPath);
       return;
     }
@@ -29794,13 +29859,13 @@ var RealtimeSyncService = class {
   async moveLocalToTrash(relPath) {
     const source = this.abs(relPath);
     const target = trashPathFor(this.root, relPath);
-    const exists5 = await fs26.stat(source).catch(() => void 0);
-    if (!exists5) {
+    const exists6 = await fs26.stat(source).catch(() => void 0);
+    if (!exists6) {
       return;
     }
     await fs26.mkdir(path32.dirname(target), { recursive: true });
     await fs26.rename(source, target).catch(async () => {
-      if (exists5.isDirectory()) {
+      if (exists6.isDirectory()) {
         await fs26.cp(source, target, { recursive: true });
         await fs26.rm(source, { recursive: true, force: true });
       } else {
@@ -29941,14 +30006,9 @@ function isAlwaysLocal(relPath) {
 
 // src/overleaf/keychainStore.ts
 var import_child_process3 = require("child_process");
-var import_util19 = require("util");
-var execFileAsync2 = (0, import_util19.promisify)(import_child_process3.execFile);
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
 var systemSecurity = {
-  async run(args) {
-    const result = await execFileAsync2("/usr/bin/security", args, { encoding: "utf8", maxBuffer: 1024 * 1024 });
-    return String(result.stdout ?? "").trim();
-  }
+  run: runSecurity
 };
 var MacKeychainCredentialStore = class {
   constructor(security = systemSecurity) {
@@ -29958,16 +30018,10 @@ var MacKeychainCredentialStore = class {
   async saveIdentity(serverUrl, identity) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run([
-      "add-generic-password",
-      "-U",
-      "-s",
-      KEYCHAIN_SERVICE,
-      "-a",
-      account,
-      "-w",
+    await this.security.run(
+      ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
       JSON.stringify(identity)
-    ]);
+    );
     await updateSharedState((state) => {
       if (!state.servers.includes(account)) state.servers.push(account);
       if (!state.credentialMigrations.includes(account)) state.credentialMigrations.push(account);
@@ -30008,6 +30062,23 @@ var MacKeychainCredentialStore = class {
     }
   }
 };
+function runSecurity(args, stdin) {
+  return new Promise((resolve22, reject) => {
+    const child = (0, import_child_process3.spawn)("/usr/bin/security", args, { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      const output = Buffer.concat(stdout).toString("utf8").trim();
+      if (code === 0) resolve22(output);
+      else reject(new Error(Buffer.concat(stderr).toString("utf8").trim() || `security exited with code ${code}.`));
+    });
+    child.stdin.end(stdin === void 0 ? void 0 : `${stdin}
+`);
+  });
+}
 function isMissingKeychainItem(error) {
   const message = error instanceof Error ? error.message : String(error);
   return /could not be found|SecKeychainSearchCopyNext|The specified item could not be found/i.test(message);
@@ -30017,56 +30088,65 @@ function isMissingKeychainItem(error) {
 var SECRET_PREFIX = "overleafCodex.identity.";
 var SERVERS_KEY = "overleafCodex.servers";
 var SecretStore = class {
-  constructor(context) {
+  constructor(context, keychain = new MacKeychainCredentialStore()) {
     this.context = context;
+    this.keychain = keychain;
   }
   context;
-  keychain = new MacKeychainCredentialStore();
+  keychain;
   async saveIdentity(serverUrl, identity) {
     const normalized = normalizeServerUrl(serverUrl);
     await this.keychain.saveIdentity(normalized, identity);
-    await this.context.secrets.store(this.key(normalized), JSON.stringify(identity));
-    await this.addServer(normalized);
+    await this.purgeLegacyIdentity(normalized);
   }
   async getIdentity(serverUrl) {
     const normalized = normalizeServerUrl(serverUrl);
     const keychain = await this.keychain.getIdentity(normalized);
-    if (keychain) return keychain;
+    if (keychain) {
+      await this.purgeLegacyIdentity(normalized);
+      return keychain;
+    }
     const shared = await readSharedState();
-    if (shared.credentialTombstones.includes(normalized) || shared.credentialMigrations.includes(normalized)) return void 0;
-    const value = await this.context.secrets.get(this.key(serverUrl));
-    if (!value) {
+    if (shared.credentialTombstones.includes(normalized) || shared.credentialMigrations.includes(normalized)) {
+      await this.purgeLegacyIdentity(normalized);
       return void 0;
     }
+    const value = await this.context.secrets.get(this.key(normalized));
+    if (!value) return void 0;
     const identity = JSON.parse(value);
     await this.keychain.saveIdentity(normalized, identity);
+    await this.purgeLegacyIdentity(normalized);
     return identity;
   }
   async deleteIdentity(serverUrl) {
     const normalized = normalizeServerUrl(serverUrl);
     await this.keychain.deleteIdentity(normalized);
-    await this.context.secrets.delete(this.key(normalized));
-    await this.removeServer(normalized);
+    await this.purgeLegacyIdentity(normalized);
   }
   async listServers() {
-    const value = await this.context.secrets.get(SERVERS_KEY);
-    if (!value) {
-      return this.keychain.listServers();
-    }
-    return [.../* @__PURE__ */ new Set([...JSON.parse(value), ...await this.keychain.listServers()])].sort();
+    for (const server of await this.legacyServers()) await this.getIdentity(server);
+    await this.context.secrets.delete(SERVERS_KEY);
+    return this.keychain.listServers();
   }
   key(serverUrl) {
     return `${SECRET_PREFIX}${normalizeServerUrl(serverUrl)}`;
   }
-  async addServer(serverUrl) {
-    const servers = new Set(await this.listServers());
-    servers.add(normalizeServerUrl(serverUrl));
-    await this.context.secrets.store(SERVERS_KEY, JSON.stringify([...servers].sort()));
+  async legacyServers() {
+    const value = await this.context.secrets.get(SERVERS_KEY);
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? [...new Set(parsed.filter((item) => typeof item === "string").map(normalizeServerUrl))] : [];
+    } catch {
+      return [];
+    }
   }
-  async removeServer(serverUrl) {
-    const servers = new Set(await this.listServers());
-    servers.delete(normalizeServerUrl(serverUrl));
-    await this.context.secrets.store(SERVERS_KEY, JSON.stringify([...servers].sort()));
+  async purgeLegacyIdentity(serverUrl) {
+    const normalized = normalizeServerUrl(serverUrl);
+    await this.context.secrets.delete(this.key(normalized));
+    const remaining = (await this.legacyServers()).filter((item) => item !== normalized);
+    if (remaining.length > 0) await this.context.secrets.store(SERVERS_KEY, JSON.stringify(remaining.sort()));
+    else await this.context.secrets.delete(SERVERS_KEY);
   }
 };
 
@@ -30097,14 +30177,14 @@ function workspaceContainsPath(candidate, workspaceRoots) {
 }
 
 // src/overleaf/syncOwnerCoordinator.ts
-var crypto5 = __toESM(require("crypto"));
+var crypto6 = __toESM(require("crypto"));
 var fs27 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path34 = __toESM(require("path"));
 var import_events = require("events");
 var import_child_process4 = require("child_process");
-var import_util22 = require("util");
-var execFileAsync3 = (0, import_util22.promisify)(import_child_process4.execFile);
+var import_util21 = require("util");
+var execFileAsync2 = (0, import_util21.promisify)(import_child_process4.execFile);
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
     this.options = options;
@@ -30153,7 +30233,7 @@ var SyncOwnerCoordinator = class {
       pid: process.pid,
       root: this.root,
       socketPath: paths.socketPath,
-      nonce: crypto5.randomBytes(16).toString("hex"),
+      nonce: crypto6.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
       processStart: await processStartSignature(process.pid)
     };
@@ -30183,7 +30263,7 @@ var SyncOwnerCoordinator = class {
     if (this.server && this.handler) return this.handler(command, args);
     const request = {
       version: 1,
-      id: crypto5.randomUUID(),
+      id: crypto6.randomUUID(),
       command,
       root: this.root,
       args
@@ -30246,7 +30326,7 @@ var SyncOwnerCoordinator = class {
     });
     socket.write(`${JSON.stringify({
       version: 1,
-      id: crypto5.randomUUID(),
+      id: crypto6.randomUUID(),
       command: "subscribe",
       root: this.root,
       args: {}
@@ -30319,8 +30399,8 @@ var SyncOwnerCoordinator = class {
   async lockIsStale(paths) {
     const metadata = await readMetadata(paths.metadataPath);
     if (!metadata) {
-      const stat8 = await fs27.stat(paths.lockPath).catch(() => void 0);
-      return Boolean(stat8 && Date.now() - stat8.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
+      const stat9 = await fs27.stat(paths.lockPath).catch(() => void 0);
+      return Boolean(stat9 && Date.now() - stat9.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
     }
     if (processAlive2(metadata.pid)) {
       const currentStart = await processStartSignature(metadata.pid);
@@ -30345,7 +30425,7 @@ var SyncOwnerCoordinator = class {
   }
 };
 function runtimePaths(root) {
-  const hash2 = crypto5.createHash("sha256").update(path34.resolve(root)).digest("hex").slice(0, 32);
+  const hash2 = crypto6.createHash("sha256").update(path34.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path34.join(runtimeRoot(), `${hash2}.lock`);
   return {
     lockPath,
@@ -30440,8 +30520,8 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat8 = await fs27.stat(guardPath).catch(() => void 0);
-  if (!stat8 || Date.now() - stat8.mtimeMs < staleMs) return false;
+  const stat9 = await fs27.stat(guardPath).catch(() => void 0);
+  if (!stat9 || Date.now() - stat9.mtimeMs < staleMs) return false;
   await fs27.rm(guardPath, { recursive: true, force: true });
   try {
     await fs27.mkdir(guardPath, { mode: 448 });
@@ -30470,7 +30550,7 @@ function processAlive2(pid) {
 }
 async function processStartSignature(pid) {
   try {
-    const result = await execFileAsync3("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
+    const result = await execFileAsync2("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
     return String(result.stdout ?? "").trim() || void 0;
   } catch {
     return void 0;
@@ -30777,7 +30857,7 @@ var OverleafService = class {
     const parent = await this.pickMirrorParentFolder();
     if (!parent) return;
     const root = this.mirrorManager.getProjectMirrorRoot(parent, project);
-    if (await exists4(root)) {
+    if (await exists5(root)) {
       const manifest = await readManifest(root).catch(() => void 0);
       if (manifest?.projectId === project.id) {
         const choice = await vscode11.window.showWarningMessage(
@@ -30993,7 +31073,7 @@ var OverleafService = class {
     return root;
   }
   findWorkspaceMirrorRootSync() {
-    return firstWorkspaceMirrorRoot(this.workspaceFileRoots(), (root) => existsSync5(manifestPath(root)));
+    return firstWorkspaceMirrorRoot(this.workspaceFileRoots(), (root) => existsSync4(manifestPath(root)));
   }
   resolveMirrorRoot(value) {
     const candidate = value && typeof value === "object" && "workspacePath" in value ? value.workspacePath : value;
@@ -31004,13 +31084,13 @@ var OverleafService = class {
     return this.mirrorRootForPath(candidate);
   }
   mirrorRootForPath(candidate) {
-    return resolveMirrorRootForPath(candidate, this.workspaceFileRoots(), (root) => existsSync5(manifestPath(root)));
+    return resolveMirrorRootForPath(candidate, this.workspaceFileRoots(), (root) => existsSync4(manifestPath(root)));
   }
   workspaceFileRoots() {
     return (vscode11.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => folder.uri.fsPath);
   }
   isMirrorRootOpen(root) {
-    return Boolean(root && existsSync5(manifestPath(root)) && workspaceContainsPath(root, this.workspaceFileRoots()));
+    return Boolean(root && existsSync4(manifestPath(root)) && workspaceContainsPath(root, this.workspaceFileRoots()));
   }
   async ensureRunning(candidate) {
     const root = await this.requireMirrorRoot(candidate);
@@ -31254,7 +31334,7 @@ var OverleafService = class {
     return (await fs28.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
   }
 };
-function existsSync5(filePath) {
+function existsSync4(filePath) {
   try {
     require("node:fs").accessSync(filePath);
     return true;
@@ -31274,7 +31354,7 @@ function abortSignalFromToken(token) {
   token.onCancellationRequested(() => controller.abort(new Error("Operation cancelled.")));
   return controller.signal;
 }
-async function exists4(filePath) {
+async function exists5(filePath) {
   try {
     await fs28.access(filePath);
     return true;
@@ -31288,8 +31368,8 @@ var fs29 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path36 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
-var import_util25 = require("util");
-var execFileAsync4 = (0, import_util25.promisify)(import_child_process5.execFile);
+var import_util24 = require("util");
+var execFileAsync3 = (0, import_util24.promisify)(import_child_process5.execFile);
 var MARKER = ".latex-editing-toolkit-cli.json";
 async function installCli(extensionRoot, version) {
   await assertNode20();
@@ -31305,7 +31385,7 @@ async function installCli(extensionRoot, version) {
   try {
     await Promise.all([
       fs29.copyFile(path36.join(extensionRoot, "dist", "cli.js"), path36.join(stagingRoot, "cli.js")),
-      fs29.cp(path36.join(extensionRoot, "dist", "cli-vendor"), path36.join(stagingRoot, "cli-vendor"), { recursive: true, force: true })
+      fs29.cp(path36.join(extensionRoot, "dist", "vendor"), path36.join(stagingRoot, "vendor"), { recursive: true, force: true })
     ]);
     await fs29.writeFile(path36.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
 `, "utf8");
@@ -31348,7 +31428,7 @@ async function updateManagedCliIfInstalled(extensionRoot, version) {
   return installCli(extensionRoot, version);
 }
 async function assertNode20() {
-  const result = await execFileAsync4("/usr/bin/env", ["node", "--version"], { encoding: "utf8" }).catch(() => void 0);
+  const result = await execFileAsync3("/usr/bin/env", ["node", "--version"], { encoding: "utf8" }).catch(() => void 0);
   const major = Number(/^v(\d+)/.exec(String(result?.stdout ?? ""))?.[1]);
   if (!Number.isFinite(major) || major < 20) throw new Error("Installing the CLI requires Node.js 20 or newer on PATH.");
 }
@@ -31362,15 +31442,15 @@ function cliCommandPath() {
   );
 }
 async function assertManagedDestination(commandPath, supportRoot) {
-  const stat8 = await fs29.lstat(commandPath).catch(() => void 0);
-  if (!stat8) return;
+  const stat9 = await fs29.lstat(commandPath).catch(() => void 0);
+  if (!stat9) return;
   if (!await isManagedLink(commandPath, supportRoot)) {
     throw new Error(`Refusing to overwrite non-managed command: ${commandPath}`);
   }
 }
 async function isManagedLink(commandPath, supportRoot) {
-  const stat8 = await fs29.lstat(commandPath).catch(() => void 0);
-  if (!stat8?.isSymbolicLink()) return false;
+  const stat9 = await fs29.lstat(commandPath).catch(() => void 0);
+  if (!stat9?.isSymbolicLink()) return false;
   const target = await fs29.realpath(commandPath).catch(() => void 0);
   const canonicalSupportRoot = await fs29.realpath(supportRoot).catch(() => path36.resolve(supportRoot));
   if (!target || !isWithin(canonicalSupportRoot, target)) return false;
@@ -31408,22 +31488,34 @@ async function applySharedSettings() {
   applyingSharedSettings = true;
   try {
     await Promise.all([
-      legacy.update("serverUrl", state.serverUrl, vscode12.ConfigurationTarget.Global),
-      legacy.update("localProjectsRoot", state.localProjectsRoot, vscode12.ConfigurationTarget.Global),
-      legacy.update("autoPushLocalAhead", state.policy.autoPushLocalAhead, vscode12.ConfigurationTarget.Global),
-      legacy.update("syncBinaryFiles", state.policy.syncBinaryFiles, vscode12.ConfigurationTarget.Global),
-      legacy.update("syncDestructiveChanges", state.policy.syncDestructiveChanges, vscode12.ConfigurationTarget.Global),
-      legacy.update("connectTimeout", state.policy.networkTimeouts.connectMs / 1e3, vscode12.ConfigurationTarget.Global),
-      legacy.update("projectJoinTimeout", state.policy.networkTimeouts.projectJoinMs / 1e3, vscode12.ConfigurationTarget.Global),
-      legacy.update("httpTimeout", state.policy.networkTimeouts.httpMs / 1e3, vscode12.ConfigurationTarget.Global),
-      legacy.update("joinDocTimeout", state.policy.networkTimeouts.joinDocMs / 1e3, vscode12.ConfigurationTarget.Global),
-      legacy.update("otAckTimeout", state.policy.networkTimeouts.otAckMs / 1e3, vscode12.ConfigurationTarget.Global),
-      modern.update("autoPushLocalAhead", state.policy.autoPushLocalAhead, vscode12.ConfigurationTarget.Global),
-      modern.update("syncBinaryFiles", state.policy.syncBinaryFiles, vscode12.ConfigurationTarget.Global)
+      updateGlobalIfChanged(legacy, "serverUrl", state.serverUrl),
+      updateGlobalIfChanged(legacy, "localProjectsRoot", state.localProjectsRoot),
+      clearGlobalIfSet(legacy, "autoPushLocalAhead"),
+      clearGlobalIfSet(legacy, "syncBinaryFiles"),
+      updateGlobalIfChanged(legacy, "syncDestructiveChanges", state.policy.syncDestructiveChanges),
+      updateGlobalIfChanged(legacy, "connectTimeout", state.policy.networkTimeouts.connectMs / 1e3),
+      updateGlobalIfChanged(legacy, "projectJoinTimeout", state.policy.networkTimeouts.projectJoinMs / 1e3),
+      updateGlobalIfChanged(legacy, "httpTimeout", state.policy.networkTimeouts.httpMs / 1e3),
+      updateGlobalIfChanged(legacy, "joinDocTimeout", state.policy.networkTimeouts.joinDocMs / 1e3),
+      updateGlobalIfChanged(legacy, "otAckTimeout", state.policy.networkTimeouts.otAckMs / 1e3),
+      updateGlobalIfChanged(modern, "autoPushLocalAhead", state.policy.autoPushLocalAhead),
+      updateGlobalIfChanged(modern, "syncBinaryFiles", state.policy.syncBinaryFiles)
     ]);
   } finally {
     applyingSharedSettings = false;
   }
+}
+async function updateGlobalIfChanged(configuration, section, value) {
+  if (!needsGlobalConfigurationUpdate(
+    configuration.inspect(section),
+    configuration.get(section),
+    value
+  )) return;
+  await configuration.update(section, value, vscode12.ConfigurationTarget.Global);
+}
+async function clearGlobalIfSet(configuration, section) {
+  if (configuration.inspect(section)?.globalValue === void 0) return;
+  await configuration.update(section, void 0, vscode12.ConfigurationTarget.Global);
 }
 async function syncExplicitSettings() {
   const legacy = vscode12.workspace.getConfiguration("overleafCodex");
@@ -32667,14 +32759,14 @@ var ToolkitPanel = class _ToolkitPanel {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = service.resolvePdfPath(rawPath);
-        let exists5 = false;
+        let exists6 = false;
         try {
-          const stat8 = await fs30.promises.stat(pdfPath);
-          exists5 = stat8.isFile();
+          const stat9 = await fs30.promises.stat(pdfPath);
+          exists6 = stat9.isFile();
         } catch {
-          exists5 = false;
+          exists6 = false;
         }
-        data = { path: rawPath || path38.basename(pdfPath), exists: exists5 };
+        data = { path: rawPath || path38.basename(pdfPath), exists: exists6 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");

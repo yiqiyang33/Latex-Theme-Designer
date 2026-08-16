@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { OverleafClient } from './overleafClient';
 import { manifestPath, readManifest } from './manifest';
-import type { CompileOutputFile, ProjectSummary } from './types';
+import type { ProjectSummary } from './types';
 import { expandHome } from './util';
 import { registerSharedMirror } from './sharedState';
 import {
@@ -142,10 +142,4 @@ function normalizeRoot(root: string): string {
 
 async function exists(filePath: string): Promise<boolean> {
   return fs.access(filePath).then(() => true, () => false);
-}
-
-export function outputFileName(output: CompileOutputFile): string {
-  if (output.path) return output.path;
-  if (output.url) return path.posix.basename(output.url.split('?')[0]);
-  return 'output.bin';
 }

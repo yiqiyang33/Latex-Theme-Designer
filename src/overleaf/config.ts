@@ -39,3 +39,12 @@ export function getWithLegacyFallback<T>(
   }
   return legacy.get<T>(legacySection, defaultValue);
 }
+
+export function needsGlobalConfigurationUpdate<T>(
+  inspection: ConfigurationInspection<T> | undefined,
+  effectiveValue: T | undefined,
+  desiredValue: T
+): boolean {
+  if (Object.is(inspection?.globalValue, desiredValue)) return false;
+  return !(inspection?.globalValue === undefined && Object.is(effectiveValue, desiredValue));
+}

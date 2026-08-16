@@ -1,22 +1,17 @@
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import type { CredentialStore } from './coreInterfaces';
 import type { Identity } from './types';
 import { normalizeServerUrl } from './util';
 import { readSharedState, updateSharedState } from './sharedState';
 
-const execFileAsync = promisify(execFile);
 export const KEYCHAIN_SERVICE = 'yiqiyang33.latex-editing-toolkit.overleaf';
 
 export interface SecurityRunner {
-  run(args: string[]): Promise<string>;
+  run(args: string[], stdin?: string): Promise<string>;
 }
 
 const systemSecurity: SecurityRunner = {
-  async run(args) {
-    const result = await execFileAsync('/usr/bin/security', args, { encoding: 'utf8', maxBuffer: 1024 * 1024 });
-    return String(result.stdout ?? '').trim();
-  }
+  run: runSecurity
 };
 
 export class MacKeychainCredentialStore implements CredentialStore {
@@ -25,9 +20,10 @@ export class MacKeychainCredentialStore implements CredentialStore {
   async saveIdentity(serverUrl: string, identity: Identity): Promise<void> {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run([
-      'add-generic-password', '-U', '-s', KEYCHAIN_SERVICE, '-a', account, '-w', JSON.stringify(identity)
-    ]);
+    await this.security.run(
+      ['add-generic-password', '-U', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'],
+      JSON.stringify(identity)
+    );
     await updateSharedState(state => {
       if (!state.servers.includes(account)) state.servers.push(account);
       if (!state.credentialMigrations.includes(account)) state.credentialMigrations.push(account);
@@ -71,6 +67,23 @@ export class MacKeychainCredentialStore implements CredentialStore {
       throw new Error('The Overleaf CLI credential store currently supports macOS Keychain only.');
     }
   }
+}
+
+function runSecurity(args: string[], stdin?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('/usr/bin/security', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on('data', chunk => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', chunk => stderr.push(Buffer.from(chunk)));
+    child.once('error', reject);
+    child.once('close', code => {
+      const output = Buffer.concat(stdout).toString('utf8').trim();
+      if (code === 0) resolve(output);
+      else reject(new Error(Buffer.concat(stderr).toString('utf8').trim() || `security exited with code ${code}.`));
+    });
+    child.stdin.end(stdin === undefined ? undefined : `${stdin}\n`);
+  });
 }
 
 function isMissingKeychainItem(error: unknown): boolean {
