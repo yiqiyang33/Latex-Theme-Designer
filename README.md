@@ -1,4 +1,4 @@
-# LaTeX Editing Toolkit 2.0.2
+# LaTeX Editing Toolkit 2.0.3
 
 VS Code / Cursor extension for local-first LaTeX projects and fast mathematical writing. Toolkit 2.0 combines project creation, themes, compile and structure tools with the complete programmable `hsnips` engine, profiles, workspace snippets, Smart Enter/Tab, a Monaco-powered snippet workbench, and integrated Overleaf mirrors, realtime sync, conflict resolution, and remote compilation.
 
