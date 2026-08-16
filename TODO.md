@@ -16,10 +16,10 @@
 
 ## P2
 
-- [ ] CLI incremental check 复用 `SyncHealthService` 的远端元数据缓存，并为二进制下载设置有限并发，避免每次全量串行读取。
-- [ ] 为共享 `overleaf.json` 的 read-modify-write 增加跨进程串行化，避免扩展与 CLI 并发更新时丢失配置或镜像记录。
-- [ ] 合并 CLI `mirrorCore` 与扩展 `MirrorManager` 的镜像创建流程，统一支持文件、LaTeX Workshop 配置、清理和 Git 初始化行为。
-- [ ] 修复 owner 启动窗口期：锁已创建但 socket 尚未监听时进行有限重试；为订阅握手增加超时。
+- [x] CLI incremental check 复用 `SyncHealthService` 的远端元数据缓存，并为二进制下载设置有限并发，避免每次全量串行读取。
+- [x] 为共享 `overleaf.json` 的 read-modify-write 增加跨进程串行化，避免扩展与 CLI 并发更新时丢失配置或镜像记录。
+- [x] 合并 CLI `mirrorCore` 与扩展 `MirrorManager` 的镜像创建流程，统一支持文件、LaTeX Workshop 配置、清理和 Git 初始化行为。
+- [x] 修复 owner 启动窗口期：锁已创建但 socket 尚未监听时进行有限重试；为订阅握手增加超时。
 
 ## P3
 
@@ -33,4 +33,4 @@
 - [x] 覆盖 CLI owner 与扩展 owner 的命令结果一致性。
 - [x] 覆盖 push/pull 后的状态、JSON envelope 和退出码。
 - [x] 覆盖远端删除后的强制恢复。
-- [ ] 覆盖 CLI incremental 远端缓存复用。
+- [x] 覆盖 CLI incremental 远端缓存复用。

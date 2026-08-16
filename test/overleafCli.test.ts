@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,11 +8,12 @@ import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
 import { KEYCHAIN_SERVICE, MacKeychainCredentialStore, type SecurityRunner } from '../src/overleaf/keychainStore';
 import { defaultSharedState, readSharedState, registerSharedMirror, sharedStatePath, updateSharedState } from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
-import { writeManifest } from '../src/overleaf/manifest';
+import { readManifest, writeManifest } from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
 import { OverleafSyncEngine } from '../src/overleaf/overleafSyncEngine';
 import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
 import { sha1 } from '../src/overleaf/util';
+import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCore';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -46,6 +48,36 @@ describe('Overleaf CLI shared infrastructure', () => {
       expect(state.policy.autoPushLocalAhead).toBe(false);
       expect(JSON.parse(await fs.readFile(sharedStatePath(), 'utf8')).schemaVersion).toBe(1);
     } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes concurrent shared configuration updates without losing fields', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-lock-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    let releaseFirst!: () => void;
+    const firstPaused = new Promise<void>(resolve => { releaseFirst = resolve; });
+    let firstStarted!: () => void;
+    const firstHoldingLock = new Promise<void>(resolve => { firstStarted = resolve; });
+    try {
+      const first = updateSharedState(async state => {
+        state.servers.push('https://first.example/');
+        firstStarted();
+        await firstPaused;
+      });
+      await firstHoldingLock;
+      const second = updateSharedState(state => {
+        state.servers.push('https://second.example/');
+        state.policy.syncBinaryFiles = false;
+      });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      releaseFirst();
+      await Promise.all([first, second]);
+      const state = await readSharedState();
+      expect(state.servers).toEqual(['https://first.example/', 'https://second.example/']);
+      expect(state.policy.syncBinaryFiles).toBe(false);
+    } finally {
+      releaseFirst?.();
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
@@ -118,6 +150,107 @@ describe('Overleaf CLI shared infrastructure', () => {
       expect(await coordinator.claim(root, async () => undefined)).toBe('owner');
     } finally {
       await coordinator.release();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for an owner socket during startup and times out an unacknowledged subscription', async () => {
+    const temporary = await fs.mkdtemp('/tmp/lt-owner-startup-');
+    process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
+    const root = path.join(temporary, 'mirror');
+    await fs.mkdir(root, { recursive: true });
+    const paths = runtimePaths(await fs.realpath(root));
+    await fs.mkdir(paths.lockPath, { recursive: true });
+    const sockets = new Set<net.Socket>();
+    const server = net.createServer(socket => {
+      sockets.add(socket);
+      socket.on('error', () => undefined);
+      socket.once('close', () => sockets.delete(socket));
+    });
+    const coordinator = new SyncOwnerCoordinator({
+      ownerStartupTimeoutMs: 1_000,
+      retryDelayMs: 20,
+      connectTimeoutMs: 30,
+      subscriptionTimeoutMs: 75,
+      missingMetadataStaleMs: 500
+    });
+    try {
+      const claim = coordinator.claim(root, async () => undefined);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(paths.socketPath, resolve);
+      });
+      expect(await claim).toBe('client');
+      await expect(coordinator.subscribe(() => undefined)).rejects.toThrow(/subscription/);
+    } finally {
+      await coordinator.release();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await fs.rm(paths.socketPath, { force: true });
+      await fs.rm(paths.lockPath, { recursive: true, force: true });
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Shared Overleaf mirror creation', () => {
+  it('creates the same complete mirror support files for CLI and extension adapters', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-mirror-core-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    const parent = path.join(temporary, 'mirrors');
+    const project = { id: 'project-1', name: 'Shared Mirror' };
+    const registered: string[] = [];
+    let disconnected = false;
+    const remoteProject = {
+      compiler: 'pdflatex',
+      rootDoc_id: 'doc-1',
+      rootFolder: {
+        _id: 'root', name: 'root', docs: [], fileRefs: [{ _id: 'file-1', name: 'figure.pdf', hash: 'blob-1' }],
+        folders: [{
+          _id: 'chapters', name: 'chapters', fileRefs: [], folders: [],
+          docs: [{ _id: 'doc-1', name: 'main.tex', version: 3 }]
+        }]
+      }
+    };
+    const session = {
+      getProject: () => remoteProject,
+      joinDoc: async () => ({ content: '\\documentclass{article}\n', version: 3 }),
+      leaveDoc: async () => undefined,
+      disconnect: () => { disconnected = true; }
+    };
+    const client = {
+      getServerUrl: () => 'https://example.test/',
+      connectSocket: async () => session,
+      downloadProjectFile: async () => Buffer.from('%PDF-test')
+    };
+    try {
+      const root = await createProjectMirror(client as never, project, parent, {
+        register: async created => { registered.push(created); }
+      });
+      expect(root).toBe(projectMirrorRoot(parent, project));
+      expect(registered).toEqual([root]);
+      expect(disconnected).toBe(true);
+      expect(await fs.readFile(path.join(root, 'chapters', 'main.tex'), 'utf8')).toContain('documentclass');
+      expect(await fs.readFile(path.join(root, 'figure.pdf'), 'utf8')).toBe('%PDF-test');
+      const settings = JSON.parse(await fs.readFile(path.join(root, '.vscode', 'settings.json'), 'utf8'));
+      expect(settings['latex-workshop.latex.recipe.default']).toBe('latexmk (local mirror)');
+      expect(settings['latex-workshop.latex.search.rootFiles.include']).toEqual(['chapters/main.tex']);
+      expect(await fs.readFile(path.join(root, 'chapters', '.latexmkrc'), 'utf8')).toContain('overleaf_codex_build_dir');
+      expect(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8')).toContain('real local mirror');
+      expect((await fs.stat(path.join(root, '.git'))).isDirectory()).toBe(true);
+      expect((await readManifest(root)).rootDocPath).toBe('chapters/main.tex');
+
+      const broken = { id: 'broken', name: 'Broken Mirror' };
+      const brokenRoot = projectMirrorRoot(parent, broken);
+      const brokenClient = {
+        getServerUrl: () => 'https://example.test/',
+        connectSocket: async () => ({ getProject: () => undefined, disconnect: () => undefined })
+      };
+      await expect(createProjectMirror(brokenClient as never, broken, parent, { register: async () => undefined }))
+        .rejects.toThrow(/project tree/);
+      await expect(fs.stat(brokenRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
@@ -262,6 +395,73 @@ describe('Shared Overleaf sync command contract', () => {
 
       await engine.syncOnce();
       expect(remoteRenames).toEqual(['new.tex']);
+    } finally {
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses incremental remote metadata and limits binary downloads to four at a time', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-cli-remote-cache-'));
+    const files = Array.from({ length: 7 }, (_, index) => ({
+      id: `file-${index}`,
+      name: `figure-${index}.pdf`,
+      content: Buffer.from(`binary-${index}`),
+      blobHash: `blob-${index}`
+    }));
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', folders: [], docs: [],
+        fileRefs: files.map(file => ({ _id: file.id, name: file.name, hash: file.blobHash }))
+      }
+    };
+    let activeDownloads = 0;
+    let maxActiveDownloads = 0;
+    let downloadCount = 0;
+    const session = {
+      getProject: () => project,
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const client = {
+      connectSocket: async () => session,
+      downloadProjectFile: async (_projectId: string, entityId: string) => {
+        downloadCount += 1;
+        activeDownloads += 1;
+        maxActiveDownloads = Math.max(maxActiveDownloads, activeDownloads);
+        await new Promise(resolve => setTimeout(resolve, 25));
+        activeDownloads -= 1;
+        return files.find(file => file.id === entityId)!.content;
+      }
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      client as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    try {
+      const state = manifest();
+      for (const file of files) {
+        state.files[file.name] = {
+          path: file.name,
+          entityId: file.id,
+          entityType: 'file',
+          parentFolderId: 'root',
+          binary: true,
+          sha1: sha1(file.content),
+          remoteBlobHash: `old-${file.blobHash}`
+        };
+        await fs.writeFile(path.join(temporary, file.name), file.content);
+      }
+      await writeManifest(temporary, state);
+      expect((await engine.status(true, false))?.hasBlocking).toBe(false);
+      expect(downloadCount).toBe(files.length);
+      expect(maxActiveDownloads).toBeGreaterThan(1);
+      expect(maxActiveDownloads).toBeLessThanOrEqual(4);
+
+      expect((await engine.status(true, false))?.hasBlocking).toBe(false);
+      expect(downloadCount).toBe(files.length);
     } finally {
       await engine.stop();
       await fs.rm(temporary, { recursive: true, force: true });

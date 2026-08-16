@@ -47,6 +47,14 @@ const execFileAsync = promisify(execFile);
 
 export type OwnerHandler = (command: string, args: Record<string, unknown>) => Promise<unknown>;
 
+export interface SyncOwnerCoordinatorOptions {
+  ownerStartupTimeoutMs?: number;
+  retryDelayMs?: number;
+  connectTimeoutMs?: number;
+  subscriptionTimeoutMs?: number;
+  missingMetadataStaleMs?: number;
+}
+
 export class SyncOwnerCoordinator {
   private root?: string;
   private metadata?: OwnerMetadata;
@@ -56,6 +64,8 @@ export class SyncOwnerCoordinator {
   private subscriberSockets = new Set<net.Socket>();
   private eventSockets = new Set<net.Socket>();
   private readonly events = new EventEmitter();
+
+  constructor(private readonly options: SyncOwnerCoordinatorOptions = {}) {}
 
   get isOwner(): boolean {
     return Boolean(this.server);
@@ -72,13 +82,22 @@ export class SyncOwnerCoordinator {
     await fs.mkdir(runtimeRoot(), { recursive: true, mode: 0o700 });
     await fs.chmod(runtimeRoot(), 0o700).catch(() => undefined);
     const paths = runtimePaths(this.root);
-    if (await canConnect(paths.socketPath)) return 'client';
-    await this.clearStale(paths);
-    try {
-      await fs.mkdir(paths.lockPath, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'client';
-      throw error;
+    const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3_000);
+    while (true) {
+      if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return 'client';
+      try {
+        await fs.mkdir(paths.lockPath, { mode: 0o700 });
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      if (await this.clearStaleLock(paths)) {
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for the sync owner socket for ${this.root}.`);
+      }
+      await delay(this.options.retryDelayMs ?? 50);
     }
 
     const metadata: OwnerMetadata = {
@@ -106,6 +125,7 @@ export class SyncOwnerCoordinator {
       return 'owner';
     } catch (error) {
       await fs.rm(paths.lockPath, { recursive: true, force: true });
+      await fs.rm(paths.socketPath, { force: true });
       throw error;
     }
   }
@@ -140,20 +160,43 @@ export class SyncOwnerCoordinator {
     return () => this.events.off('event', listener);
   }
 
-  async subscribe(onEvent: (event: OwnerEvent) => void): Promise<net.Socket> {
+  async subscribe(
+    onEvent: (event: OwnerEvent) => void,
+    timeoutMs = this.options.subscriptionTimeoutMs ?? 5_000
+  ): Promise<net.Socket> {
     if (!this.root) throw new Error('No sync root is selected.');
     const socket = net.createConnection(runtimePaths(this.root).socketPath);
-    await onceConnected(socket);
+    socket.on('error', () => undefined);
+    try {
+      await onceConnected(socket, timeoutMs);
+    } catch (error) {
+      socket.destroy();
+      throw error;
+    }
     this.subscriberSockets.add(socket);
     socket.once('close', () => this.subscriberSockets.delete(socket));
     const subscribed = new Promise<void>((resolve, reject) => {
-      const onError = (error: Error): void => reject(error);
+      const timer = setTimeout(
+        () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
+        timeoutMs
+      );
+      let settled = false;
+      const finish = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        socket.off('error', onError);
+        socket.off('close', onClose);
+        error ? reject(error) : resolve();
+      };
+      const onError = (error: Error): void => finish(error);
+      const onClose = (): void => finish(new Error('Sync owner closed the socket before confirming the subscription.'));
       socket.once('error', onError);
+      socket.once('close', onClose);
       parseJsonLines(socket, value => {
         if (!isOwnerEvent(value)) return;
         if (value.event === 'subscribed') {
-          socket.off('error', onError);
-          resolve();
+          finish();
         }
         onEvent(value);
       });
@@ -165,8 +208,14 @@ export class SyncOwnerCoordinator {
       root: this.root,
       args: {}
     } satisfies OwnerRequest)}\n`);
-    await subscribed;
-    return socket;
+    try {
+      await subscribed;
+      return socket;
+    } catch (error) {
+      this.subscriberSockets.delete(socket);
+      socket.destroy();
+      throw error;
+    }
   }
 
   async release(): Promise<void> {
@@ -223,19 +272,33 @@ export class SyncOwnerCoordinator {
     }
   }
 
-  private async clearStale(paths: ReturnType<typeof runtimePaths>): Promise<void> {
+  private async lockIsStale(paths: ReturnType<typeof runtimePaths>): Promise<boolean> {
     const metadata = await readMetadata(paths.metadataPath);
     if (!metadata) {
-      await fs.rm(paths.lockPath, { recursive: true, force: true });
-      await fs.rm(paths.socketPath, { force: true });
-      return;
+      const stat = await fs.stat(paths.lockPath).catch(() => undefined);
+      return Boolean(stat && Date.now() - stat.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1_000));
     }
     if (processAlive(metadata.pid)) {
       const currentStart = await processStartSignature(metadata.pid);
-      if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return;
+      if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
     }
-    await fs.rm(paths.lockPath, { recursive: true, force: true });
-    await fs.rm(paths.socketPath, { force: true });
+    return true;
+  }
+
+  private async clearStaleLock(paths: ReturnType<typeof runtimePaths>): Promise<boolean> {
+    const guardPath = `${paths.lockPath}.reclaim`;
+    if (!await acquireReclaimGuard(
+      guardPath,
+      Math.max((this.options.ownerStartupTimeoutMs ?? 3_000) * 2, 10_000)
+    )) return false;
+    try {
+      if (!await this.lockIsStale(paths)) return false;
+      await fs.rm(paths.lockPath, { recursive: true, force: true });
+      await fs.rm(paths.socketPath, { force: true });
+      return true;
+    } finally {
+      await fs.rm(guardPath, { recursive: true, force: true });
+    }
   }
 }
 
@@ -294,18 +357,30 @@ function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): 
   });
 }
 
-function onceConnected(socket: net.Socket): Promise<void> {
+function onceConnected(socket: net.Socket, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    socket.once('connect', resolve);
-    socket.once('error', reject);
+    const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.off('connect', onConnect);
+      socket.off('error', onError);
+      error ? reject(error) : resolve();
+    };
+    const onConnect = (): void => finish();
+    const onError = (error: Error): void => finish(error);
+    socket.once('connect', onConnect);
+    socket.once('error', onError);
   });
 }
 
-function canConnect(socketPath: string): Promise<boolean> {
+function canConnect(socketPath: string, timeoutMs = 500): Promise<boolean> {
   return new Promise(resolve => {
     const socket = net.createConnection(socketPath);
     let settled = false;
-    const timer = setTimeout(() => finish(false), 500);
+    const timer = setTimeout(() => finish(false), timeoutMs);
     const finish = (value: boolean): void => {
       if (settled) return;
       settled = true;
@@ -316,6 +391,29 @@ function canConnect(socketPath: string): Promise<boolean> {
     socket.once('connect', () => finish(true));
     socket.once('error', () => finish(false));
   });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function acquireReclaimGuard(guardPath: string, staleMs: number): Promise<boolean> {
+  try {
+    await fs.mkdir(guardPath, { mode: 0o700 });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  const stat = await fs.stat(guardPath).catch(() => undefined);
+  if (!stat || Date.now() - stat.mtimeMs < staleMs) return false;
+  await fs.rm(guardPath, { recursive: true, force: true });
+  try {
+    await fs.mkdir(guardPath, { mode: 0o700 });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
 }
 
 async function readMetadata(target: string): Promise<OwnerMetadata | undefined> {

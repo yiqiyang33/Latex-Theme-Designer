@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -56,6 +57,10 @@ export function sharedStatePath(): string {
   return path.join(applicationSupportRoot(), 'overleaf.json');
 }
 
+export function sharedStateLockPath(): string {
+  return `${sharedStatePath()}.lock`;
+}
+
 export function defaultSharedState(): SharedOverleafState {
   return {
     schemaVersion: 1,
@@ -98,20 +103,27 @@ export async function readSharedState(): Promise<SharedOverleafState> {
 }
 
 export async function writeSharedState(state: SharedOverleafState): Promise<void> {
-  await atomicWriteText(sharedStatePath(), `${JSON.stringify({ ...state, schemaVersion: 1 }, null, 2)}\n`);
+  const release = await acquireSharedStateLock();
+  try {
+    await writeSharedStateUnlocked(normalizeSharedState(state));
+  } finally {
+    await release();
+  }
 }
 
 export async function updateSharedState(
   mutate: (state: SharedOverleafState) => void | Promise<void>
 ): Promise<SharedOverleafState> {
-  const state = await readSharedState();
-  await mutate(state);
-  state.servers = [...new Set(state.servers.map(normalizeServerUrl))].sort();
-  state.credentialMigrations = [...new Set(state.credentialMigrations.map(normalizeServerUrl))].sort();
-  state.credentialTombstones = [...new Set(state.credentialTombstones.map(normalizeServerUrl))].sort();
-  state.mirrors = dedupeMirrors(state.mirrors);
-  await writeSharedState(state);
-  return state;
+  const release = await acquireSharedStateLock();
+  try {
+    const state = await readSharedState();
+    await mutate(state);
+    const normalized = normalizeSharedState(state);
+    await writeSharedStateUnlocked(normalized);
+    return normalized;
+  } finally {
+    await release();
+  }
 }
 
 export async function registerSharedMirror(root: string): Promise<SharedMirrorRecord | undefined> {
@@ -145,6 +157,133 @@ function dedupeMirrors(records: SharedMirrorRecord[]): SharedMirrorRecord[] {
   const result = new Map<string, SharedMirrorRecord>();
   for (const record of records.filter(isMirrorRecord)) result.set(path.resolve(record.root), record);
   return [...result.values()];
+}
+
+interface SharedStateLockMetadata {
+  pid: number;
+  nonce: string;
+  createdAt: string;
+}
+
+const SHARED_STATE_LOCK_TIMEOUT_MS = 15_000;
+const SHARED_STATE_STALE_GRACE_MS = 5_000;
+
+function normalizeSharedState(state: SharedOverleafState): SharedOverleafState {
+  return {
+    ...state,
+    schemaVersion: 1,
+    servers: [...new Set(state.servers.map(normalizeServerUrl))].sort(),
+    credentialMigrations: [...new Set(state.credentialMigrations.map(normalizeServerUrl))].sort(),
+    credentialTombstones: [...new Set(state.credentialTombstones.map(normalizeServerUrl))].sort(),
+    mirrors: dedupeMirrors(state.mirrors)
+  };
+}
+
+async function writeSharedStateUnlocked(state: SharedOverleafState): Promise<void> {
+  await atomicWriteText(sharedStatePath(), `${JSON.stringify(state, null, 2)}\n`);
+}
+
+async function acquireSharedStateLock(): Promise<() => Promise<void>> {
+  const lockPath = sharedStateLockPath();
+  const metadataPath = path.join(lockPath, 'owner.json');
+  const deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  await fs.mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
+  while (true) {
+    const metadata: SharedStateLockMetadata = {
+      pid: process.pid,
+      nonce: crypto.randomBytes(16).toString('hex'),
+      createdAt: new Date().toISOString()
+    };
+    try {
+      await fs.mkdir(lockPath, { mode: 0o700 });
+      try {
+        await fs.writeFile(metadataPath, `${JSON.stringify(metadata)}\n`, { mode: 0o600 });
+      } catch (error) {
+        await fs.rm(lockPath, { recursive: true, force: true });
+        throw error;
+      }
+      return async () => {
+        const current = await readSharedStateLockMetadata(metadataPath);
+        if (current?.nonce === metadata.nonce) {
+          await fs.rm(lockPath, { recursive: true, force: true });
+        }
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+
+    if (await clearStaleSharedStateLock(lockPath, metadataPath)) {
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}`);
+    }
+    await delay(25 + Math.floor(Math.random() * 25));
+  }
+}
+
+async function clearStaleSharedStateLock(lockPath: string, metadataPath: string): Promise<boolean> {
+  const guardPath = `${lockPath}.reclaim`;
+  if (!await acquireReclaimGuard(guardPath)) return false;
+  try {
+    if (!await sharedStateLockIsStale(lockPath, metadataPath)) return false;
+    await fs.rm(lockPath, { recursive: true, force: true });
+    return true;
+  } finally {
+    await fs.rm(guardPath, { recursive: true, force: true });
+  }
+}
+
+async function acquireReclaimGuard(guardPath: string): Promise<boolean> {
+  try {
+    await fs.mkdir(guardPath, { mode: 0o700 });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  const stat = await fs.stat(guardPath).catch(() => undefined);
+  if (!stat || Date.now() - stat.mtimeMs < SHARED_STATE_LOCK_TIMEOUT_MS * 2) return false;
+  await fs.rm(guardPath, { recursive: true, force: true });
+  try {
+    await fs.mkdir(guardPath, { mode: 0o700 });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+}
+
+async function sharedStateLockIsStale(lockPath: string, metadataPath: string): Promise<boolean> {
+  const metadata = await readSharedStateLockMetadata(metadataPath);
+  if (metadata) return !processAlive(metadata.pid);
+  const stat = await fs.stat(lockPath).catch(() => undefined);
+  return Boolean(stat && Date.now() - stat.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+}
+
+async function readSharedStateLockMetadata(target: string): Promise<SharedStateLockMetadata | undefined> {
+  const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<SharedStateLockMetadata>;
+    return typeof parsed.pid === 'number' && typeof parsed.nonce === 'string'
+      ? parsed as SharedStateLockMetadata
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function isMirrorRecord(value: unknown): value is SharedMirrorRecord {

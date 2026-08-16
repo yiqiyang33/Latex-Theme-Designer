@@ -34,6 +34,22 @@ export class SyncHealthService {
   }
 }
 
+export async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  handler: (item: T) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await handler(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
 export function canReuseRemoteMetadata(previous: ManifestFile | undefined, remote: ManifestFile): boolean {
   if (!previous?.sha1 || previous.entityId !== remote.entityId || previous.entityType !== remote.entityType) {
     return false;

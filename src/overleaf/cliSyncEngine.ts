@@ -44,6 +44,7 @@ import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransact
 import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
+import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
@@ -58,6 +59,7 @@ export class OverleafSyncEngine {
   private running = false;
   private operation: Promise<unknown> = Promise.resolve();
   private readonly events = new EventEmitter();
+  private readonly syncHealth = new SyncHealthService();
 
   constructor(
     readonly root: string,
@@ -193,6 +195,48 @@ export class OverleafSyncEngine {
       const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
+      const remoteContents = new Map<string, Uint8Array | string>();
+      const remoteFailures = new Map<string, string>();
+      const remotePlan = this.syncHealth.planRemoteReads(this.manifest, remote, {
+        mode,
+        paths: requestedPaths
+      });
+      let remoteReadsCompleted = 0;
+      const remoteReadsTotal = remotePlan.docsToJoin.length
+        + remotePlan.binariesToGet.length
+        + remotePlan.reusedPaths.size;
+      const reportRemoteRead = (relPath: string): void => {
+        remoteReadsCompleted += 1;
+        this.host.progress({
+          phase: 'check',
+          message: `Read remote metadata ${relPath}`,
+          path: relPath,
+          completed: remoteReadsCompleted,
+          total: remoteReadsTotal
+        });
+      };
+      for (const relPath of remotePlan.reusedPaths) reportRemoteRead(relPath);
+      for (const file of remotePlan.docsToJoin) {
+        try {
+          remoteContents.set(file.path, (await this.session!.joinDoc(file.entityId)).content);
+        } catch (error) {
+          remoteFailures.set(file.path, formatUnknownError(error));
+        } finally {
+          reportRemoteRead(file.path);
+        }
+      }
+      await mapWithConcurrency(remotePlan.binariesToGet, 4, async file => {
+        try {
+          remoteContents.set(
+            file.path,
+            await this.client.downloadProjectFile(this.manifest!.projectId, file.entityId)
+          );
+        } catch (error) {
+          remoteFailures.set(file.path, formatUnknownError(error));
+        } finally {
+          reportRemoteRead(file.path);
+        }
+      });
       let completed = 0;
       for (const relPath of [...paths].sort()) {
         if (requestedPaths && !requestedPaths.has(relPath)) continue;
@@ -200,18 +244,11 @@ export class OverleafSyncEngine {
         const manifestFile = this.manifest.files[relPath];
         const remoteFile = remote.files[relPath];
         const localResult = await cachedLocalFileHash(path.join(this.root, relPath), manifestFile, mode === 'full');
-        let remoteContent: Uint8Array | string | undefined;
-        let remoteReadError: string | undefined;
-        if (remoteFile) {
-          try {
-            remoteContent = remoteFile.entityType === 'doc'
-              ? (await this.session!.joinDoc(remoteFile.entityId)).content
-              : await this.client.downloadProjectFile(this.manifest.projectId, remoteFile.entityId);
-          } catch (error) {
-            remoteReadError = formatUnknownError(error);
-          }
-        }
-        const remoteHash = remoteContent === undefined ? undefined : sha1(remoteContent);
+        const remoteContent = remoteContents.get(relPath);
+        const remoteReadError = remoteFailures.get(relPath);
+        const remoteHash = remoteContent === undefined
+          ? remotePlan.reusedPaths.has(relPath) ? manifestFile?.sha1 : undefined
+          : sha1(remoteContent);
         let baseHash = manifestFile?.baseHash;
         if (!baseHash && remoteFile?.entityType === 'doc') {
           const base = await readBaseDoc(this.root, remoteFile.entityId);

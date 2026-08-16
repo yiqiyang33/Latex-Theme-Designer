@@ -53,7 +53,7 @@ import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
-import { SyncHealthService } from './syncHealthService';
+import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
 import { planSafeSyncActions } from './syncCommandCore';
@@ -2789,22 +2789,6 @@ export class RealtimeSyncService implements vscode.Disposable {
     else this.localMutationIds.delete(entityId);
     return true;
   }
-}
-
-async function mapWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  handler: (item: T) => Promise<void>
-): Promise<void> {
-  let nextIndex = 0;
-  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await handler(item);
-    }
-  });
-  await Promise.all(workers);
 }
 
 function isAlwaysLocal(relPath: string): boolean {
