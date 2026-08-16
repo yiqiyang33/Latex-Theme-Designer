@@ -786,6 +786,7 @@ describe("TypeScript Toolkit migration", () => {
     const uiStateSource = await fs.readFile(path.join(repoRoot, "src", "webview", "uiState.ts"), "utf8");
     const extension = await fs.readFile(path.join(repoRoot, "src", "extension.ts"), "utf8");
     const manifest = JSON.parse(await fs.readFile(path.join(repoRoot, "package.json"), "utf8"));
+    const lockfile = JSON.parse(await fs.readFile(path.join(repoRoot, "package-lock.json"), "utf8"));
     expect(source).toContain("previewStylePresetId");
     expect(source).toContain('request("autosave"');
     expect(source).toContain('className = "style-card"');
@@ -837,7 +838,9 @@ describe("TypeScript Toolkit migration", () => {
     expect(source).toContain('loadSnippetState("snippets-state"');
     expect(styles).toContain(".snippet-manager-layout");
     expect(extension).toContain('command("hsnips.openSnippetManager"');
-    expect(manifest.version).toBe("2.0.1");
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(lockfile.version).toBe(manifest.version);
+    expect(lockfile.packages[""].version).toBe(manifest.version);
     expect(manifest.icon).toBe("assets/icon.png");
     expect(manifest.activationEvents).toContain("onCommand:overleafCodex.compile");
     expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();
