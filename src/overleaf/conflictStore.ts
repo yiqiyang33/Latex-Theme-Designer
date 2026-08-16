@@ -16,8 +16,17 @@ export class ConflictStore {
   constructor(private readonly root: string) {}
 
   async list(): Promise<PersistedConflict[]> {
-    const raw = await fs.readFile(metadataPath(this.root, CONFLICT_INDEX_NAME), 'utf8').catch(() => undefined);
-    return raw ? JSON.parse(raw) as PersistedConflict[] : [];
+    const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
+    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.some(item => !item || typeof item.relPath !== 'string' || typeof item.docId !== 'string')) throw new Error('invalid conflict index');
+      return parsed as PersistedConflict[];
+    } catch {
+      await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
+      return [];
+    }
   }
 
   upsert(conflict: PersistedConflict): Promise<void> {

@@ -1,4 +1,6 @@
 import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import { createHash } from 'crypto';
 import * as path from 'path';
 import {
   ManifestFile,
@@ -19,6 +21,20 @@ export interface SyncStatusDecisionInput {
   baseHash?: string;
   localExists: boolean;
   remoteReadError?: string;
+}
+
+export interface LocalProjectFileMetadata {
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  inode: number;
+}
+
+export interface LocalProjectScan {
+  files: string[];
+  folders: string[];
+  fileMetadata: Map<string, LocalProjectFileMetadata>;
+  trackedOrParentPaths: Set<string>;
 }
 
 export function classifySyncStatus(input: SyncStatusDecisionInput): SyncStatusItem {
@@ -102,7 +118,8 @@ export function isBlockingStatus(status: SyncStatusKind): boolean {
 export function classifyFolderStructure(
   manifest: OverleafCodexManifest,
   remote: OverleafCodexManifest,
-  requestedPaths?: Iterable<string>
+  requestedPaths?: Iterable<string>,
+  localFolderPaths?: Iterable<string>
 ): { items: SyncStatusItem[]; globalBlockReason?: string } {
   const localRoot = manifest.folders[''];
   const remoteRoot = remote.folders[''];
@@ -115,8 +132,10 @@ export function classifyFolderStructure(
   const requested = requestedPaths ? [...requestedPaths].map(toPosixPath) : undefined;
   const paths = new Set([
     ...Object.keys(manifest.folders),
-    ...Object.keys(remote.folders)
+    ...Object.keys(remote.folders),
+    ...(localFolderPaths ?? [])
   ]);
+  const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath)) : undefined;
   const items: SyncStatusItem[] = [];
   for (const folderPath of paths) {
     if (!folderPath || requested && !requested.some(item =>
@@ -124,6 +143,18 @@ export function classifyFolderStructure(
     )) continue;
     const localFolder = manifest.folders[folderPath];
     const remoteFolder = remote.folders[folderPath];
+    const localExists = localPaths ? localPaths.has(folderPath) : true;
+    if (!localFolder && !remoteFolder && localExists) {
+      items.push({ path: folderPath, status: 'local only', blocking: true, blockingScope: 'subtree', localPath: folderPath,
+        changeKind: 'create', message: 'This local directory is not represented by the trusted manifest or Overleaf tree.' });
+      continue;
+    }
+    if (localFolder && !localExists) {
+      items.push({ path: folderPath, status: 'local deleted', entityId: localFolder.entityId, entityType: 'folder',
+        parentFolderId: localFolder.parentFolderId, blocking: true, blockingScope: 'subtree', localPath: folderPath,
+        changeKind: 'delete', message: 'This tracked directory is absent from the local project.' });
+      continue;
+    }
     if (localFolder?.entityId === remoteFolder?.entityId
       && localFolder?.parentFolderId === remoteFolder?.parentFolderId) continue;
     if (localFolder && remoteFolder) {
@@ -286,78 +317,93 @@ export function mergeTargetedSyncStatusReport(
 }
 
 export async function listLocalProjectFiles(root: string, manifest: OverleafCodexManifest): Promise<string[]> {
-  const files: string[] = [];
-  await walk(root, '');
-  return files.sort();
-
-  async function walk(absDir: string, relDir: string): Promise<void> {
-    const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      const relPath = toPosixPath(path.posix.join(relDir, entry.name));
-      const tracked = isTrackedPathOrParent(manifest, relPath);
-      if (
-        !relPath
-        || shouldSkip(relPath)
-        || shouldIgnore(manifest, relPath)
-        || (!tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath))
-      ) {
-        continue;
-      }
-      const absPath = path.join(root, relPath);
-      if (entry.isDirectory()) {
-        await walk(absPath, relPath);
-      } else if (entry.isFile()) {
-        files.push(relPath);
-      }
-    }
-  }
+  return (await scanLocalProject(root, manifest)).files;
 }
 
 export async function listLocalProjectFolders(root: string, manifest: OverleafCodexManifest): Promise<string[]> {
+  return (await scanLocalProject(root, manifest)).folders;
+}
+
+export async function scanLocalProject(root: string, manifest: OverleafCodexManifest): Promise<LocalProjectScan> {
+  const files: string[] = [];
   const folders: string[] = [];
+  const fileMetadata = new Map<string, LocalProjectFileMetadata>();
+  const trackedOrParentPaths = buildTrackedOrParentPathIndex(manifest);
   await walk(root, '');
-  return folders.sort();
+  files.sort();
+  folders.sort();
+  return { files, folders, fileMetadata, trackedOrParentPaths };
 
   async function walk(absDir: string, relDir: string): Promise<void> {
     const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
       const relPath = toPosixPath(path.posix.join(relDir, entry.name));
-      const tracked = isTrackedPathOrParent(manifest, relPath);
+      const tracked = trackedOrParentPaths.has(relPath);
       if (
         !relPath
         || shouldSkip(relPath)
         || shouldIgnore(manifest, relPath)
         || (!tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath))
-      ) {
-        continue;
+      ) continue;
+      const absPath = path.join(absDir, entry.name);
+      if (entry.isDirectory()) {
+        folders.push(relPath);
+        await walk(absPath, relPath);
+      } else if (entry.isFile()) {
+        files.push(relPath);
+        const stat = await fs.stat(absPath).catch(() => undefined);
+        if (stat) {
+          fileMetadata.set(relPath, {
+            size: stat.size,
+            mtimeMs: stat.mtimeMs,
+            ctimeMs: stat.ctimeMs,
+            inode: Number(stat.ino)
+          });
+        }
       }
-      folders.push(relPath);
-      await walk(path.join(root, relPath), relPath);
     }
   }
 }
 
-function isTrackedPathOrParent(manifest: OverleafCodexManifest, relPath: string): boolean {
-  if (manifest.files[relPath] || manifest.folders[relPath]) {
-    return true;
+function buildTrackedOrParentPathIndex(manifest: OverleafCodexManifest): Set<string> {
+  const result = new Set<string>(['']);
+  for (const candidate of [...Object.keys(manifest.files), ...Object.keys(manifest.folders)]) {
+    let current = toPosixPath(candidate);
+    while (current) {
+      result.add(current);
+      current = path.posix.dirname(current);
+      if (current === '.') current = '';
+    }
   }
-  const prefix = `${relPath}/`;
-  return Object.keys(manifest.files).some(item => item.startsWith(prefix))
-    || Object.keys(manifest.folders).some(item => item.startsWith(prefix));
+  return result;
 }
 
 export async function fileHash(filePath: string): Promise<string | undefined> {
-  const content = await fs.readFile(filePath).catch(() => undefined);
-  return content ? sha1(content) : undefined;
+  try {
+    const hash = createReadStream(filePath);
+    const digest = await new Promise<string>((resolve, reject) => {
+      const state = createHash('sha1');
+      hash.on('data', chunk => state.update(chunk));
+      hash.on('error', reject);
+      hash.on('end', () => resolve(state.digest('hex')));
+    });
+    return digest;
+  } catch { return undefined; }
 }
 
 export async function cachedLocalFileHash(
   filePath: string,
   manifestFile: ManifestFile | undefined,
-  force = false
+  force = false,
+  knownMetadata?: LocalProjectFileMetadata
 ): Promise<{ hash?: string; cacheChanged: boolean; reused: boolean }> {
-  const stat = await fs.stat(filePath).catch(() => undefined);
+  const stat = knownMetadata ? {
+    isFile: () => true,
+    size: knownMetadata.size,
+    mtimeMs: knownMetadata.mtimeMs,
+    ctimeMs: knownMetadata.ctimeMs,
+    ino: knownMetadata.inode
+  } : await fs.stat(filePath).catch(() => undefined);
   if (!stat?.isFile()) {
     if (manifestFile) {
       const cacheChanged = manifestFile.localHashCache !== undefined

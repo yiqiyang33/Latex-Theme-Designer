@@ -1,5 +1,6 @@
 import { ManifestFile, OverleafCodexManifest } from './types';
 import { toPosixPath } from './util';
+import { shouldIgnore } from './manifest';
 
 export interface RemoteReadPlan {
   docsToJoin: ManifestFile[];
@@ -20,6 +21,7 @@ export class SyncHealthService {
       reusedPaths: new Set<string>()
     };
     for (const file of Object.values(remote.files)) {
+      if (shouldIgnore(previous, file.path)) continue;
       if (requested && !requested.has(file.path)) continue;
       const previousFile = previous.files[file.path];
       if (options.mode === 'incremental' && canReuseRemoteMetadata(previousFile, file)) {
@@ -45,6 +47,38 @@ export async function mapWithConcurrency<T>(
       const item = items[nextIndex];
       nextIndex += 1;
       await handler(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+/** Limits both the number of active transfers and their aggregate payload size. */
+export async function mapWithByteConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  maxBytes: number,
+  estimateBytes: (item: T) => number,
+  handler: (item: T) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  let inFlightBytes = 0;
+  const waiters: Array<() => void> = [];
+  const wake = (): void => waiters.splice(0).forEach(resolve => resolve());
+  const acquire = async (bytes: number): Promise<void> => {
+    const amount = Math.max(1, Math.min(bytes, maxBytes));
+    while (inFlightBytes + amount > maxBytes && inFlightBytes > 0) {
+      await new Promise<void>(resolve => waiters.push(resolve));
+    }
+    inFlightBytes += amount;
+  };
+  const release = (bytes: number): void => { inFlightBytes = Math.max(0, inFlightBytes - Math.max(1, Math.min(bytes, maxBytes))); wake(); };
+  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      const item = items[index];
+      const bytes = estimateBytes(item);
+      await acquire(bytes);
+      try { await handler(item); } finally { release(bytes); }
     }
   });
   await Promise.all(workers);

@@ -24553,8 +24553,20 @@ function metadataPath(root, ...parts) {
   return path20.join(root, METADATA_DIR, ...parts);
 }
 async function readManifest(root) {
-  const raw = await fs15.readFile(manifestPath(root), "utf8");
-  const manifest = migrateManifest(JSON.parse(raw));
+  const target = manifestPath(root);
+  const raw = await fs15.readFile(target, "utf8");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
+  }
+  if (!isManifestShape(parsed)) {
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest failed schema validation and was quarantined at ${target}.`);
+  }
+  const manifest = migrateManifest(parsed);
   const ignoreContent = await ensureLocalIgnoreFile(root);
   localIgnoreRules.set(manifest, (0, import_ignore.default)().add(ignoreContent));
   return manifest;
@@ -24603,7 +24615,24 @@ function syncStatusPath(root) {
 }
 async function readSyncStatus(root) {
   const raw = await fs15.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
-  return raw ? JSON.parse(raw) : void 0;
+  if (!raw) return void 0;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.items) || typeof parsed.checkedAt !== "string") throw new Error("invalid sync status");
+    return parsed;
+  } catch {
+    await quarantineCorruptFile(syncStatusPath(root));
+    return void 0;
+  }
+}
+function isManifestShape(value) {
+  if (!value || typeof value !== "object") return false;
+  const manifest = value;
+  return typeof manifest.projectId === "string" && typeof manifest.serverUrl === "string" && typeof manifest.projectName === "string" && !!manifest.files && typeof manifest.files === "object" && !!manifest.folders && typeof manifest.folders === "object" && Array.isArray(manifest.ignore);
+}
+async function quarantineCorruptFile(target) {
+  const quarantine = `${target}.corrupt-${Date.now()}`;
+  await fs15.rename(target, quarantine).catch(() => void 0);
 }
 async function writeSyncStatus(root, report) {
   await atomicWriteText(syncStatusPath(root), `${JSON.stringify(report, null, 2)}
@@ -24670,31 +24699,80 @@ async function compileRemoteProject(root, client, rootDocOverride) {
   const response = await client.compile(manifest.projectId, rootDocPath ?? null);
   if (response.status !== "success") throw new Error(`Overleaf compile failed with status: ${response.status}`);
   const outputRoot = metadataPath(root, OUTPUT_DIR);
-  const token = `${process.pid}-${Date.now()}-${crypto2.randomBytes(6).toString("hex")}`;
-  const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
-  const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
-  const stagedFiles = [];
-  const usedNames = /* @__PURE__ */ new Set();
-  let committed = false;
-  await fs16.mkdir(stagingRoot, { recursive: true });
+  const releaseCompileLock = await acquireCompileLock(outputRoot);
   try {
-    for (const output of response.outputFiles ?? []) {
-      if (!output.url) continue;
-      const name = uniqueCompileOutputName(output, usedNames);
-      const target = path21.join(stagingRoot, name);
-      await fs16.writeFile(target, await client.downloadCompileOutput(output.url, response));
-      stagedFiles.push(target);
+    await cleanupInterruptedCompileArtifacts(root);
+    const token = `${process.pid}-${Date.now()}-${crypto2.randomBytes(6).toString("hex")}`;
+    const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
+    const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
+    const stagedFiles = [];
+    const usedNames = /* @__PURE__ */ new Set();
+    let committed = false;
+    await fs16.mkdir(stagingRoot, { recursive: true });
+    try {
+      for (const output of response.outputFiles ?? []) {
+        if (!output.url) continue;
+        const name = uniqueCompileOutputName(output, usedNames);
+        const target = path21.join(stagingRoot, name);
+        await fs16.writeFile(target, await client.downloadCompileOutput(output.url, response));
+        stagedFiles.push(target);
+      }
+      await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
+      committed = true;
+    } finally {
+      await fs16.rm(stagingRoot, { recursive: true, force: true });
+      if (committed) await fs16.rm(backupRoot, { recursive: true, force: true }).catch(() => void 0);
     }
-    await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
-    committed = true;
+    const files = stagedFiles.map((file) => path21.join(outputRoot, path21.basename(file)));
+    const pdfPath = await latestPathByExtension(files, ".pdf");
+    const logPath = await latestPathByExtension(files, ".log");
+    return { rootDocPath, outputRoot, files, pdfPath, logPath };
   } finally {
-    await fs16.rm(stagingRoot, { recursive: true, force: true });
-    if (committed) await fs16.rm(backupRoot, { recursive: true, force: true }).catch(() => void 0);
+    await releaseCompileLock();
   }
-  const files = stagedFiles.map((file) => path21.join(outputRoot, path21.basename(file)));
-  const pdfPath = await latestPathByExtension(files, ".pdf");
-  const logPath = await latestPathByExtension(files, ".log");
-  return { rootDocPath, outputRoot, files, pdfPath, logPath };
+}
+async function cleanupInterruptedCompileArtifacts(root) {
+  const dir = metadataPath(root, ".overleaf-codex");
+  const entries = await fs16.readdir(dir, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).map((entry) => fs16.rm(path21.join(dir, entry.name), { recursive: true, force: true })));
+}
+async function acquireCompileLock(outputRoot) {
+  const lock = `${outputRoot}.lock`;
+  const owner = path21.join(lock, "owner.json");
+  for (; ; ) {
+    try {
+      await fs16.mkdir(lock, { recursive: false });
+      const nonce = crypto2.randomBytes(8).toString("hex");
+      await fs16.writeFile(owner, JSON.stringify({ pid: process.pid, startedAt: Date.now(), nonce }));
+      return async () => {
+        const current = await fs16.readFile(owner, "utf8").catch(() => void 0);
+        if (current?.includes(nonce)) await fs16.rm(lock, { recursive: true, force: true });
+      };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      const raw = await fs16.readFile(owner, "utf8").catch(() => void 0);
+      let stale = false;
+      try {
+        const value = JSON.parse(raw ?? "{}");
+        stale = typeof value.pid === "number" && !processAlive(value.pid);
+      } catch {
+        stale = true;
+      }
+      if (stale) {
+        await fs16.rm(lock, { recursive: true, force: true });
+        continue;
+      }
+      await new Promise((resolve22) => setTimeout(resolve22, 50));
+    }
+  }
+}
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 async function replaceOutputDirectory(outputRoot, stagingRoot, backupRoot) {
   const hadPreviousOutput = await exists2(outputRoot);
@@ -24837,7 +24915,13 @@ async function readSharedState() {
   await migrateLegacyLinuxPaths();
   const raw = await fs18.readFile(sharedStatePath(), "utf8").catch(() => void 0);
   if (!raw) return defaultSharedState();
-  const parsed = JSON.parse(raw);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    await fs18.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => void 0);
+    return defaultSharedState();
+  }
   const defaults2 = defaultSharedState();
   return {
     ...defaults2,
@@ -24941,7 +25025,8 @@ async function acquireSharedStateLock() {
     const metadata = {
       pid: process.pid,
       nonce: crypto3.randomBytes(16).toString("hex"),
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      processStart: await processStartSignature(process.pid)
     };
     try {
       await fs18.mkdir(lockPath, { mode: 448 });
@@ -24961,7 +25046,7 @@ async function acquireSharedStateLock() {
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
     }
-    if (await clearStaleSharedStateLock(lockPath, metadataPath2)) {
+    if (await clearStaleSharedStateLock(lockPath, metadataPath2, deadline)) {
       continue;
     }
     if (Date.now() >= deadline) {
@@ -24970,9 +25055,9 @@ async function acquireSharedStateLock() {
     await delay(25 + Math.floor(Math.random() * 25));
   }
 }
-async function clearStaleSharedStateLock(lockPath, metadataPath2) {
+async function clearStaleSharedStateLock(lockPath, metadataPath2, deadline) {
   const guardPath = `${lockPath}.reclaim`;
-  if (!await acquireReclaimGuard(guardPath)) return false;
+  if (!await acquireReclaimGuard(guardPath, Math.max(1, Math.min(SHARED_STATE_LOCK_TIMEOUT_MS * 2, deadline - Date.now())))) return false;
   try {
     if (!await sharedStateLockIsStale(lockPath, metadataPath2)) return false;
     await fs18.rm(lockPath, { recursive: true, force: true });
@@ -24981,7 +25066,7 @@ async function clearStaleSharedStateLock(lockPath, metadataPath2) {
     await fs18.rm(guardPath, { recursive: true, force: true });
   }
 }
-async function acquireReclaimGuard(guardPath) {
+async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOUT_MS * 2) {
   try {
     await fs18.mkdir(guardPath, { mode: 448 });
     return true;
@@ -24989,7 +25074,7 @@ async function acquireReclaimGuard(guardPath) {
     if (error.code !== "EEXIST") throw error;
   }
   const stat9 = await fs18.stat(guardPath).catch(() => void 0);
-  if (!stat9 || Date.now() - stat9.mtimeMs < SHARED_STATE_LOCK_TIMEOUT_MS * 2) return false;
+  if (!stat9 || Date.now() - stat9.mtimeMs < staleMs) return false;
   await fs18.rm(guardPath, { recursive: true, force: true });
   try {
     await fs18.mkdir(guardPath, { mode: 448 });
@@ -25001,7 +25086,11 @@ async function acquireReclaimGuard(guardPath) {
 }
 async function sharedStateLockIsStale(lockPath, metadataPath2) {
   const metadata = await readSharedStateLockMetadata(metadataPath2);
-  if (metadata) return !processAlive(metadata.pid);
+  if (metadata) {
+    if (!processAlive2(metadata.pid)) return true;
+    const currentStart = await processStartSignature(metadata.pid);
+    return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
+  }
   const stat9 = await fs18.stat(lockPath).catch(() => void 0);
   return Boolean(stat9 && Date.now() - stat9.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
@@ -25015,7 +25104,16 @@ async function readSharedStateLockMetadata(target) {
     return void 0;
   }
 }
-function processAlive(pid) {
+async function processStartSignature(pid) {
+  try {
+    const raw = await fs18.readFile(`/proc/${pid}/stat`, "utf8");
+    const fields = raw.trim().split(" ");
+    return fields[21];
+  } catch {
+    return void 0;
+  }
+}
+function processAlive2(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -26547,8 +26645,17 @@ var BinaryTransactionStore = class {
   root;
   queue = Promise.resolve();
   async list() {
-    const raw = await fs21.readFile(metadataPath(this.root, TRANSACTIONS_NAME), "utf8").catch(() => void 0);
-    return raw ? JSON.parse(raw) : [];
+    const target = metadataPath(this.root, TRANSACTIONS_NAME);
+    const raw = await fs21.readFile(target, "utf8").catch(() => void 0);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== "string" || typeof item.path !== "string")) throw new Error("invalid transactions");
+      return parsed;
+    } catch {
+      await fs21.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      return [];
+    }
   }
   async upsert(transaction) {
     await this.run(async () => {
@@ -26578,6 +26685,8 @@ var BinaryTransactionStore = class {
 
 // src/overleaf/syncStatus.ts
 var fs22 = __toESM(require("fs/promises"));
+var import_fs3 = require("fs");
+var import_crypto4 = require("crypto");
 var path28 = __toESM(require("path"));
 function classifySyncStatus(input) {
   const entity = input.remoteFile ?? input.manifestFile;
@@ -26647,7 +26756,7 @@ function classifySyncStatus(input) {
 function isBlockingStatus(status) {
   return status !== "synced";
 }
-function classifyFolderStructure(manifest, remote, requestedPaths) {
+function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPaths) {
   const localRoot = manifest.folders[""];
   const remoteRoot = remote.folders[""];
   if (!localRoot || !remoteRoot || localRoot.entityId !== remoteRoot.entityId) {
@@ -26659,8 +26768,10 @@ function classifyFolderStructure(manifest, remote, requestedPaths) {
   const requested = requestedPaths ? [...requestedPaths].map(toPosixPath2) : void 0;
   const paths = /* @__PURE__ */ new Set([
     ...Object.keys(manifest.folders),
-    ...Object.keys(remote.folders)
+    ...Object.keys(remote.folders),
+    ...localFolderPaths ?? []
   ]);
+  const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath2)) : void 0;
   const items = [];
   for (const folderPath of paths) {
     if (!folderPath || requested && !requested.some(
@@ -26668,6 +26779,34 @@ function classifyFolderStructure(manifest, remote, requestedPaths) {
     )) continue;
     const localFolder = manifest.folders[folderPath];
     const remoteFolder = remote.folders[folderPath];
+    const localExists = localPaths ? localPaths.has(folderPath) : true;
+    if (!localFolder && !remoteFolder && localExists) {
+      items.push({
+        path: folderPath,
+        status: "local only",
+        blocking: true,
+        blockingScope: "subtree",
+        localPath: folderPath,
+        changeKind: "create",
+        message: "This local directory is not represented by the trusted manifest or Overleaf tree."
+      });
+      continue;
+    }
+    if (localFolder && !localExists) {
+      items.push({
+        path: folderPath,
+        status: "local deleted",
+        entityId: localFolder.entityId,
+        entityType: "folder",
+        parentFolderId: localFolder.parentFolderId,
+        blocking: true,
+        blockingScope: "subtree",
+        localPath: folderPath,
+        changeKind: "delete",
+        message: "This tracked directory is absent from the local project."
+      });
+      continue;
+    }
     if (localFolder?.entityId === remoteFolder?.entityId && localFolder?.parentFolderId === remoteFolder?.parentFolderId) continue;
     if (localFolder && remoteFolder) {
       items.push({
@@ -26789,58 +26928,74 @@ function mergeTargetedSyncStatusReport(previous, targeted, requestedPaths) {
     globalBlockReason: targeted.globalBlockReason ?? previous.globalBlockReason
   };
 }
-async function listLocalProjectFiles(root, manifest) {
+async function scanLocalProject(root, manifest) {
   const files = [];
+  const folders = [];
+  const fileMetadata = /* @__PURE__ */ new Map();
+  const trackedOrParentPaths = buildTrackedOrParentPathIndex(manifest);
   await walk(root, "");
-  return files.sort();
+  files.sort();
+  folders.sort();
+  return { files, folders, fileMetadata, trackedOrParentPaths };
   async function walk(absDir, relDir) {
     const entries = await fs22.readdir(absDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       const relPath = toPosixPath2(path28.posix.join(relDir, entry.name));
-      const tracked = isTrackedPathOrParent(manifest, relPath);
-      if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) {
-        continue;
-      }
-      const absPath = path28.join(root, relPath);
+      const tracked = trackedOrParentPaths.has(relPath);
+      if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) continue;
+      const absPath = path28.join(absDir, entry.name);
       if (entry.isDirectory()) {
+        folders.push(relPath);
         await walk(absPath, relPath);
       } else if (entry.isFile()) {
         files.push(relPath);
+        const stat9 = await fs22.stat(absPath).catch(() => void 0);
+        if (stat9) {
+          fileMetadata.set(relPath, {
+            size: stat9.size,
+            mtimeMs: stat9.mtimeMs,
+            ctimeMs: stat9.ctimeMs,
+            inode: Number(stat9.ino)
+          });
+        }
       }
     }
   }
 }
-async function listLocalProjectFolders(root, manifest) {
-  const folders = [];
-  await walk(root, "");
-  return folders.sort();
-  async function walk(absDir, relDir) {
-    const entries = await fs22.readdir(absDir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const relPath = toPosixPath2(path28.posix.join(relDir, entry.name));
-      const tracked = isTrackedPathOrParent(manifest, relPath);
-      if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) {
-        continue;
-      }
-      folders.push(relPath);
-      await walk(path28.join(root, relPath), relPath);
+function buildTrackedOrParentPathIndex(manifest) {
+  const result = /* @__PURE__ */ new Set([""]);
+  for (const candidate of [...Object.keys(manifest.files), ...Object.keys(manifest.folders)]) {
+    let current = toPosixPath2(candidate);
+    while (current) {
+      result.add(current);
+      current = path28.posix.dirname(current);
+      if (current === ".") current = "";
     }
   }
-}
-function isTrackedPathOrParent(manifest, relPath) {
-  if (manifest.files[relPath] || manifest.folders[relPath]) {
-    return true;
-  }
-  const prefix = `${relPath}/`;
-  return Object.keys(manifest.files).some((item) => item.startsWith(prefix)) || Object.keys(manifest.folders).some((item) => item.startsWith(prefix));
+  return result;
 }
 async function fileHash(filePath) {
-  const content = await fs22.readFile(filePath).catch(() => void 0);
-  return content ? sha1(content) : void 0;
+  try {
+    const hash2 = (0, import_fs3.createReadStream)(filePath);
+    const digest = await new Promise((resolve22, reject) => {
+      const state = (0, import_crypto4.createHash)("sha1");
+      hash2.on("data", (chunk) => state.update(chunk));
+      hash2.on("error", reject);
+      hash2.on("end", () => resolve22(state.digest("hex")));
+    });
+    return digest;
+  } catch {
+    return void 0;
+  }
 }
-async function cachedLocalFileHash(filePath, manifestFile, force = false) {
-  const stat9 = await fs22.stat(filePath).catch(() => void 0);
+async function cachedLocalFileHash(filePath, manifestFile, force = false, knownMetadata) {
+  const stat9 = knownMetadata ? {
+    isFile: () => true,
+    size: knownMetadata.size,
+    mtimeMs: knownMetadata.mtimeMs,
+    ctimeMs: knownMetadata.ctimeMs,
+    ino: knownMetadata.inode
+  } : await fs22.stat(filePath).catch(() => void 0);
   if (!stat9?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
@@ -26944,8 +27099,17 @@ var ConflictStore = class {
   root;
   queue = Promise.resolve();
   async list() {
-    const raw = await fs23.readFile(metadataPath(this.root, CONFLICT_INDEX_NAME), "utf8").catch(() => void 0);
-    return raw ? JSON.parse(raw) : [];
+    const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
+    const raw = await fs23.readFile(target, "utf8").catch(() => void 0);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.relPath !== "string" || typeof item.docId !== "string")) throw new Error("invalid conflict index");
+      return parsed;
+    } catch {
+      await fs23.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      return [];
+    }
   }
   upsert(conflict) {
     return this.run(async () => {
@@ -27361,6 +27525,7 @@ var SyncHealthService = class {
       reusedPaths: /* @__PURE__ */ new Set()
     };
     for (const file of Object.values(remote.files)) {
+      if (shouldIgnore(previous, file.path)) continue;
       if (requested && !requested.has(file.path)) continue;
       const previousFile = previous.files[file.path];
       if (options.mode === "incremental" && canReuseRemoteMetadata(previousFile, file)) {
@@ -27381,6 +27546,37 @@ async function mapWithConcurrency(items, concurrency, handler) {
       const item = items[nextIndex];
       nextIndex += 1;
       await handler(item);
+    }
+  });
+  await Promise.all(workers);
+}
+async function mapWithByteConcurrency(items, concurrency, maxBytes, estimateBytes, handler) {
+  let nextIndex = 0;
+  let inFlightBytes = 0;
+  const waiters = [];
+  const wake = () => waiters.splice(0).forEach((resolve22) => resolve22());
+  const acquire = async (bytes) => {
+    const amount = Math.max(1, Math.min(bytes, maxBytes));
+    while (inFlightBytes + amount > maxBytes && inFlightBytes > 0) {
+      await new Promise((resolve22) => waiters.push(resolve22));
+    }
+    inFlightBytes += amount;
+  };
+  const release = (bytes) => {
+    inFlightBytes = Math.max(0, inFlightBytes - Math.max(1, Math.min(bytes, maxBytes)));
+    wake();
+  };
+  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      const item = items[index];
+      const bytes = estimateBytes(item);
+      await acquire(bytes);
+      try {
+        await handler(item);
+      } finally {
+        release(bytes);
+      }
     }
   });
   await Promise.all(workers);
@@ -27686,6 +27882,7 @@ var RealtimeSyncService = class {
   bypassHashes = /* @__PURE__ */ new Map();
   timers = /* @__PURE__ */ new Map();
   inFlight = /* @__PURE__ */ new Map();
+  healthChecks = /* @__PURE__ */ new Set();
   localMutationIds = /* @__PURE__ */ new Map();
   pendingLocalCreates = /* @__PURE__ */ new Set();
   pendingFolderRenameRoots = /* @__PURE__ */ new Set();
@@ -27766,6 +27963,15 @@ var RealtimeSyncService = class {
     if (!root) {
       throw new Error("Open a local Overleaf Codex mirror folder first.");
     }
+    const operation = this.checkSyncStatusInternal(root, client, progress, options);
+    this.healthChecks.add(operation);
+    try {
+      return await operation;
+    } finally {
+      this.healthChecks.delete(operation);
+    }
+  }
+  async checkSyncStatusInternal(root, client, progress, options = {}) {
     const manifest = await readManifest(root);
     const activeClient = client ?? this.client;
     if (!activeClient) {
@@ -27832,10 +28038,9 @@ var RealtimeSyncService = class {
     const startingManifestEpoch = this.root === root ? this.manifestMutationEpoch : void 0;
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
     progress?.report({ message: "Comparing local and remote files" });
-    const [localPaths, localFolderPaths] = await Promise.all([
-      listLocalProjectFiles(root, manifest),
-      listLocalProjectFolders(root, manifest)
-    ]);
+    const localScan = await scanLocalProject(root, manifest);
+    const localPaths = localScan.files;
+    const localFolderPaths = localScan.folders;
     const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localFolderPaths);
     let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
     if (manifestChanged) {
@@ -27854,7 +28059,7 @@ var RealtimeSyncService = class {
       }
     }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath2)) : void 0;
-    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths);
+    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localFolderPaths);
     const items = [...folderStructure.items];
     let localCacheReuseCount = 0;
     for (const requestedPath of requestedPaths ?? []) {
@@ -27870,7 +28075,7 @@ var RealtimeSyncService = class {
       const manifestFile = manifest.files[relPath];
       const remoteFile = remote.manifest.files[relPath];
       const localAbs = path32.join(root, relPath);
-      const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full");
+      const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full", localScan.fileMetadata.get(relPath));
       const localHash = localResult.hash;
       if (localResult.reused) localCacheReuseCount += 1;
       if (localResult.cacheChanged) manifestChanged = true;
@@ -28209,6 +28414,8 @@ var RealtimeSyncService = class {
       clearTimeout(timer);
     }
     this.timers.clear();
+    await Promise.all([...this.inFlight.values()].map((operation) => operation.catch(() => void 0)));
+    await Promise.all([...this.healthChecks].map((operation) => operation.catch(() => void 0)));
     this.docStates.clear();
     this.documentSessions.clear();
     this.bypassHashes.clear();
@@ -28894,7 +29101,7 @@ var RealtimeSyncService = class {
       progress?.report({ message: `Reading remote files ${completed}/${selectedCount}: ${filePath}` });
     };
     for (const reusedPath of reused) reportProgress(reusedPath);
-    for (const file of docs) {
+    await mapWithConcurrency(docs, 4, async (file) => {
       try {
         metrics.joinDocCount += 1;
         const joined = await session.joinDoc(file.entityId, signal);
@@ -28907,11 +29114,11 @@ var RealtimeSyncService = class {
       } finally {
         reportProgress(file.path);
       }
-    }
+    });
     if (!client && binaries.length > 0) {
       throw new Error("Overleaf client is not available for binary download.");
     }
-    await mapWithConcurrency(binaries, 4, async (file) => {
+    await mapWithByteConcurrency(binaries, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async (file) => {
       try {
         metrics.binaryGetCount += 1;
         const bytes = await client.downloadProjectFile(manifest.projectId, file.entityId, signal);
@@ -28986,7 +29193,7 @@ var RealtimeSyncService = class {
     return state;
   }
   scheduleSyncStatusCheck(delayMs, paths) {
-    if (!this.root || !this.client || !this.session) {
+    if (this.stopping || !this.root || !this.client || !this.session) {
       return;
     }
     const normalizedPaths = paths ? [...paths].map(toPosixPath2) : void 0;
@@ -30486,6 +30693,8 @@ var path35 = __toESM(require("path"));
 var import_events = require("events");
 var import_child_process4 = require("child_process");
 var import_util21 = require("util");
+var MAX_IPC_FRAME_BYTES = 1024 * 1024;
+var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var execFileAsync2 = (0, import_util21.promisify)(import_child_process4.execFile);
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
@@ -30539,7 +30748,7 @@ var SyncOwnerCoordinator = class {
       socketPath: paths.socketPath,
       nonce: crypto7.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature(process.pid)
+      processStart: await processStartSignature2(process.pid)
     };
     try {
       await fs28.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
@@ -30554,6 +30763,9 @@ var SyncOwnerCoordinator = class {
         });
       });
       await fs28.chmod(paths.socketPath, 384);
+      if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
+        throw new Error("Sync owner socket did not become reachable after startup.");
+      }
       this.metadata = metadata;
       return "owner";
     } catch (error) {
@@ -30586,9 +30798,7 @@ var SyncOwnerCoordinator = class {
     const line = `${JSON.stringify(message)}
 `;
     for (const socket of this.eventSockets) {
-      if (!socket.destroyed && !socket.writableEnded) socket.write(line, (error) => {
-        if (error) socket.destroy();
-      });
+      if (!socket.destroyed && !socket.writableEnded) writeBounded(socket, line);
     }
     this.events.emit("event", message);
   }
@@ -30634,7 +30844,7 @@ var SyncOwnerCoordinator = class {
         onEvent(value);
       });
     });
-    socket.write(`${JSON.stringify({
+    writeBounded(socket, `${JSON.stringify({
       version: 1,
       id: crypto7.randomUUID(),
       command: "subscribe",
@@ -30690,27 +30900,27 @@ var SyncOwnerCoordinator = class {
   }
   async handleSocketRequest(socket, value) {
     if (!isOwnerRequest(value) || !this.root || path35.resolve(value.root) !== path35.resolve(this.root)) {
-      socket.write(`${JSON.stringify(errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."))}
+      writeBounded(socket, `${JSON.stringify(errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."))}
 `);
       return;
     }
     if (value.command === "subscribe") {
       this.eventSockets.add(socket);
-      socket.write(`${JSON.stringify({ version: 1, event: "subscribed", root: this.root })}
+      writeBounded(socket, `${JSON.stringify({ version: 1, event: "subscribed", root: this.root })}
 `);
       return;
     }
     if (this.releasing) {
-      socket.write(`${JSON.stringify(errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."))}
+      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."))}
 `);
       return;
     }
     try {
       const result = await this.runCommand(() => this.handler?.(value.command, value.args));
-      socket.write(`${JSON.stringify({ version: 1, id: value.id, ok: true, result })}
+      writeBounded(socket, `${JSON.stringify({ version: 1, id: value.id, ok: true, result })}
 `);
     } catch (error) {
-      socket.write(`${JSON.stringify(errorResponse(value.id, "owner_command_failed", formatUnknownError(error)))}
+      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, "owner_command_failed", formatUnknownError(error)))}
 `);
     }
   }
@@ -30725,8 +30935,8 @@ var SyncOwnerCoordinator = class {
       const stat9 = await fs28.stat(paths.lockPath).catch(() => void 0);
       return Boolean(stat9 && Date.now() - stat9.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
     }
-    if (processAlive2(metadata.pid)) {
-      const currentStart = await processStartSignature(metadata.pid);
+    if (processAlive3(metadata.pid)) {
+      const currentStart = await processStartSignature2(metadata.pid);
       if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
     }
     return true;
@@ -30772,7 +30982,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       error ? reject(error) : resolve22(result);
     };
     socket.once("error", (error) => finish(error));
-    socket.once("connect", () => socket.write(`${JSON.stringify(request)}
+    socket.once("connect", () => writeBounded(socket, `${JSON.stringify(request)}
 `));
     parseJsonLines(socket, (value) => {
       const response = value;
@@ -30786,10 +30996,18 @@ function parseJsonLines(socket, onValue) {
   let pending = "";
   socket.on("data", (chunk) => {
     pending += chunk.toString("utf8");
+    if (Buffer.byteLength(pending, "utf8") > MAX_IPC_BUFFER_BYTES) {
+      socket.destroy(new Error("Sync IPC receive buffer exceeded its limit."));
+      return;
+    }
     while (pending.includes("\n")) {
       const index = pending.indexOf("\n");
       const line = pending.slice(0, index);
       pending = pending.slice(index + 1);
+      if (Buffer.byteLength(line, "utf8") > MAX_IPC_FRAME_BYTES) {
+        socket.destroy(new Error("Sync IPC frame exceeded its limit."));
+        return;
+      }
       if (!line.trim()) continue;
       try {
         onValue(JSON.parse(line));
@@ -30797,6 +31015,15 @@ function parseJsonLines(socket, onValue) {
         socket.destroy(new Error("Invalid JSON received over sync IPC."));
       }
     }
+  });
+}
+function writeBounded(socket, line) {
+  if (Buffer.byteLength(line, "utf8") > MAX_IPC_FRAME_BYTES || socket.writableLength > MAX_IPC_BUFFER_BYTES) {
+    socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
+    return;
+  }
+  socket.write(line, (error) => {
+    if (error) socket.destroy();
   });
 }
 function onceConnected(socket, timeoutMs) {
@@ -30863,7 +31090,7 @@ async function readMetadata(target) {
     return void 0;
   }
 }
-function processAlive2(pid) {
+function processAlive3(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -30871,7 +31098,7 @@ function processAlive2(pid) {
     return false;
   }
 }
-async function processStartSignature(pid) {
+async function processStartSignature2(pid) {
   try {
     const result = await execFileAsync2("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
     return String(result.stdout ?? "").trim() || void 0;

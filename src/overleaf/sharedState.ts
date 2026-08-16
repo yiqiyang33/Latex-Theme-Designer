@@ -94,7 +94,12 @@ export async function readSharedState(): Promise<SharedOverleafState> {
   await migrateLegacyLinuxPaths();
   const raw = await fs.readFile(sharedStatePath(), 'utf8').catch(() => undefined);
   if (!raw) return defaultSharedState();
-  const parsed = JSON.parse(raw) as Partial<SharedOverleafState>;
+  let parsed: Partial<SharedOverleafState>;
+  try { parsed = JSON.parse(raw) as Partial<SharedOverleafState>; }
+  catch {
+    await fs.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => undefined);
+    return defaultSharedState();
+  }
   const defaults = defaultSharedState();
   return {
     ...defaults,
@@ -193,7 +198,20 @@ export async function listSharedMirrors(): Promise<SharedMirrorRecord[]> {
   const records: SharedMirrorRecord[] = [];
   for (const record of state.mirrors) {
     if (!await exists(manifestPath(record.root))) continue;
-    records.push(await registerSharedMirror(record.root) ?? record);
+    const manifest = await readManifest(record.root).catch(() => undefined);
+    records.push(manifest ? {
+      root: path.resolve(record.root), name: manifest.projectName || path.basename(record.root),
+      projectId: manifest.projectId, serverUrl: normalizeServerUrl(manifest.serverUrl), lastSyncAt: manifest.lastSyncAt
+    } : record);
+  }
+  const normalized = normalizeSharedState({ ...state, mirrors: records });
+  if (JSON.stringify(normalized.mirrors) !== JSON.stringify(state.mirrors)) {
+    const release = await acquireSharedStateLock();
+    try {
+      const latest = await readSharedState();
+      latest.mirrors = records;
+      await writeSharedStateUnlocked(normalizeSharedState(latest));
+    } finally { await release(); }
   }
   return records.sort((a, b) => (b.lastSyncAt ?? '').localeCompare(a.lastSyncAt ?? ''));
 }
@@ -208,6 +226,7 @@ interface SharedStateLockMetadata {
   pid: number;
   nonce: string;
   createdAt: string;
+  processStart?: string;
 }
 
 const SHARED_STATE_LOCK_TIMEOUT_MS = 15_000;
@@ -238,6 +257,7 @@ async function acquireSharedStateLock(): Promise<() => Promise<void>> {
       pid: process.pid,
       nonce: crypto.randomBytes(16).toString('hex'),
       createdAt: new Date().toISOString()
+      ,processStart: await processStartSignature(process.pid)
     };
     try {
       await fs.mkdir(lockPath, { mode: 0o700 });
@@ -257,7 +277,7 @@ async function acquireSharedStateLock(): Promise<() => Promise<void>> {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
 
-    if (await clearStaleSharedStateLock(lockPath, metadataPath)) {
+    if (await clearStaleSharedStateLock(lockPath, metadataPath, deadline)) {
       continue;
     }
     if (Date.now() >= deadline) {
@@ -267,9 +287,9 @@ async function acquireSharedStateLock(): Promise<() => Promise<void>> {
   }
 }
 
-async function clearStaleSharedStateLock(lockPath: string, metadataPath: string): Promise<boolean> {
+async function clearStaleSharedStateLock(lockPath: string, metadataPath: string, deadline: number): Promise<boolean> {
   const guardPath = `${lockPath}.reclaim`;
-  if (!await acquireReclaimGuard(guardPath)) return false;
+  if (!await acquireReclaimGuard(guardPath, Math.max(1, Math.min(SHARED_STATE_LOCK_TIMEOUT_MS * 2, deadline - Date.now())))) return false;
   try {
     if (!await sharedStateLockIsStale(lockPath, metadataPath)) return false;
     await fs.rm(lockPath, { recursive: true, force: true });
@@ -279,7 +299,7 @@ async function clearStaleSharedStateLock(lockPath: string, metadataPath: string)
   }
 }
 
-async function acquireReclaimGuard(guardPath: string): Promise<boolean> {
+async function acquireReclaimGuard(guardPath: string, staleMs = SHARED_STATE_LOCK_TIMEOUT_MS * 2): Promise<boolean> {
   try {
     await fs.mkdir(guardPath, { mode: 0o700 });
     return true;
@@ -287,7 +307,7 @@ async function acquireReclaimGuard(guardPath: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
   const stat = await fs.stat(guardPath).catch(() => undefined);
-  if (!stat || Date.now() - stat.mtimeMs < SHARED_STATE_LOCK_TIMEOUT_MS * 2) return false;
+  if (!stat || Date.now() - stat.mtimeMs < staleMs) return false;
   await fs.rm(guardPath, { recursive: true, force: true });
   try {
     await fs.mkdir(guardPath, { mode: 0o700 });
@@ -300,7 +320,11 @@ async function acquireReclaimGuard(guardPath: string): Promise<boolean> {
 
 async function sharedStateLockIsStale(lockPath: string, metadataPath: string): Promise<boolean> {
   const metadata = await readSharedStateLockMetadata(metadataPath);
-  if (metadata) return !processAlive(metadata.pid);
+  if (metadata) {
+    if (!processAlive(metadata.pid)) return true;
+    const currentStart = await processStartSignature(metadata.pid);
+    return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
+  }
   const stat = await fs.stat(lockPath).catch(() => undefined);
   return Boolean(stat && Date.now() - stat.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
@@ -316,6 +340,14 @@ async function readSharedStateLockMetadata(target: string): Promise<SharedStateL
   } catch {
     return undefined;
   }
+}
+
+async function processStartSignature(pid: number): Promise<string | undefined> {
+  try {
+    const raw = await fs.readFile(`/proc/${pid}/stat`, 'utf8');
+    const fields = raw.trim().split(' ');
+    return fields[21];
+  } catch { return undefined; }
 }
 
 function processAlive(pid: number): boolean {

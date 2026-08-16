@@ -24,8 +24,17 @@ export class BinaryTransactionStore {
   constructor(private readonly root: string) {}
 
   async list(): Promise<BinaryTransaction[]> {
-    const raw = await fs.readFile(metadataPath(this.root, TRANSACTIONS_NAME), 'utf8').catch(() => undefined);
-    return raw ? JSON.parse(raw) as BinaryTransaction[] : [];
+    const target = metadataPath(this.root, TRANSACTIONS_NAME);
+    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.some(item => !item || typeof item.id !== 'string' || typeof item.path !== 'string')) throw new Error('invalid transactions');
+      return parsed as BinaryTransaction[];
+    } catch {
+      await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
+      return [];
+    }
   }
 
   async upsert(transaction: BinaryTransaction): Promise<void> {

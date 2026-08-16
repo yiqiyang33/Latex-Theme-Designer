@@ -32,7 +32,7 @@ import {
   classifyFolderStructure,
   classifySyncStatus,
   listLocalProjectFiles,
-  listLocalProjectFolders,
+  scanLocalProject,
   makeSyncStatusReport,
   mergeTargetedSyncStatusReport,
   repairFolderManifestFromRemote,
@@ -44,7 +44,7 @@ import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransact
 import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
-import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { mapWithByteConcurrency, mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
 
 const REMOTE_EVENTS = [
@@ -209,22 +209,19 @@ export class OverleafSyncEngine {
         this.manifest.projectName,
         project
       ).manifest;
-      let [localFiles, localFolders] = await Promise.all([
-        listLocalProjectFiles(this.root, this.manifest),
-        listLocalProjectFolders(this.root, this.manifest)
-      ]);
+      let localScan = await scanLocalProject(this.root, this.manifest);
+      let localFiles = localScan.files;
+      let localFolders = localScan.folders;
       if (options.intent === 'sync') {
         await this.reconcileRemoteRenames(remote);
-        [localFiles, localFolders] = await Promise.all([
-          listLocalProjectFiles(this.root, this.manifest),
-          listLocalProjectFolders(this.root, this.manifest)
-        ]);
+        localScan = await scanLocalProject(this.root, this.manifest);
+        localFiles = localScan.files;
+        localFolders = localScan.folders;
         if (this.policy.autoPushLocalAhead) {
           await this.reconcileLocalRenames(localFiles, localFolders);
-          [localFiles, localFolders] = await Promise.all([
-            listLocalProjectFiles(this.root, this.manifest),
-            listLocalProjectFolders(this.root, this.manifest)
-          ]);
+          localScan = await scanLocalProject(this.root, this.manifest);
+          localFiles = localScan.files;
+          localFolders = localScan.folders;
           remote = buildProjectTreeIndex(
             this.manifest.serverUrl,
             this.manifest.projectId,
@@ -235,7 +232,7 @@ export class OverleafSyncEngine {
       }
       const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
       repairFolderManifestFromRemote(this.manifest, remote, localFolders);
-      const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths);
+      const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths, localFolders);
       const paths = new Set([
         ...Object.keys(this.manifest.files),
         ...Object.keys(remote.files),
@@ -266,7 +263,7 @@ export class OverleafSyncEngine {
         });
       };
       for (const relPath of remotePlan.reusedPaths) reportRemoteRead(relPath);
-      for (const file of remotePlan.docsToJoin) {
+      await mapWithConcurrency(remotePlan.docsToJoin, 4, async file => {
         try {
           remoteContents.set(file.path, (await this.session!.joinDoc(file.entityId)).content);
         } catch (error) {
@@ -274,8 +271,8 @@ export class OverleafSyncEngine {
         } finally {
           reportRemoteRead(file.path);
         }
-      }
-      await mapWithConcurrency(remotePlan.binariesToGet, 4, async file => {
+      });
+      await mapWithByteConcurrency(remotePlan.binariesToGet, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async file => {
         try {
           remoteContents.set(
             file.path,
@@ -293,7 +290,7 @@ export class OverleafSyncEngine {
         if (shouldIgnore(this.manifest, relPath)) continue;
         const manifestFile = this.manifest.files[relPath];
         const remoteFile = remote.files[relPath];
-        const localResult = await cachedLocalFileHash(path.join(this.root, relPath), manifestFile, mode === 'full');
+        const localResult = await cachedLocalFileHash(path.join(this.root, relPath), manifestFile, mode === 'full', localScan.fileMetadata.get(relPath));
         const remoteContent = remoteContents.get(relPath);
         const remoteReadError = remoteFailures.get(relPath);
         const remoteHash = remoteContent === undefined
@@ -350,7 +347,7 @@ export class OverleafSyncEngine {
       }
       const targetedReport = makeSyncStatusReport(this.manifest, items, {
         mode,
-        completeness: folderStatus.globalBlockReason ? 'failed' : 'complete',
+        completeness: folderStatus.globalBlockReason ? 'failed' : remoteFailures.size > 0 ? 'partial' : 'complete',
         globalBlockReason: folderStatus.globalBlockReason
       });
       const report = requestedPaths
@@ -693,18 +690,23 @@ export class OverleafSyncEngine {
       path: candidate,
       fingerprint: await this.folderFingerprintFromLocal(candidate)
     })));
+    const oldFolderFingerprints = new Map<string, string>();
+    for (const folder of missingFolders) oldFolderFingerprints.set(folder.path, this.folderFingerprintFromManifest(folder.path));
+    const oldFolderCounts = new Map<string, number>();
+    for (const fingerprint of oldFolderFingerprints.values()) oldFolderCounts.set(fingerprint, (oldFolderCounts.get(fingerprint) ?? 0) + 1);
+    const candidateByFingerprint = new Map<string, typeof folderCandidates>();
+    for (const candidate of folderCandidates) candidateByFingerprint.set(candidate.fingerprint, [...(candidateByFingerprint.get(candidate.fingerprint) ?? []), candidate]);
     for (const oldFolder of missingFolders) {
-      const fingerprint = this.folderFingerprintFromManifest(oldFolder.path);
-      const matches = folderCandidates.filter(candidate => candidate.fingerprint === fingerprint);
-      const oldMatches = missingFolders.filter(candidate => this.folderFingerprintFromManifest(candidate.path) === fingerprint);
-      if (matches.length !== 1 || oldMatches.length !== 1) {
+      const fingerprint = oldFolderFingerprints.get(oldFolder.path)!;
+      const matches = candidateByFingerprint.get(fingerprint) ?? [];
+      if (matches.length !== 1 || oldFolderCounts.get(fingerprint) !== 1) {
         if (matches.length > 0) this.host.conflict(oldFolder.path, 'Folder rename is ambiguous because multiple subtrees have identical content.');
         continue;
       }
       await this.applyLocalRename(oldFolder.path, matches[0].path);
     }
 
-    const refreshedFiles = await listLocalProjectFiles(this.root, this.manifest!);
+    const refreshedFiles = localFiles;
     const localFileSet = new Set(refreshedFiles);
     const missingFiles = Object.values(this.manifest!.files).filter(file => !localFileSet.has(file.path));
     const untrackedFiles = refreshedFiles.filter(candidate => !this.manifest!.files[candidate]);
@@ -712,14 +714,19 @@ export class OverleafSyncEngine {
       path: candidate,
       hash: await fs.readFile(path.join(this.root, candidate)).then(sha1)
     })));
+    const candidatesByHash = new Map<string, typeof localCandidates>();
+    for (const candidate of localCandidates) candidatesByHash.set(candidate.hash, [...(candidatesByHash.get(candidate.hash) ?? []), candidate]);
+    const oldFileCounts = new Map<string, number>();
+    for (const file of missingFiles) {
+      const key = `${file.entityType}\0${file.localHashCache ?? file.sha1 ?? ''}`;
+      oldFileCounts.set(key, (oldFileCounts.get(key) ?? 0) + 1);
+    }
     for (const oldFile of missingFiles) {
       const expected = oldFile.localHashCache ?? oldFile.sha1;
       if (!expected) continue;
-      const matches = localCandidates.filter(candidate => candidate.hash === expected
-        && (isTextLike(candidate.path) ? 'doc' : 'file') === oldFile.entityType);
-      const oldMatches = missingFiles.filter(candidate => (candidate.localHashCache ?? candidate.sha1) === expected
-        && candidate.entityType === oldFile.entityType);
-      if (matches.length !== 1 || oldMatches.length !== 1) {
+      const matches = (candidatesByHash.get(expected) ?? []).filter(candidate => (isTextLike(candidate.path) ? 'doc' : 'file') === oldFile.entityType);
+      const key = `${oldFile.entityType}\0${expected}`;
+      if (matches.length !== 1 || oldFileCounts.get(key) !== 1) {
         if (matches.length > 0) this.host.conflict(oldFile.path, 'File rename is ambiguous because multiple paths have identical content.');
         continue;
       }
@@ -837,7 +844,9 @@ export class OverleafSyncEngine {
     const rel = toPosixPath(path.relative(this.root, candidate));
     if (!rel || rel.startsWith('..')) return false;
     if (/(^|\/)(\.overleaf-codex|\.git|\.vscode)(\/|$)/.test(rel)) return true;
-    return this.manifest ? shouldIgnore(this.manifest, rel) : false;
+    return this.manifest
+      ? shouldIgnore(this.manifest, rel) || shouldIgnoreUntrackedLocalPath(this.manifest, rel)
+      : false;
   }
 
   private validatePath(relPath: string): string {

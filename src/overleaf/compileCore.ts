@@ -24,6 +24,9 @@ export async function compileRemoteProject(
   if (response.status !== 'success') throw new Error(`Overleaf compile failed with status: ${response.status}`);
 
   const outputRoot = metadataPath(root, OUTPUT_DIR);
+  const releaseCompileLock = await acquireCompileLock(outputRoot);
+  try {
+  await cleanupInterruptedCompileArtifacts(root);
   const token = `${process.pid}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
   const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
   const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
@@ -50,6 +53,47 @@ export async function compileRemoteProject(
   const pdfPath = await latestPathByExtension(files, '.pdf');
   const logPath = await latestPathByExtension(files, '.log');
   return { rootDocPath, outputRoot, files, pdfPath, logPath };
+  } finally {
+    await releaseCompileLock();
+  }
+}
+
+async function cleanupInterruptedCompileArtifacts(root: string): Promise<void> {
+  const dir = metadataPath(root, '.overleaf-codex');
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries
+    .filter(entry => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`))
+    .map(entry => fs.rm(path.join(dir, entry.name), { recursive: true, force: true })));
+}
+
+async function acquireCompileLock(outputRoot: string): Promise<() => Promise<void>> {
+  const lock = `${outputRoot}.lock`;
+  const owner = path.join(lock, 'owner.json');
+  for (;;) {
+    try {
+      await fs.mkdir(lock, { recursive: false });
+      const nonce = crypto.randomBytes(8).toString('hex');
+      await fs.writeFile(owner, JSON.stringify({ pid: process.pid, startedAt: Date.now(), nonce }));
+      return async () => {
+        const current = await fs.readFile(owner, 'utf8').catch(() => undefined);
+        if (current?.includes(nonce)) await fs.rm(lock, { recursive: true, force: true });
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const raw = await fs.readFile(owner, 'utf8').catch(() => undefined);
+      let stale = false;
+      try {
+        const value = JSON.parse(raw ?? '{}') as { pid?: number; startedAt?: number };
+        stale = typeof value.pid === 'number' && !processAlive(value.pid);
+      } catch { stale = true; }
+      if (stale) { await fs.rm(lock, { recursive: true, force: true }); continue; }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
 export async function latestRemotePdf(root: string): Promise<string | undefined> {

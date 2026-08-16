@@ -9,6 +9,8 @@ import { runtimeRoot } from './sharedState';
 import { formatUnknownError } from './util';
 
 export const SYNC_IPC_VERSION = 1;
+const MAX_IPC_FRAME_BYTES = 1024 * 1024;
+const MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 
 export interface OwnerRequest {
   version: 1;
@@ -123,6 +125,9 @@ export class SyncOwnerCoordinator {
         });
       });
       await fs.chmod(paths.socketPath, 0o600);
+      if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
+        throw new Error('Sync owner socket did not become reachable after startup.');
+      }
       this.metadata = metadata;
       return 'owner';
     } catch (error) {
@@ -156,9 +161,7 @@ export class SyncOwnerCoordinator {
     const message: OwnerEvent = { version: 1, event, root: this.root, data };
     const line = `${JSON.stringify(message)}\n`;
     for (const socket of this.eventSockets) {
-      if (!socket.destroyed && !socket.writableEnded) socket.write(line, error => {
-        if (error) socket.destroy();
-      });
+      if (!socket.destroyed && !socket.writableEnded) writeBounded(socket, line);
     }
     this.events.emit('event', message);
   }
@@ -209,7 +212,7 @@ export class SyncOwnerCoordinator {
         onEvent(value);
       });
     });
-    socket.write(`${JSON.stringify({
+    writeBounded(socket, `${JSON.stringify({
       version: 1,
       id: crypto.randomUUID(),
       command: 'subscribe',
@@ -267,23 +270,23 @@ export class SyncOwnerCoordinator {
 
   private async handleSocketRequest(socket: net.Socket, value: unknown): Promise<void> {
     if (!isOwnerRequest(value) || !this.root || path.resolve(value.root) !== path.resolve(this.root)) {
-      socket.write(`${JSON.stringify(errorResponse(String((value as { id?: unknown })?.id ?? ''), 'invalid_request', 'Invalid IPC request.'))}\n`);
+      writeBounded(socket, `${JSON.stringify(errorResponse(String((value as { id?: unknown })?.id ?? ''), 'invalid_request', 'Invalid IPC request.'))}\n`);
       return;
     }
     if (value.command === 'subscribe') {
       this.eventSockets.add(socket);
-      socket.write(`${JSON.stringify({ version: 1, event: 'subscribed', root: this.root } satisfies OwnerEvent)}\n`);
+      writeBounded(socket, `${JSON.stringify({ version: 1, event: 'subscribed', root: this.root } satisfies OwnerEvent)}\n`);
       return;
     }
     if (this.releasing) {
-      socket.write(`${JSON.stringify(errorResponse(value.id, 'owner_releasing', 'Sync owner is shutting down.'))}\n`);
+      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, 'owner_releasing', 'Sync owner is shutting down.'))}\n`);
       return;
     }
     try {
       const result = await this.runCommand(() => this.handler?.(value.command, value.args));
-      socket.write(`${JSON.stringify({ version: 1, id: value.id, ok: true, result } satisfies OwnerResponse)}\n`);
+      writeBounded(socket, `${JSON.stringify({ version: 1, id: value.id, ok: true, result } satisfies OwnerResponse)}\n`);
     } catch (error) {
-      socket.write(`${JSON.stringify(errorResponse(value.id, 'owner_command_failed', formatUnknownError(error)))}\n`);
+      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, 'owner_command_failed', formatUnknownError(error)))}\n`);
     }
   }
 
@@ -354,7 +357,7 @@ function sendRequest(socketPath: string, request: OwnerRequest, timeoutMs: numbe
       error ? reject(error) : resolve(result);
     };
     socket.once('error', error => finish(error));
-    socket.once('connect', () => socket.write(`${JSON.stringify(request)}\n`));
+    socket.once('connect', () => writeBounded(socket, `${JSON.stringify(request)}\n`));
     parseJsonLines(socket, value => {
       const response = value as Partial<OwnerResponse>;
       if (response.id !== request.id || typeof response.ok !== 'boolean') return;
@@ -368,14 +371,30 @@ function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): 
   let pending = '';
   socket.on('data', chunk => {
     pending += chunk.toString('utf8');
+    if (Buffer.byteLength(pending, 'utf8') > MAX_IPC_BUFFER_BYTES) {
+      socket.destroy(new Error('Sync IPC receive buffer exceeded its limit.'));
+      return;
+    }
     while (pending.includes('\n')) {
       const index = pending.indexOf('\n');
       const line = pending.slice(0, index);
       pending = pending.slice(index + 1);
+      if (Buffer.byteLength(line, 'utf8') > MAX_IPC_FRAME_BYTES) {
+        socket.destroy(new Error('Sync IPC frame exceeded its limit.'));
+        return;
+      }
       if (!line.trim()) continue;
       try { onValue(JSON.parse(line)); } catch { socket.destroy(new Error('Invalid JSON received over sync IPC.')); }
     }
   });
+}
+
+function writeBounded(socket: net.Socket, line: string): void {
+  if (Buffer.byteLength(line, 'utf8') > MAX_IPC_FRAME_BYTES || socket.writableLength > MAX_IPC_BUFFER_BYTES) {
+    socket.destroy(new Error('Sync IPC send queue exceeded its limit.'));
+    return;
+  }
+  socket.write(line, error => { if (error) socket.destroy(); });
 }
 
 function onceConnected(socket: net.Socket, timeoutMs: number): Promise<void> {

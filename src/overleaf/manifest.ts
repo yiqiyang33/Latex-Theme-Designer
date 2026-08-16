@@ -135,8 +135,18 @@ export function metadataPath(root: string, ...parts: string[]): string {
 }
 
 export async function readManifest(root: string): Promise<OverleafCodexManifest> {
-  const raw = await fs.readFile(manifestPath(root), 'utf8');
-  const manifest = migrateManifest(JSON.parse(raw) as OverleafCodexManifest);
+  const target = manifestPath(root);
+  const raw = await fs.readFile(target, 'utf8');
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch (error) {
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
+  }
+  if (!isManifestShape(parsed)) {
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest failed schema validation and was quarantined at ${target}.`);
+  }
+  const manifest = migrateManifest(parsed);
   const ignoreContent = await ensureLocalIgnoreFile(root);
   localIgnoreRules.set(manifest, createIgnore().add(ignoreContent));
   return manifest;
@@ -192,7 +202,28 @@ export function syncStatusPath(root: string): string {
 
 export async function readSyncStatus(root: string): Promise<SyncStatusReport | undefined> {
   const raw = await fs.readFile(syncStatusPath(root), 'utf8').catch(() => undefined);
-  return raw ? JSON.parse(raw) as SyncStatusReport : undefined;
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as SyncStatusReport;
+    if (!parsed || !Array.isArray(parsed.items) || typeof parsed.checkedAt !== 'string') throw new Error('invalid sync status');
+    return parsed;
+  } catch {
+    await quarantineCorruptFile(syncStatusPath(root));
+    return undefined;
+  }
+}
+
+function isManifestShape(value: unknown): value is OverleafCodexManifest {
+  if (!value || typeof value !== 'object') return false;
+  const manifest = value as Partial<OverleafCodexManifest>;
+  return typeof manifest.projectId === 'string' && typeof manifest.serverUrl === 'string'
+    && typeof manifest.projectName === 'string' && !!manifest.files && typeof manifest.files === 'object'
+    && !!manifest.folders && typeof manifest.folders === 'object' && Array.isArray(manifest.ignore);
+}
+
+async function quarantineCorruptFile(target: string): Promise<void> {
+  const quarantine = `${target}.corrupt-${Date.now()}`;
+  await fs.rename(target, quarantine).catch(() => undefined);
 }
 
 export async function writeSyncStatus(root: string, report: SyncStatusReport): Promise<void> {

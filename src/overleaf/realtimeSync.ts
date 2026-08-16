@@ -38,8 +38,7 @@ import {
   classifySyncStatus,
   classifyFolderStructure,
   cachedLocalFileHash,
-  listLocalProjectFiles,
-  listLocalProjectFolders,
+  scanLocalProject,
   makeSyncStatusReport,
   mergeTargetedSyncStatusReport,
   isBlockingStatus,
@@ -53,7 +52,7 @@ import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
-import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { mapWithByteConcurrency, mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
 import { planSafeSyncActions } from './syncCommandCore';
@@ -139,6 +138,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private readonly bypassHashes = new Map<string, string>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly inFlight = new Map<string, Promise<void>>();
+  private readonly healthChecks = new Set<Promise<unknown>>();
   private readonly localMutationIds = new Map<string, number[]>();
   private readonly pendingLocalCreates = new Set<string>();
   private readonly pendingFolderRenameRoots = new Set<string>();
@@ -259,14 +259,25 @@ export class RealtimeSyncService implements vscode.Disposable {
       throw new Error('Open a local Overleaf Codex mirror folder first.');
     }
 
-    const manifest = await readManifest(root);
+    const operation = this.checkSyncStatusInternal(root, client, progress, options);
+    this.healthChecks.add(operation);
+    try { return await operation; } finally { this.healthChecks.delete(operation); }
+  }
+
+  private async checkSyncStatusInternal(
+    root: string | undefined,
+    client: OverleafClient | undefined,
+    progress?: SyncProgress,
+    options: SyncCheckOptions = {}
+  ): Promise<SyncStatusReport> {
+    const manifest = await readManifest(root!);
     const activeClient = client ?? this.client;
     if (!activeClient) {
       throw new Error('Overleaf Codex is not connected.');
     }
     if (this.root === root && this.session && !this.stopping) {
       const expectedGeneration = this.generation;
-      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, this.session, progress, {
+      return (await this.checkSyncStatusWithSession(root!, manifest, activeClient, this.session, progress, {
         ...options,
         expectedGeneration
       })).report;
@@ -276,7 +287,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     try {
       const expectedGeneration = this.root === root ? this.generation : undefined;
-      return (await this.checkSyncStatusWithSession(root, manifest, activeClient, session, progress, {
+      return (await this.checkSyncStatusWithSession(root!, manifest, activeClient, session, progress, {
         ...options,
         expectedGeneration
       })).report;
@@ -335,10 +346,9 @@ export class RealtimeSyncService implements vscode.Disposable {
     const startingManifestEpoch = this.root === root ? this.manifestMutationEpoch : undefined;
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
     progress?.report({ message: 'Comparing local and remote files' });
-    const [localPaths, localFolderPaths] = await Promise.all([
-      listLocalProjectFiles(root, manifest),
-      listLocalProjectFolders(root, manifest)
-    ]);
+    const localScan = await scanLocalProject(root, manifest);
+    const localPaths = localScan.files;
+    const localFolderPaths = localScan.folders;
     const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localFolderPaths);
     let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
     if (manifestChanged) {
@@ -358,7 +368,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       }
     }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
-    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths);
+    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localFolderPaths);
     const items: SyncStatusItem[] = [...folderStructure.items];
     let localCacheReuseCount = 0;
 
@@ -377,7 +387,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       const manifestFile = manifest.files[relPath];
       const remoteFile = remote.manifest.files[relPath];
       const localAbs = path.join(root, relPath);
-      const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === 'full');
+      const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === 'full', localScan.fileMetadata.get(relPath));
       const localHash = localResult.hash;
       if (localResult.reused) localCacheReuseCount += 1;
       if (localResult.cacheChanged) manifestChanged = true;
@@ -755,6 +765,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       clearTimeout(timer);
     }
     this.timers.clear();
+    await Promise.all([...this.inFlight.values()].map(operation => operation.catch(() => undefined)));
+    await Promise.all([...this.healthChecks].map(operation => operation.catch(() => undefined)));
     this.docStates.clear();
     this.documentSessions.clear();
     this.bypassHashes.clear();
@@ -1501,7 +1513,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     };
 
     for (const reusedPath of reused) reportProgress(reusedPath);
-    for (const file of docs) {
+    await mapWithConcurrency(docs, 4, async file => {
       try {
         metrics.joinDocCount += 1;
         const joined = await session.joinDoc(file.entityId, signal);
@@ -1514,12 +1526,12 @@ export class RealtimeSyncService implements vscode.Disposable {
       } finally {
         reportProgress(file.path);
       }
-    }
+    });
 
     if (!client && binaries.length > 0) {
       throw new Error('Overleaf client is not available for binary download.');
     }
-    await mapWithConcurrency(binaries, 4, async file => {
+    await mapWithByteConcurrency(binaries, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async file => {
       try {
         metrics.binaryGetCount += 1;
         const bytes = await client!.downloadProjectFile(manifest.projectId, file.entityId, signal);
@@ -1600,7 +1612,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private scheduleSyncStatusCheck(delayMs?: number, paths?: Iterable<string>): void {
-    if (!this.root || !this.client || !this.session) {
+    if (this.stopping || !this.root || !this.client || !this.session) {
       return;
     }
     const normalizedPaths = paths ? [...paths].map(toPosixPath) : undefined;
