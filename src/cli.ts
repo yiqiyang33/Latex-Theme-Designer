@@ -4,8 +4,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as readline from 'readline';
 import { OverleafSyncEngine } from './overleaf/overleafSyncEngine';
-import type { SyncHost, SyncPolicy } from './overleaf/coreInterfaces';
-import { MacKeychainCredentialStore } from './overleaf/keychainStore';
+import type { CredentialStore, SyncHost, SyncPolicy } from './overleaf/coreInterfaces';
+import { createCredentialStore } from './overleaf/keychainStore';
 import { compileRemoteProject, latestRemotePdf } from './overleaf/compileCore';
 import { createProjectMirror } from './overleaf/mirrorCore';
 import { manifestPath, readManifest, readSyncStatus } from './overleaf/manifest';
@@ -21,7 +21,7 @@ import {
   SyncOwnerCoordinator,
   type OwnerEvent
 } from './overleaf/syncOwnerCoordinator';
-import type { SyncStatusReport } from './overleaf/types';
+import type { Identity, SyncStatusReport } from './overleaf/types';
 import type { SharedOverleafState } from './overleaf/sharedState';
 import { formatUnknownError, normalizeServerUrl } from './overleaf/util';
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from './overleaf/syncCommandCore';
@@ -136,7 +136,7 @@ async function dispatch(
   root?: string
 ): Promise<unknown> {
   const [group, action, operand] = args;
-  const credentials = new MacKeychainCredentialStore();
+  const credentials = createCredentialStore();
   const shared = await readSharedState();
   const server = normalizeServerUrl(stringOption(parsed, 'server') ?? shared.serverUrl);
 
@@ -210,7 +210,7 @@ async function dispatch(
     if (!pdf) throw dataError('No downloaded remote PDF exists. Run compile first.');
     if (action === 'path') return { path: pdf };
     if (action === 'open') {
-      await execFileAsync('/usr/bin/open', [pdf]);
+      await execFileAsync(openCommand(), [pdf]);
       return { path: pdf, opened: true };
     }
     throw usageError('Use pdf path or pdf open.');
@@ -264,7 +264,7 @@ class OwnerFacade {
   constructor(
     private readonly root: string,
     private readonly policy: SyncPolicy,
-    private readonly credentials: MacKeychainCredentialStore,
+    private readonly credentials: CredentialStore,
     private readonly output: Output
   ) {}
 
@@ -325,7 +325,7 @@ class OwnerFacade {
 async function withOwner<T>(
   root: string,
   policy: SyncPolicy,
-  credentials: MacKeychainCredentialStore,
+  credentials: CredentialStore,
   output: Output,
   run: (owner: OwnerFacade) => Promise<T>
 ): Promise<T> {
@@ -337,7 +337,7 @@ async function withOwner<T>(
 async function watchWithTakeover(
   root: string,
   policy: SyncPolicy,
-  credentials: MacKeychainCredentialStore,
+  credentials: CredentialStore,
   output: Output
 ): Promise<void> {
   let stopping = false;
@@ -390,15 +390,22 @@ async function watchWithTakeover(
 async function doctor(
   root: string | undefined,
   server: string,
-  credentials: MacKeychainCredentialStore,
+  credentials: CredentialStore,
   policy: SyncPolicy
 ): Promise<Record<string, unknown>> {
-  const identity = await credentials.getIdentity(server);
+  let identity: Identity | undefined;
+  let credentialError: string | undefined;
+  try {
+    identity = await credentials.getIdentity(server);
+  } catch (error) {
+    credentialError = formatUnknownError(error);
+  }
+  const credentialStore = credentials.describe?.();
   const checks: Record<string, unknown> = {
-    platform: { ok: process.platform === 'darwin', value: process.platform },
+    platform: { ok: process.platform === 'darwin' || process.platform === 'linux', value: process.platform },
     node: { ok: Number(process.versions.node.split('.')[0]) >= 20, value: process.versions.node },
-    keychain: { ok: process.platform === 'darwin' && await exists('/usr/bin/security'), path: '/usr/bin/security' },
-    authentication: { ok: Boolean(identity), server }
+    credentialStore: credentialStore ?? { kind: 'unknown', available: false },
+    authentication: { ok: Boolean(identity), server, ...(credentialError ? { error: credentialError } : {}) }
   };
   if (identity) {
     try {
@@ -417,7 +424,7 @@ async function doctor(
 
 async function makeClient(
   serverUrl: string,
-  credentials: MacKeychainCredentialStore,
+  credentials: CredentialStore,
   policy: SyncPolicy
 ): Promise<OverleafClient> {
   const normalized = normalizeServerUrl(serverUrl);
@@ -599,8 +606,14 @@ function delay(ms: number): Promise<void> { return new Promise(resolve => setTim
 function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false); }
 function humanValue(value: unknown): string { return typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
 
+function openCommand(): string {
+  if (process.platform === 'darwin') return '/usr/bin/open';
+  if (process.platform === 'linux') return 'xdg-open';
+  throw new Error(`Opening files is not supported on ${process.platform}.`);
+}
+
 if (require.main === module) {
   void main().then(code => { process.exitCode = code; });
 }
 
-export { main, parseArgs, blockingExitCode, makeSuccessEnvelope };
+export { main, parseArgs, blockingExitCode, makeSuccessEnvelope, openCommand };

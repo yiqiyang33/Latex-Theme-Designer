@@ -13,6 +13,7 @@ export interface BinaryTransaction {
   originalEntityId: string;
   tempEntityId: string;
   expectedBlobHash: string;
+  expectedSha1?: string;
   stage: BinaryTransactionStage;
   createdAt: string;
 }

@@ -8,11 +8,11 @@ The former Overleaf Codex workflow is now part of the same `yiqiyang33.latex-edi
 
 Toolkit source and configuration files can be synchronized by default, including `.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `commands.tex`, `theorems.tex`, `theme.sty`, `theme.colors.tex`, `theme.ui.json`, and `theme.overrides.tex`. Project assets such as images and input PDFs also synchronize by default; generated `main.pdf`, `output.pdf`, auxiliary files, and paths listed in `.overleaf-codexignore` remain local. The `latexEditingToolkit.overleaf.syncToolkitOverrides` setting controls the Toolkit-managed override files; source files remain governed by the normal manifest and ignore rules. Sync metadata, `.vscode`, build outputs, logs, conflict copies, and machine caches remain local. Destructive deletes and conflict replacement still require explicit confirmation, and binary synchronization can be disabled with `latexEditingToolkit.overleaf.syncBinaryFiles`.
 
-For security, identities are stored in macOS Keychain under service `yiqiyang33.latex-editing-toolkit.overleaf`; the extension migrates its existing SecretStorage identity once and a logout tombstone prevents an old secret from being imported again. The legacy Socket.IO client is shipped as a small native-loaded runtime under `dist/vendor/socket.io-client`; it is intentionally kept out of the esbuild bundle because its CommonJS circular-module contract depends on Node's real `module.parent.exports` behavior.
+On macOS, identities are stored in Keychain under service `yiqiyang33.latex-editing-toolkit.overleaf`. On Linux, the CLI and extension use `secret-tool`/libsecret when available and otherwise use a local credentials directory protected by `0700`/`0600` filesystem permissions. The extension migrates its existing SecretStorage identity once and a logout tombstone prevents an old secret from being imported again. The legacy Socket.IO client is shipped as a small native-loaded runtime under `dist/vendor/socket.io-client`; it is intentionally kept out of the esbuild bundle because its CommonJS circular-module contract depends on Node's real `module.parent.exports` behavior.
 
 Existing `.overleaf-codex` mirrors are migrated in place: schema and ignore defaults are upgraded while local files, base snapshots, sync status, and conflict records are preserved. If the remote project root identity is no longer trusted, outbound writes are frozen until a sync audit succeeds.
 
-### macOS Overleaf CLI
+### macOS/Linux Overleaf CLI
 
 Run `LaTeX Editing Toolkit: Install/Update CLI` from the command palette, then ensure `~/.local/bin` is on `PATH`. The managed command requires Node.js 20 or newer and can run while VS Code/Cursor is closed:
 
@@ -30,7 +30,9 @@ latex-toolkit overleaf pdf open --root /path/to/mirror
 
 Use `--json` for a stable JSON envelope; `sync --watch --json` emits NDJSON on stdout and sends logs to stderr. For automation, pipe a Cookie request header to `auth login --cookie-stdin`; cookies are never accepted as an argv option. Conflict replacement, overwrite, and deletion remain blocked unless explicitly authorized with `--force` or `conflicts resolve PATH --use local|remote`.
 
-The CLI and extension share Keychain credentials, `~/Library/Application Support/latex-editing-toolkit/overleaf.json`, mirror metadata, and sync status. A per-mirror Unix socket and atomic owner lock guarantee one manifest writer. A later process forwards work to the current owner; `sync --watch` takes ownership automatically when that owner exits.
+The CLI and extension share credentials, configuration, mirror metadata, and sync status. On macOS the shared configuration is under `~/Library/Application Support/latex-editing-toolkit`; on Linux it follows XDG (`${XDG_CONFIG_HOME:-~/.config}/latex-editing-toolkit`). Linux credential files, when libsecret is unavailable, live under `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/credentials` and are kept at mode `0600`. A per-mirror Unix socket and atomic owner lock guarantee one manifest writer. A later process forwards work to the current owner; `sync --watch` takes ownership automatically when that owner exits.
+
+The CLI runtime uses the macOS Application Support directory or `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/cli` on Linux. Add `~/.local/bin` to `PATH` after installing the managed command. Remote PDF opening uses `open` on macOS and `xdg-open` on Linux.
 
 ## Build
 

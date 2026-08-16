@@ -3,11 +3,27 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { blockingExitCode, makeSuccessEnvelope, parseArgs } from '../src/cli';
+import { blockingExitCode, makeSuccessEnvelope, openCommand, parseArgs } from '../src/cli';
 import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
-import { KEYCHAIN_SERVICE, MacKeychainCredentialStore, type SecurityRunner } from '../src/overleaf/keychainStore';
+import {
+  FallbackCredentialStore,
+  FileCredentialStore,
+  KEYCHAIN_SERVICE,
+  MacKeychainCredentialStore,
+  SecretToolCredentialStore,
+  type SecurityRunner
+} from '../src/overleaf/keychainStore';
 import { SecretStore } from '../src/overleaf/secretStore';
-import { defaultSharedState, readSharedState, registerSharedMirror, sharedStatePath, updateSharedState } from '../src/overleaf/sharedState';
+import {
+  applicationDataRoot,
+  applicationSupportRoot,
+  defaultSharedState,
+  readSharedState,
+  registerSharedMirror,
+  runtimeRoot,
+  sharedStatePath,
+  updateSharedState
+} from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
 import { metadataPath, OUTPUT_DIR, readManifest, writeManifest } from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
@@ -16,6 +32,8 @@ import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
 import { sha1 } from '../src/overleaf/util';
 import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCore';
 import { compileRemoteProject, latestRemotePdf } from '../src/overleaf/compileCore';
+import { BinaryTransactionStore, type BinaryTransaction } from '../src/overleaf/binaryTransactions';
+import { recoverBinaryTransactions, type RemoteBinaryEntityState } from '../src/overleaf/remoteMutationCore';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -144,6 +162,94 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
+  it('uses XDG config, data and cache roots on Linux', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-xdg-'));
+    delete process.env.LATEX_TOOLKIT_SUPPORT_HOME;
+    delete process.env.LATEX_TOOLKIT_DATA_HOME;
+    delete process.env.LATEX_TOOLKIT_CACHE_HOME;
+    process.env.XDG_CONFIG_HOME = path.join(temporary, 'config');
+    process.env.XDG_DATA_HOME = path.join(temporary, 'data');
+    process.env.XDG_CACHE_HOME = path.join(temporary, 'cache');
+    try {
+      expect(applicationSupportRoot()).toBe(path.join(temporary, 'config', 'latex-editing-toolkit'));
+      expect(applicationDataRoot()).toBe(path.join(temporary, 'data', 'latex-editing-toolkit'));
+      expect(runtimeRoot()).toBe(path.join(temporary, 'cache', 'latex-editing-toolkit', 'runtime'));
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a private credential file when secret-tool is unavailable', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-file-credentials-'));
+    const support = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'data', 'credentials');
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = support;
+    process.env.LATEX_TOOLKIT_DATA_HOME = path.join(temporary, 'data');
+    const runner: SecurityRunner = {
+      run: async () => { throw new Error('spawn secret-tool ENOENT'); }
+    };
+    const store = new FallbackCredentialStore(
+      new SecretToolCredentialStore(runner),
+      new FileCredentialStore(credentialsRoot)
+    );
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await store.saveIdentity('https://example.test', identity);
+      expect(await store.getIdentity('https://example.test/')).toEqual(identity);
+      const entries = await fs.readdir(credentialsRoot);
+      expect(entries).toHaveLength(1);
+      expect((await fs.stat(credentialsRoot)).mode & 0o777).toBe(0o700);
+      expect((await fs.stat(path.join(credentialsRoot, entries[0]))).mode & 0o777).toBe(0o600);
+      expect(store.describe().kind).toBe('restricted-file');
+      await store.deleteIdentity('https://example.test');
+      expect(await fs.readdir(credentialsRoot)).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('round-trips identities through the secret-tool backend without putting cookies in argv', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-tool-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const runner = new MemorySecretToolRunner();
+    const store = new SecretToolCredentialStore(runner);
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf', userEmail: 'test@example.com' };
+    try {
+      await store.saveIdentity('https://example.test', identity);
+      expect(runner.lastArgs).toEqual([
+        'store', '--label', 'LaTeX Editing Toolkit Overleaf', 'service', KEYCHAIN_SERVICE, 'account', 'https://example.test/'
+      ]);
+      expect(runner.lastStdin).toBe(JSON.stringify(identity));
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      await store.deleteIdentity('https://example.test');
+      expect(await store.getIdentity('https://example.test')).toBeUndefined();
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates a fallback file identity back into secret-tool when it becomes available', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-migration-back-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const file = new FileCredentialStore(credentialsRoot);
+    const runner = new MemorySecretToolRunner();
+    const store = new FallbackCredentialStore(new SecretToolCredentialStore(runner), file);
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await file.saveIdentity('https://example.test', identity);
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(runner.items.get('https://example.test/')).toBe(JSON.stringify(identity));
+      expect(await fs.readdir(credentialsRoot)).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the platform PDF opener', () => {
+    expect(openCommand()).toBe(process.platform === 'darwin' ? '/usr/bin/open' : 'xdg-open');
+  });
+
   it('elects one owner, forwards commands and events, then allows takeover', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-owner-'));
     process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
@@ -170,6 +276,37 @@ describe('Overleaf CLI shared infrastructure', () => {
     } finally {
       await second.release();
       await first.release();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes concurrent IPC commands at the owner boundary', async () => {
+    const temporary = await fs.mkdtemp('/tmp/lt-owner-serial-');
+    process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
+    const root = path.join(temporary, 'mirror');
+    await fs.mkdir(root, { recursive: true });
+    const owner = new SyncOwnerCoordinator();
+    const client = new SyncOwnerCoordinator();
+    let active = 0;
+    let maximumActive = 0;
+    try {
+      await owner.claim(root, async command => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise(resolve => setTimeout(resolve, 30));
+        active -= 1;
+        return command;
+      });
+      await client.claim(root, async () => undefined);
+      expect(await Promise.all([
+        client.request('first'),
+        client.request('second'),
+        client.request('third')
+      ])).toEqual(['first', 'second', 'third']);
+      expect(maximumActive).toBe(1);
+    } finally {
+      await client.release();
+      await owner.release();
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
@@ -496,6 +633,205 @@ describe('Shared Overleaf sync command contract', () => {
     }
   });
 
+  it('applies a remote non-empty folder rename once without moving its children separately', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-folder-rename-'));
+    const content = 'chapter content\n';
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', fileRefs: [], docs: [],
+        folders: [{
+          _id: 'folder-1', name: 'new', fileRefs: [], docs: [],
+          folders: [{
+            _id: 'folder-2', name: 'nested', folders: [], fileRefs: [],
+            docs: [{ _id: 'doc-1', name: 'main.tex', version: 1 }]
+          }]
+        }]
+      }
+    };
+    const session = {
+      getProject: () => project,
+      joinDoc: async () => ({ content, version: 1 }),
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      { connectSocket: async () => session } as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    try {
+      const state = manifest();
+      state.rootDocPath = 'old/nested/main.tex';
+      state.folders.old = { path: 'old', entityId: 'folder-1', parentFolderId: 'root' };
+      state.folders['old/nested'] = { path: 'old/nested', entityId: 'folder-2', parentFolderId: 'folder-1' };
+      state.files['old/nested/main.tex'] = {
+        path: 'old/nested/main.tex', entityId: 'doc-1', entityType: 'doc', parentFolderId: 'folder-2',
+        version: 1, sha1: sha1(content), baseHash: sha1(content)
+      };
+      await writeManifest(temporary, state);
+      await fs.mkdir(path.join(temporary, 'old', 'nested'), { recursive: true });
+      await fs.writeFile(path.join(temporary, 'old', 'nested', 'main.tex'), content);
+
+      const report = await engine.syncOnce();
+      expect(report.hasBlocking).toBe(false);
+      expect(await fs.readFile(path.join(temporary, 'new', 'nested', 'main.tex'), 'utf8')).toBe(content);
+      await expect(fs.stat(path.join(temporary, 'old'))).rejects.toMatchObject({ code: 'ENOENT' });
+      const updated = await readManifest(temporary);
+      expect(updated.folders.new?.entityId).toBe('folder-1');
+      expect(updated.folders['new/nested']?.entityId).toBe('folder-2');
+      expect(updated.files['new/nested/main.tex']?.entityId).toBe('doc-1');
+      expect(updated.rootDocPath).toBe('new/nested/main.tex');
+    } finally {
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks a CLI remote folder rename when the local target already exists', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-folder-conflict-'));
+    const content = 'tracked\n';
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', fileRefs: [], docs: [],
+        folders: [{
+          _id: 'folder-1', name: 'new', folders: [], fileRefs: [],
+          docs: [{ _id: 'doc-1', name: 'main.tex', version: 1 }]
+        }]
+      }
+    };
+    const conflicts: string[] = [];
+    const session = {
+      getProject: () => project,
+      joinDoc: async () => ({ content, version: 1 }),
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      { connectSocket: async () => session } as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      {
+        log: () => undefined,
+        progress: () => undefined,
+        status: () => undefined,
+        conflict: (_path, reason) => conflicts.push(reason)
+      }
+    );
+    try {
+      const state = manifest();
+      state.folders.old = { path: 'old', entityId: 'folder-1', parentFolderId: 'root' };
+      state.files['old/main.tex'] = {
+        path: 'old/main.tex', entityId: 'doc-1', entityType: 'doc', parentFolderId: 'folder-1',
+        version: 1, sha1: sha1(content), baseHash: sha1(content)
+      };
+      await writeManifest(temporary, state);
+      await fs.mkdir(path.join(temporary, 'old'), { recursive: true });
+      await fs.mkdir(path.join(temporary, 'new'), { recursive: true });
+      await fs.writeFile(path.join(temporary, 'old', 'main.tex'), content);
+      await fs.writeFile(path.join(temporary, 'new', 'protected.txt'), 'keep');
+
+      await expect(engine.syncOnce()).rejects.toThrow(/target already exists/);
+      expect(await fs.readFile(path.join(temporary, 'old', 'main.tex'), 'utf8')).toBe(content);
+      expect(await fs.readFile(path.join(temporary, 'new', 'protected.txt'), 'utf8')).toBe('keep');
+      expect((await readManifest(temporary)).folders.old?.entityId).toBe('folder-1');
+      expect(conflicts).toHaveLength(1);
+    } finally {
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes the complete sync-once plan so concurrent calls do not pull twice', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-sync-once-serial-'));
+    const content = 'remote content\n';
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', folders: [], fileRefs: [],
+        docs: [{ _id: 'doc-1', name: 'main.tex', version: 1 }]
+      }
+    };
+    let joins = 0;
+    const session = {
+      getProject: () => project,
+      joinDoc: async () => {
+        joins += 1;
+        await new Promise(resolve => setTimeout(resolve, 15));
+        return { content, version: 1 };
+      },
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      { connectSocket: async () => session } as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    try {
+      await writeManifest(temporary, manifest());
+      const reports = await Promise.all([engine.syncOnce(), engine.syncOnce(), engine.syncOnce()]);
+      expect(reports.every(report => !report.hasBlocking)).toBe(true);
+      expect(joins).toBe(2);
+      expect(await fs.readFile(path.join(temporary, 'main.tex'), 'utf8')).toBe(content);
+    } finally {
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for an in-flight reconcile before disconnecting during stop', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-sync-stop-'));
+    const content = 'remote content\n';
+    const project = {
+      rootFolder: {
+        _id: 'root', name: 'root', folders: [], fileRefs: [],
+        docs: [{ _id: 'doc-1', name: 'main.tex', version: 1 }]
+      }
+    };
+    let releaseFirstJoin!: () => void;
+    const firstJoinReleased = new Promise<void>(resolve => { releaseFirstJoin = resolve; });
+    let notifyFirstJoin!: () => void;
+    const firstJoinStarted = new Promise<void>(resolve => { notifyFirstJoin = resolve; });
+    let first = true;
+    let disconnected = false;
+    const session = {
+      getProject: () => project,
+      joinDoc: async () => {
+        if (first) {
+          first = false;
+          notifyFirstJoin();
+          await firstJoinReleased;
+        }
+        return { content, version: 1 };
+      },
+      on: () => undefined,
+      disconnect: () => { disconnected = true; }
+    };
+    const engine = new OverleafSyncEngine(
+      temporary,
+      { connectSocket: async () => session } as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    try {
+      await writeManifest(temporary, manifest());
+      const syncing = engine.syncOnce();
+      await firstJoinStarted;
+      const stopping = engine.stop();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(disconnected).toBe(false);
+      releaseFirstJoin();
+      expect((await syncing).hasBlocking).toBe(false);
+      await stopping;
+      expect(disconnected).toBe(true);
+    } finally {
+      releaseFirstJoin?.();
+      await engine.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('reuses incremental remote metadata and limits binary downloads to four at a time', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-cli-remote-cache-'));
     const files = Array.from({ length: 7 }, (_, index) => ({
@@ -564,6 +900,146 @@ describe('Shared Overleaf sync command contract', () => {
   });
 });
 
+describe('Binary replacement crash recovery', () => {
+  it('rolls back when backup rename succeeded before its stage was persisted', async () => {
+    const fixture = await binaryRecoveryFixture('temp-uploaded', 'backup', 'temporary');
+    try {
+      const changed = await recoverBinaryTransactions(
+        fixture.client as never,
+        'project',
+        fixture.manifest,
+        fixture.store,
+        { inspectEntity: id => fixture.entities.get(id) }
+      );
+      expect(changed).toBe(false);
+      expect(fixture.entities.get('original')?.name).toBe('figure.pdf');
+      expect(fixture.entities.has('temporary')).toBe(false);
+      expect(fixture.manifest.files['figure.pdf'].entityId).toBe('original');
+      expect(await fixture.store.list()).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it('commits when promotion succeeded before its stage was persisted', async () => {
+    const fixture = await binaryRecoveryFixture('original-backed-up', 'backup', 'final');
+    try {
+      const changed = await recoverBinaryTransactions(
+        fixture.client as never,
+        'project',
+        fixture.manifest,
+        fixture.store,
+        { inspectEntity: id => fixture.entities.get(id) }
+      );
+      expect(changed).toBe(true);
+      expect(fixture.entities.has('original')).toBe(false);
+      expect(fixture.entities.get('temporary')?.name).toBe('figure.pdf');
+      expect(fixture.manifest.files['figure.pdf']).toMatchObject({
+        entityId: 'temporary',
+        remoteBlobHash: 'new-blob',
+        sha1: 'new-content'
+      });
+      expect(await fixture.store.list()).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it('commits when the backup was deleted before the new manifest was persisted', async () => {
+    const fixture = await binaryRecoveryFixture('promoted', 'missing', 'final');
+    try {
+      expect(await recoverBinaryTransactions(
+        fixture.client as never,
+        'project',
+        fixture.manifest,
+        fixture.store,
+        { inspectEntity: id => fixture.entities.get(id) }
+      )).toBe(true);
+      expect(fixture.entities.get('temporary')?.name).toBe('figure.pdf');
+      expect(fixture.manifest.files['figure.pdf']).toMatchObject({
+        entityId: 'temporary',
+        remoteBlobHash: 'new-blob',
+        sha1: 'new-content'
+      });
+      expect(await fixture.store.list()).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
+
+async function binaryRecoveryFixture(
+  stage: BinaryTransaction['stage'],
+  originalState: 'backup' | 'final' | 'missing',
+  temporaryState: 'temporary' | 'final'
+): Promise<{
+  client: { renameEntity: (...args: string[]) => Promise<void>; deleteEntity: (...args: string[]) => Promise<void> };
+  manifest: OverleafCodexManifest;
+  store: BinaryTransactionStore;
+  entities: Map<string, RemoteBinaryEntityState>;
+  dispose: () => Promise<void>;
+}> {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-binary-recovery-'));
+  const finalName = 'figure.pdf';
+  const tempName = 'figure.overleaf-codex-upload.pdf';
+  const backupName = 'figure.overleaf-codex-backup.pdf';
+  const entities = new Map<string, RemoteBinaryEntityState>([
+    ...(originalState === 'missing' ? [] : [['original', {
+      entityId: 'original',
+      name: originalState === 'backup' ? backupName : finalName,
+      parentFolderId: 'root'
+    }] as [string, RemoteBinaryEntityState]]),
+    ['temporary', {
+      entityId: 'temporary',
+      name: temporaryState === 'temporary' ? tempName : finalName,
+      parentFolderId: 'root'
+    }]
+  ]);
+  const state = manifest();
+  state.files[finalName] = {
+    path: finalName,
+    entityId: 'original',
+    entityType: 'file',
+    parentFolderId: 'root',
+    binary: true,
+    sha1: 'old-content',
+    remoteBlobHash: 'old-blob'
+  };
+  const transaction: BinaryTransaction = {
+    id: 'transaction-1',
+    path: finalName,
+    parentFolderId: 'root',
+    finalName,
+    tempName,
+    backupName,
+    originalEntityId: 'original',
+    tempEntityId: 'temporary',
+    expectedBlobHash: 'new-blob',
+    expectedSha1: 'new-content',
+    stage,
+    createdAt: new Date().toISOString()
+  };
+  const store = new BinaryTransactionStore(root);
+  await store.upsert(transaction);
+  const client = {
+    renameEntity: async (_projectId: string, _entityType: string, entityId: string, name: string) => {
+      const entity = entities.get(entityId);
+      if (!entity) throw new Error(`Missing remote entity ${entityId}.`);
+      entity.name = name;
+    },
+    deleteEntity: async (_projectId: string, _entityType: string, entityId: string) => {
+      if (!entities.delete(entityId)) throw new Error(`Missing remote entity ${entityId}.`);
+    }
+  };
+  return {
+    client,
+    manifest: state,
+    store,
+    entities,
+    dispose: () => fs.rm(root, { recursive: true, force: true })
+  };
+}
+
 class MemorySecurityRunner implements SecurityRunner {
   readonly items = new Map<string, Identity>();
   readonly serviceNames = new Set<string>();
@@ -590,6 +1066,32 @@ class MemorySecurityRunner implements SecurityRunner {
       return '';
     }
     throw new Error(`Unexpected security operation: ${args[0]}`);
+  }
+}
+
+class MemorySecretToolRunner implements SecurityRunner {
+  readonly items = new Map<string, string>();
+  lastArgs?: string[];
+  lastStdin?: string;
+
+  async run(args: string[], stdin?: string): Promise<string> {
+    this.lastArgs = [...args];
+    this.lastStdin = stdin;
+    const account = args[args.indexOf('account') + 1];
+    if (args[0] === 'store') {
+      this.items.set(account, stdin ?? '');
+      return '';
+    }
+    if (args[0] === 'lookup') {
+      const value = this.items.get(account);
+      if (value === undefined) throw new Error('No such secret.');
+      return value;
+    }
+    if (args[0] === 'clear') {
+      this.items.delete(account);
+      return '';
+    }
+    throw new Error(`Unexpected secret-tool operation: ${args[0]}`);
   }
 }
 

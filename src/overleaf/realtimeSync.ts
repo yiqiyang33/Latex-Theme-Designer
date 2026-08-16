@@ -2013,7 +2013,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     try {
       const expectedBlobHash = gitBlobHash(content);
       this.markLocalMutation(entry.entityId);
-      let uploaded;
+      let uploaded: { _id: string; name: string; hash?: string; transactionId?: string };
       try {
       uploaded = await this.client!.uploadFile(
         this.manifest!.projectId,
@@ -2048,6 +2048,9 @@ export class RealtimeSyncService implements vscode.Disposable {
         remoteBlobHash: uploaded.hash ?? expectedBlobHash
       }, content);
       await this.persistManifest();
+      if (uploaded.transactionId) {
+        await this.binaryTransactions!.remove(uploaded.transactionId);
+      }
       if (manual) {
         vscode.window.showInformationMessage(`Replaced Overleaf version of ${relPath}.`);
       }
@@ -2061,7 +2064,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     content: Uint8Array,
     entry: ManifestFile,
     expectedBlobHash: string
-  ): Promise<{ _id: string; name: string; hash?: string }> {
+  ): Promise<{ _id: string; name: string; hash?: string; transactionId?: string }> {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const finalName = path.posix.basename(relPath);
     const tempName = transactionName(finalName, `upload-${id}`);
@@ -2086,6 +2089,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       originalEntityId: entry.entityId,
       tempEntityId: temporary._id,
       expectedBlobHash,
+      expectedSha1: sha1(content),
       stage: 'temp-uploaded',
       createdAt: new Date().toISOString()
     };
@@ -2100,19 +2104,15 @@ export class RealtimeSyncService implements vscode.Disposable {
       transaction.stage = 'promoted';
       await this.binaryTransactions!.upsert(transaction);
       this.markLocalMutation(entry.entityId);
-      await this.client!.deleteEntity(this.manifest!.projectId, 'file', entry.entityId).catch(error => {
-        this.log(`Could not clean binary backup ${backupName}: ${formatUnknownError(error)}`);
-      });
-      await this.binaryTransactions!.remove(transaction.id);
-      return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expectedBlobHash };
+      await this.client!.deleteEntity(this.manifest!.projectId, 'file', entry.entityId);
+      return {
+        _id: temporary._id,
+        name: finalName,
+        hash: temporary.hash ?? expectedBlobHash,
+        transactionId: transaction.id
+      };
     } catch (error) {
-      if (transaction.stage === 'original-backed-up') {
-        this.markLocalMutation(entry.entityId);
-        await this.client!.renameEntity(this.manifest!.projectId, 'file', entry.entityId, finalName).catch(() => undefined);
-        this.markLocalMutation(temporary._id);
-        await this.client!.deleteEntity(this.manifest!.projectId, 'file', temporary._id).catch(() => undefined);
-        await this.binaryTransactions!.remove(transaction.id).catch(() => undefined);
-      }
+      this.log(`Binary replacement transaction ${transaction.id} remains pending for safe recovery: ${formatUnknownError(error)}`);
       throw error;
     }
   }
@@ -2131,6 +2131,19 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async recoverBinaryTransactions(): Promise<void> {
+    const project = this.session?.getProject();
+    if (!project) throw new Error('Cannot recover binary transactions without the current Overleaf project tree.');
+    const remote = buildProjectTreeIndex(
+      this.manifest!.serverUrl,
+      this.manifest!.projectId,
+      this.manifest!.projectName,
+      project
+    ).manifest;
+    const entities = new Map(Object.values(remote.files).map(file => [file.entityId, {
+      entityId: file.entityId,
+      name: path.posix.basename(file.path),
+      parentFolderId: file.parentFolderId
+    }]));
     const changed = await recoverBinaryTransactions(
       this.client!,
       this.manifest!.projectId,
@@ -2138,7 +2151,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.binaryTransactions!,
       {
         beforeMutation: entityId => this.markLocalMutation(entityId),
-        log: message => this.log(message)
+        log: message => this.log(message),
+        inspectEntity: entityId => entities.get(entityId)
       }
     );
     if (changed) await this.persistManifest();

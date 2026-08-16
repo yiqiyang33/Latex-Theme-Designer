@@ -27,5 +27,12 @@ export interface CredentialStore {
   getIdentity(serverUrl: string): Promise<Identity | undefined>;
   deleteIdentity(serverUrl: string): Promise<void>;
   listServers(): Promise<string[]>;
+  describe?(): CredentialBackendInfo;
 }
 
+export interface CredentialBackendInfo {
+  kind: 'macos-keychain' | 'secret-tool' | 'restricted-file';
+  available: boolean;
+  location?: string;
+  warning?: string;
+}

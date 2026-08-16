@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { migrateLegacyLinuxPaths } from './sharedState';
 
 const execFileAsync = promisify(execFile);
 const MARKER = '.latex-editing-toolkit-cli.json';
@@ -14,6 +15,7 @@ export interface CliInstallResult {
 }
 
 export async function installCli(extensionRoot: string, version: string): Promise<CliInstallResult> {
+  await migrateLegacyLinuxPaths();
   await assertNode20();
   const supportRoot = cliSupportRoot();
   const installRoot = path.join(supportRoot, version);
@@ -55,6 +57,7 @@ export async function installCli(extensionRoot: string, version: string): Promis
 }
 
 export async function uninstallCli(): Promise<{ removed: boolean; commandPath: string }> {
+  await migrateLegacyLinuxPaths();
   const supportRoot = cliSupportRoot();
   const commandPath = cliCommandPath();
   const managed = await isManagedLink(commandPath, supportRoot);
@@ -68,6 +71,7 @@ export async function updateManagedCliIfInstalled(
   extensionRoot: string,
   version: string
 ): Promise<CliInstallResult | undefined> {
+  await migrateLegacyLinuxPaths();
   const supportRoot = cliSupportRoot();
   const commandPath = cliCommandPath();
   if (!await isManagedLink(commandPath, supportRoot)) return undefined;
@@ -83,7 +87,13 @@ async function assertNode20(): Promise<void> {
 function cliSupportRoot(): string {
   return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME
     ? path.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME)
-    : path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit', 'cli');
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit', 'cli')
+      : path.join(
+        process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'),
+        'latex-editing-toolkit',
+        'cli'
+      );
 }
 
 function cliCommandPath(): string {

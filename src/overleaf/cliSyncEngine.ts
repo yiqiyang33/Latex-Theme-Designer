@@ -45,11 +45,19 @@ import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from '
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { renameLocalPathTransactionally } from './localRename';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
   'reciveEntityRename', 'reciveEntityMove', 'removeEntity', 'rootDocUpdated'
 ];
+
+interface BinaryUploadResult {
+  _id: string;
+  name: string;
+  hash?: string;
+  transactionId?: string;
+}
 
 export class OverleafSyncEngine {
   private manifest?: OverleafCodexManifest;
@@ -57,6 +65,9 @@ export class OverleafSyncEngine {
   private watcher?: FSWatcher;
   private timer?: NodeJS.Timeout;
   private running = false;
+  private stopping = false;
+  private startPromise?: Promise<void>;
+  private stopPromise?: Promise<void>;
   private operation: Promise<unknown> = Promise.resolve();
   private readonly events = new EventEmitter();
   private readonly syncHealth = new SyncHealthService();
@@ -70,22 +81,53 @@ export class OverleafSyncEngine {
 
   async start(): Promise<void> {
     if (this.running) return;
-    this.manifest = await readManifest(this.root);
-    this.session = await this.client.connectSocket(this.manifest.projectId);
-    await this.recoverBinaryTransactions();
-    this.running = true;
-    for (const event of REMOTE_EVENTS) this.session.on(event, () => this.scheduleSync(`remote:${event}`));
+    if (this.stopping) throw new Error('Overleaf sync engine is stopping.');
+    if (!this.startPromise) {
+      this.startPromise = this.startNow().finally(() => {
+        this.startPromise = undefined;
+      });
+    }
+    return this.startPromise;
   }
 
   async stop(): Promise<void> {
-    this.running = false;
+    if (!this.stopPromise) {
+      this.stopPromise = this.stopNow().finally(() => {
+        this.stopPromise = undefined;
+      });
+    }
+    return this.stopPromise;
+  }
+
+  private async startNow(): Promise<void> {
+    const manifest = await readManifest(this.root);
+    const session = await this.client.connectSocket(manifest.projectId);
+    this.manifest = manifest;
+    this.session = session;
+    try {
+      await this.recoverBinaryTransactions();
+      if (this.stopping) throw new Error('Overleaf sync engine stopped during startup.');
+      this.running = true;
+      for (const event of REMOTE_EVENTS) session.on(event, () => this.scheduleSync(`remote:${event}`));
+    } catch (error) {
+      session.disconnect();
+      if (this.session === session) this.session = undefined;
+      throw error;
+    }
+  }
+
+  private async stopNow(): Promise<void> {
+    this.stopping = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     await this.watcher?.close();
     this.watcher = undefined;
+    await this.startPromise?.catch(() => undefined);
     await this.operation.catch(() => undefined);
+    this.running = false;
     this.session?.disconnect();
     this.session = undefined;
+    this.stopping = false;
   }
 
   onEvent(listener: (event: { event: string; data?: unknown }) => void): () => void {
@@ -105,22 +147,24 @@ export class OverleafSyncEngine {
   }
 
   async syncOnce(): Promise<SyncStatusReport> {
-    await this.start();
-    let report = await this.check('incremental', { intent: 'sync', reason: 'sync-once' });
-    const plan = planSafeSyncActions(report, this.policy);
-    for (const item of plan.pulls) {
-      if (item.entityType === 'folder') {
-        await fs.mkdir(path.join(this.root, item.path), { recursive: true });
-      } else {
-        await this.pull(item.path, false);
+    return this.serial(async () => {
+      await this.start();
+      let report = await this.checkNow('incremental', { intent: 'sync', reason: 'sync-once' });
+      const plan = planSafeSyncActions(report, this.policy);
+      for (const item of plan.pulls) {
+        if (item.entityType === 'folder') {
+          await fs.mkdir(path.join(this.root, item.path), { recursive: true });
+        } else {
+          await this.pullNow(item.path, false);
+        }
       }
-    }
-    for (const item of plan.pushes) {
-      await this.push(item.path, false);
-    }
-    report = await this.check('incremental', { intent: 'sync', reason: 'post-sync-once' });
-    this.emit('status', report);
-    return report;
+      for (const item of plan.pushes) {
+        await this.pushNow(item.path, false);
+      }
+      report = await this.checkNow('incremental', { intent: 'sync', reason: 'post-sync-once' });
+      this.emit('status', report);
+      return report;
+    });
   }
 
   async watch(): Promise<void> {
@@ -148,7 +192,13 @@ export class OverleafSyncEngine {
     mode: 'incremental' | 'full',
     options: { intent?: 'status' | 'sync'; paths?: Iterable<string>; reason?: string } = {}
   ): Promise<SyncStatusReport> {
-    return this.serial(async () => {
+    return this.serial(() => this.checkNow(mode, options));
+  }
+
+  private async checkNow(
+    mode: 'incremental' | 'full',
+    options: { intent?: 'status' | 'sync'; paths?: Iterable<string>; reason?: string } = {}
+  ): Promise<SyncStatusReport> {
       await this.start();
       this.manifest = await readManifest(this.root);
       const project = this.session!.getProject();
@@ -164,7 +214,7 @@ export class OverleafSyncEngine {
         listLocalProjectFolders(this.root, this.manifest)
       ]);
       if (options.intent === 'sync') {
-        await this.reconcileRemoteRenames(remote, localFiles, localFolders);
+        await this.reconcileRemoteRenames(remote);
         [localFiles, localFolders] = await Promise.all([
           listLocalProjectFiles(this.root, this.manifest),
           listLocalProjectFolders(this.root, this.manifest)
@@ -310,11 +360,13 @@ export class OverleafSyncEngine {
       await writeSyncStatus(this.root, report);
       this.host.status(report);
       return report;
-    });
   }
 
   async push(relPath: string, force: boolean): Promise<void> {
-    await this.serial(async () => {
+    await this.serial(() => this.pushNow(relPath, force));
+  }
+
+  private async pushNow(relPath: string, force: boolean): Promise<void> {
       await this.start();
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
@@ -358,7 +410,7 @@ export class OverleafSyncEngine {
         this.manifest.files[normalized].baseHash = await writeBaseDoc(this.root, target.entityId, text);
       } else {
         if (!this.policy.syncBinaryFiles && !force) throw new Error('Binary synchronization is disabled.');
-        const uploaded = effectiveEntry
+        const uploaded: BinaryUploadResult = effectiveEntry
           ? await this.replaceBinary(normalized, content, effectiveEntry)
           : await this.client.uploadFile(this.manifest.projectId, parentFolderId, path.posix.basename(normalized), content);
         addOrUpdateFile(this.manifest, {
@@ -369,14 +421,22 @@ export class OverleafSyncEngine {
           binary: true,
           remoteBlobHash: uploaded.hash ?? gitBlobHash(content)
         }, content);
+        await writeManifest(this.root, this.manifest);
+        if (uploaded.transactionId) {
+          await new BinaryTransactionStore(this.root).remove(uploaded.transactionId);
+        }
+        this.emit('pushed', { path: normalized });
+        return;
       }
       await writeManifest(this.root, this.manifest);
       this.emit('pushed', { path: normalized });
-    });
   }
 
   async pull(relPath: string, force: boolean): Promise<void> {
-    await this.serial(async () => {
+    await this.serial(() => this.pullNow(relPath, force));
+  }
+
+  private async pullNow(relPath: string, force: boolean): Promise<void> {
       await this.start();
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
@@ -420,7 +480,6 @@ export class OverleafSyncEngine {
       }
       await writeManifest(this.root, this.manifest);
       this.emit('pulled', { path: normalized });
-    });
   }
 
   async conflicts(): Promise<PersistedConflict[]> {
@@ -475,7 +534,7 @@ export class OverleafSyncEngine {
     relPath: string,
     content: Uint8Array,
     entry: ManifestFile
-  ): Promise<{ _id: string; name: string; hash?: string }> {
+  ): Promise<BinaryUploadResult> {
     try {
       return await this.client.uploadFile(
         this.manifest!.projectId, entry.parentFolderId, path.posix.basename(relPath), content
@@ -498,6 +557,7 @@ export class OverleafSyncEngine {
     const transaction: BinaryTransaction = {
       id, path: relPath, parentFolderId: entry.parentFolderId, finalName, tempName, backupName,
       originalEntityId: entry.entityId, tempEntityId: temporary._id, expectedBlobHash: expected,
+      expectedSha1: sha1(content),
       stage: 'temp-uploaded', createdAt: new Date().toISOString()
     };
     const store = new BinaryTransactionStore(this.root);
@@ -508,46 +568,114 @@ export class OverleafSyncEngine {
     await this.client.renameEntity(this.manifest!.projectId, 'file', temporary._id, finalName);
     transaction.stage = 'promoted';
     await store.upsert(transaction);
-    await this.client.deleteEntity(this.manifest!.projectId, 'file', entry.entityId).catch(() => undefined);
-    await store.remove(id);
-    return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expected };
+    await this.client.deleteEntity(this.manifest!.projectId, 'file', entry.entityId);
+    return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expected, transactionId: id };
   }
 
   private async recoverBinaryTransactions(): Promise<void> {
     const store = new BinaryTransactionStore(this.root);
+    const project = this.session?.getProject();
+    if (!project) throw new Error('Cannot recover binary transactions without the current Overleaf project tree.');
+    const remote = buildProjectTreeIndex(
+      this.manifest!.serverUrl,
+      this.manifest!.projectId,
+      this.manifest!.projectName,
+      project
+    ).manifest;
+    const entities = new Map(Object.values(remote.files).map(file => [file.entityId, {
+      entityId: file.entityId,
+      name: path.posix.basename(file.path),
+      parentFolderId: file.parentFolderId
+    }]));
     const changed = await recoverBinaryTransactions(
       this.client,
       this.manifest!.projectId,
       this.manifest!,
       store,
-      { log: message => this.host.log(message) }
+      {
+        log: message => this.host.log(message),
+        inspectEntity: entityId => entities.get(entityId)
+      }
     );
     if (changed) await writeManifest(this.root, this.manifest!);
   }
 
-  private async reconcileRemoteRenames(
-    remote: OverleafCodexManifest,
-    localFiles: string[],
-    localFolders: string[]
-  ): Promise<void> {
-    const localFileSet = new Set(localFiles);
-    const localFolderSet = new Set(localFolders);
-    for (const oldEntry of Object.values(this.manifest!.files)) {
-      const newEntry = Object.values(remote.files).find(item => item.entityId === oldEntry.entityId);
-      if (!newEntry || newEntry.path === oldEntry.path || !localFileSet.has(oldEntry.path) || localFileSet.has(newEntry.path)) continue;
-      const hash = await cachedLocalFileHash(path.join(this.root, oldEntry.path), oldEntry);
-      if (hash.hash !== oldEntry.sha1) continue;
-      await fs.mkdir(path.dirname(path.join(this.root, newEntry.path)), { recursive: true });
-      await fs.rename(path.join(this.root, oldEntry.path), path.join(this.root, newEntry.path));
-      delete this.manifest!.files[oldEntry.path];
-      this.manifest!.files[newEntry.path] = { ...oldEntry, ...newEntry, path: newEntry.path };
+  private async reconcileRemoteRenames(remote: OverleafCodexManifest): Promise<void> {
+    const remoteFoldersById = new Map(Object.values(remote.folders).map(folder => [folder.entityId, folder]));
+    const attemptedFolders = new Set<string>();
+    while (true) {
+      const candidate = Object.values(this.manifest!.folders)
+        .filter(folder => folder.path && !attemptedFolders.has(folder.entityId))
+        .map(folder => ({ local: folder, remote: remoteFoldersById.get(folder.entityId) }))
+        .filter((pair): pair is { local: ManifestFolder; remote: ManifestFolder } =>
+          Boolean(pair.remote && pair.remote.path !== pair.local.path))
+        .sort((left, right) => left.local.path.split('/').length - right.local.path.split('/').length)[0];
+      if (!candidate) break;
+      attemptedFolders.add(candidate.local.entityId);
+      const oldPath = candidate.local.path;
+      const newPath = candidate.remote.path;
+      const source = await fs.stat(path.join(this.root, oldPath)).catch(() => undefined);
+      if (!source?.isDirectory()) continue;
+      const oldParentFolderId = candidate.local.parentFolderId;
+      try {
+        await renameLocalPathTransactionally(
+          this.root,
+          oldPath,
+          newPath,
+          async () => {
+            this.remapManifestFolder(oldPath, newPath, candidate.remote.parentFolderId);
+            await writeManifest(this.root, this.manifest!);
+          },
+          async () => {
+            const moved = this.manifest!.folders[newPath];
+            if (moved?.entityId === candidate.local.entityId) {
+              this.remapManifestFolder(newPath, oldPath, oldParentFolderId);
+            }
+          }
+        );
+      } catch (error) {
+        this.host.conflict(oldPath, `Remote folder rename to ${newPath} could not be applied safely: ${formatUnknownError(error)}`);
+        throw error;
+      }
     }
-    for (const oldFolder of Object.values(this.manifest!.folders)) {
-      if (!oldFolder.path) continue;
-      const newFolder = Object.values(remote.folders).find(item => item.entityId === oldFolder.entityId);
-      if (!newFolder || newFolder.path === oldFolder.path || !localFolderSet.has(oldFolder.path) || localFolderSet.has(newFolder.path)) continue;
-      await fs.mkdir(path.dirname(path.join(this.root, newFolder.path)), { recursive: true });
-      await fs.rename(path.join(this.root, oldFolder.path), path.join(this.root, newFolder.path));
+
+    const remoteFilesById = new Map(Object.values(remote.files).map(file => [file.entityId, file]));
+    for (const entry of [...Object.values(this.manifest!.files)]) {
+      const remoteEntry = remoteFilesById.get(entry.entityId);
+      if (!remoteEntry || remoteEntry.path === entry.path) continue;
+      const oldPath = entry.path;
+      const newPath = remoteEntry.path;
+      const hash = await cachedLocalFileHash(path.join(this.root, oldPath), entry);
+      if (hash.hash !== entry.sha1) continue;
+      if (this.manifest!.files[newPath] || this.manifest!.folders[newPath]) {
+        const message = `Remote file rename to ${newPath} conflicts with an existing manifest path.`;
+        this.host.conflict(oldPath, message);
+        throw new Error(message);
+      }
+      try {
+        await renameLocalPathTransactionally(
+          this.root,
+          oldPath,
+          newPath,
+          async () => {
+            delete this.manifest!.files[oldPath];
+            this.manifest!.files[newPath] = { ...entry, ...remoteEntry, path: newPath };
+            if (this.manifest!.rootDocPath === oldPath) this.manifest!.rootDocPath = newPath;
+            await writeManifest(this.root, this.manifest!);
+          },
+          async () => {
+            const moved = this.manifest!.files[newPath];
+            if (moved?.entityId !== entry.entityId) return;
+            delete this.manifest!.files[newPath];
+            entry.path = oldPath;
+            this.manifest!.files[oldPath] = entry;
+            if (this.manifest!.rootDocPath === newPath) this.manifest!.rootDocPath = oldPath;
+          }
+        );
+      } catch (error) {
+        this.host.conflict(oldPath, `Remote file rename to ${newPath} could not be applied safely: ${formatUnknownError(error)}`);
+        throw error;
+      }
     }
   }
 
@@ -638,7 +766,7 @@ export class OverleafSyncEngine {
     this.emit('renamed', { oldPath, newPath });
   }
 
-  private remapManifestFolder(oldPath: string, newPath: string, parentFolderId: string): void {
+  private remapManifestFolder(oldPath: string, newPath: string, parentFolderId?: string): void {
     const prefix = `${oldPath}/`;
     for (const folder of Object.values(this.manifest!.folders)) {
       if (folder.path !== oldPath && !folder.path.startsWith(prefix)) continue;
@@ -652,6 +780,11 @@ export class OverleafSyncEngine {
       delete this.manifest!.files[file.path];
       file.path = `${newPath}/${file.path.slice(prefix.length)}`;
       this.manifest!.files[file.path] = file;
+    }
+    if (this.manifest!.rootDocPath === oldPath || this.manifest!.rootDocPath?.startsWith(prefix)) {
+      this.manifest!.rootDocPath = this.manifest!.rootDocPath === oldPath
+        ? newPath
+        : `${newPath}/${this.manifest!.rootDocPath.slice(prefix.length)}`;
     }
   }
 
@@ -689,7 +822,7 @@ export class OverleafSyncEngine {
   }
 
   private scheduleSync(reason: string): void {
-    if (!this.running) return;
+    if (!this.running || this.stopping) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = undefined;

@@ -44,13 +44,29 @@ export const DEFAULT_SYNC_POLICY: SyncPolicy = {
 export function applicationSupportRoot(): string {
   return process.env.LATEX_TOOLKIT_SUPPORT_HOME
     ? path.resolve(process.env.LATEX_TOOLKIT_SUPPORT_HOME)
-    : path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit');
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit')
+      : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'latex-editing-toolkit');
+}
+
+export function applicationDataRoot(): string {
+  return process.env.LATEX_TOOLKIT_DATA_HOME
+    ? path.resolve(process.env.LATEX_TOOLKIT_DATA_HOME)
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit')
+      : path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'latex-editing-toolkit');
+}
+
+export function credentialRoot(): string {
+  return path.join(applicationDataRoot(), 'credentials');
 }
 
 export function runtimeRoot(): string {
   return process.env.LATEX_TOOLKIT_CACHE_HOME
     ? path.resolve(process.env.LATEX_TOOLKIT_CACHE_HOME)
-    : path.join(os.homedir(), 'Library', 'Caches', 'latex-editing-toolkit', 'runtime');
+    : process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Caches', 'latex-editing-toolkit', 'runtime')
+      : path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'latex-editing-toolkit', 'runtime');
 }
 
 export function sharedStatePath(): string {
@@ -75,6 +91,7 @@ export function defaultSharedState(): SharedOverleafState {
 }
 
 export async function readSharedState(): Promise<SharedOverleafState> {
+  await migrateLegacyLinuxPaths();
   const raw = await fs.readFile(sharedStatePath(), 'utf8').catch(() => undefined);
   if (!raw) return defaultSharedState();
   const parsed = JSON.parse(raw) as Partial<SharedOverleafState>;
@@ -100,6 +117,34 @@ export async function readSharedState(): Promise<SharedOverleafState> {
       }
     }
   };
+}
+
+export async function migrateLegacyLinuxPaths(): Promise<void> {
+  if (process.platform !== 'linux') return;
+  if (process.env.LATEX_TOOLKIT_SUPPORT_HOME || process.env.LATEX_TOOLKIT_DATA_HOME || process.env.LATEX_TOOLKIT_CACHE_HOME) return;
+  const legacySupport = path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit');
+  const legacyCache = path.join(os.homedir(), 'Library', 'Caches', 'latex-editing-toolkit');
+  const configRoot = applicationSupportRoot();
+  const dataRoot = applicationDataRoot();
+  const cacheRoot = runtimeRoot();
+  const marker = path.join(configRoot, '.legacy-migration-v1');
+  if (await exists(marker)) return;
+
+  const legacyState = path.join(legacySupport, 'overleaf.json');
+  if (!await exists(sharedStatePath()) && await exists(legacyState)) {
+    await fs.mkdir(configRoot, { recursive: true, mode: 0o700 });
+    await fs.copyFile(legacyState, sharedStatePath());
+  }
+  await copyDirectoryIfMissing(path.join(legacySupport, 'cli'), path.join(dataRoot, 'cli'));
+  await copyDirectoryIfMissing(path.join(legacyCache, 'runtime'), cacheRoot);
+  await fs.mkdir(configRoot, { recursive: true, mode: 0o700 });
+  await fs.writeFile(marker, `${new Date().toISOString()}\n`, { mode: 0o600 });
+}
+
+async function copyDirectoryIfMissing(source: string, target: string): Promise<void> {
+  if (await exists(target) || !await exists(source)) return;
+  await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+  await fs.cp(source, target, { recursive: true });
 }
 
 export async function writeSharedState(state: SharedOverleafState): Promise<void> {

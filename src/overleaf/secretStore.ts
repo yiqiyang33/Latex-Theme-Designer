@@ -1,7 +1,8 @@
 import type * as vscode from 'vscode';
 import type { Identity } from './types';
 import { normalizeServerUrl } from './util';
-import { MacKeychainCredentialStore } from './keychainStore';
+import { createCredentialStore } from './keychainStore';
+import type { CredentialStore } from './coreInterfaces';
 import { readSharedState } from './sharedState';
 
 const SECRET_PREFIX = 'overleafCodex.identity.';
@@ -10,7 +11,7 @@ const SERVERS_KEY = 'overleafCodex.servers';
 export class SecretStore {
   constructor(
     private readonly context: Pick<vscode.ExtensionContext, 'secrets'>,
-    private readonly keychain = new MacKeychainCredentialStore()
+    private readonly keychain: CredentialStore = createCredentialStore()
   ) {}
 
   async saveIdentity(serverUrl: string, identity: Identity): Promise<void> {

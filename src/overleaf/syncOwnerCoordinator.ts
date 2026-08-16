@@ -64,6 +64,8 @@ export class SyncOwnerCoordinator {
   private subscriberSockets = new Set<net.Socket>();
   private eventSockets = new Set<net.Socket>();
   private readonly events = new EventEmitter();
+  private commandQueue: Promise<unknown> = Promise.resolve();
+  private releasing = false;
 
   constructor(private readonly options: SyncOwnerCoordinatorOptions = {}) {}
 
@@ -124,6 +126,9 @@ export class SyncOwnerCoordinator {
       this.metadata = metadata;
       return 'owner';
     } catch (error) {
+      const server = this.server;
+      this.server = undefined;
+      if (server?.listening) await new Promise<void>(resolve => server.close(() => resolve()));
       await fs.rm(paths.lockPath, { recursive: true, force: true });
       await fs.rm(paths.socketPath, { force: true });
       throw error;
@@ -132,7 +137,10 @@ export class SyncOwnerCoordinator {
 
   async request(command: string, args: Record<string, unknown> = {}, timeoutMs = 120_000): Promise<unknown> {
     if (!this.root) throw new Error('No sync root is selected.');
-    if (this.server && this.handler) return this.handler(command, args);
+    if (this.server && this.handler) {
+      if (this.releasing) throw new Error('Sync owner is shutting down.');
+      return this.runCommand(() => this.handler?.(command, args));
+    }
     const request: OwnerRequest = {
       version: 1,
       id: crypto.randomUUID(),
@@ -219,6 +227,8 @@ export class SyncOwnerCoordinator {
   }
 
   async release(): Promise<void> {
+    this.releasing = true;
+    await this.commandQueue.catch(() => undefined);
     for (const socket of this.subscriberSockets) socket.destroy();
     this.subscriberSockets.clear();
     for (const socket of this.clientSockets) socket.destroy();
@@ -240,6 +250,7 @@ export class SyncOwnerCoordinator {
     this.metadata = undefined;
     this.handler = undefined;
     this.root = undefined;
+    this.releasing = false;
   }
 
   private accept(socket: net.Socket): void {
@@ -264,12 +275,22 @@ export class SyncOwnerCoordinator {
       socket.write(`${JSON.stringify({ version: 1, event: 'subscribed', root: this.root } satisfies OwnerEvent)}\n`);
       return;
     }
+    if (this.releasing) {
+      socket.write(`${JSON.stringify(errorResponse(value.id, 'owner_releasing', 'Sync owner is shutting down.'))}\n`);
+      return;
+    }
     try {
-      const result = await this.handler?.(value.command, value.args);
+      const result = await this.runCommand(() => this.handler?.(value.command, value.args));
       socket.write(`${JSON.stringify({ version: 1, id: value.id, ok: true, result } satisfies OwnerResponse)}\n`);
     } catch (error) {
       socket.write(`${JSON.stringify(errorResponse(value.id, 'owner_command_failed', formatUnknownError(error)))}\n`);
     }
+  }
+
+  private runCommand<T>(operation: () => Promise<T> | undefined): Promise<T | undefined> {
+    const current = this.commandQueue.catch(() => undefined).then(operation);
+    this.commandQueue = current.then(() => undefined, () => undefined);
+    return current;
   }
 
   private async lockIsStale(paths: ReturnType<typeof runtimePaths>): Promise<boolean> {
