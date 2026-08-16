@@ -12190,12 +12190,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs11.stat(value.path, function(err, stat8) {
+          fs11.stat(value.path, function(err, stat9) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat8.size - (value.start ? value.start : 0);
+            var fileSize = stat9.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -17025,8 +17025,8 @@ var FSWatcher = class extends import_events.EventEmitter {
     }
     return this._userIgnored(path13, stats);
   }
-  _isntIgnored(path13, stat8) {
-    return !this._isIgnored(path13, stat8);
+  _isntIgnored(path13, stat9) {
+    return !this._isIgnored(path13, stat9);
   }
   /**
    * Provides a set of common helpers and properties relating to symlink handling.
@@ -19372,8 +19372,8 @@ async function fileHash(filePath) {
   return content ? sha1(content) : void 0;
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false) {
-  const stat8 = await fs2.stat(filePath).catch(() => void 0);
-  if (!stat8?.isFile()) {
+  const stat9 = await fs2.stat(filePath).catch(() => void 0);
+  if (!stat9?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -19385,19 +19385,23 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false) {
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat8.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat8.size && manifestFile.localMtimeMs === stat8.mtimeMs && manifestFile.localCtimeMs === stat8.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat9.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat9.size && manifestFile.localMtimeMs === stat9.mtimeMs && manifestFile.localCtimeMs === stat9.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash = await fileHash(filePath);
   if (!manifestFile) return { hash, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash || manifestFile.localSize !== stat8.size || manifestFile.localMtimeMs !== stat8.mtimeMs || manifestFile.localCtimeMs !== stat8.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash || manifestFile.localSize !== stat9.size || manifestFile.localMtimeMs !== stat9.mtimeMs || manifestFile.localCtimeMs !== stat9.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash;
-  manifestFile.localSize = stat8.size;
-  manifestFile.localMtimeMs = stat8.mtimeMs;
-  manifestFile.localCtimeMs = stat8.ctimeMs;
+  manifestFile.localSize = stat9.size;
+  manifestFile.localMtimeMs = stat9.mtimeMs;
+  manifestFile.localCtimeMs = stat9.ctimeMs;
   manifestFile.localInode = inode;
   return { hash, cacheChanged, reused: false };
+}
+function trashPathFor(root, relPath) {
+  const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+  return path5.join(root, ".overleaf-codex", "trash", stamp, relPath);
 }
 function shouldSkip(relPath) {
   return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
@@ -19792,8 +19796,26 @@ var OverleafSyncEngine = class {
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
       const remote = await this.remoteFile(normalized);
-      if (!remote) throw new Error(`${normalized} does not exist on Overleaf.`);
       const entry = this.manifest.files[normalized];
+      if (!remote) {
+        if (!entry) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
+        if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
+        const source = path6.join(this.root, normalized);
+        const target = trashPathFor(this.root, normalized);
+        const stat9 = await fs5.stat(source).catch(() => void 0);
+        if (stat9) {
+          await fs5.mkdir(path6.dirname(target), { recursive: true });
+          await fs5.rename(source, target).catch(async () => {
+            if (stat9.isDirectory()) await fs5.cp(source, target, { recursive: true });
+            else await fs5.copyFile(source, target);
+            await fs5.rm(source, { recursive: stat9.isDirectory(), force: true });
+          });
+        }
+        delete this.manifest.files[normalized];
+        await writeManifest(this.root, this.manifest);
+        this.emit("trashed", { path: normalized, trashPath: stat9 ? target : void 0 });
+        return;
+      }
       const local = await fs5.readFile(path6.join(this.root, normalized)).catch(() => void 0);
       if (!force && entry && local) {
         const base = entry.baseHash ?? entry.sha1;
@@ -22150,8 +22172,8 @@ async function makeClient(serverUrl, credentials, policy) {
 }
 async function resolveMirrorRoot(candidate) {
   let current = path12.resolve(candidate);
-  const stat8 = await fs10.stat(current).catch(() => void 0);
-  if (stat8?.isFile()) current = path12.dirname(current);
+  const stat9 = await fs10.stat(current).catch(() => void 0);
+  if (stat9?.isFile()) current = path12.dirname(current);
   while (true) {
     if (await exists3(manifestPath(current))) return current;
     const parent = path12.dirname(current);

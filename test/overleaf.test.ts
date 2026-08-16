@@ -27,6 +27,11 @@ import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
 import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
 import { RenameDetector } from "../src/overleaf/renameDetector";
 import {
+  LocalRenameConflictError,
+  renameLocalPathSafely,
+  renameLocalPathTransactionally
+} from "../src/overleaf/localRename";
+import {
   addProjectTreeEntity,
   buildProjectTreeIndex,
   moveProjectTreeEntity,
@@ -157,6 +162,80 @@ describe("Overleaf integration primitives", () => {
     expect(detector.registerCreate({ path: "sections", hash: "tree-hash", entityType: "folder" })).toEqual({
       kind: "matched", oldPath: "chapters", newPath: "sections"
     });
+  });
+
+  it("applies local remote-renames without overwriting an existing target", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-rename-"));
+    try {
+      await fs.mkdir(path.join(root, "chapters"), { recursive: true });
+      await fs.writeFile(path.join(root, "draft.tex"), "remote source", "utf8");
+      await fs.writeFile(path.join(root, "main.tex"), "local target", "utf8");
+
+      await expect(renameLocalPathSafely(root, "draft.tex", "main.tex"))
+        .rejects.toBeInstanceOf(LocalRenameConflictError);
+      expect(await fs.readFile(path.join(root, "draft.tex"), "utf8")).toBe("remote source");
+      expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe("local target");
+
+      await renameLocalPathSafely(root, "draft.tex", "chapters/renamed.tex");
+      await expect(fs.stat(path.join(root, "draft.tex"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await fs.readFile(path.join(root, "chapters", "renamed.tex"), "utf8")).toBe("remote source");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects remote-renames whose paths escape the mirror", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-rename-path-"));
+    try {
+      await fs.writeFile(path.join(root, "main.tex"), "source", "utf8");
+      await expect(renameLocalPathSafely(root, "main.tex", "../outside.tex"))
+        .rejects.toThrow(/Invalid local mirror path|escapes the local mirror/);
+      expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe("source");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps both directory trees when a remote folder rename has a local target conflict", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-folder-rename-"));
+    try {
+      await fs.mkdir(path.join(root, "old-folder"), { recursive: true });
+      await fs.mkdir(path.join(root, "new-folder"), { recursive: true });
+      await fs.writeFile(path.join(root, "old-folder", "remote.tex"), "remote tree", "utf8");
+      await fs.writeFile(path.join(root, "new-folder", "local.tex"), "local tree", "utf8");
+
+      await expect(renameLocalPathSafely(root, "old-folder", "new-folder"))
+        .rejects.toBeInstanceOf(LocalRenameConflictError);
+      expect(await fs.readFile(path.join(root, "old-folder", "remote.tex"), "utf8")).toBe("remote tree");
+      expect(await fs.readFile(path.join(root, "new-folder", "local.tex"), "utf8")).toBe("local tree");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back the local path and state when a remote rename cannot be committed", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-overleaf-rename-rollback-"));
+    let manifestPath = "old.tex";
+    try {
+      await fs.writeFile(path.join(root, "old.tex"), "source", "utf8");
+      await expect(renameLocalPathTransactionally(
+        root,
+        "old.tex",
+        "new.tex",
+        async () => {
+          manifestPath = "new.tex";
+          throw new Error("manifest write failed");
+        },
+        async () => {
+          manifestPath = "old.tex";
+        }
+      )).rejects.toThrow("manifest write failed");
+      expect(manifestPath).toBe("old.tex");
+      expect(await fs.readFile(path.join(root, "old.tex"), "utf8")).toBe("source");
+      await expect(fs.stat(path.join(root, "new.tex"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it("keeps the realtime project tree current across entity events", () => {

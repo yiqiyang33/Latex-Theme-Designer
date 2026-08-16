@@ -34,7 +34,8 @@ import {
   listLocalProjectFiles,
   listLocalProjectFolders,
   makeSyncStatusReport,
-  repairFolderManifestFromRemote
+  repairFolderManifestFromRemote,
+  trashPathFor
 } from './syncStatus';
 import { buildOtOperations } from './ot';
 import { ConflictStore } from './conflictStore';
@@ -331,8 +332,26 @@ export class OverleafSyncEngine {
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
       const remote = await this.remoteFile(normalized);
-      if (!remote) throw new Error(`${normalized} does not exist on Overleaf.`);
       const entry = this.manifest.files[normalized];
+      if (!remote) {
+        if (!entry) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
+        if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
+        const source = path.join(this.root, normalized);
+        const target = trashPathFor(this.root, normalized);
+        const stat = await fs.stat(source).catch(() => undefined);
+        if (stat) {
+          await fs.mkdir(path.dirname(target), { recursive: true });
+          await fs.rename(source, target).catch(async () => {
+            if (stat.isDirectory()) await fs.cp(source, target, { recursive: true });
+            else await fs.copyFile(source, target);
+            await fs.rm(source, { recursive: stat.isDirectory(), force: true });
+          });
+        }
+        delete this.manifest.files[normalized];
+        await writeManifest(this.root, this.manifest);
+        this.emit('trashed', { path: normalized, trashPath: stat ? target : undefined });
+        return;
+      }
       const local = await fs.readFile(path.join(this.root, normalized)).catch(() => undefined);
       if (!force && entry && local) {
         const base = entry.baseHash ?? entry.sha1;

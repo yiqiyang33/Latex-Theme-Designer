@@ -55,6 +55,7 @@ import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
 import { SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
+import { renameLocalPathTransactionally } from './localRename';
 import {
   applyOtOperations,
   buildOtOperations,
@@ -2340,18 +2341,23 @@ export class RealtimeSyncService implements vscode.Disposable {
       }
       const file = this.manifest!.files[oldPath];
       const newPath = path.posix.join(path.posix.dirname(oldPath), newName).replace(/^\.\//, '');
-      delete this.manifest!.files[oldPath];
-      file.path = newPath;
-      this.manifest!.files[newPath] = file;
-      await this.renameLocal(oldPath, newPath);
-      await this.persistManifest();
+      try {
+        await this.applyRemoteFilePathChange(oldPath, newPath, file.parentFolderId);
+      } catch (error) {
+        this.blockRemotePathChange(oldPath, newPath, error, false);
+      }
       return;
     }
 
     const folder = Object.values(this.manifest!.folders).find(item => item.entityId === entityId);
     if (folder) {
       const newPath = path.posix.join(path.posix.dirname(folder.path), newName).replace(/^\.\//, '');
-      await this.remapFolderPath(folder.path, newPath);
+      const oldPath = folder.path;
+      try {
+        await this.remapFolderPath(oldPath, newPath, true, folder.parentFolderId);
+      } catch (error) {
+        this.blockRemotePathChange(oldPath, newPath, error, true);
+      }
     }
   }
 
@@ -2374,18 +2380,23 @@ export class RealtimeSyncService implements vscode.Disposable {
       }
       const file = this.manifest!.files[oldPath];
       const newPath = path.posix.join(parentPath, path.posix.basename(oldPath));
-      delete this.manifest!.files[oldPath];
-      file.path = newPath;
-      file.parentFolderId = newParentFolderId;
-      this.manifest!.files[newPath] = file;
-      await this.renameLocal(oldPath, newPath);
-      await this.persistManifest();
+      try {
+        await this.applyRemoteFilePathChange(oldPath, newPath, newParentFolderId);
+      } catch (error) {
+        this.blockRemotePathChange(oldPath, newPath, error, false);
+      }
       return;
     }
 
     const folder = Object.values(this.manifest!.folders).find(item => item.entityId === entityId);
     if (folder) {
-      await this.remapFolderPath(folder.path, path.posix.join(parentPath, path.posix.basename(folder.path)));
+      const oldPath = folder.path;
+      const newPath = path.posix.join(parentPath, path.posix.basename(oldPath));
+      try {
+        await this.remapFolderPath(oldPath, newPath, true, newParentFolderId);
+      } catch (error) {
+        this.blockRemotePathChange(oldPath, newPath, error, true);
+      }
     }
   }
 
@@ -2524,11 +2535,38 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.openConflictDiff(relPath);
   }
 
-  private async remapFolderPath(oldPath: string, newPath: string, renameLocalFs = true): Promise<void> {
+  private async remapFolderPath(
+    oldPath: string,
+    newPath: string,
+    renameLocalFs = true,
+    newParentFolderId?: string
+  ): Promise<void> {
+    const oldParentFolderId = this.manifest!.folders[oldPath]?.parentFolderId;
+    if (renameLocalFs) {
+      this.assertRemotePathTargetAvailable(oldPath, newPath);
+      await renameLocalPathTransactionally(
+        this.root!,
+        oldPath,
+        newPath,
+        async () => {
+          await this.remapFolderState(oldPath, newPath, newParentFolderId);
+          await this.persistManifest();
+        },
+        async () => {
+          if (this.manifest!.folders[newPath]) {
+            await this.remapFolderState(newPath, oldPath, oldParentFolderId);
+          }
+        }
+      );
+      return;
+    }
+    await this.remapFolderState(oldPath, newPath, newParentFolderId);
+    await this.persistManifest();
+  }
+
+  private async remapFolderState(oldPath: string, newPath: string, newParentFolderId?: string): Promise<void> {
     const oldPrefix = oldPath ? `${oldPath}/` : '';
     const newPrefix = newPath ? `${newPath}/` : '';
-    const oldAbs = this.abs(oldPath);
-    const newAbs = this.abs(newPath);
 
     for (const folder of Object.values(this.manifest!.folders)) {
       if (folder.path === oldPath || folder.path.startsWith(oldPrefix)) {
@@ -2536,6 +2574,9 @@ export class RealtimeSyncService implements vscode.Disposable {
         folder.path = folder.path === oldPath ? newPath : `${newPrefix}${folder.path.slice(oldPrefix.length)}`;
         this.manifest!.folders[folder.path] = folder;
       }
+    }
+    if (newParentFolderId !== undefined && this.manifest!.folders[newPath]) {
+      this.manifest!.folders[newPath].parentFolderId = newParentFolderId;
     }
 
     for (const file of Object.values(this.manifest!.files)) {
@@ -2546,13 +2587,6 @@ export class RealtimeSyncService implements vscode.Disposable {
       }
     }
     await this.remapRuntimePaths(oldPath, newPath, true);
-    if (renameLocalFs) {
-      await fs.mkdir(path.dirname(newAbs), { recursive: true });
-      await fs.rename(oldAbs, newAbs).catch(async () => {
-        await fs.mkdir(newAbs, { recursive: true });
-      });
-    }
-    await this.persistManifest();
   }
 
   private async remapRuntimePaths(oldPath: string, newPath: string, subtree: boolean): Promise<void> {
@@ -2589,11 +2623,48 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
   }
 
-  private async renameLocal(oldPath: string, newPath: string): Promise<void> {
-    const oldAbs = this.abs(oldPath);
-    const newAbs = this.abs(newPath);
-    await fs.mkdir(path.dirname(newAbs), { recursive: true });
-    await fs.rename(oldAbs, newAbs).catch(() => undefined);
+  private async applyRemoteFilePathChange(
+    oldPath: string,
+    newPath: string,
+    newParentFolderId: string
+  ): Promise<void> {
+    const file = this.manifest!.files[oldPath];
+    if (!file) throw new Error(`Cannot apply remote path change; ${oldPath} is missing from the manifest.`);
+    const oldParentFolderId = file.parentFolderId;
+    this.assertRemotePathTargetAvailable(oldPath, newPath);
+    await renameLocalPathTransactionally(
+      this.root!,
+      oldPath,
+      newPath,
+      async () => {
+        await this.remapFilePath(oldPath, newPath, newParentFolderId);
+        await this.persistManifest();
+      },
+      async () => {
+        if (this.manifest!.files[newPath]?.entityId === file.entityId) {
+          await this.remapFilePath(newPath, oldPath, oldParentFolderId);
+        }
+      }
+    );
+  }
+
+  private assertRemotePathTargetAvailable(oldPath: string, newPath: string): void {
+    if (oldPath === newPath) return;
+    const target = this.manifest!.files[newPath] ?? this.manifest!.folders[newPath];
+    if (target) {
+      throw new Error(`Cannot apply remote path change ${oldPath} -> ${newPath}; the manifest target already exists.`);
+    }
+  }
+
+  private blockRemotePathChange(oldPath: string, newPath: string, error: unknown, subtree: boolean): void {
+    const reason = `Remote rename/move ${oldPath} -> ${newPath} was not applied locally: ${formatUnknownError(error)}`;
+    this.syncGate.setPath(oldPath, 'error', reason, subtree);
+    this.syncGate.setPath(newPath, 'error', reason, subtree);
+    this.updateSyncStatusBar();
+    this.syncStatusChanged.fire();
+    this.statusChanged.fire();
+    this.log(reason);
+    this.scheduleSyncStatusCheck(500, [oldPath, newPath]);
   }
 
   private async moveLocalToTrash(relPath: string): Promise<void> {
