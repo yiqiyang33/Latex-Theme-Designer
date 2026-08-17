@@ -150,7 +150,7 @@ export async function latestRemotePdf(root: string): Promise<string | undefined>
   );
 }
 
-async function replaceOutputDirectory(outputRoot: string, stagingRoot: string, backupRoot: string): Promise<void> {
+export async function replaceOutputDirectory(outputRoot: string, stagingRoot: string, backupRoot: string): Promise<void> {
   const hadPreviousOutput = await exists(outputRoot);
   if (hadPreviousOutput) await fs.rename(outputRoot, backupRoot);
   try {

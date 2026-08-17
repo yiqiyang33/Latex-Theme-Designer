@@ -59,6 +59,7 @@ import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { planSafeSyncActions } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
+import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
 import {
   applyOtOperations,
   buildOtOperations,
@@ -163,6 +164,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private reconnectTimer?: NodeJS.Timeout;
   private readonly checkScheduler: SyncCheckScheduler<SyncStatusReport>;
   private readonly syncHealth = new SyncHealthService();
+  private manifestFolderFingerprints?: Map<string, string>;
   private stopping = false;
   private positionTimer?: NodeJS.Timeout;
   private lastPositionKey?: string;
@@ -1381,42 +1383,12 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private folderFingerprintFromManifest(relPath: string): string {
-    const prefix = `${relPath}/`;
-    const parts = [
-      ...Object.values(this.manifest!.folders)
-        .filter(folder => folder.path.startsWith(prefix) && !shouldIgnore(this.manifest!, folder.path))
-        .map(folder => `D\0${folder.path.slice(prefix.length)}`),
-      ...Object.values(this.manifest!.files)
-        .filter(file => file.path.startsWith(prefix) && !shouldIgnore(this.manifest!, file.path))
-        .map(file => `F\0${file.path.slice(prefix.length)}\0${file.entityType}\0${file.localHashCache ?? file.sha1 ?? ''}`)
-    ];
-    return sha1(`folder\0${parts.sort().join('\n')}`);
+    this.manifestFolderFingerprints ??= buildManifestFolderFingerprints(this.manifest!);
+    return this.manifestFolderFingerprints.get(relPath) ?? sha1('folder\0');
   }
 
   private async folderFingerprintFromLocal(relPath: string): Promise<string> {
-    const parts: string[] = [];
-    const root = this.abs(relPath);
-    const walk = async (absDir: string, relativeDir: string): Promise<void> => {
-      const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
-      for (const entry of entries) {
-        const relative = toPosixPath(path.posix.join(relativeDir, entry.name));
-        const projectPath = toPosixPath(path.posix.join(relPath, relative));
-        if (isAlwaysLocal(projectPath) || shouldIgnore(this.manifest!, projectPath)
-          || shouldIgnoreUntrackedLocalPath(this.manifest!, projectPath)) continue;
-        if (entry.isDirectory()) {
-          parts.push(`D\0${relative}`);
-          await walk(path.join(absDir, entry.name), relative);
-        } else if (entry.isFile()) {
-          const childPath = path.join(absDir, entry.name);
-          const digest = isTextLike(relative)
-            ? sha1(await fs.readFile(childPath))
-            : (await hashFileDigests(childPath)).sha1;
-          parts.push(`F\0${relative}\0${isTextLike(relative) ? 'doc' : 'file'}\0${digest}`);
-        }
-      }
-    };
-    await walk(root, '');
-    return sha1(`folder\0${parts.sort().join('\n')}`);
+    return folderFingerprintFromLocal(this.root!, relPath, this.manifest!);
   }
 
   private runPathOperation(relPath: string, operation: () => Promise<void>): void {
@@ -2819,6 +2791,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   private async persistManifest(): Promise<void> {
     await this.storeFor(this.root!).writeManifest(this.manifest!);
+    this.manifestFolderFingerprints = undefined;
     this.manifestMutationEpoch += 1;
   }
 

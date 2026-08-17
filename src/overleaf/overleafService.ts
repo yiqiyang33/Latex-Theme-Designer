@@ -4,7 +4,8 @@ import type { Socket } from "node:net";
 import * as vscode from "vscode";
 import { CompileDiagnosticProvider } from "./diagnostics";
 import { CompileService } from "./compileService";
-import { manifestPath, readManifest, metadataPath, OUTPUT_DIR } from "./manifest";
+import { manifestPath, readManifest, OUTPUT_DIR } from "./manifest";
+import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord } from "./mirrorManager";
 import { OverleafClient } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo } from "./realtimeSync";
@@ -824,12 +825,7 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async findPdf(root: string): Promise<string | undefined> {
-    const outputRoot = metadataPath(root, OUTPUT_DIR);
-    const files = await fs.readdir(outputRoot).catch(() => [] as string[]);
-    const candidate = files.find(name => name.toLowerCase().endsWith(".pdf"));
-    if (!candidate) return undefined;
-    const full = path.join(outputRoot, candidate);
-    return (await fs.stat(full).catch(() => undefined))?.isFile() ? full : undefined;
+    return latestRemotePdf(root);
   }
 }
 

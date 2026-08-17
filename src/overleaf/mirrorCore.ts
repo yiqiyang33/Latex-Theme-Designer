@@ -9,6 +9,7 @@ import type { ManifestFile, ProjectSummary } from './types';
 import { OverleafClient } from './overleafClient';
 import { expandHome, isTextLike, sanitizeProjectFolderName, sha1 } from './util';
 import { registerSharedMirror } from './sharedState';
+import { mapWithConcurrency, mapWithDynamicByteConcurrency, type DynamicByteReservation } from './syncHealthService';
 
 const execFileAsync = promisify(execFile);
 
@@ -58,6 +59,8 @@ cookie*
 
 export interface CreateProjectMirrorOptions {
   register?: (root: string) => Promise<unknown>;
+  taskConcurrency?: number;
+  maxInFlightBytes?: number;
 }
 
 export function projectMirrorRoot(parentRoot: string, project: ProjectSummary): string {
@@ -87,10 +90,17 @@ export async function createProjectMirror(
     const joined = session.getProject();
     if (!joined) throw new Error('Realtime connection did not provide a project tree.');
     const index = buildProjectTreeIndex(client.getServerUrl(), project.id, project.name, joined);
-    for (const folder of index.folders) {
-      if (folder.path) await fs.mkdir(path.join(targetRoot, folder.path), { recursive: true });
-    }
-    for (const file of index.files) await writeInitialFile(client, session, project.id, targetRoot, file);
+    await mapWithConcurrency(
+      index.folders.filter(folder => Boolean(folder.path)),
+      options.taskConcurrency ?? 4,
+      async folder => { await fs.mkdir(path.join(targetRoot, folder.path), { recursive: true }); }
+    );
+    await mapWithDynamicByteConcurrency(
+      index.files,
+      options.taskConcurrency ?? 4,
+      options.maxInFlightBytes ?? 32 * 1024 * 1024,
+      async (file, reservation) => writeInitialFile(client, session!, project.id, targetRoot, file, reservation)
+    );
     for (const name of ['output', 'conflicts', path.join('base', 'docs'), 'trash']) {
       await fs.mkdir(metadataPath(targetRoot, name), { recursive: true });
     }
@@ -113,20 +123,27 @@ async function writeInitialFile(
   session: Awaited<ReturnType<OverleafClient['connectSocket']>>,
   projectId: string,
   root: string,
-  file: ManifestFile
+  file: ManifestFile,
+  reservation?: DynamicByteReservation
 ): Promise<void> {
   const target = path.join(root, file.path);
   await fs.mkdir(path.dirname(target), { recursive: true });
   if (file.entityType === 'doc') {
     const joined = await session.joinDoc(file.entityId);
-    await fs.writeFile(target, joined.content, 'utf8');
-    file.version = joined.version;
-    file.binary = !isTextLike(file.path);
-    file.sha1 = sha1(joined.content);
-    file.baseHash = await writeBaseDoc(root, file.entityId, joined.content);
-    await session.leaveDoc(file.entityId).catch(() => undefined);
+    try {
+      await reservation?.reserve(Buffer.byteLength(joined.content, 'utf8'));
+      await fs.writeFile(target, joined.content, 'utf8');
+      file.version = joined.version;
+      file.binary = !isTextLike(file.path);
+      file.sha1 = sha1(joined.content);
+      file.baseHash = await writeBaseDoc(root, file.entityId, joined.content);
+    } finally {
+      await session.leaveDoc(file.entityId).catch(() => undefined);
+    }
   } else {
-    const result = await client.downloadProjectFileToPath(projectId, file.entityId, target);
+    const result = await client.downloadProjectFileToPath(projectId, file.entityId, target, {
+      onSize: async size => { await reservation?.reserve(size); }
+    });
     file.binary = true;
     file.sha1 = result.sha1;
     file.remoteSize = result.size;

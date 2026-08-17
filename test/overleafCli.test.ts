@@ -19,6 +19,7 @@ import {
   applicationDataRoot,
   applicationSupportRoot,
   defaultSharedState,
+  listSharedMirrors,
   mergeRefreshedMirrorRecords,
   readSharedState,
   registerSharedMirror,
@@ -27,13 +28,24 @@ import {
   updateSharedState
 } from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
-import { metadataPath, OUTPUT_DIR, readManifest, readSyncStatus, writeManifest } from '../src/overleaf/manifest';
+import {
+  addOrUpdateFile,
+  addOrUpdateFolder,
+  filePathById,
+  folderPathById,
+  metadataPath,
+  OUTPUT_DIR,
+  readManifest,
+  readSyncStatus,
+  writeManifest
+} from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
 import { OverleafSyncEngine } from '../src/overleaf/overleafSyncEngine';
 import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
 import { gitBlobHash, sha1 } from '../src/overleaf/util';
 import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCore';
-import { compileRemoteProject, latestRemotePdf } from '../src/overleaf/compileCore';
+import { compileRemoteProject, latestRemotePdf, replaceOutputDirectory } from '../src/overleaf/compileCore';
+import { buildManifestFolderFingerprints } from '../src/overleaf/folderFingerprint';
 import { BinaryTransactionStore, type BinaryTransaction } from '../src/overleaf/binaryTransactions';
 import { ConflictStore } from '../src/overleaf/conflictStore';
 import { recoverBinaryTransactions, type RemoteBinaryEntityState } from '../src/overleaf/remoteMutationCore';
@@ -105,6 +117,47 @@ describe('Overleaf CLI shared infrastructure', () => {
       expect(state.policy.syncBinaryFiles).toBe(false);
     } finally {
       releaseFirst?.();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('merges a concurrent shared mirror registration into a list refresh', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-list-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    const firstRoot = path.join(temporary, 'first');
+    const secondRoot = path.join(temporary, 'second');
+    await writeManifest(firstRoot, manifest());
+    await writeManifest(secondRoot, { ...manifest(), projectId: 'second', projectName: 'Second' });
+    try {
+      await registerSharedMirror(firstRoot);
+      const refreshing = listSharedMirrors();
+      await registerSharedMirror(secondRoot);
+      const mirrors = await refreshing;
+      expect(mirrors.map(item => item.projectId).sort()).toEqual(['project', 'second']);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps manifest entity lookups indexed across create, rename, remove and reload', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-manifest-index-'));
+    try {
+      const state = manifest();
+      addOrUpdateFolder(state, { path: 'chapters', entityId: 'folder-1', parentFolderId: 'root' });
+      addOrUpdateFile(state, {
+        path: 'chapters/main.tex', entityId: 'doc-1', entityType: 'doc', parentFolderId: 'folder-1'
+      }, 'source');
+      await writeManifest(temporary, state);
+      expect(folderPathById(state, 'folder-1')).toBe('chapters');
+      expect(filePathById(state, 'doc-1')).toBe('chapters/main.tex');
+      delete state.files['chapters/main.tex'];
+      addOrUpdateFile(state, {
+        path: 'paper.tex', entityId: 'doc-1', entityType: 'doc', parentFolderId: 'root'
+      }, 'source');
+      await writeManifest(temporary, state);
+      expect(filePathById(state, 'doc-1')).toBe('paper.tex');
+      expect(filePathById(await readManifest(temporary), 'doc-1')).toBe('paper.tex');
+    } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
@@ -555,6 +608,52 @@ describe('Shared Overleaf mirror creation', () => {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
+
+  it('bounds initial mirror tasks and pairs every document join with leave', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-mirror-concurrency-'));
+    const parent = path.join(temporary, 'projects');
+    const project = { id: 'parallel', name: 'Parallel Mirror' };
+    const docs = Array.from({ length: 4 }, (_, index) => ({ _id: `doc-${index}`, name: `chapter-${index}.tex`, version: 1 }));
+    const files = Array.from({ length: 4 }, (_, index) => ({ _id: `file-${index}`, name: `figure-${index}.pdf`, hash: `blob-${index}`, size: 1024 }));
+    const remoteProject = {
+      rootDoc_id: docs[0]._id,
+      rootFolder: { _id: 'root', name: 'root', docs, fileRefs: files, folders: [] }
+    };
+    let joins = 0;
+    let leaves = 0;
+    let active = 0;
+    let maximumActive = 0;
+    const session = {
+      getProject: () => remoteProject,
+      joinDoc: async (id: string) => {
+        joins += 1; active += 1; maximumActive = Math.max(maximumActive, active);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { content: `content ${id}`, version: 1 };
+      },
+      leaveDoc: async () => { leaves += 1; active -= 1; },
+      disconnect: () => undefined
+    };
+    const client = {
+      getServerUrl: () => 'https://example.test/',
+      connectSocket: async () => session,
+      downloadProjectFileToPath: async (_projectId: string, id: string, target: string, options?: { onSize?: (size: number) => Promise<void> }) => {
+        active += 1; maximumActive = Math.max(maximumActive, active);
+        await options?.onSize?.(1024);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        await fs.writeFile(target, Buffer.alloc(1024, id.charCodeAt(0)));
+        active -= 1;
+        return { size: 1024, sha1: sha1(Buffer.alloc(1024, id.charCodeAt(0))), gitBlobHash: gitBlobHash(Buffer.alloc(1024, id.charCodeAt(0))) };
+      }
+    };
+    try {
+      await createProjectMirror(client as never, project, parent, { taskConcurrency: 2, maxInFlightBytes: 2048, register: async () => undefined });
+      expect(joins).toBe(4);
+      expect(leaves).toBe(4);
+      expect(maximumActive).toBeLessThanOrEqual(2);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('Remote Overleaf compile output transactions', () => {
@@ -685,6 +784,25 @@ describe('Remote Overleaf compile output transactions', () => {
         lockWaitMs: 40,
         lockMissingOwnerGraceMs: 5_000
       })).rejects.toThrow(/Timed out waiting for the Overleaf compile lock/);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('restores the previous output when promotion fails after the backup rename', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-compile-rename-window-'));
+    await writeManifest(temporary, manifest());
+    const outputRoot = metadataPath(temporary, OUTPUT_DIR);
+    await fs.mkdir(outputRoot, { recursive: true });
+    await fs.writeFile(path.join(outputRoot, 'trusted.pdf'), 'trusted');
+    try {
+      await expect(replaceOutputDirectory(
+        outputRoot,
+        path.join(metadataPath(temporary), 'output.staging-missing'),
+        path.join(metadataPath(temporary), 'output.backup-crash')
+      )).rejects.toThrow();
+      expect(await fs.readFile(path.join(outputRoot, 'trusted.pdf'), 'utf8')).toBe('trusted');
+      expect((await fs.readdir(metadataPath(temporary))).filter(name => /output\.(?:staging|backup)-/.test(name))).toEqual([]);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -1054,10 +1172,11 @@ describe('Shared Overleaf sync command contract', () => {
 
   it('reuses incremental remote metadata and limits binary downloads to four at a time', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-cli-remote-cache-'));
+    const largePdf = Buffer.alloc(8 * 1024 * 1024, 0x5a);
     const files = Array.from({ length: 7 }, (_, index) => ({
       id: `file-${index}`,
       name: `figure-${index}.pdf`,
-      content: Buffer.from(`binary-${index}`),
+      content: largePdf,
       blobHash: `blob-${index}`
     }));
     const project = {
@@ -1068,6 +1187,8 @@ describe('Shared Overleaf sync command contract', () => {
     };
     let activeDownloads = 0;
     let maxActiveDownloads = 0;
+    let activeBytes = 0;
+    let maxActiveBytes = 0;
     let downloadCount = 0;
     const session = {
       getProject: () => project,
@@ -1083,7 +1204,10 @@ describe('Shared Overleaf sync command contract', () => {
         await new Promise(resolve => setTimeout(resolve, 25));
         const content = files.find(file => file.id === entityId)!.content;
         await options.onSize?.(content.length);
+        activeBytes += content.length;
+        maxActiveBytes = Math.max(maxActiveBytes, activeBytes);
         await fs.writeFile(target, content);
+        activeBytes -= content.length;
         activeDownloads -= 1;
         return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
       }
@@ -1109,10 +1233,13 @@ describe('Shared Overleaf sync command contract', () => {
         await fs.writeFile(path.join(temporary, file.name), file.content);
       }
       await writeManifest(temporary, state);
+      const rssBefore = process.memoryUsage().rss;
       expect((await engine.status(true, false))?.hasBlocking).toBe(false);
       expect(downloadCount).toBe(files.length);
       expect(maxActiveDownloads).toBeGreaterThan(1);
       expect(maxActiveDownloads).toBeLessThanOrEqual(4);
+      expect(maxActiveBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
+      expect(process.memoryUsage().rss - rssBefore).toBeLessThan(128 * 1024 * 1024);
 
       expect((await engine.status(true, false))?.hasBlocking).toBe(false);
       expect(downloadCount).toBe(files.length);
@@ -1216,10 +1343,11 @@ describe('Large mirror performance regressions', () => {
     try {
       const state = manifest();
       await writeManifest(temporary, state);
-      for (let directory = 0; directory < 40; directory += 1) {
+      const benchmarkStartedAt = performance.now();
+      for (let directory = 0; directory < 100; directory += 1) {
         const relDir = `chapters/chapter-${directory}`;
         await fs.mkdir(path.join(temporary, relDir), { recursive: true });
-        await Promise.all(Array.from({ length: 10 }, (_, file) =>
+        await Promise.all(Array.from({ length: 100 }, (_, file) =>
           fs.writeFile(path.join(temporary, relDir, `section-${file}.tex`), `content ${directory}:${file}\n`)
         ));
       }
@@ -1228,10 +1356,27 @@ describe('Large mirror performance regressions', () => {
       const loaded = await readManifest(temporary);
       const startedAt = performance.now();
       const scan = await scanLocalProject(temporary, loaded);
+      const indexed = manifest();
+      for (let directory = 0; directory < 100; directory += 1) {
+        const folderPath = `chapters/chapter-${directory}`;
+        indexed.folders[folderPath] = { path: folderPath, entityId: `folder-${directory}`, parentFolderId: 'root' };
+        for (let file = 0; file < 100; file += 1) {
+          const filePath = `${folderPath}/section-${file}.tex`;
+          indexed.files[filePath] = {
+            path: filePath, entityId: `doc-${directory}-${file}`, entityType: 'doc', parentFolderId: `folder-${directory}`,
+            sha1: 'content-hash'
+          };
+        }
+      }
+      const fingerprintStartedAt = performance.now();
+      const fingerprints = buildManifestFolderFingerprints(indexed);
       const digest = await fileHash(path.join(temporary, 'large.pdf'));
-      expect(performance.now() - startedAt).toBeLessThan(10_000);
-      expect(scan.files).toHaveLength(401);
-      expect(scan.folders).toHaveLength(41);
+      expect(performance.now() - benchmarkStartedAt).toBeLessThan(20_000);
+      expect(performance.now() - startedAt).toBeLessThan(20_000);
+      expect(scan.files).toHaveLength(10_001);
+      expect(scan.folders).toHaveLength(101);
+      expect(fingerprints.size).toBe(101);
+      expect(performance.now() - fingerprintStartedAt).toBeLessThan(5_000);
       expect(scan.fileMetadata.get('large.pdf')?.size).toBe(binary.length);
       expect(digest).toBe(sha1(binary));
 
@@ -1260,6 +1405,7 @@ describe('P1 resource and persistence regressions', () => {
     content.write('stream-boundary-check', 1024);
     await fs.writeFile(source, content);
     let uploadedBody = Buffer.alloc(0);
+    let uploadedContentType = '';
     const server = http.createServer((request, response) => {
       if (request.method === 'GET') {
         const broken = request.url?.endsWith('/broken');
@@ -1272,6 +1418,7 @@ describe('P1 resource and persistence regressions', () => {
         return;
       }
       const chunks: Buffer[] = [];
+      uploadedContentType = String(request.headers['content-type'] ?? '');
       request.on('data', chunk => chunks.push(Buffer.from(chunk)));
       request.on('end', () => {
         uploadedBody = Buffer.concat(chunks);
@@ -1294,7 +1441,9 @@ describe('P1 resource and persistence regressions', () => {
       expect(await hashFileDigests(target)).toEqual(downloaded);
       const uploaded = await client.uploadFileFromPath('project', 'root', 'source.bin', source);
       expect(uploaded._id).toBe('uploaded-file');
+      expect(uploadedContentType).toMatch(/^multipart\/form-data; boundary=/);
       expect(uploadedBody.includes(content)).toBe(true);
+      expect(uploadedBody.length).toBeGreaterThan(content.length);
       const incomplete = path.join(temporary, 'incomplete.bin');
       await expect(client.downloadProjectFileToPath('project', 'broken', incomplete)).rejects.toThrow();
       await expect(fs.stat(incomplete)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -1308,6 +1457,26 @@ describe('P1 resource and persistence regressions', () => {
   it('aborts stalled response bodies on timeout and external cancellation', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-http-body-timeout-'));
     const server = http.createServer((request, response) => {
+      if (request.url === '/api/project' || request.url === '/user/projects') {
+        response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '15' });
+        setTimeout(() => response.end('{"projects":[]}'), 500);
+        return;
+      }
+      if (request.url?.endsWith('/redirect')) {
+        response.writeHead(302, { Location: '/project/project/file/stalled' });
+        response.end();
+        return;
+      }
+      if (request.url?.endsWith('/range')) {
+        if (!request.headers.range) {
+          response.writeHead(206, { 'Content-Range': 'bytes 0-1/5', 'Content-Length': '2' });
+          response.end('ab');
+        } else {
+          response.writeHead(206, { 'Content-Range': 'bytes 2-4/5', 'Content-Length': '3' });
+          setTimeout(() => response.end('cde'), 500);
+        }
+        return;
+      }
       if (request.url?.includes('stalled')) {
         response.writeHead(200, { 'Content-Length': '5' });
         setTimeout(() => response.end('stale'), 500);
@@ -1324,6 +1493,9 @@ describe('P1 resource and persistence regressions', () => {
       const timeoutTarget = path.join(temporary, 'timeout.bin');
       await expect(client.downloadProjectFileToPath('project', 'stalled', timeoutTarget)).rejects.toThrow();
       await expect(fs.stat(timeoutTarget)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(client.listProjects()).rejects.toThrow();
+      await expect(client.downloadProjectFileToPath('project', 'redirect', path.join(temporary, 'redirect.bin'))).rejects.toThrow();
+      await expect(client.downloadProjectFileToPath('project', 'range', path.join(temporary, 'range.bin'))).rejects.toThrow();
 
       const controller = new AbortController();
       const cancelTarget = path.join(temporary, 'cancel.bin');

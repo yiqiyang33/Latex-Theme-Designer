@@ -316,26 +316,20 @@ export function mergeTargetedSyncStatusReport(
   };
 }
 
-export async function listLocalProjectFiles(root: string, manifest: OverleafCodexManifest): Promise<string[]> {
-  return (await scanLocalProject(root, manifest)).files;
-}
-
-export async function listLocalProjectFolders(root: string, manifest: OverleafCodexManifest): Promise<string[]> {
-  return (await scanLocalProject(root, manifest)).folders;
-}
-
 export async function scanLocalProject(root: string, manifest: OverleafCodexManifest): Promise<LocalProjectScan> {
   const files: string[] = [];
   const folders: string[] = [];
   const fileMetadata = new Map<string, LocalProjectFileMetadata>();
   const trackedOrParentPaths = buildTrackedOrParentPathIndex(manifest);
+  const runFs = createFsLimiter(16);
   await walk(root, '');
   files.sort();
   folders.sort();
   return { files, folders, fileMetadata, trackedOrParentPaths };
 
   async function walk(absDir: string, relDir: string): Promise<void> {
-    const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => []);
+    const entries = await runFs(() => fs.readdir(absDir, { withFileTypes: true }).catch(() => []));
+    const childDirectories: Array<{ absolute: string; relative: string }> = [];
     for (const entry of entries) {
       const relPath = toPosixPath(path.posix.join(relDir, entry.name));
       const tracked = trackedOrParentPaths.has(relPath);
@@ -348,10 +342,10 @@ export async function scanLocalProject(root: string, manifest: OverleafCodexMani
       const absPath = path.join(absDir, entry.name);
       if (entry.isDirectory()) {
         folders.push(relPath);
-        await walk(absPath, relPath);
+        childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat = await fs.stat(absPath).catch(() => undefined);
+        const stat = await runFs(() => fs.stat(absPath).catch(() => undefined));
         if (stat) {
           fileMetadata.set(relPath, {
             size: stat.size,
@@ -362,7 +356,25 @@ export async function scanLocalProject(root: string, manifest: OverleafCodexMani
         }
       }
     }
+    await Promise.all(childDirectories.map(child => walk(child.absolute, child.relative)));
   }
+}
+
+function createFsLimiter(concurrency: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const pending: Array<() => void> = [];
+  const pump = (): void => {
+    while (active < concurrency && pending.length) {
+      active += 1;
+      pending.shift()!();
+    }
+  };
+  return function run<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      pending.push(() => task().then(resolve, reject).finally(() => { active -= 1; pump(); }));
+      pump();
+    });
+  };
 }
 
 function buildTrackedOrParentPathIndex(manifest: OverleafCodexManifest): Set<string> {

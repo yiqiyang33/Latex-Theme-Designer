@@ -8,6 +8,7 @@ import { OverleafClient, OverleafSocketSession } from './overleafClient';
 import {
   addOrUpdateFile,
   addOrUpdateFolder,
+  folderPathById,
   metadataPath,
   readBaseDoc,
   readManifest,
@@ -32,7 +33,6 @@ import {
   cachedLocalFileHash,
   classifyFolderStructure,
   classifySyncStatus,
-  listLocalProjectFiles,
   scanLocalProject,
   makeSyncStatusReport,
   mergeTargetedSyncStatusReport,
@@ -48,6 +48,7 @@ import { performRemotePathChange, recoverBinaryTransactions, transactionName } f
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
+import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
@@ -223,21 +224,25 @@ export class OverleafSyncEngine {
       let localFiles = localScan.files;
       let localFolders = localScan.folders;
       if (options.intent === 'sync') {
-        await this.reconcileRemoteRenames(remote);
-        localScan = await scanLocalProject(this.root, this.manifest);
-        localFiles = localScan.files;
-        localFolders = localScan.folders;
-        if (this.policy.autoPushLocalAhead) {
-          await this.reconcileLocalRenames(localFiles, localFolders);
+        const remoteRenamesChanged = await this.reconcileRemoteRenames(remote);
+        if (remoteRenamesChanged) {
           localScan = await scanLocalProject(this.root, this.manifest);
           localFiles = localScan.files;
           localFolders = localScan.folders;
-          remote = buildProjectTreeIndex(
-            this.manifest.serverUrl,
-            this.manifest.projectId,
-            this.manifest.projectName,
-            project
-          ).manifest;
+        }
+        if (this.policy.autoPushLocalAhead) {
+          const localRenamesChanged = await this.reconcileLocalRenames(localFiles, localFolders);
+          if (localRenamesChanged) {
+            localScan = await scanLocalProject(this.root, this.manifest);
+            localFiles = localScan.files;
+            localFolders = localScan.folders;
+            remote = buildProjectTreeIndex(
+              this.manifest.serverUrl,
+              this.manifest.projectId,
+              this.manifest.projectName,
+              project
+            ).manifest;
+          }
         }
       }
       const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
@@ -689,23 +694,22 @@ export class OverleafSyncEngine {
     if (changed) await writeManifest(this.root, this.manifest!);
   }
 
-  private async reconcileRemoteRenames(remote: OverleafCodexManifest): Promise<void> {
+  private async reconcileRemoteRenames(remote: OverleafCodexManifest): Promise<boolean> {
+    let changed = false;
     const remoteFoldersById = new Map(Object.values(remote.folders).map(folder => [folder.entityId, folder]));
-    const attemptedFolders = new Set<string>();
-    while (true) {
-      const candidate = Object.values(this.manifest!.folders)
-        .filter(folder => folder.path && !attemptedFolders.has(folder.entityId))
-        .map(folder => ({ local: folder, remote: remoteFoldersById.get(folder.entityId) }))
-        .filter((pair): pair is { local: ManifestFolder; remote: ManifestFolder } =>
-          Boolean(pair.remote && pair.remote.path !== pair.local.path))
-        .sort((left, right) => left.local.path.split('/').length - right.local.path.split('/').length)[0];
-      if (!candidate) break;
-      attemptedFolders.add(candidate.local.entityId);
-      const oldPath = candidate.local.path;
+    const folderCandidates = Object.values(this.manifest!.folders)
+      .filter(folder => folder.path)
+      .map(folder => ({ local: folder, remote: remoteFoldersById.get(folder.entityId) }))
+      .filter((pair): pair is { local: ManifestFolder; remote: ManifestFolder } =>
+        Boolean(pair.remote && pair.remote.path !== pair.local.path))
+      .sort((left, right) => left.local.path.split('/').length - right.local.path.split('/').length);
+    for (const candidate of folderCandidates) {
+      const oldPath = folderPathById(this.manifest!, candidate.local.entityId);
+      if (!oldPath || oldPath === candidate.remote.path) continue;
       const newPath = candidate.remote.path;
       const source = await fs.stat(path.join(this.root, oldPath)).catch(() => undefined);
       if (!source?.isDirectory()) continue;
-      const oldParentFolderId = candidate.local.parentFolderId;
+      const oldParentFolderId = this.manifest!.folders[oldPath]?.parentFolderId;
       try {
         await renameLocalPathTransactionally(
           this.root,
@@ -722,6 +726,7 @@ export class OverleafSyncEngine {
             }
           }
         );
+        changed = true;
       } catch (error) {
         this.host.conflict(oldPath, `Remote folder rename to ${newPath} could not be applied safely: ${formatUnknownError(error)}`);
         throw error;
@@ -761,29 +766,30 @@ export class OverleafSyncEngine {
             if (this.manifest!.rootDocPath === newPath) this.manifest!.rootDocPath = oldPath;
           }
         );
+        changed = true;
       } catch (error) {
         this.host.conflict(oldPath, `Remote file rename to ${newPath} could not be applied safely: ${formatUnknownError(error)}`);
         throw error;
       }
     }
+    return changed;
   }
 
-  private async reconcileLocalRenames(localFiles: string[], localFolders: string[]): Promise<void> {
+  private async reconcileLocalRenames(localFiles: string[], localFolders: string[]): Promise<boolean> {
+    let changed = false;
     const localFolderSet = new Set(localFolders);
-    const missingFolders = Object.values(this.manifest!.folders)
+    const missingFolderPaths = new Set(Object.values(this.manifest!.folders)
       .filter(folder => folder.path && !localFolderSet.has(folder.path))
-      .filter(folder => !Object.values(this.manifest!.folders).some(parent =>
-        parent.path && parent.path !== folder.path && folder.path.startsWith(`${parent.path}/`) && !localFolderSet.has(parent.path)
-      ));
-    const untrackedFolders = localFolders.filter(candidate => !this.manifest!.folders[candidate])
-      .filter(candidate => !localFolders.some(parent => parent !== candidate
-        && !this.manifest!.folders[parent] && candidate.startsWith(`${parent}/`)));
-    const folderCandidates = await Promise.all(untrackedFolders.map(async candidate => ({
+      .map(folder => folder.path));
+    const missingFolders = Object.values(this.manifest!.folders).filter(folder =>
+      folder.path && missingFolderPaths.has(folder.path) && !hasMissingAncestor(folder.path, missingFolderPaths));
+    const untrackedFolderPaths = new Set(localFolders.filter(candidate => !this.manifest!.folders[candidate]));
+    const untrackedFolders = [...untrackedFolderPaths].filter(candidate => !hasMissingAncestor(candidate, untrackedFolderPaths));
+    const folderCandidates = await mapWithConcurrencyResult(untrackedFolders, 4, async candidate => ({
       path: candidate,
-      fingerprint: await this.folderFingerprintFromLocal(candidate)
-    })));
-    const oldFolderFingerprints = new Map<string, string>();
-    for (const folder of missingFolders) oldFolderFingerprints.set(folder.path, this.folderFingerprintFromManifest(folder.path));
+      fingerprint: await folderFingerprintFromLocal(this.root, candidate, this.manifest!)
+    }));
+    const oldFolderFingerprints = buildManifestFolderFingerprints(this.manifest!);
     const oldFolderCounts = new Map<string, number>();
     for (const fingerprint of oldFolderFingerprints.values()) oldFolderCounts.set(fingerprint, (oldFolderCounts.get(fingerprint) ?? 0) + 1);
     const candidateByFingerprint = new Map<string, typeof folderCandidates>();
@@ -796,18 +802,17 @@ export class OverleafSyncEngine {
         continue;
       }
       await this.applyLocalRename(oldFolder.path, matches[0].path);
+      changed = true;
     }
 
     const refreshedFiles = localFiles;
     const localFileSet = new Set(refreshedFiles);
     const missingFiles = Object.values(this.manifest!.files).filter(file => !localFileSet.has(file.path));
     const untrackedFiles = refreshedFiles.filter(candidate => !this.manifest!.files[candidate]);
-    const localCandidates = await Promise.all(untrackedFiles.map(async candidate => ({
+    const localCandidates = await mapWithConcurrencyResult(untrackedFiles, 4, async candidate => ({
       path: candidate,
-      hash: isTextLike(candidate)
-        ? await fs.readFile(path.join(this.root, candidate)).then(sha1)
-        : (await hashFileDigests(path.join(this.root, candidate))).sha1
-    })));
+      hash: (await hashFileDigests(path.join(this.root, candidate))).sha1
+    }));
     const candidatesByHash = new Map<string, typeof localCandidates>();
     for (const candidate of localCandidates) candidatesByHash.set(candidate.hash, [...(candidatesByHash.get(candidate.hash) ?? []), candidate]);
     const oldFileCounts = new Map<string, number>();
@@ -825,7 +830,9 @@ export class OverleafSyncEngine {
         continue;
       }
       await this.applyLocalRename(oldFile.path, matches[0].path);
+      changed = true;
     }
+    return changed;
   }
 
   private async applyLocalRename(oldPath: string, newPath: string): Promise<void> {
@@ -889,40 +896,8 @@ export class OverleafSyncEngine {
     }
   }
 
-  private folderFingerprintFromManifest(relPath: string): string {
-    const prefix = `${relPath}/`;
-    const parts = [
-      ...Object.values(this.manifest!.folders)
-        .filter(folder => folder.path.startsWith(prefix) && !shouldIgnore(this.manifest!, folder.path))
-        .map(folder => `D\0${folder.path.slice(prefix.length)}`),
-      ...Object.values(this.manifest!.files)
-        .filter(file => file.path.startsWith(prefix) && !shouldIgnore(this.manifest!, file.path))
-        .map(file => `F\0${file.path.slice(prefix.length)}\0${file.entityType}\0${file.localHashCache ?? file.sha1 ?? ''}`)
-    ];
-    return sha1(`folder\0${parts.sort().join('\n')}`);
-  }
-
   private async folderFingerprintFromLocal(relPath: string): Promise<string> {
-    const parts: string[] = [];
-    const walk = async (absolute: string, relative: string): Promise<void> => {
-      for (const entry of await fs.readdir(absolute, { withFileTypes: true }).catch(() => [])) {
-        const child = toPosixPath(path.posix.join(relative, entry.name));
-        const projectPath = toPosixPath(path.posix.join(relPath, child));
-        if (shouldIgnore(this.manifest!, projectPath) || shouldIgnoreUntrackedLocalPath(this.manifest!, projectPath)) continue;
-        if (entry.isDirectory()) {
-          parts.push(`D\0${child}`);
-          await walk(path.join(absolute, entry.name), child);
-        } else if (entry.isFile()) {
-          const childPath = path.join(absolute, entry.name);
-          const digest = isTextLike(child)
-            ? sha1(await fs.readFile(childPath))
-            : (await hashFileDigests(childPath)).sha1;
-          parts.push(`F\0${child}\0${isTextLike(child) ? 'doc' : 'file'}\0${digest}`);
-        }
-      }
-    };
-    await walk(path.join(this.root, relPath), '');
-    return sha1(`folder\0${parts.sort().join('\n')}`);
+    return folderFingerprintFromLocal(this.root, relPath, this.manifest!);
   }
 
   private scheduleSync(reason: string): void {
@@ -965,3 +940,28 @@ export class OverleafSyncEngine {
 
 /** @deprecated Use OverleafSyncEngine. Kept for source compatibility with early CLI builds. */
 export { OverleafSyncEngine as CliSyncEngine };
+
+function hasMissingAncestor(relPath: string, candidates: ReadonlySet<string>): boolean {
+  let parent = path.posix.dirname(relPath);
+  while (parent && parent !== '.') {
+    if (candidates.has(parent)) return true;
+    parent = path.posix.dirname(parent);
+  }
+  return false;
+}
+
+async function mapWithConcurrencyResult<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  handler: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await handler(items[index]);
+    }
+  }));
+  return results;
+}

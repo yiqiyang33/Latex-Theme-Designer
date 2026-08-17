@@ -130,6 +130,11 @@ export interface LocalIgnoreRule {
 }
 
 const localIgnoreRules = new WeakMap<OverleafCodexManifest, Ignore>();
+interface ManifestEntityIndex {
+  files: Map<string, string>;
+  folders: Map<string, string>;
+}
+const manifestEntityIndexes = new WeakMap<OverleafCodexManifest, ManifestEntityIndex>();
 
 export function manifestPath(root: string): string {
   return path.join(root, METADATA_DIR, MANIFEST_NAME);
@@ -172,6 +177,7 @@ export async function writeManifest(root: string, manifest: OverleafCodexManifes
   manifest.schemaVersion = 3;
   manifest.lastSyncAt = new Date().toISOString();
   assertValidManifest(manifest);
+  manifestEntityIndexes.delete(manifest);
   await atomicWriteText(manifestPath(root), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
@@ -349,18 +355,34 @@ export function addOrUpdateFile(
     ...file,
     sha1: content === undefined ? manifest.files[file.path]?.sha1 : sha1(content)
   };
+  manifestEntityIndexes.delete(manifest);
 }
 
 export function addOrUpdateFolder(manifest: OverleafCodexManifest, folder: ManifestFolder): void {
   manifest.folders[folder.path] = folder;
+  manifestEntityIndexes.delete(manifest);
 }
 
 export function folderPathById(manifest: OverleafCodexManifest, folderId: string): string | undefined {
-  return Object.values(manifest.folders).find(folder => folder.entityId === folderId)?.path;
+  return getManifestEntityIndex(manifest).folders.get(folderId);
 }
 
 export function filePathById(manifest: OverleafCodexManifest, entityId: string): string | undefined {
-  return Object.values(manifest.files).find(file => file.entityId === entityId)?.path;
+  return getManifestEntityIndex(manifest).files.get(entityId);
+}
+
+export function invalidateManifestEntityIndex(manifest: OverleafCodexManifest): void {
+  manifestEntityIndexes.delete(manifest);
+}
+
+function getManifestEntityIndex(manifest: OverleafCodexManifest): ManifestEntityIndex {
+  const existing = manifestEntityIndexes.get(manifest);
+  if (existing) return existing;
+  const index: ManifestEntityIndex = { files: new Map(), folders: new Map() };
+  for (const file of Object.values(manifest.files)) index.files.set(file.entityId, file.path);
+  for (const folder of Object.values(manifest.folders)) index.folders.set(folder.entityId, folder.path);
+  manifestEntityIndexes.set(manifest, index);
+  return index;
 }
 
 export function findParentFolderId(manifest: OverleafCodexManifest, relPath: string): string | undefined {
