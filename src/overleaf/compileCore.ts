@@ -13,10 +13,19 @@ export interface RemoteCompileResult {
   logPath?: string;
 }
 
+export interface CompileOptions {
+  lockWaitMs?: number;
+  lockMissingOwnerGraceMs?: number;
+}
+
+const DEFAULT_COMPILE_LOCK_WAIT_MS = 120_000;
+const DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5_000;
+
 export async function compileRemoteProject(
   root: string,
   client: OverleafClient,
-  rootDocOverride?: string
+  rootDocOverride?: string,
+  options: CompileOptions = {}
 ): Promise<RemoteCompileResult> {
   const manifest = await readManifest(root);
   const rootDocPath = rootDocOverride ?? manifest.rootDocPath ?? await detectRootDoc(root);
@@ -24,7 +33,7 @@ export async function compileRemoteProject(
   if (response.status !== 'success') throw new Error(`Overleaf compile failed with status: ${response.status}`);
 
   const outputRoot = metadataPath(root, OUTPUT_DIR);
-  const releaseCompileLock = await acquireCompileLock(outputRoot);
+  const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
   await cleanupInterruptedCompileArtifacts(root);
   const token = `${process.pid}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
@@ -59,21 +68,28 @@ export async function compileRemoteProject(
 }
 
 async function cleanupInterruptedCompileArtifacts(root: string): Promise<void> {
-  const dir = metadataPath(root, '.overleaf-codex');
+  const dir = metadataPath(root);
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   await Promise.all(entries
     .filter(entry => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`))
     .map(entry => fs.rm(path.join(dir, entry.name), { recursive: true, force: true })));
 }
 
-async function acquireCompileLock(outputRoot: string): Promise<() => Promise<void>> {
+async function acquireCompileLock(outputRoot: string, options: CompileOptions = {}): Promise<() => Promise<void>> {
   const lock = `${outputRoot}.lock`;
   const owner = path.join(lock, 'owner.json');
+  const deadline = Date.now() + Math.max(1, options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS);
+  const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
   for (;;) {
     try {
       await fs.mkdir(lock, { recursive: false });
       const nonce = crypto.randomBytes(8).toString('hex');
-      await fs.writeFile(owner, JSON.stringify({ pid: process.pid, startedAt: Date.now(), nonce }));
+      await fs.writeFile(owner, JSON.stringify({
+        pid: process.pid,
+        startedAt: Date.now(),
+        processStart: await processStartSignature(process.pid),
+        nonce
+      }));
       return async () => {
         const current = await fs.readFile(owner, 'utf8').catch(() => undefined);
         if (current?.includes(nonce)) await fs.rm(lock, { recursive: true, force: true });
@@ -83,13 +99,42 @@ async function acquireCompileLock(outputRoot: string): Promise<() => Promise<voi
       const raw = await fs.readFile(owner, 'utf8').catch(() => undefined);
       let stale = false;
       try {
-        const value = JSON.parse(raw ?? '{}') as { pid?: number; startedAt?: number };
-        stale = typeof value.pid === 'number' && !processAlive(value.pid);
-      } catch { stale = true; }
+        const value = JSON.parse(raw ?? '') as { pid?: number; startedAt?: number; processStart?: string };
+        if (typeof value.pid !== 'number' || typeof value.startedAt !== 'number') {
+          stale = await lockAge(lock) >= missingOwnerGraceMs;
+        } else if (!processAlive(value.pid)) {
+          stale = true;
+        } else if (value.processStart) {
+          const currentStart = await processStartSignature(value.pid);
+          stale = Boolean(currentStart && currentStart !== value.processStart);
+        }
+      } catch {
+        stale = await lockAge(lock) >= missingOwnerGraceMs;
+      }
       if (stale) { await fs.rm(lock, { recursive: true, force: true }); continue; }
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
+      }
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
+}
+
+async function lockAge(lock: string): Promise<number> {
+  const stat = await fs.stat(lock).catch(() => undefined);
+  return stat ? Math.max(0, Date.now() - stat.mtimeMs) : Number.POSITIVE_INFINITY;
+}
+
+async function processStartSignature(pid: number): Promise<string | undefined> {
+  if (process.platform === 'linux') {
+    try {
+      const raw = await fs.readFile(`/proc/${pid}/stat`, 'utf8');
+      const endOfCommand = raw.lastIndexOf(')');
+      if (endOfCommand < 0) return undefined;
+      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
+    } catch { return undefined; }
+  }
+  return undefined;
 }
 
 function processAlive(pid: number): boolean {

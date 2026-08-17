@@ -287,6 +287,39 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
+  it('reassembles status responses and events larger than one IPC frame', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-owner-large-ipc-'));
+    process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
+    const root = path.join(temporary, 'mirror');
+    await fs.mkdir(root, { recursive: true });
+    const owner = new SyncOwnerCoordinator();
+    const client = new SyncOwnerCoordinator();
+    const large = { items: 'x'.repeat(2 * 1024 * 1024), count: 2 * 1024 * 1024 };
+    try {
+      await owner.claim(root, async command => {
+        if (command === 'status') return large;
+        if (command === 'oversized-status') return { items: 'y'.repeat(33 * 1024 * 1024) };
+        return undefined;
+      });
+      await client.claim(root, async () => undefined);
+      await expect(client.request('status')).resolves.toEqual(large);
+      await expect(client.request('oversized-status')).rejects.toThrow(/message exceeded its limit/);
+      const received = new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timed out waiting for large IPC event.')), 3_000);
+        void client.subscribe(event => {
+          if (event.event !== 'large-status') return;
+          clearTimeout(timer);
+          resolve(event.data);
+        }).then(() => owner.emit('large-status', large), reject);
+      });
+      await expect(received).resolves.toEqual(large);
+    } finally {
+      await client.release();
+      await owner.release();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it('serializes concurrent IPC commands at the owner boundary', async () => {
     const temporary = await fs.mkdtemp('/tmp/lt-owner-serial-');
     process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
@@ -612,6 +645,46 @@ describe('Remote Overleaf compile output transactions', () => {
       expect(results.every(result => result.pdfPath === path.join(metadataPath(temporary, OUTPUT_DIR), 'main.pdf'))).toBe(true);
       expect(await fs.readFile(path.join(metadataPath(temporary, OUTPUT_DIR), 'main.pdf'), 'utf8')).toMatch(/^\/compile-\d+\/main\.pdf$/);
       expect((await fs.readdir(metadataPath(temporary))).filter(name => /^output\.(?:lock|staging|backup)/.test(name))).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers aged invalid locks, cleans crash artifacts, and times out live owners', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-compile-lock-recovery-'));
+    await writeManifest(temporary, manifest());
+    const outputRoot = metadataPath(temporary, OUTPUT_DIR);
+    const lock = `${outputRoot}.lock`;
+    const client = {
+      compile: async () => ({ status: 'success' as const, compileGroup: 'compile-recovery', outputFiles: [] })
+    };
+    try {
+      await fs.mkdir(lock, { recursive: true });
+      await fs.writeFile(path.join(lock, 'owner.json'), '{"pid":');
+      const old = new Date(Date.now() - 10_000);
+      await fs.utimes(lock, old, old);
+      await fs.mkdir(path.join(metadataPath(temporary), 'output.staging-crashed'), { recursive: true });
+      await fs.mkdir(path.join(metadataPath(temporary), 'output.backup-crashed'), { recursive: true });
+      await expect(compileRemoteProject(temporary, client as never, undefined, {
+        lockWaitMs: 500,
+        lockMissingOwnerGraceMs: 1
+      })).resolves.toMatchObject({ files: [] });
+      await expect(fs.stat(lock)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(path.join(metadataPath(temporary), 'output.staging-crashed'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(path.join(metadataPath(temporary), 'output.backup-crashed'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+      await fs.mkdir(lock, { recursive: true });
+      await fs.writeFile(path.join(lock, 'owner.json'), JSON.stringify({
+        pid: process.pid, startedAt: Date.now(), processStart: 'pid-reuse-test'
+      }));
+      await expect(compileRemoteProject(temporary, client as never, undefined, { lockWaitMs: 500 })).resolves.toMatchObject({ files: [] });
+
+      await fs.mkdir(lock, { recursive: true });
+      await fs.writeFile(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
+      await expect(compileRemoteProject(temporary, client as never, undefined, {
+        lockWaitMs: 40,
+        lockMissingOwnerGraceMs: 5_000
+      })).rejects.toThrow(/Timed out waiting for the Overleaf compile lock/);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -1231,6 +1304,39 @@ describe('P1 resource and persistence regressions', () => {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   }, 15_000);
+
+  it('aborts stalled response bodies on timeout and external cancellation', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-http-body-timeout-'));
+    const server = http.createServer((request, response) => {
+      if (request.url?.includes('stalled')) {
+        response.writeHead(200, { 'Content-Length': '5' });
+        setTimeout(() => response.end('stale'), 500);
+        return;
+      }
+      response.writeHead(200, { 'Content-Length': '5' });
+      setTimeout(() => response.end('later'), 500);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('HTTP test server did not expose a TCP address.');
+      const client = new OverleafClient(`http://127.0.0.1:${address.port}/`, { csrfToken: 'csrf', cookies: 'sid=test' }, 0.05);
+      const timeoutTarget = path.join(temporary, 'timeout.bin');
+      await expect(client.downloadProjectFileToPath('project', 'stalled', timeoutTarget)).rejects.toThrow();
+      await expect(fs.stat(timeoutTarget)).rejects.toMatchObject({ code: 'ENOENT' });
+
+      const controller = new AbortController();
+      const cancelTarget = path.join(temporary, 'cancel.bin');
+      const pending = client.downloadProjectFileToPath('project', 'cancel', cancelTarget, { signal: controller.signal });
+      setTimeout(() => controller.abort(new Error('cancelled by test')), 30);
+      await expect(pending).rejects.toThrow();
+      await expect(fs.stat(cancelTarget)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  }, 10_000);
 
   it('reserves actual response sizes and never exceeds the dynamic byte budget', async () => {
     const sizes = [6, 5, 4, 3].map(value => value * 1024 * 1024);

@@ -11,6 +11,8 @@ import { formatUnknownError } from './util';
 export const SYNC_IPC_VERSION = 1;
 const MAX_IPC_FRAME_BYTES = 1024 * 1024;
 const MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
+const MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
+const IPC_CHUNK_BYTES = 512 * 1024;
 
 export interface OwnerRequest {
   version: 1;
@@ -45,6 +47,15 @@ interface OwnerMetadata {
   processStart?: string;
 }
 
+interface IpcChunk {
+  version: 1;
+  kind: 'chunk';
+  id: string;
+  index: number;
+  total: number;
+  payload: string;
+}
+
 const execFileAsync = promisify(execFile);
 
 export type OwnerHandler = (command: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -66,6 +77,7 @@ export class SyncOwnerCoordinator {
   private subscriberSockets = new Set<net.Socket>();
   private eventSockets = new Set<net.Socket>();
   private readonly events = new EventEmitter();
+  private readonly writeQueues = new WeakMap<net.Socket, Promise<void>>();
   private commandQueue: Promise<unknown> = Promise.resolve();
   private releasing = false;
 
@@ -159,9 +171,19 @@ export class SyncOwnerCoordinator {
   emit(event: string, data?: unknown): void {
     if (!this.root) return;
     const message: OwnerEvent = { version: 1, event, root: this.root, data };
-    const line = `${JSON.stringify(message)}\n`;
     for (const socket of this.eventSockets) {
-      if (!socket.destroyed && !socket.writableEnded) writeBounded(socket, line);
+      if (!socket.destroyed && !socket.writableEnded) {
+        void this.enqueueMessage(socket, message).catch(error => {
+          if (!socket.destroyed && !socket.writableEnded) {
+            void this.enqueueMessage(socket, {
+              version: 1,
+              event: 'error',
+              root: this.root,
+              data: { code: 'message_too_large', message: formatUnknownError(error) }
+            }).catch(() => undefined);
+          }
+        });
+      }
     }
     this.events.emit('event', message);
   }
@@ -212,14 +234,14 @@ export class SyncOwnerCoordinator {
         onEvent(value);
       });
     });
-    writeBounded(socket, `${JSON.stringify({
-      version: 1,
-      id: crypto.randomUUID(),
-      command: 'subscribe',
-      root: this.root,
-      args: {}
-    } satisfies OwnerRequest)}\n`);
     try {
+      await this.enqueueMessage(socket, {
+        version: 1,
+        id: crypto.randomUUID(),
+        command: 'subscribe',
+        root: this.root,
+        args: {}
+      } satisfies OwnerRequest);
       await subscribed;
       return socket;
     } catch (error) {
@@ -232,6 +254,7 @@ export class SyncOwnerCoordinator {
   async release(): Promise<void> {
     this.releasing = true;
     await this.commandQueue.catch(() => undefined);
+    await Promise.all([...this.clientSockets].map(socket => this.writeQueues.get(socket)?.catch(() => undefined)));
     for (const socket of this.subscriberSockets) socket.destroy();
     this.subscriberSockets.clear();
     for (const socket of this.clientSockets) socket.destroy();
@@ -264,35 +287,42 @@ export class SyncOwnerCoordinator {
       this.eventSockets.delete(socket);
     });
     parseJsonLines(socket, value => {
-      void this.handleSocketRequest(socket, value);
+      void this.handleSocketRequest(socket, value).catch(() => undefined);
     });
   }
 
   private async handleSocketRequest(socket: net.Socket, value: unknown): Promise<void> {
     if (!isOwnerRequest(value) || !this.root || path.resolve(value.root) !== path.resolve(this.root)) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(String((value as { id?: unknown })?.id ?? ''), 'invalid_request', 'Invalid IPC request.'))}\n`);
+      await this.enqueueMessage(socket, errorResponse(String((value as { id?: unknown })?.id ?? ''), 'invalid_request', 'Invalid IPC request.'));
       return;
     }
     if (value.command === 'subscribe') {
       this.eventSockets.add(socket);
-      writeBounded(socket, `${JSON.stringify({ version: 1, event: 'subscribed', root: this.root } satisfies OwnerEvent)}\n`);
+      await this.enqueueMessage(socket, { version: 1, event: 'subscribed', root: this.root } satisfies OwnerEvent);
       return;
     }
     if (this.releasing) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, 'owner_releasing', 'Sync owner is shutting down.'))}\n`);
+      await this.enqueueMessage(socket, errorResponse(value.id, 'owner_releasing', 'Sync owner is shutting down.'));
       return;
     }
     try {
       const result = await this.runCommand(() => this.handler?.(value.command, value.args));
-      writeBounded(socket, `${JSON.stringify({ version: 1, id: value.id, ok: true, result } satisfies OwnerResponse)}\n`);
+      await this.enqueueMessage(socket, { version: 1, id: value.id, ok: true, result } satisfies OwnerResponse);
     } catch (error) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, 'owner_command_failed', formatUnknownError(error)))}\n`);
+      await this.enqueueMessage(socket, errorResponse(value.id, 'owner_command_failed', formatUnknownError(error)));
     }
   }
 
   private runCommand<T>(operation: () => Promise<T> | undefined): Promise<T | undefined> {
     const current = this.commandQueue.catch(() => undefined).then(operation);
     this.commandQueue = current.then(() => undefined, () => undefined);
+    return current;
+  }
+
+  private enqueueMessage(socket: net.Socket, value: unknown): Promise<void> {
+    const previous = this.writeQueues.get(socket) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(() => writeMessageBounded(socket, value));
+    this.writeQueues.set(socket, current);
     return current;
   }
 
@@ -357,7 +387,7 @@ function sendRequest(socketPath: string, request: OwnerRequest, timeoutMs: numbe
       error ? reject(error) : resolve(result);
     };
     socket.once('error', error => finish(error));
-    socket.once('connect', () => writeBounded(socket, `${JSON.stringify(request)}\n`));
+    socket.once('connect', () => void writeMessageBounded(socket, request).catch(error => finish(error)));
     parseJsonLines(socket, value => {
       const response = value as Partial<OwnerResponse>;
       if (response.id !== request.id || typeof response.ok !== 'boolean') return;
@@ -369,12 +399,40 @@ function sendRequest(socketPath: string, request: OwnerRequest, timeoutMs: numbe
 
 function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): void {
   let pending = '';
-  socket.on('data', chunk => {
-    pending += chunk.toString('utf8');
-    if (Buffer.byteLength(pending, 'utf8') > MAX_IPC_BUFFER_BYTES) {
-      socket.destroy(new Error('Sync IPC receive buffer exceeded its limit.'));
+  const chunks = new Map<string, { total: number; parts: Array<Buffer | undefined>; received: number }>();
+  const accept = (value: unknown): void => {
+    if (!isIpcChunk(value)) {
+      onValue(value);
       return;
     }
+    if (value.total <= 0 || value.total > Math.ceil(MAX_IPC_MESSAGE_BYTES / IPC_CHUNK_BYTES)
+      || value.index < 0 || value.index >= value.total) {
+      socket.destroy(new Error('Sync IPC chunk metadata is invalid.'));
+      return;
+    }
+    const payload = Buffer.from(value.payload, 'base64');
+    if (payload.length > IPC_CHUNK_BYTES || !value.payload || payload.toString('base64') !== value.payload) {
+      socket.destroy(new Error('Sync IPC chunk payload is invalid.'));
+      return;
+    }
+    let entry = chunks.get(value.id);
+    if (!entry) {
+      entry = { total: value.total, parts: Array.from({ length: value.total }), received: 0 };
+      chunks.set(value.id, entry);
+    }
+    if (entry.total !== value.total || entry.parts[value.index]) {
+      socket.destroy(new Error('Sync IPC chunk sequence is invalid.'));
+      return;
+    }
+    entry.parts[value.index] = payload;
+    entry.received += 1;
+    if (entry.received !== entry.total) return;
+    chunks.delete(value.id);
+    try { onValue(JSON.parse(Buffer.concat(entry.parts as Buffer[]).toString('utf8'))); }
+    catch { socket.destroy(new Error('Invalid JSON received over sync IPC.')); }
+  };
+  socket.on('data', chunk => {
+    pending += chunk.toString('utf8');
     while (pending.includes('\n')) {
       const index = pending.indexOf('\n');
       const line = pending.slice(0, index);
@@ -384,17 +442,78 @@ function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): 
         return;
       }
       if (!line.trim()) continue;
-      try { onValue(JSON.parse(line)); } catch { socket.destroy(new Error('Invalid JSON received over sync IPC.')); }
+      try { accept(JSON.parse(line)); } catch { socket.destroy(new Error('Invalid JSON received over sync IPC.')); }
+    }
+    if (Buffer.byteLength(pending, 'utf8') > MAX_IPC_BUFFER_BYTES) {
+      socket.destroy(new Error('Sync IPC receive buffer exceeded its limit.'));
     }
   });
 }
 
-function writeBounded(socket: net.Socket, line: string): void {
+function writeMessageBounded(socket: net.Socket, value: unknown): Promise<void> {
+  const encoded = Buffer.from(JSON.stringify(value), 'utf8');
+  if (encoded.length <= MAX_IPC_FRAME_BYTES) return writeFrame(socket, `${encoded.toString('utf8')}\n`);
+  if (encoded.length > MAX_IPC_MESSAGE_BYTES) {
+    return Promise.reject(new Error('Sync IPC message exceeded its limit.'));
+  }
+  const candidateId = (value as { id?: unknown })?.id;
+  const id = typeof candidateId === 'string' ? candidateId : crypto.randomUUID();
+  const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
+  return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES))
+    .reduce(
+      (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({
+        version: 1, kind: 'chunk', id, index, total, payload: payload.toString('base64')
+      } satisfies IpcChunk)}\n`)),
+      Promise.resolve()
+    );
+}
+
+function writeFrame(socket: net.Socket, line: string): Promise<void> {
   if (Buffer.byteLength(line, 'utf8') > MAX_IPC_FRAME_BYTES || socket.writableLength > MAX_IPC_BUFFER_BYTES) {
     socket.destroy(new Error('Sync IPC send queue exceeded its limit.'));
-    return;
+    return Promise.reject(new Error('Sync IPC send queue exceeded its limit.'));
   }
-  socket.write(line, error => { if (error) socket.destroy(); });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      socket.off('drain', onDrain);
+      socket.off('error', onError);
+      socket.off('close', onClose);
+      error ? reject(error) : resolve();
+    };
+    const onDrain = (): void => finish();
+    const onError = (error: Error): void => finish(error);
+    const onClose = (): void => finish(new Error('Sync IPC socket closed while writing.'));
+    socket.once('error', onError);
+    socket.once('close', onClose);
+    let accepted = false;
+    if (socket.destroyed || socket.writableEnded) {
+      finish(new Error('Sync IPC socket is not writable.'));
+      return;
+    }
+    try {
+      accepted = socket.write(line, error => {
+        if (error) finish(error);
+        else if (accepted) finish();
+      });
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    if (!accepted) socket.once('drain', onDrain);
+  });
+}
+
+function isIpcChunk(value: unknown): value is IpcChunk {
+  return Boolean(value) && typeof value === 'object'
+    && (value as IpcChunk).version === 1
+    && (value as IpcChunk).kind === 'chunk'
+    && typeof (value as IpcChunk).id === 'string'
+    && Number.isInteger((value as IpcChunk).index)
+    && Number.isInteger((value as IpcChunk).total)
+    && typeof (value as IpcChunk).payload === 'string';
 }
 
 function onceConnected(socket: net.Socket, timeoutMs: number): Promise<void> {

@@ -404,11 +404,37 @@ export class OverleafClient {
       externalSignal?.addEventListener('abort', abort, { once: true });
     }
     const timer = setTimeout(() => controller.abort(new Error(`HTTP request timed out after ${timeoutMs / 1000} seconds.`)), timeoutMs);
-    try {
-      return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
       clearTimeout(timer);
       externalSignal?.removeEventListener('abort', abort);
+    };
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const body = response.body;
+      body?.once('end', finish);
+      body?.once('error', finish);
+      body?.once('close', finish);
+      if (!body) finish();
+
+      const timedResponse = response as Response & {
+        text: () => Promise<string>;
+        buffer: () => Promise<Buffer>;
+      };
+      const text = timedResponse.text.bind(response);
+      timedResponse.text = async () => {
+        try { return await text(); } finally { finish(); }
+      };
+      const buffer = timedResponse.buffer.bind(response);
+      timedResponse.buffer = async () => {
+        try { return await buffer(); } finally { finish(); }
+      };
+      return timedResponse;
+    } catch (error) {
+      finish();
+      throw error;
     }
   }
 
@@ -422,6 +448,7 @@ export class OverleafClient {
         Connection: 'keep-alive'
       }
     });
+    await res.text();
     const setCookie = res.headers.raw()['set-cookie']?.[0]?.split(';')[0];
     if (setCookie && !identity.cookies.includes(setCookie)) {
       return {
@@ -500,6 +527,7 @@ export class OverleafClient {
 
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get('location');
+        res.body?.resume();
         if (!location || redirects >= 5) {
           throw new OverleafHttpError(`Overleaf download redirect failed for ${path.basename(currentUrl)}.`, res.status);
         }

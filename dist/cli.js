@@ -21612,13 +21612,15 @@ function findExecutable(command) {
 var crypto4 = __toESM(require("crypto"));
 var fs10 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
-async function compileRemoteProject(root, client, rootDocOverride) {
+var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
+var DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5e3;
+async function compileRemoteProject(root, client, rootDocOverride, options = {}) {
   const manifest = await readManifest(root);
   const rootDocPath = rootDocOverride ?? manifest.rootDocPath ?? await detectRootDoc(root);
   const response = await client.compile(manifest.projectId, rootDocPath ?? null);
   if (response.status !== "success") throw new Error(`Overleaf compile failed with status: ${response.status}`);
   const outputRoot = metadataPath(root, OUTPUT_DIR);
-  const releaseCompileLock = await acquireCompileLock(outputRoot);
+  const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
     await cleanupInterruptedCompileArtifacts(root);
     const token = `${process.pid}-${Date.now()}-${crypto4.randomBytes(6).toString("hex")}`;
@@ -21651,18 +21653,25 @@ async function compileRemoteProject(root, client, rootDocOverride) {
   }
 }
 async function cleanupInterruptedCompileArtifacts(root) {
-  const dir = metadataPath(root, ".overleaf-codex");
+  const dir = metadataPath(root);
   const entries = await fs10.readdir(dir, { withFileTypes: true }).catch(() => []);
   await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).map((entry) => fs10.rm(path12.join(dir, entry.name), { recursive: true, force: true })));
 }
-async function acquireCompileLock(outputRoot) {
+async function acquireCompileLock(outputRoot, options = {}) {
   const lock = `${outputRoot}.lock`;
   const owner = path12.join(lock, "owner.json");
+  const deadline = Date.now() + Math.max(1, options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS);
+  const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
   for (; ; ) {
     try {
       await fs10.mkdir(lock, { recursive: false });
       const nonce = crypto4.randomBytes(8).toString("hex");
-      await fs10.writeFile(owner, JSON.stringify({ pid: process.pid, startedAt: Date.now(), nonce }));
+      await fs10.writeFile(owner, JSON.stringify({
+        pid: process.pid,
+        startedAt: Date.now(),
+        processStart: await processStartSignature2(process.pid),
+        nonce
+      }));
       return async () => {
         const current = await fs10.readFile(owner, "utf8").catch(() => void 0);
         if (current?.includes(nonce)) await fs10.rm(lock, { recursive: true, force: true });
@@ -21672,18 +21681,45 @@ async function acquireCompileLock(outputRoot) {
       const raw = await fs10.readFile(owner, "utf8").catch(() => void 0);
       let stale = false;
       try {
-        const value = JSON.parse(raw ?? "{}");
-        stale = typeof value.pid === "number" && !processAlive2(value.pid);
+        const value = JSON.parse(raw ?? "");
+        if (typeof value.pid !== "number" || typeof value.startedAt !== "number") {
+          stale = await lockAge(lock) >= missingOwnerGraceMs;
+        } else if (!processAlive2(value.pid)) {
+          stale = true;
+        } else if (value.processStart) {
+          const currentStart = await processStartSignature2(value.pid);
+          stale = Boolean(currentStart && currentStart !== value.processStart);
+        }
       } catch {
-        stale = true;
+        stale = await lockAge(lock) >= missingOwnerGraceMs;
       }
       if (stale) {
         await fs10.rm(lock, { recursive: true, force: true });
         continue;
       }
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
+      }
       await new Promise((resolve7) => setTimeout(resolve7, 50));
     }
   }
+}
+async function lockAge(lock) {
+  const stat13 = await fs10.stat(lock).catch(() => void 0);
+  return stat13 ? Math.max(0, Date.now() - stat13.mtimeMs) : Number.POSITIVE_INFINITY;
+}
+async function processStartSignature2(pid) {
+  if (process.platform === "linux") {
+    try {
+      const raw = await fs10.readFile(`/proc/${pid}/stat`, "utf8");
+      const endOfCommand = raw.lastIndexOf(")");
+      if (endOfCommand < 0) return void 0;
+      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
+    } catch {
+      return void 0;
+    }
+  }
+  return void 0;
 }
 function processAlive2(pid) {
   try {
@@ -22350,11 +22386,41 @@ var OverleafClient = class {
       externalSignal?.addEventListener("abort", abort, { once: true });
     }
     const timer = setTimeout(() => controller.abort(new Error(`HTTP request timed out after ${timeoutMs / 1e3} seconds.`)), timeoutMs);
-    try {
-      return await (0, import_node_fetch.default)(url, { ...init, signal: controller.signal });
-    } finally {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
       clearTimeout(timer);
       externalSignal?.removeEventListener("abort", abort);
+    };
+    try {
+      const response = await (0, import_node_fetch.default)(url, { ...init, signal: controller.signal });
+      const body = response.body;
+      body?.once("end", finish);
+      body?.once("error", finish);
+      body?.once("close", finish);
+      if (!body) finish();
+      const timedResponse = response;
+      const text = timedResponse.text.bind(response);
+      timedResponse.text = async () => {
+        try {
+          return await text();
+        } finally {
+          finish();
+        }
+      };
+      const buffer = timedResponse.buffer.bind(response);
+      timedResponse.buffer = async () => {
+        try {
+          return await buffer();
+        } finally {
+          finish();
+        }
+      };
+      return timedResponse;
+    } catch (error) {
+      finish();
+      throw error;
     }
   }
   async refreshSocketCookie(identity) {
@@ -22367,6 +22433,7 @@ var OverleafClient = class {
         Connection: "keep-alive"
       }
     });
+    await res.text();
     const setCookie = res.headers.raw()["set-cookie"]?.[0]?.split(";")[0];
     if (setCookie && !identity.cookies.includes(setCookie)) {
       return {
@@ -22435,6 +22502,7 @@ var OverleafClient = class {
       }, this.timeouts.httpMs, signal);
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get("location");
+        res.body?.resume();
         if (!location || redirects >= 5) {
           throw new OverleafHttpError(`Overleaf download redirect failed for ${path14.basename(currentUrl)}.`, res.status);
         }
@@ -23145,6 +23213,8 @@ var import_child_process3 = require("child_process");
 var import_util15 = require("util");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
+var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
+var IPC_CHUNK_BYTES = 512 * 1024;
 var execFileAsync2 = (0, import_util15.promisify)(import_child_process3.execFile);
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
@@ -23159,6 +23229,7 @@ var SyncOwnerCoordinator = class {
   subscriberSockets = /* @__PURE__ */ new Set();
   eventSockets = /* @__PURE__ */ new Set();
   events = new import_events3.EventEmitter();
+  writeQueues = /* @__PURE__ */ new WeakMap();
   commandQueue = Promise.resolve();
   releasing = false;
   get isOwner() {
@@ -23198,7 +23269,7 @@ var SyncOwnerCoordinator = class {
       socketPath: paths.socketPath,
       nonce: crypto7.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature2(process.pid)
+      processStart: await processStartSignature3(process.pid)
     };
     try {
       await fs13.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
@@ -23245,10 +23316,19 @@ var SyncOwnerCoordinator = class {
   emit(event, data) {
     if (!this.root) return;
     const message = { version: 1, event, root: this.root, data };
-    const line = `${JSON.stringify(message)}
-`;
     for (const socket of this.eventSockets) {
-      if (!socket.destroyed && !socket.writableEnded) writeBounded(socket, line);
+      if (!socket.destroyed && !socket.writableEnded) {
+        void this.enqueueMessage(socket, message).catch((error) => {
+          if (!socket.destroyed && !socket.writableEnded) {
+            void this.enqueueMessage(socket, {
+              version: 1,
+              event: "error",
+              root: this.root,
+              data: { code: "message_too_large", message: formatUnknownError(error) }
+            }).catch(() => void 0);
+          }
+        });
+      }
     }
     this.events.emit("event", message);
   }
@@ -23294,15 +23374,14 @@ var SyncOwnerCoordinator = class {
         onEvent(value);
       });
     });
-    writeBounded(socket, `${JSON.stringify({
-      version: 1,
-      id: crypto7.randomUUID(),
-      command: "subscribe",
-      root: this.root,
-      args: {}
-    })}
-`);
     try {
+      await this.enqueueMessage(socket, {
+        version: 1,
+        id: crypto7.randomUUID(),
+        command: "subscribe",
+        root: this.root,
+        args: {}
+      });
       await subscribed;
       return socket;
     } catch (error) {
@@ -23314,6 +23393,7 @@ var SyncOwnerCoordinator = class {
   async release() {
     this.releasing = true;
     await this.commandQueue.catch(() => void 0);
+    await Promise.all([...this.clientSockets].map((socket) => this.writeQueues.get(socket)?.catch(() => void 0)));
     for (const socket of this.subscriberSockets) socket.destroy();
     this.subscriberSockets.clear();
     for (const socket of this.clientSockets) socket.destroy();
@@ -23345,38 +23425,39 @@ var SyncOwnerCoordinator = class {
       this.eventSockets.delete(socket);
     });
     parseJsonLines(socket, (value) => {
-      void this.handleSocketRequest(socket, value);
+      void this.handleSocketRequest(socket, value).catch(() => void 0);
     });
   }
   async handleSocketRequest(socket, value) {
     if (!isOwnerRequest(value) || !this.root || path15.resolve(value.root) !== path15.resolve(this.root)) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."))}
-`);
+      await this.enqueueMessage(socket, errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."));
       return;
     }
     if (value.command === "subscribe") {
       this.eventSockets.add(socket);
-      writeBounded(socket, `${JSON.stringify({ version: 1, event: "subscribed", root: this.root })}
-`);
+      await this.enqueueMessage(socket, { version: 1, event: "subscribed", root: this.root });
       return;
     }
     if (this.releasing) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."))}
-`);
+      await this.enqueueMessage(socket, errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."));
       return;
     }
     try {
       const result = await this.runCommand(() => this.handler?.(value.command, value.args));
-      writeBounded(socket, `${JSON.stringify({ version: 1, id: value.id, ok: true, result })}
-`);
+      await this.enqueueMessage(socket, { version: 1, id: value.id, ok: true, result });
     } catch (error) {
-      writeBounded(socket, `${JSON.stringify(errorResponse(value.id, "owner_command_failed", formatUnknownError(error)))}
-`);
+      await this.enqueueMessage(socket, errorResponse(value.id, "owner_command_failed", formatUnknownError(error)));
     }
   }
   runCommand(operation) {
     const current = this.commandQueue.catch(() => void 0).then(operation);
     this.commandQueue = current.then(() => void 0, () => void 0);
+    return current;
+  }
+  enqueueMessage(socket, value) {
+    const previous = this.writeQueues.get(socket) ?? Promise.resolve();
+    const current = previous.catch(() => void 0).then(() => writeMessageBounded(socket, value));
+    this.writeQueues.set(socket, current);
     return current;
   }
   async lockIsStale(paths) {
@@ -23386,7 +23467,7 @@ var SyncOwnerCoordinator = class {
       return Boolean(stat13 && Date.now() - stat13.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
     }
     if (processAlive3(metadata.pid)) {
-      const currentStart = await processStartSignature2(metadata.pid);
+      const currentStart = await processStartSignature3(metadata.pid);
       if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
     }
     return true;
@@ -23436,8 +23517,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       error ? reject(error) : resolve7(result);
     };
     socket.once("error", (error) => finish(error));
-    socket.once("connect", () => writeBounded(socket, `${JSON.stringify(request)}
-`));
+    socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
     parseJsonLines(socket, (value) => {
       const response = value;
       if (response.id !== request.id || typeof response.ok !== "boolean") return;
@@ -23448,12 +23528,42 @@ function sendRequest(socketPath, request, timeoutMs) {
 }
 function parseJsonLines(socket, onValue) {
   let pending = "";
-  socket.on("data", (chunk) => {
-    pending += chunk.toString("utf8");
-    if (Buffer.byteLength(pending, "utf8") > MAX_IPC_BUFFER_BYTES) {
-      socket.destroy(new Error("Sync IPC receive buffer exceeded its limit."));
+  const chunks = /* @__PURE__ */ new Map();
+  const accept = (value) => {
+    if (!isIpcChunk(value)) {
+      onValue(value);
       return;
     }
+    if (value.total <= 0 || value.total > Math.ceil(MAX_IPC_MESSAGE_BYTES / IPC_CHUNK_BYTES) || value.index < 0 || value.index >= value.total) {
+      socket.destroy(new Error("Sync IPC chunk metadata is invalid."));
+      return;
+    }
+    const payload = Buffer.from(value.payload, "base64");
+    if (payload.length > IPC_CHUNK_BYTES || !value.payload || payload.toString("base64") !== value.payload) {
+      socket.destroy(new Error("Sync IPC chunk payload is invalid."));
+      return;
+    }
+    let entry = chunks.get(value.id);
+    if (!entry) {
+      entry = { total: value.total, parts: Array.from({ length: value.total }), received: 0 };
+      chunks.set(value.id, entry);
+    }
+    if (entry.total !== value.total || entry.parts[value.index]) {
+      socket.destroy(new Error("Sync IPC chunk sequence is invalid."));
+      return;
+    }
+    entry.parts[value.index] = payload;
+    entry.received += 1;
+    if (entry.received !== entry.total) return;
+    chunks.delete(value.id);
+    try {
+      onValue(JSON.parse(Buffer.concat(entry.parts).toString("utf8")));
+    } catch {
+      socket.destroy(new Error("Invalid JSON received over sync IPC."));
+    }
+  };
+  socket.on("data", (chunk) => {
+    pending += chunk.toString("utf8");
     while (pending.includes("\n")) {
       const index = pending.indexOf("\n");
       const line = pending.slice(0, index);
@@ -23464,21 +23574,78 @@ function parseJsonLines(socket, onValue) {
       }
       if (!line.trim()) continue;
       try {
-        onValue(JSON.parse(line));
+        accept(JSON.parse(line));
       } catch {
         socket.destroy(new Error("Invalid JSON received over sync IPC."));
       }
     }
+    if (Buffer.byteLength(pending, "utf8") > MAX_IPC_BUFFER_BYTES) {
+      socket.destroy(new Error("Sync IPC receive buffer exceeded its limit."));
+    }
   });
 }
-function writeBounded(socket, line) {
+function writeMessageBounded(socket, value) {
+  const encoded = Buffer.from(JSON.stringify(value), "utf8");
+  if (encoded.length <= MAX_IPC_FRAME_BYTES) return writeFrame(socket, `${encoded.toString("utf8")}
+`);
+  if (encoded.length > MAX_IPC_MESSAGE_BYTES) {
+    return Promise.reject(new Error("Sync IPC message exceeded its limit."));
+  }
+  const candidateId = value?.id;
+  const id = typeof candidateId === "string" ? candidateId : crypto7.randomUUID();
+  const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
+  return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES)).reduce(
+    (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({
+      version: 1,
+      kind: "chunk",
+      id,
+      index,
+      total,
+      payload: payload.toString("base64")
+    })}
+`)),
+    Promise.resolve()
+  );
+}
+function writeFrame(socket, line) {
   if (Buffer.byteLength(line, "utf8") > MAX_IPC_FRAME_BYTES || socket.writableLength > MAX_IPC_BUFFER_BYTES) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
-    return;
+    return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  socket.write(line, (error) => {
-    if (error) socket.destroy();
+  return new Promise((resolve7, reject) => {
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      socket.off("drain", onDrain);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+      error ? reject(error) : resolve7();
+    };
+    const onDrain = () => finish();
+    const onError = (error) => finish(error);
+    const onClose = () => finish(new Error("Sync IPC socket closed while writing."));
+    socket.once("error", onError);
+    socket.once("close", onClose);
+    let accepted = false;
+    if (socket.destroyed || socket.writableEnded) {
+      finish(new Error("Sync IPC socket is not writable."));
+      return;
+    }
+    try {
+      accepted = socket.write(line, (error) => {
+        if (error) finish(error);
+        else if (accepted) finish();
+      });
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    if (!accepted) socket.once("drain", onDrain);
   });
+}
+function isIpcChunk(value) {
+  return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
   return new Promise((resolve7, reject) => {
@@ -23552,7 +23719,7 @@ function processAlive3(pid) {
     return false;
   }
 }
-async function processStartSignature2(pid) {
+async function processStartSignature3(pid) {
   try {
     const result = await execFileAsync2("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
     return String(result.stdout ?? "").trim() || void 0;
