@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "An integrated LaTeX workspace for themes, programmable hsnips, local and Overleaf builds, realtime sync, mirrors, and conflict resolution.",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "publisher": "yiqiyang33",
   "icon": "assets/icon.png",
   "license": "MIT",

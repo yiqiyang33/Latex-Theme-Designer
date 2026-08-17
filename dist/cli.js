@@ -18801,19 +18801,26 @@ var DEFAULT_IGNORE_PATTERNS = [
   ".overleaf-codex/**",
   ".vscode/**",
   "**/.vscode/**",
+  ".git",
+  ".git/**",
+  "**/.git",
+  "**/.git/**",
   ".gitignore",
   "**/.gitignore",
   ".latexmkrc",
   "**/.latexmkrc",
   LOCAL_IGNORE_NAME,
   "AGENTS.md",
-  "**/.git/**",
   "**/.DS_Store"
 ];
 var TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   ".overleaf-codex/**",
   ".vscode/**",
   "**/.vscode/**",
+  ".git",
+  ".git/**",
+  "**/.git",
+  "**/.git/**",
   ".latexmkrc",
   "**/.latexmkrc",
   "AGENTS.md",
@@ -19262,7 +19269,7 @@ function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPa
   const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath)) : void 0;
   const items = [];
   for (const folderPath of paths) {
-    if (!folderPath || requested && !requested.some(
+    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !requested.some(
       (item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`)
     )) continue;
     const localFolder = manifest.folders[folderPath];

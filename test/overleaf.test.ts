@@ -128,6 +128,12 @@ describe("Overleaf integration primitives", () => {
       files: {}, folders, ignore: [], lastSyncAt: "now"
     });
     expect(classifyFolderStructure(make({ "": { path: "", entityId: "a" } }), make({ "": { path: "", entityId: "b" } })).globalBlockReason).toMatch(/root folder/);
+
+    const gitFolder = {
+      "": { path: "", entityId: "root" },
+      ".git": { path: ".git", entityId: "remote-git", parentFolderId: "root" }
+    };
+    expect(classifyFolderStructure(make(gitFolder), make(gitFolder), undefined, []).items).toEqual([]);
   });
 
   it("repairs corroborated folder renames and missing folder metadata", () => {

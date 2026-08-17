@@ -138,7 +138,7 @@ export function classifyFolderStructure(
   const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath)) : undefined;
   const items: SyncStatusItem[] = [];
   for (const folderPath of paths) {
-    if (!folderPath || requested && !requested.some(item =>
+    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !requested.some(item =>
       item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`)
     )) continue;
     const localFolder = manifest.folders[folderPath];
