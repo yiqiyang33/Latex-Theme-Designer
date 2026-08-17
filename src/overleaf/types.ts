@@ -27,6 +27,7 @@ export interface OverleafFileRef {
   name: string;
   hash?: string;
   rev?: number;
+  size?: number;
   linkedFileData?: unknown;
 }
 
@@ -59,6 +60,7 @@ export interface ManifestFile {
   baseHash?: string;
   remoteBlobHash?: string;
   remoteRevision?: number;
+  remoteSize?: number;
   localSize?: number;
   localMtimeMs?: number;
   localCtimeMs?: number;
@@ -210,6 +212,12 @@ export interface SyncStatusReport {
 
 export interface UploadFileResult extends OverleafFileRef {
   entityType?: 'file' | 'doc';
+}
+
+export interface FileTransferResult {
+  size: number;
+  sha1: string;
+  gitBlobHash: string;
 }
 
 export interface NetworkTimeouts {

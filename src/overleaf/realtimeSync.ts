@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import { OverleafClient, OverleafSocketSession } from './overleafClient';
 import { BinaryTransaction, BinaryTransactionStore } from './binaryTransactions';
@@ -52,9 +53,10 @@ import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
-import { mapWithByteConcurrency, mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
+import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { planSafeSyncActions } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import {
@@ -96,7 +98,9 @@ type LocalChangeKind = 'create' | 'change' | 'delete';
 
 interface RemoteSnapshot {
   manifest: OverleafCodexManifest;
-  contents: Map<string, Uint8Array | string>;
+  contents: Map<string, string>;
+  hashes: Map<string, string>;
+  blobHashes: Map<string, string>;
   failures: Map<string, string>;
   reused: Set<string>;
   metrics: {
@@ -392,9 +396,9 @@ export class RealtimeSyncService implements vscode.Disposable {
       if (localResult.reused) localCacheReuseCount += 1;
       if (localResult.cacheChanged) manifestChanged = true;
       const remoteContent = remote.contents.get(relPath);
-      const remoteHash = remoteContent === undefined
+      const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === undefined
         ? remote.reused.has(relPath) ? manifestFile?.sha1 : undefined
-        : sha1(remoteContent);
+        : sha1(remoteContent));
       const remoteReadError = remote.failures.get(relPath);
       if (!manifestFile && !remoteFile && localHash === undefined && !remoteReadError) {
         continue;
@@ -429,16 +433,19 @@ export class RealtimeSyncService implements vscode.Disposable {
       if (item.status === 'synced' && manifestFile && remoteFile) {
         if (manifestFile.version !== remoteFile.version
           || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash
-          || manifestFile.remoteRevision !== remoteFile.remoteRevision) {
+          || manifestFile.remoteRevision !== remoteFile.remoteRevision
+          || manifestFile.remoteSize !== remoteFile.remoteSize) {
           manifestFile.version = remoteFile.version;
           manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
           manifestFile.remoteRevision = remoteFile.remoteRevision;
+          manifestFile.remoteSize = remoteFile.remoteSize;
           manifestChanged = true;
         }
       }
 
       if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== undefined) {
         addOrUpdateFile(manifest, remoteFile, remoteContent);
+        manifest.files[relPath].sha1 = remoteHash;
         manifest.files[relPath].baseHash = baseHash;
         manifestChanged = true;
       }
@@ -575,9 +582,12 @@ export class RealtimeSyncService implements vscode.Disposable {
       throw new Error(`${normalized} is excluded by ${LOCAL_IGNORE_NAME} and cannot be pushed to Overleaf.`);
     }
     await this.saveOpenLocalDocument(normalized);
-    const localContent = await fs.readFile(this.abs(normalized)).catch(() => undefined);
+    const localPath = this.abs(normalized);
+    const localStat = await fs.stat(localPath).catch(() => undefined);
+    const binary = entry ? entry.entityType === 'file' : !isTextLike(normalized);
+    const localContent = localStat && !binary ? await fs.readFile(localPath) : undefined;
 
-    if (localContent === undefined) {
+    if (!localStat) {
       if (!entry) {
         throw new Error(`${normalized} does not exist locally or in the manifest.`);
       }
@@ -622,6 +632,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
 
     if (entry.entityType === 'doc') {
+      if (!localContent) throw new Error(`Could not read local document ${normalized}.`);
       this.log(`Pushing local document ${normalized}.`);
       const state = await this.ensureDocState(normalized);
       state.paused = false;
@@ -629,7 +640,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.syncDocContent(normalized, localContent.toString('utf8'), true);
     } else {
       this.log(`Replacing remote binary file ${normalized}.`);
-      await this.replaceBinaryFile(normalized, localContent, entry, true);
+      await this.replaceBinaryFile(normalized, localPath, await hashFileDigests(localPath), entry, true);
     }
 
     if (refreshStatus) {
@@ -652,24 +663,40 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (remoteFailure) {
       throw new Error(`Could not read ${normalized} from Overleaf: ${remoteFailure}`);
     }
-    if (!remoteFile || remoteContent === undefined) {
+    if (!remoteFile || remoteFile.entityType === 'doc' && remoteContent === undefined) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
 
-    addOrUpdateFile(this.manifest!, remoteFile, remoteContent);
-    this.manifest!.files[normalized].baseHash = remoteFile.entityType === 'doc' && typeof remoteContent === 'string'
-      ? await writeBaseDoc(this.root!, remoteFile.entityId, remoteContent)
-      : sha1(remoteContent);
+    if (remoteFile.entityType === 'file') {
+      const target = this.abs(normalized);
+      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
+      const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, remoteFile.entityId, staging);
+      await installStagedFile(staging, target);
+      addOrUpdateFile(this.manifest!, { ...remoteFile, remoteSize: result.size });
+      this.manifest!.files[normalized].sha1 = result.sha1;
+      this.manifest!.files[normalized].baseHash = result.sha1;
+      this.bypassHashes.set(normalized, result.sha1);
+      await this.persistManifest();
+      this.syncGate.clearPath(normalized);
+      if (refreshStatus) {
+        await this.checkTargeted([normalized], 'post-pull');
+        vscode.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+      }
+      return;
+    }
+
+    addOrUpdateFile(this.manifest!, remoteFile, remoteContent!);
+    this.manifest!.files[normalized].baseHash = await writeBaseDoc(this.root!, remoteFile.entityId, remoteContent!);
     await this.writeLocalFile(
       normalized,
-      typeof remoteContent === 'string' ? Buffer.from(remoteContent, 'utf8') : remoteContent,
+      Buffer.from(remoteContent!, 'utf8'),
       true
     );
-    if (remoteFile.entityType === 'doc' && typeof remoteContent === 'string') {
+    if (remoteFile.entityType === 'doc') {
       const state = this.docStates.get(normalized) ?? await this.joinDocState(normalized, remoteFile.entityId);
       state.version = remoteFile.version ?? state.version;
-      state.localCache = remoteContent;
-      state.remoteCache = remoteContent;
+      state.localCache = remoteContent!;
+      state.remoteCache = remoteContent!;
       state.paused = false;
     }
     await this.persistManifest();
@@ -689,13 +716,18 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (remoteFailure) {
       throw new Error(`Could not read ${normalized} from Overleaf: ${remoteFailure}`);
     }
-    if (remoteContent === undefined) {
+    const remoteFile = remote.manifest.files[normalized];
+    if (!remoteFile || remoteFile.entityType === 'doc' && remoteContent === undefined) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
     const suffix = isTextLike(normalized) ? path.extname(normalized) || '.tex' : '.remote';
     const diffPath = metadataPath(this.root!, 'conflicts', `${normalized.replace(/[\/\\]/g, '__')}.remote.${Date.now()}${suffix}`);
     await fs.mkdir(path.dirname(diffPath), { recursive: true });
-    await fs.writeFile(diffPath, remoteContent);
+    if (remoteFile.entityType === 'file') {
+      await this.client!.downloadProjectFileToPath(this.manifest!.projectId, remoteFile.entityId, diffPath);
+    } else {
+      await fs.writeFile(diffPath, remoteContent!);
+    }
     await vscode.commands.executeCommand(
       'vscode.diff',
       vscode.Uri.file(diffPath),
@@ -1291,11 +1323,12 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.scheduleLocalChange(relPath, 'create', 650);
       return;
     }
-    const content = await fs.readFile(this.abs(relPath)).catch(() => undefined);
-    if (!content) return;
+    const content = isTextLike(relPath) ? await fs.readFile(this.abs(relPath)).catch(() => undefined) : undefined;
+    const hash = content ? sha1(content) : (await hashFileDigests(this.abs(relPath)).catch(() => undefined))?.sha1;
+    if (!hash) return;
     const detection = this.renameDetector.registerCreate({
       path: relPath,
-      hash: sha1(content),
+      hash,
       entityType: isTextLike(relPath) ? 'doc' : 'file'
     });
     if (detection.kind !== 'none') {
@@ -1374,8 +1407,11 @@ export class RealtimeSyncService implements vscode.Disposable {
           parts.push(`D\0${relative}`);
           await walk(path.join(absDir, entry.name), relative);
         } else if (entry.isFile()) {
-          const content = await fs.readFile(path.join(absDir, entry.name));
-          parts.push(`F\0${relative}\0${isTextLike(relative) ? 'doc' : 'file'}\0${sha1(content)}`);
+          const childPath = path.join(absDir, entry.name);
+          const digest = isTextLike(relative)
+            ? sha1(await fs.readFile(childPath))
+            : (await hashFileDigests(childPath)).sha1;
+          parts.push(`F\0${relative}\0${isTextLike(relative) ? 'doc' : 'file'}\0${digest}`);
         }
       }
     };
@@ -1487,7 +1523,9 @@ export class RealtimeSyncService implements vscode.Disposable {
       manifest.projectName,
       project
     );
-    const contents = new Map<string, Uint8Array | string>();
+    const contents = new Map<string, string>();
+    const hashes = new Map<string, string>();
+    const blobHashes = new Map<string, string>();
     const failures = new Map<string, string>();
     const reused = new Set<string>();
     const metrics = {
@@ -1531,23 +1569,37 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (!client && binaries.length > 0) {
       throw new Error('Overleaf client is not available for binary download.');
     }
-    await mapWithByteConcurrency(binaries, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async file => {
-      try {
-        metrics.binaryGetCount += 1;
-        const bytes = await client!.downloadProjectFile(manifest.projectId, file.entityId, signal);
-        contents.set(file.path, bytes);
-      } catch (error) {
-        const message = formatUnknownError(error);
-        failures.set(file.path, message);
-        this.log(`Could not read remote ${file.path}: ${message}`);
-      } finally {
-        reportProgress(file.path);
-      }
-    });
+    const remoteTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-health-'));
+    try {
+      await mapWithDynamicByteConcurrency(binaries, 4, 64 * 1024 * 1024, async (file, reservation) => {
+        const target = path.join(remoteTempRoot, file.entityId);
+        try {
+          metrics.binaryGetCount += 1;
+          const result = await client!.downloadProjectFileToPath(manifest.projectId, file.entityId, target, {
+            signal,
+            onSize: bytes => reservation.reserve(bytes)
+          });
+          file.remoteSize = result.size;
+          hashes.set(file.path, result.sha1);
+          blobHashes.set(file.path, result.gitBlobHash);
+        } catch (error) {
+          const message = formatUnknownError(error);
+          failures.set(file.path, message);
+          this.log(`Could not read remote ${file.path}: ${message}`);
+        } finally {
+          await fs.rm(target, { force: true }).catch(() => undefined);
+          reportProgress(file.path);
+        }
+      });
+    } finally {
+      await fs.rm(remoteTempRoot, { recursive: true, force: true });
+    }
 
     return {
       manifest: indexed.manifest,
       contents,
+      hashes,
+      blobHashes,
       failures,
       reused,
       metrics
@@ -1877,6 +1929,34 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
+    const trackedEntry = this.manifest!.files[relPath];
+    const binary = trackedEntry ? trackedEntry.entityType === 'file' : !isTextLike(relPath);
+    if (binary) {
+      const digests = await hashFileDigests(absPath);
+      const bypassHash = this.bypassHashes.get(relPath);
+      if (bypassHash && bypassHash === digests.sha1) {
+        this.bypassHashes.delete(relPath);
+        return;
+      }
+      const entry = trackedEntry;
+      if (!entry) {
+        if (this.canAutoPushLocalAhead() && await this.handleLocalFileCreate(relPath, undefined)) {
+          this.syncGate.clearPath(relPath);
+          this.log(`Created ${relPath} on Overleaf from the local mirror.`);
+          this.scheduleSyncStatusCheck(500, [relPath]);
+          return;
+        }
+        const reason = !this.canSyncBinaryFiles()
+          ? 'Binary synchronization is disabled; use Push Local or enable binary synchronization.'
+          : 'Automatic upload is disabled; use Push Local for this new file.';
+        this.syncGate.setPath(relPath, 'pending', reason);
+        this.scheduleSyncStatusCheck(undefined, [relPath]);
+        return;
+      }
+      await this.replaceBinaryFile(relPath, absPath, digests, entry);
+      return;
+    }
+
     const content = await fs.readFile(absPath);
     const bypassHash = this.bypassHashes.get(relPath);
     const currentHash = sha1(content);
@@ -1910,10 +1990,10 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
-    await this.replaceBinaryFile(relPath, content, entry);
+    throw new Error(`Tracked binary path ${relPath} was classified as a text document.`);
   }
 
-  private async restoreRemoteDeletedFile(relPath: string, content: Uint8Array, previousEntry: ManifestFile): Promise<void> {
+  private async restoreRemoteDeletedFile(relPath: string, content: Uint8Array | undefined, previousEntry: ManifestFile): Promise<void> {
     this.log(`Restoring remote-deleted path ${relPath} from the local mirror.`);
     const previousState = this.docStates.get(relPath);
     this.docStates.delete(relPath);
@@ -1942,13 +2022,14 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
   }
 
-  private async handleLocalFileCreate(relPath: string, content: Uint8Array, manual = false): Promise<boolean> {
+  private async handleLocalFileCreate(relPath: string, content: Uint8Array | undefined, manual = false): Promise<boolean> {
     if (!isTextLike(relPath) && !await this.canUploadBinaryFile(relPath, manual, 'Upload')) {
       this.log(`Skipped binary upload for ${relPath}. Enable overleafCodex.syncBinaryFiles to upload binary files.`);
       return false;
     }
     const ensured = await this.ensureRemoteParentFolders(relPath);
     if (isTextLike(relPath)) {
+      if (!content) throw new Error(`Could not read local document ${relPath}.`);
       this.pendingLocalCreates.add(relPath);
       try {
         const doc = await this.client!.addDoc(this.manifest!.projectId, ensured.parentFolderId, path.posix.basename(relPath));
@@ -1969,14 +2050,23 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     this.pendingLocalCreates.add(relPath);
     try {
-      const file = await this.client!.uploadFile(this.manifest!.projectId, ensured.parentFolderId, path.posix.basename(relPath), content);
+      const sourcePath = this.abs(relPath);
+      const digests = await hashFileDigests(sourcePath);
+      const file = await this.client!.uploadFileFromPath(this.manifest!.projectId, ensured.parentFolderId, path.posix.basename(relPath), sourcePath);
+      if (file.hash ? file.hash !== digests.gitBlobHash : !await this.remoteBlobMatches(file._id, digests.gitBlobHash)) {
+        await this.client!.deleteEntity(this.manifest!.projectId, 'file', file._id).catch(() => undefined);
+        throw new Error(`Local binary ${relPath} changed while it was being uploaded.`);
+      }
       addOrUpdateFile(this.manifest!, {
         path: relPath,
         entityId: file._id,
         entityType: 'file',
         parentFolderId: ensured.parentFolderId,
-        binary: true
-      }, content);
+        binary: true,
+        remoteBlobHash: file.hash ?? digests.gitBlobHash,
+        remoteSize: digests.size
+      });
+      this.manifest!.files[relPath].sha1 = digests.sha1;
       await this.persistManifest();
       if (manual) {
         vscode.window.showInformationMessage(`Uploaded ${relPath} to Overleaf.`);
@@ -2015,7 +2105,13 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
   }
 
-  private async replaceBinaryFile(relPath: string, content: Uint8Array, entry: ManifestFile, manual = false): Promise<void> {
+  private async replaceBinaryFile(
+    relPath: string,
+    sourcePath: string,
+    digests: FileDigests,
+    entry: ManifestFile,
+    manual = false
+  ): Promise<void> {
     if (!await this.canUploadBinaryFile(relPath, manual, 'Replace')) {
       this.log(`Skipped binary replacement for ${relPath}. Enable overleafCodex.syncBinaryFiles to replace binary files.`);
       return;
@@ -2023,20 +2119,20 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     this.pendingLocalCreates.add(relPath);
     try {
-      const expectedBlobHash = gitBlobHash(content);
+      const expectedBlobHash = digests.gitBlobHash;
       this.markLocalMutation(entry.entityId);
       let uploaded: { _id: string; name: string; hash?: string; transactionId?: string };
       try {
-      uploaded = await this.client!.uploadFile(
+      uploaded = await this.client!.uploadFileFromPath(
         this.manifest!.projectId,
         entry.parentFolderId,
         path.posix.basename(relPath),
-        content
+        sourcePath
       );
       } catch (error) {
         if (error instanceof Error && 'code' in error && error.code === 'duplicate_file_name') {
-          uploaded = await this.replaceBinaryWithFallbackTransaction(relPath, content, entry, expectedBlobHash);
-        } else if (await this.reconcileAmbiguousBinaryUpload(relPath, content)) {
+          uploaded = await this.replaceBinaryWithFallbackTransaction(relPath, sourcePath, digests, entry);
+        } else if (await this.reconcileAmbiguousBinaryUpload(relPath, digests)) {
           if (manual) vscode.window.showInformationMessage(`Replaced Overleaf version of ${relPath}.`);
           return;
         } else {
@@ -2049,16 +2145,17 @@ export class RealtimeSyncService implements vscode.Disposable {
         throw new Error(`Overleaf returned an unexpected content hash while replacing ${relPath}.`);
       }
       if (!uploaded.hash) {
-        const downloaded = await this.client!.downloadProjectFile(this.manifest!.projectId, uploaded._id);
-        if (gitBlobHash(downloaded) !== expectedBlobHash) {
+        if (!await this.remoteBlobMatches(uploaded._id, expectedBlobHash)) {
           throw new Error(`Could not verify the uploaded content for ${relPath}.`);
         }
       }
       addOrUpdateFile(this.manifest!, {
         ...entry,
         entityId: uploaded._id,
-        remoteBlobHash: uploaded.hash ?? expectedBlobHash
-      }, content);
+        remoteBlobHash: uploaded.hash ?? expectedBlobHash,
+        remoteSize: digests.size
+      });
+      this.manifest!.files[relPath].sha1 = digests.sha1;
       await this.persistManifest();
       if (uploaded.transactionId) {
         await this.binaryTransactions!.remove(uploaded.transactionId);
@@ -2073,9 +2170,9 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   private async replaceBinaryWithFallbackTransaction(
     relPath: string,
-    content: Uint8Array,
-    entry: ManifestFile,
-    expectedBlobHash: string
+    sourcePath: string,
+    digests: FileDigests,
+    entry: ManifestFile
   ): Promise<{ _id: string; name: string; hash?: string; transactionId?: string }> {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const finalName = path.posix.basename(relPath);
@@ -2084,9 +2181,10 @@ export class RealtimeSyncService implements vscode.Disposable {
     const tempPath = path.posix.join(path.posix.dirname(relPath), tempName).replace(/^\.\//, '');
     this.pendingLocalCreates.add(tempPath);
     setTimeout(() => this.pendingLocalCreates.delete(tempPath), 30_000);
-    const temporary = await this.client!.uploadFile(this.manifest!.projectId, entry.parentFolderId, tempName, content);
+    const expectedBlobHash = digests.gitBlobHash;
+    const temporary = await this.client!.uploadFileFromPath(this.manifest!.projectId, entry.parentFolderId, tempName, sourcePath);
     const verified = temporary.hash === expectedBlobHash
-      || gitBlobHash(await this.client!.downloadProjectFile(this.manifest!.projectId, temporary._id)) === expectedBlobHash;
+      || await this.remoteBlobMatches(temporary._id, expectedBlobHash);
     if (!verified) {
       await this.client!.deleteEntity(this.manifest!.projectId, 'file', temporary._id).catch(() => undefined);
       throw new Error(`Could not verify temporary upload for ${relPath}.`);
@@ -2101,7 +2199,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       originalEntityId: entry.entityId,
       tempEntityId: temporary._id,
       expectedBlobHash,
-      expectedSha1: sha1(content),
+      expectedSha1: digests.sha1,
       stage: 'temp-uploaded',
       createdAt: new Date().toISOString()
     };
@@ -2129,17 +2227,29 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
   }
 
-  private async reconcileAmbiguousBinaryUpload(relPath: string, content: Uint8Array): Promise<boolean> {
+  private async reconcileAmbiguousBinaryUpload(relPath: string, digests: FileDigests): Promise<boolean> {
     const remote = await this.fetchFreshRemoteSnapshot([relPath]).catch(() => undefined);
     const remoteFile = remote?.manifest.files[relPath];
-    const remoteContent = remote?.contents.get(relPath);
-    if (!remoteFile || !(remoteContent instanceof Uint8Array) || gitBlobHash(remoteContent) !== gitBlobHash(content)) {
+    const remoteBlobHash = remote?.blobHashes.get(relPath);
+    if (!remoteFile || !remoteBlobHash || remoteBlobHash !== digests.gitBlobHash) {
       return false;
     }
-    addOrUpdateFile(this.manifest!, remoteFile, content);
-    this.manifest!.files[relPath].remoteBlobHash = remoteFile.remoteBlobHash ?? gitBlobHash(content);
+    addOrUpdateFile(this.manifest!, remoteFile);
+    this.manifest!.files[relPath].sha1 = digests.sha1;
+    this.manifest!.files[relPath].remoteBlobHash = remoteFile.remoteBlobHash ?? digests.gitBlobHash;
+    this.manifest!.files[relPath].remoteSize = digests.size;
     await this.persistManifest();
     return true;
+  }
+
+  private async remoteBlobMatches(entityId: string, expectedBlobHash: string): Promise<boolean> {
+    const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-verify-'));
+    const target = path.join(temporaryRoot, entityId);
+    try {
+      return (await this.client!.downloadProjectFileToPath(this.manifest!.projectId, entityId, target)).gitBlobHash === expectedBlobHash;
+    } finally {
+      await fs.rm(temporaryRoot, { recursive: true, force: true });
+    }
   }
 
   private async recoverBinaryTransactions(): Promise<void> {
@@ -2280,15 +2390,21 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.writeLocalFile(relPath, Buffer.from(doc.content, 'utf8'), true);
       await this.session!.leaveDoc(entity._id).catch(() => undefined);
     } else {
-      const content = await this.client!.downloadProjectFile(this.manifest!.projectId, entity._id);
+      const target = this.abs(relPath);
+      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
+      const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, entity._id, staging);
+      await installStagedFile(staging, target);
       addOrUpdateFile(this.manifest!, {
         path: relPath,
         entityId: entity._id,
         entityType: 'file',
         parentFolderId,
-        binary: true
-      }, content);
-      await this.writeLocalFile(relPath, content, true);
+        binary: true,
+        remoteSize: result.size
+      });
+      const added = this.manifest!.files[relPath] as ManifestFile;
+      added.sha1 = result.sha1;
+      this.bypassHashes.set(relPath, result.sha1);
     }
 
     await this.persistManifest();

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import { atomicWriteText, metadataPath, TRANSACTIONS_NAME } from './manifest';
+import { assertValidTransactions, validateTransactionList } from './metadataValidation';
 
 export type BinaryTransactionStage = 'temp-uploaded' | 'original-backed-up' | 'promoted';
 
@@ -29,10 +30,12 @@ export class BinaryTransactionStore {
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.some(item => !item || typeof item.id !== 'string' || typeof item.path !== 'string')) throw new Error('invalid transactions');
+      const validationError = validateTransactionList(parsed);
+      if (validationError) throw new Error(validationError);
       return parsed as BinaryTransaction[];
-    } catch {
+    } catch (error) {
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
+      console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
@@ -54,6 +57,7 @@ export class BinaryTransactionStore {
   }
 
   private write(records: BinaryTransaction[]): Promise<void> {
+    assertValidTransactions(records);
     return atomicWriteText(metadataPath(this.root, TRANSACTIONS_NAME), `${JSON.stringify(records, null, 2)}\n`);
   }
 

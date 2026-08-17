@@ -6,6 +6,7 @@ import type { NetworkTimeouts } from './types';
 import type { SyncPolicy } from './coreInterfaces';
 import { atomicWriteText, manifestPath, readManifest } from './manifest';
 import { normalizeServerUrl } from './util';
+import { mapWithConcurrency } from './syncHealthService';
 
 export interface SharedMirrorRecord {
   root: string;
@@ -195,25 +196,45 @@ export async function registerSharedMirror(root: string): Promise<SharedMirrorRe
 
 export async function listSharedMirrors(): Promise<SharedMirrorRecord[]> {
   const state = await readSharedState();
-  const records: SharedMirrorRecord[] = [];
-  for (const record of state.mirrors) {
-    if (!await exists(manifestPath(record.root))) continue;
-    const manifest = await readManifest(record.root).catch(() => undefined);
-    records.push(manifest ? {
-      root: path.resolve(record.root), name: manifest.projectName || path.basename(record.root),
-      projectId: manifest.projectId, serverUrl: normalizeServerUrl(manifest.serverUrl), lastSyncAt: manifest.lastSyncAt
+  const refreshed = new Map<string, SharedMirrorRecord | undefined>();
+  await mapWithConcurrency(state.mirrors, 8, async record => {
+    const absolute = path.resolve(record.root);
+    if (!await exists(manifestPath(absolute))) {
+      refreshed.set(absolute, undefined);
+      return;
+    }
+    const manifest = await readManifest(absolute).catch(() => undefined);
+    refreshed.set(absolute, manifest ? {
+      root: absolute,
+      name: manifest.projectName || path.basename(absolute),
+      projectId: manifest.projectId,
+      serverUrl: normalizeServerUrl(manifest.serverUrl),
+      lastSyncAt: manifest.lastSyncAt
     } : record);
+  });
+
+  const release = await acquireSharedStateLock();
+  try {
+    const latest = await readSharedState();
+    const records = mergeRefreshedMirrorRecords(latest.mirrors, refreshed);
+    const normalized = normalizeSharedState({ ...latest, mirrors: records });
+    if (JSON.stringify(normalized.mirrors) !== JSON.stringify(latest.mirrors)) {
+      await writeSharedStateUnlocked(normalized);
+    }
+    return normalized.mirrors.sort((a, b) => (b.lastSyncAt ?? '').localeCompare(a.lastSyncAt ?? ''));
+  } finally {
+    await release();
   }
-  const normalized = normalizeSharedState({ ...state, mirrors: records });
-  if (JSON.stringify(normalized.mirrors) !== JSON.stringify(state.mirrors)) {
-    const release = await acquireSharedStateLock();
-    try {
-      const latest = await readSharedState();
-      latest.mirrors = records;
-      await writeSharedStateUnlocked(normalizeSharedState(latest));
-    } finally { await release(); }
-  }
-  return records.sort((a, b) => (b.lastSyncAt ?? '').localeCompare(a.lastSyncAt ?? ''));
+}
+
+export function mergeRefreshedMirrorRecords(
+  latest: SharedMirrorRecord[],
+  refreshed: ReadonlyMap<string, SharedMirrorRecord | undefined>
+): SharedMirrorRecord[] {
+  return latest.flatMap(record => {
+    const absolute = path.resolve(record.root);
+    return refreshed.has(absolute) ? refreshed.get(absolute) ?? [] : record;
+  });
 }
 
 function dedupeMirrors(records: SharedMirrorRecord[]): SharedMirrorRecord[] {

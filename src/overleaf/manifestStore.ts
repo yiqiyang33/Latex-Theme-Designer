@@ -34,8 +34,16 @@ export class ManifestStore {
   }
 
   async readJson<T>(name: string, fallback: T): Promise<T> {
-    const raw = await fs.readFile(metadataPath(this.root, name), 'utf8').catch(() => undefined);
-    return raw ? JSON.parse(raw) as T : fallback;
+    const target = metadataPath(this.root, name);
+    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
+      console.warn(`Overleaf metadata at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
+      return fallback;
+    }
   }
 
   writeJson(name: string, value: unknown): Promise<void> {

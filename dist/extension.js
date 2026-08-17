@@ -945,10 +945,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename18, pattern) {
+function matchesGlob(relPath, basename19, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename18);
+    return globToRegExp(pattern).test(basename19);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -1595,7 +1595,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path40, checkUnignored, mode) {
+      test(path41, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1604,7 +1604,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path40);
+          const matched = rule[mode].test(path41);
           if (!matched) {
             return;
           }
@@ -1625,17 +1625,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path40, originalPath, doThrow) => {
-      if (!isString(path40)) {
+    var checkPath = (path41, originalPath, doThrow) => {
+      if (!isString(path41)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path40) {
+      if (!path41) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path40)) {
+      if (checkPath.isNotRelative(path41)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1644,7 +1644,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path40) => REGEX_TEST_INVALID_PATH.test(path40);
+    var isNotRelative = (path41) => REGEX_TEST_INVALID_PATH.test(path41);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1674,19 +1674,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path40 = originalPath && checkPath.convert(originalPath);
+        const path41 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path40,
+          path41,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path40, cache, checkUnignored, slices);
+        return this._t(path41, cache, checkUnignored, slices);
       }
-      checkIgnore(path40) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path40)) {
-          return this.test(path40);
+      checkIgnore(path41) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path41)) {
+          return this.test(path41);
         }
-        const slices = path40.split(SLASH).filter(Boolean);
+        const slices = path41.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1699,18 +1699,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path40, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path41, false, MODE_CHECK_IGNORE);
       }
-      _t(path40, cache, checkUnignored, slices) {
-        if (path40 in cache) {
-          return cache[path40];
+      _t(path41, cache, checkUnignored, slices) {
+        if (path41 in cache) {
+          return cache[path41];
         }
         if (!slices) {
-          slices = path40.split(SLASH).filter(Boolean);
+          slices = path41.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path40] = this._rules.test(path40, checkUnignored, MODE_IGNORE);
+          return cache[path41] = this._rules.test(path41, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1718,29 +1718,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path40] = parent.ignored ? parent : this._rules.test(path40, checkUnignored, MODE_IGNORE);
+        return cache[path41] = parent.ignored ? parent : this._rules.test(path41, checkUnignored, MODE_IGNORE);
       }
-      ignores(path40) {
-        return this._test(path40, this._ignoreCache, false).ignored;
+      ignores(path41) {
+        return this._test(path41, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path40) => !this.ignores(path40);
+        return (path41) => !this.ignores(path41);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path40) {
-        return this._test(path40, this._testCache, true);
+      test(path41) {
+        return this._test(path41, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path40) => checkPath(path40 && checkPath.convert(path40), path40, RETURN_FALSE);
+    var isPathValid = (path41) => checkPath(path41 && checkPath.convert(path41), path41, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path40) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path40) || isNotRelative(path40);
+      checkPath.isNotRelative = (path41) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path41) || isNotRelative(path41);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10602,11 +10602,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path40) {
-      if (!path40 || typeof path40 !== "string") {
+    function lookup2(path41) {
+      if (!path41 || typeof path41 !== "string") {
         return false;
       }
-      var extension2 = extname9("x." + path40).toLowerCase().substr(1);
+      var extension2 = extname9("x." + path41).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11711,11 +11711,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path40 = require("path");
+    var path41 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs32 = require("fs");
+    var fs34 = require("fs");
     var Stream = require("stream").Stream;
     var crypto8 = require("crypto");
     var mime2 = require_mime_types();
@@ -11782,12 +11782,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs32.stat(value.path, function(err, stat9) {
+          fs34.stat(value.path, function(err, stat11) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat9.size - (value.start ? value.start : 0);
+            var fileSize = stat11.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -11839,11 +11839,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path40.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path41.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path40.basename(options.filename || value && (value.name || value.path));
+        filename = path41.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path40.basename(value.client._httpMessage.path || "");
+        filename = path41.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12756,14 +12756,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path40 = url.path;
-      if (path40.length === 0) {
+      const path41 = url.path;
+      if (path41.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path40.length === 1 && isNormalizedWindowsDriveLetter(path40[0])) {
+      if (url.scheme === "file" && path41.length === 1 && isNormalizedWindowsDriveLetter(path41[0])) {
         return;
       }
-      path40.pop();
+      path41.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -16499,8 +16499,8 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs31 = __toESM(require("node:fs"));
-var path39 = __toESM(require("node:path"));
+var fs33 = __toESM(require("node:fs"));
+var path40 = __toESM(require("node:path"));
 var vscode13 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
@@ -16645,18 +16645,18 @@ var ChangeHistoryService = class {
   }
   async captureValue(target) {
     try {
-      const stat9 = await import_node_fs2.promises.lstat(target);
-      if (stat9.isSymbolicLink()) {
+      const stat11 = await import_node_fs2.promises.lstat(target);
+      if (stat11.isSymbolicLink()) {
         const link = await import_node_fs2.promises.readlink(target);
-        return { kind: "symlink", link_target: link, mode: stat9.mode, fingerprint: hash(`symlink:${link}`) };
+        return { kind: "symlink", link_target: link, mode: stat11.mode, fingerprint: hash(`symlink:${link}`) };
       }
-      if (stat9.isDirectory()) {
+      if (stat11.isDirectory()) {
         const entries = (await import_node_fs2.promises.readdir(target)).sort();
-        return { kind: "directory", mode: stat9.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
+        return { kind: "directory", mode: stat11.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
       }
-      if (stat9.isFile()) {
+      if (stat11.isFile()) {
         const content = await import_node_fs2.promises.readFile(target);
-        return { kind: "file", content_base64: content.toString("base64"), mode: stat9.mode, fingerprint: hashBuffer(content) };
+        return { kind: "file", content_base64: content.toString("base64"), mode: stat11.mode, fingerprint: hashBuffer(content) };
       }
       return { kind: "missing", fingerprint: hash("missing") };
     } catch (err) {
@@ -16684,8 +16684,8 @@ var ChangeHistoryService = class {
     const missing = entries.filter((entry) => entry.value.kind === "missing");
     for (const { target } of missing) {
       try {
-        const stat9 = await import_node_fs2.promises.lstat(target);
-        if (!stat9.isDirectory()) await import_node_fs2.promises.unlink(target);
+        const stat11 = await import_node_fs2.promises.lstat(target);
+        if (!stat11.isDirectory()) await import_node_fs2.promises.unlink(target);
       } catch (err) {
         const code = err.code;
         if (code !== "ENOENT") throw err;
@@ -17216,8 +17216,8 @@ async function preflightCreateProject(draft, extensionDir) {
   const rootPath = path4.resolve(parentPath, projectName || "New Notes");
   if (path4.dirname(rootPath) !== path4.normalize(parentPath)) errors.push("Project path must remain directly inside the selected parent folder.");
   try {
-    const stat9 = await import_node_fs4.promises.stat(parentPath);
-    if (!stat9.isDirectory()) errors.push("Selected parent location is not a directory.");
+    const stat11 = await import_node_fs4.promises.stat(parentPath);
+    if (!stat11.isDirectory()) errors.push("Selected parent location is not a directory.");
     else await import_node_fs4.promises.access(parentPath, import_node_fs4.constants.W_OK);
   } catch (err) {
     errors.push(`Parent location is not writable: ${err.message}`);
@@ -17225,9 +17225,9 @@ async function preflightCreateProject(draft, extensionDir) {
   let targetExists = false;
   let targetEmpty = false;
   try {
-    const stat9 = await import_node_fs4.promises.lstat(rootPath);
+    const stat11 = await import_node_fs4.promises.lstat(rootPath);
     targetExists = true;
-    if (!stat9.isDirectory()) errors.push("A non-directory item already exists at the project path.");
+    if (!stat11.isDirectory()) errors.push("A non-directory item already exists at the project path.");
     else {
       const entries = await import_node_fs4.promises.readdir(rootPath);
       targetEmpty = entries.length === 0;
@@ -17282,7 +17282,7 @@ var path6 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path40, callback = (err) => {
+function openExplorer(path41, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -17299,8 +17299,8 @@ function openExplorer(path40, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path40 = path40 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands7[platform3], [path40]);
+  path41 = path41 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands7[platform3], [path41]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -17385,26 +17385,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path40) {
+  function parse_path(path41) {
     if (platform3 == "win32") {
-      path40 = RegReplace(path40, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path41 = RegReplace(path41, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path40 = RegReplace(path40, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path41 = RegReplace(path41, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path40 = path40.replace(/\//g, "\\");
+      path41 = path41.replace(/\//g, "\\");
     }
-    return path40;
+    return path41;
   }
   if (platform3 == "win32") {
-    let path40 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path40 ? parse_path(path40) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path41 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path41 ? parse_path(path41) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path40 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path40 ? parse_path(path40) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path41 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path41 ? parse_path(path41) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path40 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path40 ? parse_path(path40) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path41 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path41 ? parse_path(path41) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -18985,8 +18985,8 @@ var snippetOutput;
 function isLatexLikeDocument(document) {
   return ["latex", "tex", "markdown"].includes(document.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path40) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path40);
+function getStringArrayConfiguration(path41) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path41);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -20433,8 +20433,8 @@ async function loadRecipeCatalog(rootDir) {
 async function generateVscodeSettingsIfMissing(rootDir) {
   const settingsPath = path9.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat9 = await import_node_fs8.promises.stat(settingsPath);
-    if (stat9.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
+    const stat11 = await import_node_fs8.promises.stat(settingsPath);
+    if (stat11.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
@@ -20569,9 +20569,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path10.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename18 = path10.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename18, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename18, pattern))) {
+        const basename19 = path10.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename19, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename19, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -20727,8 +20727,8 @@ var CompileService = class {
     const isBeamer = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(source);
     const hasBibliography = /\\(?:addbibresource|bibliography)\b/i.test(source);
     const latex = ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]];
-    const pipeline = isBeamer ? [latex] : [latex, ["biber", [ctx.docstem]], latex, latex];
-    for (const [cmd, args] of pipeline) {
+    const pipeline2 = isBeamer ? [latex] : [latex, ["biber", [ctx.docstem]], latex, latex];
+    for (const [cmd, args] of pipeline2) {
       const resolved = await this.resolveBinary(cmd);
       if (!resolved) {
         logs.push(`[${cmd}] command not found in PATH.`);
@@ -22363,8 +22363,8 @@ var TemplateService = class {
     await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat9 = await import_node_fs14.promises.stat(targetAbs);
-      if (stat9.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
+      const stat11 = await import_node_fs14.promises.stat(targetAbs);
+      if (stat11.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
@@ -22716,8 +22716,8 @@ function isRecord3(value) {
 }
 
 // src/overleaf/overleafService.ts
-var fs29 = __toESM(require("node:fs/promises"));
-var path36 = __toESM(require("node:path"));
+var fs31 = __toESM(require("node:fs/promises"));
+var path37 = __toESM(require("node:path"));
 var vscode11 = __toESM(require("vscode"));
 
 // src/overleaf/diagnostics.ts
@@ -24360,10 +24360,6 @@ function expandHome(input) {
 function sha1(content) {
   return crypto.createHash("sha1").update(content).digest("hex");
 }
-function gitBlobHash(content) {
-  const bytes = Buffer.from(content);
-  return crypto.createHash("sha1").update(`blob ${bytes.length}\0`, "utf8").update(bytes).digest("hex");
-}
 function isTextLike(filePath) {
   const ext2 = path19.extname(filePath).toLowerCase();
   return [
@@ -24431,6 +24427,150 @@ function safeJson(value) {
 function sanitizeProjectFolderName(projectName, projectId) {
   const safeName = projectName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "overleaf-project";
   return `${safeName}-${projectId}`;
+}
+
+// src/overleaf/metadataValidation.ts
+var STATUS_VALUES = /* @__PURE__ */ new Set([
+  "synced",
+  "local ahead",
+  "remote ahead",
+  "diverged",
+  "local only",
+  "remote only",
+  "remote deleted",
+  "local deleted",
+  "error"
+]);
+var ENTITY_TYPES = /* @__PURE__ */ new Set(["doc", "file", "folder"]);
+var HASH_FIELDS = ["sha1", "baseHash", "remoteBlobHash", "localHashCache"];
+function validateManifest(value) {
+  if (!isRecord4(value)) return "$ must be an object";
+  const required = requiredStrings(value, ["serverUrl", "projectId", "projectName", "lastSyncAt"]);
+  if (required) return required;
+  if (value.schemaVersion !== void 0 && ![1, 2, 3].includes(value.schemaVersion)) return "$.schemaVersion must be 1, 2, or 3";
+  if (!Array.isArray(value.ignore) || value.ignore.some((item) => typeof item !== "string")) return "$.ignore must be an array of strings";
+  if (!isRecord4(value.files)) return "$.files must be an object";
+  if (!isRecord4(value.folders)) return "$.folders must be an object";
+  for (const [key, item] of Object.entries(value.files)) {
+    const at = `$.files[${JSON.stringify(key)}]`;
+    if (!isRecord4(item)) return `${at} must be an object`;
+    const error = requiredStrings(item, ["path", "entityId", "parentFolderId"], at);
+    if (error) return error;
+    if (item.path !== key) return `${at}.path must match its map key`;
+    if (item.entityType !== "doc" && item.entityType !== "file") return `${at}.entityType must be "doc" or "file"`;
+    if (item.binary !== void 0 && typeof item.binary !== "boolean") return `${at}.binary must be a boolean`;
+    for (const field of HASH_FIELDS) if (item[field] !== void 0 && typeof item[field] !== "string") return `${at}.${field} must be a string`;
+    for (const field of ["version", "remoteRevision", "remoteSize", "localSize", "localMtimeMs", "localCtimeMs", "localInode"]) {
+      if (item[field] !== void 0 && !isNonNegativeNumber(item[field])) return `${at}.${field} must be a non-negative finite number`;
+    }
+  }
+  for (const [key, item] of Object.entries(value.folders)) {
+    const at = `$.folders[${JSON.stringify(key)}]`;
+    if (!isRecord4(item)) return `${at} must be an object`;
+    const error = requiredStrings(item, ["path", "entityId"], at);
+    if (error) return error;
+    if (item.path !== key) return `${at}.path must match its map key`;
+    if (item.parentFolderId !== void 0 && typeof item.parentFolderId !== "string") return `${at}.parentFolderId must be a string`;
+  }
+  for (const field of ["rootDocId", "rootDocPath", "compiler", "lastFullAuditAt"]) {
+    if (value[field] !== void 0 && typeof value[field] !== "string") return `$.${field} must be a string`;
+  }
+  if (value.projectVersion !== void 0 && !isNonNegativeNumber(value.projectVersion)) return "$.projectVersion must be a non-negative finite number";
+  return void 0;
+}
+function validateSyncStatus(value) {
+  if (!isRecord4(value)) return "$ must be an object";
+  const required = requiredStrings(value, ["checkedAt", "projectId", "projectName"]);
+  if (required) return required;
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) return "$.schemaVersion must be 1 or 2";
+  if (typeof value.hasBlocking !== "boolean") return "$.hasBlocking must be a boolean";
+  if (!Array.isArray(value.items)) return "$.items must be an array";
+  for (let index = 0; index < value.items.length; index += 1) {
+    const error = validateStatusItem(value.items[index], `$.items[${index}]`);
+    if (error) return error;
+  }
+  if (value.checkMode !== void 0 && value.checkMode !== "incremental" && value.checkMode !== "full") return "$.checkMode is invalid";
+  if (value.completeness !== void 0 && !["complete", "partial", "failed"].includes(value.completeness)) return "$.completeness is invalid";
+  if (value.globalBlockReason !== void 0 && typeof value.globalBlockReason !== "string") return "$.globalBlockReason must be a string";
+  return void 0;
+}
+function validateConflictList(value) {
+  if (!Array.isArray(value)) return "$ must be an array";
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    const at = `$[${index}]`;
+    if (!isRecord4(item)) return `${at} must be an object`;
+    const error = requiredStrings(item, ["relPath", "docId", "remotePath", "reason", "createdAt"], at);
+    if (error) return error;
+    if (!isNonNegativeNumber(item.remoteVersion)) return `${at}.remoteVersion must be a non-negative finite number`;
+  }
+  return void 0;
+}
+function validateTransactionList(value) {
+  if (!Array.isArray(value)) return "$ must be an array";
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    const at = `$[${index}]`;
+    if (!isRecord4(item)) return `${at} must be an object`;
+    const error = requiredStrings(item, [
+      "id",
+      "path",
+      "parentFolderId",
+      "finalName",
+      "tempName",
+      "backupName",
+      "originalEntityId",
+      "tempEntityId",
+      "expectedBlobHash",
+      "createdAt"
+    ], at);
+    if (error) return error;
+    if (!["temp-uploaded", "original-backed-up", "promoted"].includes(item.stage)) return `${at}.stage is invalid`;
+    if (item.expectedSha1 !== void 0 && typeof item.expectedSha1 !== "string") return `${at}.expectedSha1 must be a string`;
+  }
+  return void 0;
+}
+function assertValidManifest(value) {
+  const error = validateManifest(value);
+  if (error) throw new Error(`Cannot write invalid Overleaf manifest: ${error}`);
+}
+function assertValidSyncStatus(value) {
+  const error = validateSyncStatus(value);
+  if (error) throw new Error(`Cannot write invalid Overleaf sync status: ${error}`);
+}
+function assertValidConflicts(value) {
+  const error = validateConflictList(value);
+  if (error) throw new Error(`Cannot write invalid Overleaf conflict index: ${error}`);
+}
+function assertValidTransactions(value) {
+  const error = validateTransactionList(value);
+  if (error) throw new Error(`Cannot write invalid Overleaf binary transactions: ${error}`);
+}
+function validateStatusItem(value, at) {
+  if (!isRecord4(value)) return `${at} must be an object`;
+  if (typeof value.path !== "string") return `${at}.path must be a string`;
+  if (!STATUS_VALUES.has(value.status)) return `${at}.status is invalid`;
+  if (typeof value.blocking !== "boolean") return `${at}.blocking must be a boolean`;
+  if (value.entityType !== void 0 && !ENTITY_TYPES.has(value.entityType)) return `${at}.entityType is invalid`;
+  for (const field of ["entityId", "parentFolderId", "localHash", "remoteHash", "baseHash", "message", "localPath", "remotePath"]) {
+    if (value[field] !== void 0 && typeof value[field] !== "string") return `${at}.${field} must be a string`;
+  }
+  for (const field of ["version", "remoteVersion"]) {
+    if (value[field] !== void 0 && !isNonNegativeNumber(value[field])) return `${at}.${field} must be a non-negative finite number`;
+  }
+  if (value.blockingScope !== void 0 && !["none", "path", "subtree", "project"].includes(value.blockingScope)) return `${at}.blockingScope is invalid`;
+  if (value.changeKind !== void 0 && !["content", "create", "delete", "rename", "move", "type-change", "read-error"].includes(value.changeKind)) return `${at}.changeKind is invalid`;
+  return void 0;
+}
+function isRecord4(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function requiredStrings(value, fields, at = "$") {
+  for (const field of fields) if (typeof value[field] !== "string") return `${at}.${field} must be a string`;
+  return void 0;
+}
+function isNonNegativeNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 // src/overleaf/manifest.ts
@@ -24569,9 +24709,10 @@ async function readManifest(root) {
     await quarantineCorruptFile(target);
     throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
   }
-  if (!isManifestShape(parsed)) {
+  const validationError = validateManifest(parsed);
+  if (validationError) {
     await quarantineCorruptFile(target);
-    throw new Error(`Overleaf manifest failed schema validation and was quarantined at ${target}.`);
+    throw new Error(`Overleaf manifest failed schema validation at ${validationError} and was quarantined at ${target}.`);
   }
   const manifest = migrateManifest(parsed);
   const ignoreContent = await ensureLocalIgnoreFile(root);
@@ -24590,6 +24731,7 @@ async function ensureLocalIgnoreFile(root) {
 async function writeManifest(root, manifest) {
   manifest.schemaVersion = 3;
   manifest.lastSyncAt = (/* @__PURE__ */ new Date()).toISOString();
+  assertValidManifest(manifest);
   await atomicWriteText(manifestPath(root), `${JSON.stringify(manifest, null, 2)}
 `);
 }
@@ -24625,23 +24767,21 @@ async function readSyncStatus(root) {
   if (!raw) return void 0;
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.items) || typeof parsed.checkedAt !== "string") throw new Error("invalid sync status");
+    const validationError = validateSyncStatus(parsed);
+    if (validationError) throw new Error(validationError);
     return parsed;
-  } catch {
+  } catch (error) {
     await quarantineCorruptFile(syncStatusPath(root));
+    console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return void 0;
   }
-}
-function isManifestShape(value) {
-  if (!value || typeof value !== "object") return false;
-  const manifest = value;
-  return typeof manifest.projectId === "string" && typeof manifest.serverUrl === "string" && typeof manifest.projectName === "string" && !!manifest.files && typeof manifest.files === "object" && !!manifest.folders && typeof manifest.folders === "object" && Array.isArray(manifest.ignore);
 }
 async function quarantineCorruptFile(target) {
   const quarantine = `${target}.corrupt-${Date.now()}`;
   await fs15.rename(target, quarantine).catch(() => void 0);
 }
 async function writeSyncStatus(root, report) {
+  assertValidSyncStatus(report);
   await atomicWriteText(syncStatusPath(root), `${JSON.stringify(report, null, 2)}
 `);
 }
@@ -24721,7 +24861,7 @@ async function compileRemoteProject(root, client, rootDocOverride) {
         if (!output.url) continue;
         const name = uniqueCompileOutputName(output, usedNames);
         const target = path21.join(stagingRoot, name);
-        await fs16.writeFile(target, await client.downloadCompileOutput(output.url, response));
+        await client.downloadCompileOutputToPath(output.url, response, target);
         stagedFiles.push(target);
       }
       await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
@@ -24875,6 +25015,89 @@ var crypto3 = __toESM(require("crypto"));
 var fs18 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
+
+// src/overleaf/syncHealthService.ts
+var SyncHealthService = class {
+  planRemoteReads(previous, remote, options) {
+    const requested = options.paths ? new Set([...options.paths].map(toPosixPath2)) : void 0;
+    const plan = {
+      docsToJoin: [],
+      binariesToGet: [],
+      reusedPaths: /* @__PURE__ */ new Set()
+    };
+    for (const file of Object.values(remote.files)) {
+      if (shouldIgnore(previous, file.path)) continue;
+      if (requested && !requested.has(file.path)) continue;
+      const previousFile = previous.files[file.path];
+      if (options.mode === "incremental" && canReuseRemoteMetadata(previousFile, file)) {
+        plan.reusedPaths.add(file.path);
+      } else if (file.entityType === "doc") {
+        plan.docsToJoin.push(file);
+      } else {
+        plan.binariesToGet.push(file);
+      }
+    }
+    return plan;
+  }
+};
+async function mapWithConcurrency(items, concurrency, handler) {
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await handler(item);
+    }
+  });
+  await Promise.all(workers);
+}
+async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handler) {
+  let nextIndex = 0;
+  let reservedBytes = 0;
+  const waiters = [];
+  const wake = () => waiters.splice(0).forEach((resolve22) => resolve22());
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex++];
+      let amount = 0;
+      let didReserve = false;
+      const reservation = {
+        reserve: async (bytes) => {
+          if (didReserve) throw new Error("Transfer size was reserved more than once.");
+          didReserve = true;
+          amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
+          while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
+            await new Promise((resolve22) => waiters.push(resolve22));
+          }
+          reservedBytes += amount;
+        }
+      };
+      try {
+        await handler(item, reservation);
+      } finally {
+        if (didReserve) {
+          reservedBytes = Math.max(0, reservedBytes - amount);
+          wake();
+        }
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+function canReuseRemoteMetadata(previous, remote) {
+  if (!previous?.sha1 || previous.entityId !== remote.entityId || previous.entityType !== remote.entityType) {
+    return false;
+  }
+  if (remote.entityType === "doc") {
+    return previous.version !== void 0 && remote.version !== void 0 && previous.version === remote.version;
+  }
+  if (previous.remoteBlobHash !== void 0 && remote.remoteBlobHash !== void 0) {
+    return previous.remoteBlobHash === remote.remoteBlobHash;
+  }
+  return previous.remoteRevision !== void 0 && remote.remoteRevision !== void 0 && previous.remoteRevision === remote.remoteRevision;
+}
+
+// src/overleaf/sharedState.ts
 var DEFAULT_NETWORK_TIMEOUTS = {
   connectMs: 2e4,
   projectJoinMs: 3e4,
@@ -25080,8 +25303,8 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat9 = await fs18.stat(guardPath).catch(() => void 0);
-  if (!stat9 || Date.now() - stat9.mtimeMs < staleMs) return false;
+  const stat11 = await fs18.stat(guardPath).catch(() => void 0);
+  if (!stat11 || Date.now() - stat11.mtimeMs < staleMs) return false;
   await fs18.rm(guardPath, { recursive: true, force: true });
   try {
     await fs18.mkdir(guardPath, { mode: 448 });
@@ -25098,8 +25321,8 @@ async function sharedStateLockIsStale(lockPath, metadataPath2) {
     const currentStart = await processStartSignature(metadata.pid);
     return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
   }
-  const stat9 = await fs18.stat(lockPath).catch(() => void 0);
-  return Boolean(stat9 && Date.now() - stat9.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+  const stat11 = await fs18.stat(lockPath).catch(() => void 0);
+  return Boolean(stat11 && Date.now() - stat11.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
   const raw = await fs18.readFile(target, "utf8").catch(() => void 0);
@@ -25145,7 +25368,7 @@ var fs19 = __toESM(require("fs/promises"));
 var os5 = __toESM(require("os"));
 var path25 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
-var import_util4 = require("util");
+var import_util5 = require("util");
 
 // src/overleaf/tree.ts
 var path24 = __toESM(require("path"));
@@ -25286,13 +25509,14 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
       parentFolderId: folder._id,
       binary: true,
       remoteBlobHash: file.hash,
-      remoteRevision: file.rev
+      remoteRevision: file.rev,
+      remoteSize: file.size
     });
   }
 }
 
 // src/overleaf/mirrorCore.ts
-var execFileAsync = (0, import_util4.promisify)(import_child_process2.execFile);
+var execFileAsync = (0, import_util5.promisify)(import_child_process2.execFile);
 var AGENTS_CONTENT = `# AGENTS.md
 
 This folder is a real local mirror of an Overleaf project.
@@ -25387,10 +25611,11 @@ async function writeInitialFile(client, session, projectId, root, file) {
     file.baseHash = await writeBaseDoc(root, file.entityId, joined.content);
     await session.leaveDoc(file.entityId).catch(() => void 0);
   } else {
-    const content = await client.downloadProjectFile(projectId, file.entityId);
-    await fs19.writeFile(target, content);
+    const result = await client.downloadProjectFileToPath(projectId, file.entityId, target);
     file.binary = true;
-    file.sha1 = sha1(content);
+    file.sha1 = result.sha1;
+    file.remoteSize = result.size;
+    file.remoteBlobHash ??= result.gitBlobHash;
   }
 }
 async function writeMirrorSupportFiles(root, rootDocPath, compiler) {
@@ -25656,9 +25881,12 @@ async function exists5(filePath) {
 // src/overleaf/overleafClient.ts
 var http = __toESM(require("http"));
 var https = __toESM(require("https"));
-var path27 = __toESM(require("path"));
+var path28 = __toESM(require("path"));
+var fs22 = __toESM(require("fs/promises"));
+var import_fs4 = require("fs");
 var import_module = require("module");
 var import_stream = require("stream");
+var import_promises = require("stream/promises");
 var import_form_data = __toESM(require_form_data());
 var import_node_fetch = __toESM(require_lib2());
 var mime = __toESM(require_mime_types());
@@ -25709,6 +25937,54 @@ function v4(options, buf, offset) {
   return unsafeStringify(rnds);
 }
 var v4_default = v4;
+
+// src/overleaf/binaryTransfer.ts
+var import_crypto4 = require("crypto");
+var import_fs3 = require("fs");
+var fs21 = __toESM(require("fs/promises"));
+var path27 = __toESM(require("path"));
+var import_crypto5 = require("crypto");
+async function hashFileDigests(filePath) {
+  const stat11 = await fs21.stat(filePath);
+  if (!stat11.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
+  const sha13 = (0, import_crypto4.createHash)("sha1");
+  const git = (0, import_crypto4.createHash)("sha1");
+  git.update(`blob ${stat11.size}\0`);
+  await new Promise((resolve22, reject) => {
+    const input = (0, import_fs3.createReadStream)(filePath);
+    input.on("data", (chunk) => {
+      sha13.update(chunk);
+      git.update(chunk);
+    });
+    input.on("error", reject);
+    input.on("end", resolve22);
+  });
+  return { size: stat11.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
+}
+async function installStagedFile(stagedPath, targetPath) {
+  const token = `${process.pid}-${Date.now()}-${(0, import_crypto5.randomBytes)(4).toString("hex")}`;
+  const backupPath = path27.join(path27.dirname(targetPath), `.${path27.basename(targetPath)}.backup-${token}`);
+  let backedUp = false;
+  try {
+    await fs21.mkdir(path27.dirname(targetPath), { recursive: true });
+    try {
+      await fs21.rename(targetPath, backupPath);
+      backedUp = true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await fs21.rename(stagedPath, targetPath);
+    if (backedUp) await fs21.rm(backupPath, { force: true });
+  } catch (error) {
+    if (backedUp) {
+      await fs21.rm(targetPath, { force: true }).catch(() => void 0);
+      await fs21.rename(backupPath, targetPath).catch(() => void 0);
+    }
+    throw error;
+  } finally {
+    await fs21.rm(stagedPath, { force: true }).catch(() => void 0);
+  }
+}
 
 // src/overleaf/overleafClient.ts
 var DEFAULT_TIMEOUTS = {
@@ -25827,7 +26103,21 @@ var OverleafClient = class {
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", import_stream.Readable.from(content), { filename });
+    const buffer = Buffer.from(content);
+    form.append("qqfile", import_stream.Readable.from([buffer]), { filename, knownLength: buffer.length });
+    return this.uploadForm(projectId, parentFolderId, filename, form);
+  }
+  async uploadFileFromPath(projectId, parentFolderId, filename, sourcePath) {
+    const stat11 = await fs22.stat(sourcePath);
+    if (!stat11.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
+    const form = new import_form_data.default();
+    form.append("targetFolderId", parentFolderId);
+    form.append("name", filename);
+    form.append("type", mime.lookup(filename) || "application/octet-stream");
+    form.append("qqfile", (0, import_fs4.createReadStream)(sourcePath), { filename, knownLength: stat11.size });
+    return this.uploadForm(projectId, parentFolderId, filename, form);
+  }
+  async uploadForm(projectId, parentFolderId, filename, form) {
     const result = await this.requestJson("POST", `project/${projectId}/upload?folder_id=${encodeURIComponent(parentFolderId)}`, {
       body: form,
       includeCsrfHeader: true
@@ -25844,6 +26134,14 @@ var OverleafClient = class {
   }
   async downloadProjectFile(projectId, fileId, signal) {
     return this.downloadRelative(`project/${projectId}/file/${fileId}`, true, signal);
+  }
+  async downloadProjectFileToPath(projectId, fileId, targetPath, options = {}) {
+    return this.downloadAbsoluteToPath(
+      this.urlFor(`project/${projectId}/file/${fileId}`),
+      true,
+      targetPath,
+      options
+    );
   }
   async deleteEntity(projectId, entityType, entityId) {
     await this.requestText("DELETE", `project/${projectId}/${entityType}/${entityId}`, {
@@ -25894,6 +26192,17 @@ var OverleafClient = class {
       return this.downloadAbsolute(cdnUrl, false);
     }
     return this.downloadRelative(outputUrl.replace(/^\/+/, ""), true);
+  }
+  async downloadCompileOutputToPath(outputUrl, compile, targetPath, options = {}) {
+    if (/^https?:\/\//i.test(outputUrl)) {
+      return this.downloadAbsoluteToPath(outputUrl, false, targetPath, options);
+    }
+    if (compile.pdfDownloadDomain && compile.clsiServerId) {
+      const cleanOutput = outputUrl.replace(/^\/+/, "");
+      const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, "")}/${cleanOutput}?compileGroup=${encodeURIComponent(compile.compileGroup)}&clsiserverid=${encodeURIComponent(compile.clsiServerId)}&enable_pdf_caching=true`;
+      return this.downloadAbsoluteToPath(cdnUrl, false, targetPath, options);
+    }
+    return this.downloadAbsoluteToPath(this.urlFor(outputUrl.replace(/^\/+/, "")), true, targetPath, options);
   }
   async syncCode(projectId, file, line, column, buildId) {
     const route = `project/${projectId}/sync/code?file=${encodeURIComponent(file)}&line=${line}&column=${column}&editorId=${v4_default()}&buildId=${encodeURIComponent(buildId)}`;
@@ -26024,7 +26333,7 @@ var OverleafClient = class {
       if (res.status >= 300 && res.status < 400) {
         const location = res.headers.get("location");
         if (!location || redirects >= 5) {
-          throw new OverleafHttpError(`Overleaf download redirect failed for ${path27.basename(currentUrl)}.`, res.status);
+          throw new OverleafHttpError(`Overleaf download redirect failed for ${path28.basename(currentUrl)}.`, res.status);
         }
         currentUrl = new URL(location, currentUrl).toString();
         redirects += 1;
@@ -26072,6 +26381,86 @@ var OverleafClient = class {
     }
     return new Uint8Array(result);
   }
+  async downloadAbsoluteToPath(url, includeCookies, targetPath, options) {
+    const identity = includeCookies ? this.requireIdentity() : void 0;
+    let currentUrl = url;
+    let offset = 0;
+    let expectedTotal;
+    let redirects = 0;
+    let ranges = 0;
+    let sizeReported = false;
+    await fs22.mkdir(path28.dirname(targetPath), { recursive: true });
+    await fs22.rm(targetPath, { force: true });
+    try {
+      while (true) {
+        const res = await this.fetchWithTimeout(currentUrl, {
+          method: "GET",
+          redirect: "manual",
+          agent: this.agent,
+          headers: {
+            Connection: "keep-alive",
+            ...offset > 0 ? { Range: `bytes=${offset}-` } : {},
+            ...identity ? { Cookie: identity.cookies } : {}
+          }
+        }, this.timeouts.httpMs, options.signal);
+        if (res.status >= 300 && res.status < 400) {
+          const location = res.headers.get("location");
+          res.body?.resume();
+          if (!location || redirects >= 5) {
+            throw new OverleafHttpError(`Overleaf download redirect failed for ${path28.basename(currentUrl)}.`, res.status);
+          }
+          currentUrl = new URL(location, currentUrl).toString();
+          redirects += 1;
+          continue;
+        }
+        if (res.status !== 200 && res.status !== 206) await assertOk(res, currentUrl);
+        let responseStart = 0;
+        let responseEnd;
+        if (res.status === 206) {
+          if (ranges >= 128) throw new Error("Overleaf download returned too many partial responses.");
+          const range = parseContentRange(res.headers.get("content-range"));
+          if (range.start !== offset || range.end < range.start) {
+            throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get("content-range") ?? "missing"}.`);
+          }
+          if (expectedTotal !== void 0 && range.total !== expectedTotal) {
+            throw new Error("Overleaf changed the total download size between partial responses.");
+          }
+          expectedTotal = range.total;
+          responseStart = range.start;
+          responseEnd = range.end;
+        } else {
+          if (offset > 0) throw new Error("Overleaf ignored a Range request after returning partial content.");
+          const contentLength = parseNonNegativeInteger(res.headers.get("content-length"));
+          expectedTotal = contentLength;
+          responseEnd = contentLength === void 0 ? void 0 : contentLength - 1;
+        }
+        if (!sizeReported) {
+          await options.onSize?.(expectedTotal ?? Number.POSITIVE_INFINITY);
+          sizeReported = true;
+        }
+        if (!res.body) throw new Error("Overleaf download response did not contain a body.");
+        const before = offset;
+        await (0, import_promises.pipeline)(res.body, (0, import_fs4.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        const actualSize = (await fs22.stat(targetPath)).size;
+        const received = actualSize - before;
+        if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
+          throw new Error(`Overleaf download body length did not match its declared range (${received} bytes received).`);
+        }
+        offset = actualSize;
+        if (res.status === 200 || expectedTotal === void 0 || offset === expectedTotal) break;
+        if (offset > expectedTotal) throw new Error("Overleaf partial download exceeded its declared size.");
+        ranges += 1;
+      }
+      const digests = await hashFileDigests(targetPath);
+      if (expectedTotal !== void 0 && digests.size !== expectedTotal) {
+        throw new Error(`Overleaf download was incomplete (${digests.size}/${expectedTotal} bytes).`);
+      }
+      return digests;
+    } catch (error) {
+      await fs22.rm(targetPath, { force: true }).catch(() => void 0);
+      throw error;
+    }
+  }
   requireIdentity() {
     if (!this.identity) {
       throw new Error("Not logged in to Overleaf.");
@@ -26089,7 +26478,7 @@ var OverleafSocketSession = class {
   constructor(serverUrl, identity, timeouts, query) {
     this.identity = identity;
     this.timeouts = timeouts;
-    const runtimeRoot2 = path27.join(__dirname, "vendor", "socket.io-client");
+    const runtimeRoot2 = path28.join(__dirname, "vendor", "socket.io-client");
     const socketIo = loadSocketIoClient(runtimeRoot2);
     patchSocketIoHandshake(socketIo, runtimeRoot2);
     const connect = socketIo.connect.bind(socketIo);
@@ -26338,12 +26727,17 @@ function parseContentRange(value) {
   }
   return { start: Number(match2[1]), end: Number(match2[2]), total: Number(match2[3]) };
 }
+function parseNonNegativeInteger(value) {
+  if (!value || !/^\d+$/.test(value)) return void 0;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : void 0;
+}
 function abortError(signal) {
   return signal?.reason instanceof Error ? signal.reason : new Error("Operation cancelled.");
 }
-function loadSocketIoClient(runtimeRoot2 = path27.join(__dirname, "vendor", "socket.io-client")) {
+function loadSocketIoClient(runtimeRoot2 = path28.join(__dirname, "vendor", "socket.io-client")) {
   const requireFromExtension = (0, import_module.createRequire)(__filename);
-  const entry = path27.join(runtimeRoot2, "lib", "io.js");
+  const entry = path28.join(runtimeRoot2, "lib", "io.js");
   let loaded;
   try {
     loaded = requireFromExtension(entry);
@@ -26371,14 +26765,14 @@ function loadSocketIoClient(runtimeRoot2 = path27.join(__dirname, "vendor", "soc
   throw new Error(`Could not load socket.io-client connect function. Loaded shape: ${shape || "empty"}.`);
 }
 function loadSocketIoWebSocket(runtimeRoot2) {
-  const entry = path27.join(runtimeRoot2, "lib", "io.js");
+  const entry = path28.join(runtimeRoot2, "lib", "io.js");
   const requireFromRuntime = (0, import_module.createRequire)(entry);
   let loaded;
   try {
     loaded = requireFromRuntime("ws");
   } catch (error) {
     const message = formatUnknownError(error);
-    throw new Error(`Could not load the Overleaf WebSocket runtime from ${path27.join(runtimeRoot2, "node_modules", "ws")}: ${message}. Rebuild or reinstall the extension.`);
+    throw new Error(`Could not load the Overleaf WebSocket runtime from ${path28.join(runtimeRoot2, "node_modules", "ws")}: ${message}. Rebuild or reinstall the extension.`);
   }
   const candidate = loaded?.default ?? loaded;
   if (typeof candidate !== "function") {
@@ -26631,7 +27025,7 @@ async function assertOk(res, route) {
     code = void 0;
   }
   throw new OverleafHttpError(
-    `Overleaf request failed (${res.status}) for ${path27.basename(route)}: ${body.slice(0, 500)}`,
+    `Overleaf request failed (${res.status}) for ${path28.basename(route)}: ${body.slice(0, 500)}`,
     res.status,
     code,
     body.slice(0, 500)
@@ -26639,12 +27033,13 @@ async function assertOk(res, route) {
 }
 
 // src/overleaf/realtimeSync.ts
-var fs26 = __toESM(require("fs/promises"));
-var path32 = __toESM(require("path"));
+var fs28 = __toESM(require("fs/promises"));
+var path33 = __toESM(require("path"));
+var os6 = __toESM(require("os"));
 var vscode10 = __toESM(require("vscode"));
 
 // src/overleaf/binaryTransactions.ts
-var fs21 = __toESM(require("fs/promises"));
+var fs23 = __toESM(require("fs/promises"));
 var BinaryTransactionStore = class {
   constructor(root) {
     this.root = root;
@@ -26653,14 +27048,16 @@ var BinaryTransactionStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
-    const raw = await fs21.readFile(target, "utf8").catch(() => void 0);
+    const raw = await fs23.readFile(target, "utf8").catch(() => void 0);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.id !== "string" || typeof item.path !== "string")) throw new Error("invalid transactions");
+      const validationError = validateTransactionList(parsed);
+      if (validationError) throw new Error(validationError);
       return parsed;
-    } catch {
-      await fs21.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+    } catch (error) {
+      await fs23.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
@@ -26680,6 +27077,7 @@ var BinaryTransactionStore = class {
     });
   }
   write(records) {
+    assertValidTransactions(records);
     return atomicWriteText(metadataPath(this.root, TRANSACTIONS_NAME), `${JSON.stringify(records, null, 2)}
 `);
   }
@@ -26691,10 +27089,10 @@ var BinaryTransactionStore = class {
 };
 
 // src/overleaf/syncStatus.ts
-var fs22 = __toESM(require("fs/promises"));
-var import_fs3 = require("fs");
-var import_crypto4 = require("crypto");
-var path28 = __toESM(require("path"));
+var fs24 = __toESM(require("fs/promises"));
+var import_fs5 = require("fs");
+var import_crypto6 = require("crypto");
+var path29 = __toESM(require("path"));
 function classifySyncStatus(input) {
   const entity = input.remoteFile ?? input.manifestFile;
   const baseHash = input.baseHash ?? input.manifestFile?.baseHash ?? input.manifestFile?.sha1;
@@ -26945,24 +27343,24 @@ async function scanLocalProject(root, manifest) {
   folders.sort();
   return { files, folders, fileMetadata, trackedOrParentPaths };
   async function walk(absDir, relDir) {
-    const entries = await fs22.readdir(absDir, { withFileTypes: true }).catch(() => []);
+    const entries = await fs24.readdir(absDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      const relPath = toPosixPath2(path28.posix.join(relDir, entry.name));
+      const relPath = toPosixPath2(path29.posix.join(relDir, entry.name));
       const tracked = trackedOrParentPaths.has(relPath);
       if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) continue;
-      const absPath = path28.join(absDir, entry.name);
+      const absPath = path29.join(absDir, entry.name);
       if (entry.isDirectory()) {
         folders.push(relPath);
         await walk(absPath, relPath);
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat9 = await fs22.stat(absPath).catch(() => void 0);
-        if (stat9) {
+        const stat11 = await fs24.stat(absPath).catch(() => void 0);
+        if (stat11) {
           fileMetadata.set(relPath, {
-            size: stat9.size,
-            mtimeMs: stat9.mtimeMs,
-            ctimeMs: stat9.ctimeMs,
-            inode: Number(stat9.ino)
+            size: stat11.size,
+            mtimeMs: stat11.mtimeMs,
+            ctimeMs: stat11.ctimeMs,
+            inode: Number(stat11.ino)
           });
         }
       }
@@ -26975,7 +27373,7 @@ function buildTrackedOrParentPathIndex(manifest) {
     let current = toPosixPath2(candidate);
     while (current) {
       result.add(current);
-      current = path28.posix.dirname(current);
+      current = path29.posix.dirname(current);
       if (current === ".") current = "";
     }
   }
@@ -26983,9 +27381,9 @@ function buildTrackedOrParentPathIndex(manifest) {
 }
 async function fileHash(filePath) {
   try {
-    const hash2 = (0, import_fs3.createReadStream)(filePath);
+    const hash2 = (0, import_fs5.createReadStream)(filePath);
     const digest = await new Promise((resolve22, reject) => {
-      const state = (0, import_crypto4.createHash)("sha1");
+      const state = (0, import_crypto6.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
       hash2.on("end", () => resolve22(state.digest("hex")));
@@ -26996,14 +27394,14 @@ async function fileHash(filePath) {
   }
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false, knownMetadata) {
-  const stat9 = knownMetadata ? {
+  const stat11 = knownMetadata ? {
     isFile: () => true,
     size: knownMetadata.size,
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
-  } : await fs22.stat(filePath).catch(() => void 0);
-  if (!stat9?.isFile()) {
+  } : await fs24.stat(filePath).catch(() => void 0);
+  if (!stat11?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -27015,23 +27413,23 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat9.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat9.size && manifestFile.localMtimeMs === stat9.mtimeMs && manifestFile.localCtimeMs === stat9.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat11.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat11.size && manifestFile.localMtimeMs === stat11.mtimeMs && manifestFile.localCtimeMs === stat11.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash2 = await fileHash(filePath);
   if (!manifestFile) return { hash: hash2, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat9.size || manifestFile.localMtimeMs !== stat9.mtimeMs || manifestFile.localCtimeMs !== stat9.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat11.size || manifestFile.localMtimeMs !== stat11.mtimeMs || manifestFile.localCtimeMs !== stat11.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash2;
-  manifestFile.localSize = stat9.size;
-  manifestFile.localMtimeMs = stat9.mtimeMs;
-  manifestFile.localCtimeMs = stat9.ctimeMs;
+  manifestFile.localSize = stat11.size;
+  manifestFile.localMtimeMs = stat11.mtimeMs;
+  manifestFile.localCtimeMs = stat11.ctimeMs;
   manifestFile.localInode = inode;
   return { hash: hash2, cacheChanged, reused: false };
 }
 function trashPathFor(root, relPath) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  return path28.join(root, ".overleaf-codex", "trash", stamp, relPath);
+  return path29.join(root, ".overleaf-codex", "trash", stamp, relPath);
 }
 function shouldSkip(relPath) {
   return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
@@ -27052,12 +27450,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path40, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path40);
+  setPath(path41, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path41);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path40) {
-    this.paths.delete(toPosixPath2(path40));
+  clearPath(path41) {
+    this.paths.delete(toPosixPath2(path41));
   }
   clearPaths() {
     this.paths.clear();
@@ -27069,16 +27467,16 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path40 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path40, { ...entry, path: path40 });
+      const path41 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path41, { ...entry, path: path41 });
     }
   }
-  canSync(path40) {
+  canSync(path41) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path40) === void 0;
+    return this.findBlocking(path41) === void 0;
   }
-  findBlocking(path40) {
-    const normalized = toPosixPath2(path40);
+  findBlocking(path41) {
+    const normalized = toPosixPath2(path41);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -27098,7 +27496,7 @@ var SyncGate = class {
 };
 
 // src/overleaf/conflictStore.ts
-var fs23 = __toESM(require("fs/promises"));
+var fs25 = __toESM(require("fs/promises"));
 var ConflictStore = class {
   constructor(root) {
     this.root = root;
@@ -27107,14 +27505,16 @@ var ConflictStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
-    const raw = await fs23.readFile(target, "utf8").catch(() => void 0);
+    const raw = await fs25.readFile(target, "utf8").catch(() => void 0);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.some((item) => !item || typeof item.relPath !== "string" || typeof item.docId !== "string")) throw new Error("invalid conflict index");
+      const validationError = validateConflictList(parsed);
+      if (validationError) throw new Error(validationError);
       return parsed;
-    } catch {
-      await fs23.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+    } catch (error) {
+      await fs25.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
@@ -27144,6 +27544,7 @@ var ConflictStore = class {
     });
   }
   write(records) {
+    assertValidConflicts(records);
     return atomicWriteText(metadataPath(this.root, CONFLICT_INDEX_NAME), `${JSON.stringify(records, null, 2)}
 `);
   }
@@ -27155,8 +27556,8 @@ var ConflictStore = class {
 };
 
 // src/overleaf/manifestStore.ts
-var fs24 = __toESM(require("fs/promises"));
-var path29 = __toESM(require("path"));
+var fs26 = __toESM(require("fs/promises"));
+var path30 = __toESM(require("path"));
 var ManifestStore = class {
   constructor(root) {
     this.root = root;
@@ -27176,8 +27577,16 @@ var ManifestStore = class {
     return this.run(() => writeBaseDoc(this.root, docId, content));
   }
   async readJson(name, fallback) {
-    const raw = await fs24.readFile(metadataPath(this.root, name), "utf8").catch(() => void 0);
-    return raw ? JSON.parse(raw) : fallback;
+    const target = metadataPath(this.root, name);
+    const raw = await fs26.readFile(target, "utf8").catch(() => void 0);
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      await fs26.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      console.warn(`Overleaf metadata at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
+      return fallback;
+    }
   }
   writeJson(name, value) {
     return this.run(() => atomicWriteText(metadataPath(this.root, name), `${JSON.stringify(value, null, 2)}
@@ -27185,7 +27594,7 @@ var ManifestStore = class {
   }
   paths() {
     return {
-      manifest: path29.join(this.root, ".overleaf-codex", "manifest.json"),
+      manifest: path30.join(this.root, ".overleaf-codex", "manifest.json"),
       status: syncStatusPath(this.root),
       base: (docId) => baseDocPath(this.root, docId)
     };
@@ -27391,13 +27800,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path40) {
-    const normalized = toPosixPath2(path40);
+  forget(path41) {
+    const normalized = toPosixPath2(path41);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path40) {
-    const normalized = toPosixPath2(path40);
+  forgetSubtree(path41) {
+    const normalized = toPosixPath2(path41);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -27436,8 +27845,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path40, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path40);
+      for (const [path41, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path41);
       }
     }
   }
@@ -27522,85 +27931,6 @@ function normalizeRequest(request) {
   };
 }
 
-// src/overleaf/syncHealthService.ts
-var SyncHealthService = class {
-  planRemoteReads(previous, remote, options) {
-    const requested = options.paths ? new Set([...options.paths].map(toPosixPath2)) : void 0;
-    const plan = {
-      docsToJoin: [],
-      binariesToGet: [],
-      reusedPaths: /* @__PURE__ */ new Set()
-    };
-    for (const file of Object.values(remote.files)) {
-      if (shouldIgnore(previous, file.path)) continue;
-      if (requested && !requested.has(file.path)) continue;
-      const previousFile = previous.files[file.path];
-      if (options.mode === "incremental" && canReuseRemoteMetadata(previousFile, file)) {
-        plan.reusedPaths.add(file.path);
-      } else if (file.entityType === "doc") {
-        plan.docsToJoin.push(file);
-      } else {
-        plan.binariesToGet.push(file);
-      }
-    }
-    return plan;
-  }
-};
-async function mapWithConcurrency(items, concurrency, handler) {
-  let nextIndex = 0;
-  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await handler(item);
-    }
-  });
-  await Promise.all(workers);
-}
-async function mapWithByteConcurrency(items, concurrency, maxBytes, estimateBytes, handler) {
-  let nextIndex = 0;
-  let inFlightBytes = 0;
-  const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve22) => resolve22());
-  const acquire = async (bytes) => {
-    const amount = Math.max(1, Math.min(bytes, maxBytes));
-    while (inFlightBytes + amount > maxBytes && inFlightBytes > 0) {
-      await new Promise((resolve22) => waiters.push(resolve22));
-    }
-    inFlightBytes += amount;
-  };
-  const release = (bytes) => {
-    inFlightBytes = Math.max(0, inFlightBytes - Math.max(1, Math.min(bytes, maxBytes)));
-    wake();
-  };
-  const workers = Array.from({ length: Math.min(Math.max(concurrency, 1), items.length) }, async () => {
-    while (nextIndex < items.length) {
-      const index = nextIndex++;
-      const item = items[index];
-      const bytes = estimateBytes(item);
-      await acquire(bytes);
-      try {
-        await handler(item);
-      } finally {
-        release(bytes);
-      }
-    }
-  });
-  await Promise.all(workers);
-}
-function canReuseRemoteMetadata(previous, remote) {
-  if (!previous?.sha1 || previous.entityId !== remote.entityId || previous.entityType !== remote.entityType) {
-    return false;
-  }
-  if (remote.entityType === "doc") {
-    return previous.version !== void 0 && remote.version !== void 0 && previous.version === remote.version;
-  }
-  if (previous.remoteBlobHash !== void 0 && remote.remoteBlobHash !== void 0) {
-    return previous.remoteBlobHash === remote.remoteBlobHash;
-  }
-  return previous.remoteRevision !== void 0 && remote.remoteRevision !== void 0 && previous.remoteRevision === remote.remoteRevision;
-}
-
 // src/overleaf/config.ts
 var EXPLICIT_CONFIGURATION_SCOPES = [
   "globalValue",
@@ -27626,8 +27956,8 @@ function needsGlobalConfigurationUpdate(inspection, effectiveValue, desiredValue
 }
 
 // src/overleaf/localRename.ts
-var fs25 = __toESM(require("fs/promises"));
-var path30 = __toESM(require("path"));
+var fs27 = __toESM(require("fs/promises"));
+var path31 = __toESM(require("path"));
 var LocalRenameConflictError = class extends Error {
   constructor(oldPath, newPath) {
     super(`Cannot apply remote rename ${oldPath} -> ${newPath}; the local target already exists.`);
@@ -27644,19 +27974,19 @@ async function renameLocalPathSafely(root, oldPath, newPath) {
   if (normalizedOld === normalizedNew) return;
   const oldAbsolute = resolveWithinRoot(root, normalizedOld);
   const newAbsolute = resolveWithinRoot(root, normalizedNew);
-  const source = await fs25.lstat(oldAbsolute).catch((error) => {
+  const source = await fs27.lstat(oldAbsolute).catch((error) => {
     if (error.code === "ENOENT") return void 0;
     throw error;
   });
   if (!source) throw new Error(`Cannot apply remote rename; the local source does not exist: ${normalizedOld}`);
-  const target = await fs25.lstat(newAbsolute).catch((error) => {
+  const target = await fs27.lstat(newAbsolute).catch((error) => {
     if (error.code === "ENOENT") return void 0;
     throw error;
   });
   const sameEntity = target && source.dev === target.dev && source.ino === target.ino;
   if (target && !sameEntity) throw new LocalRenameConflictError(normalizedOld, normalizedNew);
-  await fs25.mkdir(path30.dirname(newAbsolute), { recursive: true });
-  await fs25.rename(oldAbsolute, newAbsolute);
+  await fs27.mkdir(path31.dirname(newAbsolute), { recursive: true });
+  await fs27.rename(oldAbsolute, newAbsolute);
 }
 async function renameLocalPathTransactionally(root, oldPath, newPath, commit, rollback) {
   await renameLocalPathSafely(root, oldPath, newPath);
@@ -27677,16 +28007,16 @@ async function renameLocalPathTransactionally(root, oldPath, newPath, commit, ro
 }
 function validateRelativePath(value) {
   const normalized = toPosixPath2(value);
-  if (!normalized || normalized === "." || normalized.startsWith("../") || path30.isAbsolute(value)) {
+  if (!normalized || normalized === "." || normalized.startsWith("../") || path31.isAbsolute(value)) {
     throw new Error(`Invalid local mirror path: ${value}`);
   }
   return normalized;
 }
 function resolveWithinRoot(root, relPath) {
-  const absoluteRoot = path30.resolve(root);
-  const absolute = path30.resolve(absoluteRoot, relPath);
-  const relative8 = path30.relative(absoluteRoot, absolute);
-  if (!relative8 || relative8.startsWith("..") || path30.isAbsolute(relative8)) {
+  const absoluteRoot = path31.resolve(root);
+  const absolute = path31.resolve(absoluteRoot, relPath);
+  const relative8 = path31.relative(absoluteRoot, absolute);
+  if (!relative8 || relative8.startsWith("..") || path31.isAbsolute(relative8)) {
     throw new Error(`Path escapes the local mirror: ${relPath}`);
   }
   return absolute;
@@ -27718,22 +28048,22 @@ async function executeSyncCommand(backend, command, args = {}) {
       return backend.syncOnce();
     case "push":
     case "pull": {
-      const path40 = requiredPath(args.path);
+      const path41 = requiredPath(args.path);
       const force = Boolean(args.force);
-      await backend.authorize?.(command, path40, force);
-      await backend[command](path40, force);
+      await backend.authorize?.(command, path41, force);
+      await backend[command](path41, force);
       return backend.status({
         refresh: true,
         full: false,
-        paths: [path40],
+        paths: [path41],
         reason: `post-${command}`
       });
     }
     case "conflicts-list":
       return backend.conflicts();
     case "conflicts-resolve": {
-      const path40 = requiredPath(args.path);
-      await backend.resolveConflict(path40, args.use === "remote" ? "remote" : "local");
+      const path41 = requiredPath(args.path);
+      await backend.resolveConflict(path41, args.use === "remote" ? "remote" : "local");
       return backend.conflicts();
     }
     default:
@@ -27749,7 +28079,7 @@ function stringArray(value) {
 }
 
 // src/overleaf/remoteMutationCore.ts
-var path31 = __toESM(require("path"));
+var path32 = __toESM(require("path"));
 async function performRemotePathChange(client, projectId, change, beforeMutation = () => void 0) {
   const renamed = change.oldName !== change.newName;
   const moved = change.oldParentFolderId !== change.newParentFolderId;
@@ -27848,8 +28178,8 @@ function commitRecoveredBinary(manifest, transaction) {
   return changed;
 }
 function transactionName(filename, suffix) {
-  const ext2 = path31.posix.extname(filename);
-  const stem = path31.posix.basename(filename, ext2);
+  const ext2 = path32.posix.extname(filename);
+  const stem = path32.posix.basename(filename, ext2);
   const marker = `.overleaf-codex-${suffix}`;
   const maxStem = Math.max(1, 150 - ext2.length - marker.length);
   return `${stem.slice(0, maxStem)}${marker}${ext2}`;
@@ -28019,7 +28349,7 @@ var RealtimeSyncService = class {
       if (signal?.aborted) throw signal.reason ?? new Error("Operation cancelled.");
       progress?.report({ message: `Pulling safe remote changes ${pulled + 1}/${plan.pulls.length}: ${item.path}` });
       if (item.entityType === "folder") {
-        await fs26.mkdir(this.abs(item.path), { recursive: true });
+        await fs28.mkdir(this.abs(item.path), { recursive: true });
       } else {
         await this.pullRemoteFile(item.path, false);
       }
@@ -28081,13 +28411,13 @@ var RealtimeSyncService = class {
       }
       const manifestFile = manifest.files[relPath];
       const remoteFile = remote.manifest.files[relPath];
-      const localAbs = path32.join(root, relPath);
+      const localAbs = path33.join(root, relPath);
       const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full", localScan.fileMetadata.get(relPath));
       const localHash = localResult.hash;
       if (localResult.reused) localCacheReuseCount += 1;
       if (localResult.cacheChanged) manifestChanged = true;
       const remoteContent = remote.contents.get(relPath);
-      const remoteHash = remoteContent === void 0 ? remote.reused.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent);
+      const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === void 0 ? remote.reused.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent));
       const remoteReadError = remote.failures.get(relPath);
       if (!manifestFile && !remoteFile && localHash === void 0 && !remoteReadError) {
         continue;
@@ -28116,15 +28446,17 @@ var RealtimeSyncService = class {
         remoteReadError
       });
       if (item.status === "synced" && manifestFile && remoteFile) {
-        if (manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision) {
+        if (manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision || manifestFile.remoteSize !== remoteFile.remoteSize) {
           manifestFile.version = remoteFile.version;
           manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
           manifestFile.remoteRevision = remoteFile.remoteRevision;
+          manifestFile.remoteSize = remoteFile.remoteSize;
           manifestChanged = true;
         }
       }
       if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {
         addOrUpdateFile(manifest, remoteFile, remoteContent);
+        manifest.files[relPath].sha1 = remoteHash;
         manifest.files[relPath].baseHash = baseHash;
         manifestChanged = true;
       }
@@ -28244,8 +28576,11 @@ var RealtimeSyncService = class {
       throw new Error(`${normalized} is excluded by ${LOCAL_IGNORE_NAME} and cannot be pushed to Overleaf.`);
     }
     await this.saveOpenLocalDocument(normalized);
-    const localContent = await fs26.readFile(this.abs(normalized)).catch(() => void 0);
-    if (localContent === void 0) {
+    const localPath = this.abs(normalized);
+    const localStat = await fs28.stat(localPath).catch(() => void 0);
+    const binary = entry ? entry.entityType === "file" : !isTextLike(normalized);
+    const localContent = localStat && !binary ? await fs28.readFile(localPath) : void 0;
+    if (!localStat) {
       if (!entry) {
         throw new Error(`${normalized} does not exist locally or in the manifest.`);
       }
@@ -28287,6 +28622,7 @@ var RealtimeSyncService = class {
       return;
     }
     if (entry.entityType === "doc") {
+      if (!localContent) throw new Error(`Could not read local document ${normalized}.`);
       this.log(`Pushing local document ${normalized}.`);
       const state = await this.ensureDocState(normalized);
       state.paused = false;
@@ -28294,7 +28630,7 @@ var RealtimeSyncService = class {
       await this.syncDocContent(normalized, localContent.toString("utf8"), true);
     } else {
       this.log(`Replacing remote binary file ${normalized}.`);
-      await this.replaceBinaryFile(normalized, localContent, entry, true);
+      await this.replaceBinaryFile(normalized, localPath, await hashFileDigests(localPath), entry, true);
     }
     if (refreshStatus) {
       await this.checkTargeted([normalized], "post-push");
@@ -28315,17 +28651,34 @@ var RealtimeSyncService = class {
     if (remoteFailure) {
       throw new Error(`Could not read ${normalized} from Overleaf: ${remoteFailure}`);
     }
-    if (!remoteFile || remoteContent === void 0) {
+    if (!remoteFile || remoteFile.entityType === "doc" && remoteContent === void 0) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
+    if (remoteFile.entityType === "file") {
+      const target = this.abs(normalized);
+      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
+      const result = await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, staging);
+      await installStagedFile(staging, target);
+      addOrUpdateFile(this.manifest, { ...remoteFile, remoteSize: result.size });
+      this.manifest.files[normalized].sha1 = result.sha1;
+      this.manifest.files[normalized].baseHash = result.sha1;
+      this.bypassHashes.set(normalized, result.sha1);
+      await this.persistManifest();
+      this.syncGate.clearPath(normalized);
+      if (refreshStatus) {
+        await this.checkTargeted([normalized], "post-pull");
+        vscode10.window.showInformationMessage(`Pulled Overleaf version for ${normalized}.`);
+      }
+      return;
+    }
     addOrUpdateFile(this.manifest, remoteFile, remoteContent);
-    this.manifest.files[normalized].baseHash = remoteFile.entityType === "doc" && typeof remoteContent === "string" ? await writeBaseDoc(this.root, remoteFile.entityId, remoteContent) : sha1(remoteContent);
+    this.manifest.files[normalized].baseHash = await writeBaseDoc(this.root, remoteFile.entityId, remoteContent);
     await this.writeLocalFile(
       normalized,
-      typeof remoteContent === "string" ? Buffer.from(remoteContent, "utf8") : remoteContent,
+      Buffer.from(remoteContent, "utf8"),
       true
     );
-    if (remoteFile.entityType === "doc" && typeof remoteContent === "string") {
+    if (remoteFile.entityType === "doc") {
       const state = this.docStates.get(normalized) ?? await this.joinDocState(normalized, remoteFile.entityId);
       state.version = remoteFile.version ?? state.version;
       state.localCache = remoteContent;
@@ -28348,13 +28701,18 @@ var RealtimeSyncService = class {
     if (remoteFailure) {
       throw new Error(`Could not read ${normalized} from Overleaf: ${remoteFailure}`);
     }
-    if (remoteContent === void 0) {
+    const remoteFile = remote.manifest.files[normalized];
+    if (!remoteFile || remoteFile.entityType === "doc" && remoteContent === void 0) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
-    const suffix = isTextLike(normalized) ? path32.extname(normalized) || ".tex" : ".remote";
+    const suffix = isTextLike(normalized) ? path33.extname(normalized) || ".tex" : ".remote";
     const diffPath = metadataPath(this.root, "conflicts", `${normalized.replace(/[\/\\]/g, "__")}.remote.${Date.now()}${suffix}`);
-    await fs26.mkdir(path32.dirname(diffPath), { recursive: true });
-    await fs26.writeFile(diffPath, remoteContent);
+    await fs28.mkdir(path33.dirname(diffPath), { recursive: true });
+    if (remoteFile.entityType === "file") {
+      await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, diffPath);
+    } else {
+      await fs28.writeFile(diffPath, remoteContent);
+    }
     await vscode10.commands.executeCommand(
       "vscode.diff",
       vscode10.Uri.file(diffPath),
@@ -28567,7 +28925,7 @@ var RealtimeSyncService = class {
     if (!relPath || !this.root) {
       return;
     }
-    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path32.join(this.root, relPath)));
+    const document = await vscode10.workspace.openTextDocument(vscode10.Uri.file(path33.join(this.root, relPath)));
     await vscode10.window.showTextDocument(document, {
       selection: new vscode10.Selection(picked.user.row ?? 0, picked.user.column ?? 0, picked.user.row ?? 0, picked.user.column ?? 0),
       preview: false
@@ -28624,7 +28982,7 @@ var RealtimeSyncService = class {
   async useLocalConflict(relPath) {
     const state = this.requireConflict(relPath);
     await this.saveOpenLocalDocument(relPath);
-    const localContent = await fs26.readFile(this.abs(relPath), "utf8");
+    const localContent = await fs28.readFile(this.abs(relPath), "utf8");
     state.paused = false;
     state.conflictPath = void 0;
     state.conflictReason = void 0;
@@ -28650,9 +29008,9 @@ var RealtimeSyncService = class {
     }
   }
   async saveOpenLocalDocument(relPath) {
-    const absPath = path32.normalize(this.abs(relPath));
+    const absPath = path33.normalize(this.abs(relPath));
     const document = vscode10.workspace.textDocuments.find(
-      (item) => path32.normalize(item.uri.fsPath) === absPath
+      (item) => path33.normalize(item.uri.fsPath) === absPath
     );
     if (document?.isDirty) {
       await document.save();
@@ -28695,7 +29053,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest || !this.session || event.selections.length === 0) {
       return;
     }
-    const relPath = toPosixPath2(path32.relative(this.root, event.textEditor.document.uri.fsPath));
+    const relPath = toPosixPath2(path33.relative(this.root, event.textEditor.document.uri.fsPath));
     if (!relPath || relPath.startsWith("..")) {
       return;
     }
@@ -28788,7 +29146,7 @@ var RealtimeSyncService = class {
           continue;
         }
         const relPath = filePathById(this.manifest, user.doc_id);
-        if (!relPath || path32.normalize(editor.document.uri.fsPath) !== path32.normalize(path32.join(this.root, relPath))) {
+        if (!relPath || path33.normalize(editor.document.uri.fsPath) !== path33.normalize(path33.join(this.root, relPath))) {
           continue;
         }
         const range = new vscode10.Range(user.row ?? 0, user.column ?? 0, user.row ?? 0, user.column ?? 0);
@@ -28822,7 +29180,7 @@ var RealtimeSyncService = class {
     if (!this.root || !this.manifest) {
       return;
     }
-    const relPath = toPosixPath2(path32.relative(this.root, uri.fsPath));
+    const relPath = toPosixPath2(path33.relative(this.root, uri.fsPath));
     if (relPath === LOCAL_IGNORE_NAME) {
       void this.reloadLocalIgnoreFile();
       return;
@@ -28896,13 +29254,13 @@ var RealtimeSyncService = class {
     this.timers.set(relPath, timer);
   }
   async registerPotentialRenameCreate(relPath) {
-    const stat9 = await fs26.stat(this.abs(relPath)).catch(() => void 0);
-    if (!stat9) return;
+    const stat11 = await fs28.stat(this.abs(relPath)).catch(() => void 0);
+    if (!stat11) return;
     if (this.hasPendingFolderRenameAncestor(relPath)) {
       this.scheduleLocalChange(relPath, "create", 1e3);
       return;
     }
-    if (stat9.isDirectory()) {
+    if (stat11.isDirectory()) {
       this.pendingFolderRenameRoots.add(relPath);
       const detection2 = this.renameDetector.registerCreate({
         path: relPath,
@@ -28917,11 +29275,12 @@ var RealtimeSyncService = class {
       this.scheduleLocalChange(relPath, "create", 650);
       return;
     }
-    const content = await fs26.readFile(this.abs(relPath)).catch(() => void 0);
-    if (!content) return;
+    const content = isTextLike(relPath) ? await fs28.readFile(this.abs(relPath)).catch(() => void 0) : void 0;
+    const hash2 = content ? sha1(content) : (await hashFileDigests(this.abs(relPath)).catch(() => void 0))?.sha1;
+    if (!hash2) return;
     const detection = this.renameDetector.registerCreate({
       path: relPath,
-      hash: sha1(content),
+      hash: hash2,
       entityType: isTextLike(relPath) ? "doc" : "file"
     });
     if (detection.kind !== "none") {
@@ -28980,17 +29339,18 @@ var RealtimeSyncService = class {
     const parts = [];
     const root = this.abs(relPath);
     const walk = async (absDir, relativeDir) => {
-      const entries = await fs26.readdir(absDir, { withFileTypes: true }).catch(() => []);
+      const entries = await fs28.readdir(absDir, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
-        const relative8 = toPosixPath2(path32.posix.join(relativeDir, entry.name));
-        const projectPath = toPosixPath2(path32.posix.join(relPath, relative8));
+        const relative8 = toPosixPath2(path33.posix.join(relativeDir, entry.name));
+        const projectPath = toPosixPath2(path33.posix.join(relPath, relative8));
         if (isAlwaysLocal(projectPath) || shouldIgnore(this.manifest, projectPath) || shouldIgnoreUntrackedLocalPath(this.manifest, projectPath)) continue;
         if (entry.isDirectory()) {
           parts.push(`D\0${relative8}`);
-          await walk(path32.join(absDir, entry.name), relative8);
+          await walk(path33.join(absDir, entry.name), relative8);
         } else if (entry.isFile()) {
-          const content = await fs26.readFile(path32.join(absDir, entry.name));
-          parts.push(`F\0${relative8}\0${isTextLike(relative8) ? "doc" : "file"}\0${sha1(content)}`);
+          const childPath = path33.join(absDir, entry.name);
+          const digest = isTextLike(relative8) ? sha1(await fs28.readFile(childPath)) : (await hashFileDigests(childPath)).sha1;
+          parts.push(`F\0${relative8}\0${isTextLike(relative8) ? "doc" : "file"}\0${digest}`);
         }
       }
     };
@@ -29085,6 +29445,8 @@ var RealtimeSyncService = class {
       project
     );
     const contents = /* @__PURE__ */ new Map();
+    const hashes = /* @__PURE__ */ new Map();
+    const blobHashes = /* @__PURE__ */ new Map();
     const failures = /* @__PURE__ */ new Map();
     const reused = /* @__PURE__ */ new Set();
     const metrics = {
@@ -29125,22 +29487,36 @@ var RealtimeSyncService = class {
     if (!client && binaries.length > 0) {
       throw new Error("Overleaf client is not available for binary download.");
     }
-    await mapWithByteConcurrency(binaries, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async (file) => {
-      try {
-        metrics.binaryGetCount += 1;
-        const bytes = await client.downloadProjectFile(manifest.projectId, file.entityId, signal);
-        contents.set(file.path, bytes);
-      } catch (error) {
-        const message = formatUnknownError(error);
-        failures.set(file.path, message);
-        this.log(`Could not read remote ${file.path}: ${message}`);
-      } finally {
-        reportProgress(file.path);
-      }
-    });
+    const remoteTempRoot = await fs28.mkdtemp(path33.join(os6.tmpdir(), "latex-toolkit-health-"));
+    try {
+      await mapWithDynamicByteConcurrency(binaries, 4, 64 * 1024 * 1024, async (file, reservation) => {
+        const target = path33.join(remoteTempRoot, file.entityId);
+        try {
+          metrics.binaryGetCount += 1;
+          const result = await client.downloadProjectFileToPath(manifest.projectId, file.entityId, target, {
+            signal,
+            onSize: (bytes) => reservation.reserve(bytes)
+          });
+          file.remoteSize = result.size;
+          hashes.set(file.path, result.sha1);
+          blobHashes.set(file.path, result.gitBlobHash);
+        } catch (error) {
+          const message = formatUnknownError(error);
+          failures.set(file.path, message);
+          this.log(`Could not read remote ${file.path}: ${message}`);
+        } finally {
+          await fs28.rm(target, { force: true }).catch(() => void 0);
+          reportProgress(file.path);
+        }
+      });
+    } finally {
+      await fs28.rm(remoteTempRoot, { recursive: true, force: true });
+    }
     return {
       manifest: indexed.manifest,
       contents,
+      hashes,
+      blobHashes,
       failures,
       reused,
       metrics
@@ -29173,7 +29549,7 @@ var RealtimeSyncService = class {
       if (typeof content !== "string") {
         continue;
       }
-      const localContent = await fs26.readFile(this.abs(relPath), "utf8").catch(() => content);
+      const localContent = await fs28.readFile(this.abs(relPath), "utf8").catch(() => content);
       this.docStates.set(relPath, {
         relPath,
         docId: remoteFile.entityId,
@@ -29276,8 +29652,8 @@ var RealtimeSyncService = class {
   async handleVsCodeRenames(event) {
     if (!this.root || !this.manifest || !this.session) return;
     for (const file of event.files) {
-      const oldPath = toPosixPath2(path32.relative(this.root, file.oldUri.fsPath));
-      const newPath = toPosixPath2(path32.relative(this.root, file.newUri.fsPath));
+      const oldPath = toPosixPath2(path33.relative(this.root, file.oldUri.fsPath));
+      const newPath = toPosixPath2(path33.relative(this.root, file.newUri.fsPath));
       if (!oldPath || !newPath || oldPath.startsWith("..") || newPath.startsWith("..")) continue;
       const subtree = Boolean(this.manifest.folders[oldPath]);
       this.pendingFolderRenameRoots.delete(oldPath);
@@ -29334,8 +29710,8 @@ var RealtimeSyncService = class {
         entityId: entity.entityId,
         oldParentFolderId,
         newParentFolderId: ensured.parentFolderId,
-        oldName: path32.posix.basename(normalizedOld),
-        newName: path32.posix.basename(normalizedNew)
+        oldName: path33.posix.basename(normalizedOld),
+        newName: path33.posix.basename(normalizedNew)
       }, (entityId) => this.markLocalMutation(entityId));
     } catch (error) {
       const reason = `Remote rename/move failed for ${normalizedOld}; no delete/create fallback was used.`;
@@ -29379,7 +29755,7 @@ var RealtimeSyncService = class {
     return current;
   }
   async ensureRemoteParentFoldersNow(relPath) {
-    const parentPath = path32.posix.dirname(toPosixPath2(relPath));
+    const parentPath = path33.posix.dirname(toPosixPath2(relPath));
     const normalizedParent = parentPath === "." ? "" : parentPath;
     const rootFolder = this.manifest.folders[""];
     if (!rootFolder) throw new Error("Overleaf project root folder is missing from the manifest.");
@@ -29433,16 +29809,41 @@ var RealtimeSyncService = class {
       return;
     }
     const absPath = this.abs(relPath);
-    const stat9 = await fs26.stat(absPath).catch(() => void 0);
-    if (!stat9) {
+    const stat11 = await fs28.stat(absPath).catch(() => void 0);
+    if (!stat11) {
       await this.handleLocalDelete(relPath);
       return;
     }
-    if (stat9.isDirectory()) {
+    if (stat11.isDirectory()) {
       await this.handleLocalFolderCreate(relPath);
       return;
     }
-    const content = await fs26.readFile(absPath);
+    const trackedEntry = this.manifest.files[relPath];
+    const binary = trackedEntry ? trackedEntry.entityType === "file" : !isTextLike(relPath);
+    if (binary) {
+      const digests = await hashFileDigests(absPath);
+      const bypassHash2 = this.bypassHashes.get(relPath);
+      if (bypassHash2 && bypassHash2 === digests.sha1) {
+        this.bypassHashes.delete(relPath);
+        return;
+      }
+      const entry2 = trackedEntry;
+      if (!entry2) {
+        if (this.canAutoPushLocalAhead() && await this.handleLocalFileCreate(relPath, void 0)) {
+          this.syncGate.clearPath(relPath);
+          this.log(`Created ${relPath} on Overleaf from the local mirror.`);
+          this.scheduleSyncStatusCheck(500, [relPath]);
+          return;
+        }
+        const reason = !this.canSyncBinaryFiles() ? "Binary synchronization is disabled; use Push Local or enable binary synchronization." : "Automatic upload is disabled; use Push Local for this new file.";
+        this.syncGate.setPath(relPath, "pending", reason);
+        this.scheduleSyncStatusCheck(void 0, [relPath]);
+        return;
+      }
+      await this.replaceBinaryFile(relPath, absPath, digests, entry2);
+      return;
+    }
+    const content = await fs28.readFile(absPath);
     const bypassHash = this.bypassHashes.get(relPath);
     const currentHash = sha1(content);
     if (bypassHash && bypassHash === currentHash) {
@@ -29470,7 +29871,7 @@ var RealtimeSyncService = class {
       await this.syncDocContent(relPath, Buffer.from(content).toString("utf8"));
       return;
     }
-    await this.replaceBinaryFile(relPath, content, entry);
+    throw new Error(`Tracked binary path ${relPath} was classified as a text document.`);
   }
   async restoreRemoteDeletedFile(relPath, content, previousEntry) {
     this.log(`Restoring remote-deleted path ${relPath} from the local mirror.`);
@@ -29506,9 +29907,10 @@ var RealtimeSyncService = class {
     }
     const ensured = await this.ensureRemoteParentFolders(relPath);
     if (isTextLike(relPath)) {
+      if (!content) throw new Error(`Could not read local document ${relPath}.`);
       this.pendingLocalCreates.add(relPath);
       try {
-        const doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path32.posix.basename(relPath));
+        const doc = await this.client.addDoc(this.manifest.projectId, ensured.parentFolderId, path33.posix.basename(relPath));
         const entry = {
           path: relPath,
           entityId: doc._id,
@@ -29526,14 +29928,23 @@ var RealtimeSyncService = class {
     }
     this.pendingLocalCreates.add(relPath);
     try {
-      const file = await this.client.uploadFile(this.manifest.projectId, ensured.parentFolderId, path32.posix.basename(relPath), content);
+      const sourcePath = this.abs(relPath);
+      const digests = await hashFileDigests(sourcePath);
+      const file = await this.client.uploadFileFromPath(this.manifest.projectId, ensured.parentFolderId, path33.posix.basename(relPath), sourcePath);
+      if (file.hash ? file.hash !== digests.gitBlobHash : !await this.remoteBlobMatches(file._id, digests.gitBlobHash)) {
+        await this.client.deleteEntity(this.manifest.projectId, "file", file._id).catch(() => void 0);
+        throw new Error(`Local binary ${relPath} changed while it was being uploaded.`);
+      }
       addOrUpdateFile(this.manifest, {
         path: relPath,
         entityId: file._id,
         entityType: "file",
         parentFolderId: ensured.parentFolderId,
-        binary: true
-      }, content);
+        binary: true,
+        remoteBlobHash: file.hash ?? digests.gitBlobHash,
+        remoteSize: digests.size
+      });
+      this.manifest.files[relPath].sha1 = digests.sha1;
       await this.persistManifest();
       if (manual) {
         vscode10.window.showInformationMessage(`Uploaded ${relPath} to Overleaf.`);
@@ -29568,27 +29979,27 @@ var RealtimeSyncService = class {
       await this.persistManifest();
     }
   }
-  async replaceBinaryFile(relPath, content, entry, manual = false) {
+  async replaceBinaryFile(relPath, sourcePath, digests, entry, manual = false) {
     if (!await this.canUploadBinaryFile(relPath, manual, "Replace")) {
       this.log(`Skipped binary replacement for ${relPath}. Enable overleafCodex.syncBinaryFiles to replace binary files.`);
       return;
     }
     this.pendingLocalCreates.add(relPath);
     try {
-      const expectedBlobHash = gitBlobHash(content);
+      const expectedBlobHash = digests.gitBlobHash;
       this.markLocalMutation(entry.entityId);
       let uploaded;
       try {
-        uploaded = await this.client.uploadFile(
+        uploaded = await this.client.uploadFileFromPath(
           this.manifest.projectId,
           entry.parentFolderId,
-          path32.posix.basename(relPath),
-          content
+          path33.posix.basename(relPath),
+          sourcePath
         );
       } catch (error) {
         if (error instanceof Error && "code" in error && error.code === "duplicate_file_name") {
-          uploaded = await this.replaceBinaryWithFallbackTransaction(relPath, content, entry, expectedBlobHash);
-        } else if (await this.reconcileAmbiguousBinaryUpload(relPath, content)) {
+          uploaded = await this.replaceBinaryWithFallbackTransaction(relPath, sourcePath, digests, entry);
+        } else if (await this.reconcileAmbiguousBinaryUpload(relPath, digests)) {
           if (manual) vscode10.window.showInformationMessage(`Replaced Overleaf version of ${relPath}.`);
           return;
         } else {
@@ -29600,16 +30011,17 @@ var RealtimeSyncService = class {
         throw new Error(`Overleaf returned an unexpected content hash while replacing ${relPath}.`);
       }
       if (!uploaded.hash) {
-        const downloaded = await this.client.downloadProjectFile(this.manifest.projectId, uploaded._id);
-        if (gitBlobHash(downloaded) !== expectedBlobHash) {
+        if (!await this.remoteBlobMatches(uploaded._id, expectedBlobHash)) {
           throw new Error(`Could not verify the uploaded content for ${relPath}.`);
         }
       }
       addOrUpdateFile(this.manifest, {
         ...entry,
         entityId: uploaded._id,
-        remoteBlobHash: uploaded.hash ?? expectedBlobHash
-      }, content);
+        remoteBlobHash: uploaded.hash ?? expectedBlobHash,
+        remoteSize: digests.size
+      });
+      this.manifest.files[relPath].sha1 = digests.sha1;
       await this.persistManifest();
       if (uploaded.transactionId) {
         await this.binaryTransactions.remove(uploaded.transactionId);
@@ -29621,16 +30033,17 @@ var RealtimeSyncService = class {
       this.pendingLocalCreates.delete(relPath);
     }
   }
-  async replaceBinaryWithFallbackTransaction(relPath, content, entry, expectedBlobHash) {
+  async replaceBinaryWithFallbackTransaction(relPath, sourcePath, digests, entry) {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const finalName = path32.posix.basename(relPath);
+    const finalName = path33.posix.basename(relPath);
     const tempName = transactionName(finalName, `upload-${id}`);
     const backupName = transactionName(finalName, `backup-${id}`);
-    const tempPath = path32.posix.join(path32.posix.dirname(relPath), tempName).replace(/^\.\//, "");
+    const tempPath = path33.posix.join(path33.posix.dirname(relPath), tempName).replace(/^\.\//, "");
     this.pendingLocalCreates.add(tempPath);
     setTimeout(() => this.pendingLocalCreates.delete(tempPath), 3e4);
-    const temporary = await this.client.uploadFile(this.manifest.projectId, entry.parentFolderId, tempName, content);
-    const verified = temporary.hash === expectedBlobHash || gitBlobHash(await this.client.downloadProjectFile(this.manifest.projectId, temporary._id)) === expectedBlobHash;
+    const expectedBlobHash = digests.gitBlobHash;
+    const temporary = await this.client.uploadFileFromPath(this.manifest.projectId, entry.parentFolderId, tempName, sourcePath);
+    const verified = temporary.hash === expectedBlobHash || await this.remoteBlobMatches(temporary._id, expectedBlobHash);
     if (!verified) {
       await this.client.deleteEntity(this.manifest.projectId, "file", temporary._id).catch(() => void 0);
       throw new Error(`Could not verify temporary upload for ${relPath}.`);
@@ -29645,7 +30058,7 @@ var RealtimeSyncService = class {
       originalEntityId: entry.entityId,
       tempEntityId: temporary._id,
       expectedBlobHash,
-      expectedSha1: sha1(content),
+      expectedSha1: digests.sha1,
       stage: "temp-uploaded",
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
@@ -29672,17 +30085,28 @@ var RealtimeSyncService = class {
       throw error;
     }
   }
-  async reconcileAmbiguousBinaryUpload(relPath, content) {
+  async reconcileAmbiguousBinaryUpload(relPath, digests) {
     const remote = await this.fetchFreshRemoteSnapshot([relPath]).catch(() => void 0);
     const remoteFile = remote?.manifest.files[relPath];
-    const remoteContent = remote?.contents.get(relPath);
-    if (!remoteFile || !(remoteContent instanceof Uint8Array) || gitBlobHash(remoteContent) !== gitBlobHash(content)) {
+    const remoteBlobHash = remote?.blobHashes.get(relPath);
+    if (!remoteFile || !remoteBlobHash || remoteBlobHash !== digests.gitBlobHash) {
       return false;
     }
-    addOrUpdateFile(this.manifest, remoteFile, content);
-    this.manifest.files[relPath].remoteBlobHash = remoteFile.remoteBlobHash ?? gitBlobHash(content);
+    addOrUpdateFile(this.manifest, remoteFile);
+    this.manifest.files[relPath].sha1 = digests.sha1;
+    this.manifest.files[relPath].remoteBlobHash = remoteFile.remoteBlobHash ?? digests.gitBlobHash;
+    this.manifest.files[relPath].remoteSize = digests.size;
     await this.persistManifest();
     return true;
+  }
+  async remoteBlobMatches(entityId, expectedBlobHash) {
+    const temporaryRoot = await fs28.mkdtemp(path33.join(os6.tmpdir(), "latex-toolkit-verify-"));
+    const target = path33.join(temporaryRoot, entityId);
+    try {
+      return (await this.client.downloadProjectFileToPath(this.manifest.projectId, entityId, target)).gitBlobHash === expectedBlobHash;
+    } finally {
+      await fs28.rm(temporaryRoot, { recursive: true, force: true });
+    }
   }
   async recoverBinaryTransactions() {
     const project = this.session?.getProject();
@@ -29695,7 +30119,7 @@ var RealtimeSyncService = class {
     ).manifest;
     const entities = new Map(Object.values(remote.files).map((file) => [file.entityId, {
       entityId: file.entityId,
-      name: path32.posix.basename(file.path),
+      name: path33.posix.basename(file.path),
       parentFolderId: file.parentFolderId
     }]));
     const changed = await recoverBinaryTransactions(
@@ -29759,7 +30183,7 @@ var RealtimeSyncService = class {
       await this.resyncOrConflict(relPath, "Remote version changed unexpectedly.");
       return;
     }
-    const localContent = await fs26.readFile(this.abs(relPath), "utf8").catch(() => state.localCache);
+    const localContent = await fs28.readFile(this.abs(relPath), "utf8").catch(() => state.localCache);
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
       await this.writeLocalFile(relPath, Buffer.from(remoteNext, "utf8"), true);
@@ -29788,7 +30212,7 @@ var RealtimeSyncService = class {
       await this.resyncOrConflict("", "Remote create used an unknown parent folder.");
       return;
     }
-    const relPath = path32.posix.join(parentPath, entity.name);
+    const relPath = path33.posix.join(parentPath, entity.name);
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
@@ -29812,15 +30236,21 @@ var RealtimeSyncService = class {
       await this.writeLocalFile(relPath, Buffer.from(doc.content, "utf8"), true);
       await this.session.leaveDoc(entity._id).catch(() => void 0);
     } else {
-      const content = await this.client.downloadProjectFile(this.manifest.projectId, entity._id);
+      const target = this.abs(relPath);
+      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
+      const result = await this.client.downloadProjectFileToPath(this.manifest.projectId, entity._id, staging);
+      await installStagedFile(staging, target);
       addOrUpdateFile(this.manifest, {
         path: relPath,
         entityId: entity._id,
         entityType: "file",
         parentFolderId,
-        binary: true
-      }, content);
-      await this.writeLocalFile(relPath, content, true);
+        binary: true,
+        remoteSize: result.size
+      });
+      const added = this.manifest.files[relPath];
+      added.sha1 = result.sha1;
+      this.bypassHashes.set(relPath, result.sha1);
     }
     await this.persistManifest();
   }
@@ -29833,7 +30263,7 @@ var RealtimeSyncService = class {
     if (parentPath === void 0) {
       return;
     }
-    const relPath = path32.posix.join(parentPath, folder.name);
+    const relPath = path33.posix.join(parentPath, folder.name);
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
@@ -29844,7 +30274,7 @@ var RealtimeSyncService = class {
       entityId: folder._id,
       parentFolderId
     });
-    await fs26.mkdir(this.abs(relPath), { recursive: true });
+    await fs28.mkdir(this.abs(relPath), { recursive: true });
     await this.persistManifest();
   }
   async handleRemoteRenamed(entityId, newName) {
@@ -29860,7 +30290,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path32.posix.join(path32.posix.dirname(oldPath), newName).replace(/^\.\//, "");
+      const newPath = path33.posix.join(path33.posix.dirname(oldPath), newName).replace(/^\.\//, "");
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, file.parentFolderId);
       } catch (error) {
@@ -29870,7 +30300,7 @@ var RealtimeSyncService = class {
     }
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
-      const newPath = path32.posix.join(path32.posix.dirname(folder.path), newName).replace(/^\.\//, "");
+      const newPath = path33.posix.join(path33.posix.dirname(folder.path), newName).replace(/^\.\//, "");
       const oldPath2 = folder.path;
       try {
         await this.remapFolderPath(oldPath2, newPath, true, folder.parentFolderId);
@@ -29896,7 +30326,7 @@ var RealtimeSyncService = class {
         return;
       }
       const file = this.manifest.files[oldPath];
-      const newPath = path32.posix.join(parentPath, path32.posix.basename(oldPath));
+      const newPath = path33.posix.join(parentPath, path33.posix.basename(oldPath));
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, newParentFolderId);
       } catch (error) {
@@ -29907,7 +30337,7 @@ var RealtimeSyncService = class {
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder) {
       const oldPath2 = folder.path;
-      const newPath = path32.posix.join(parentPath, path32.posix.basename(oldPath2));
+      const newPath = path33.posix.join(parentPath, path33.posix.basename(oldPath2));
       try {
         await this.remapFolderPath(oldPath2, newPath, true, newParentFolderId);
       } catch (error) {
@@ -29979,12 +30409,12 @@ var RealtimeSyncService = class {
     const conflicts = await this.conflictStore?.list() ?? [];
     for (const conflict of conflicts) {
       const state = this.docStates.get(conflict.relPath);
-      const snapshotExists = await fs26.stat(conflict.remotePath).then(() => true, () => false);
+      const snapshotExists = await fs28.stat(conflict.remotePath).then(() => true, () => false);
       if (!state || state.docId !== conflict.docId || !snapshotExists) {
         await this.conflictStore?.remove(conflict.relPath);
         continue;
       }
-      const remoteContent = await fs26.readFile(conflict.remotePath, "utf8");
+      const remoteContent = await fs28.readFile(conflict.remotePath, "utf8");
       state.version = Math.max(state.version, conflict.remoteVersion);
       state.remoteCache = remoteContent;
       state.paused = true;
@@ -30003,7 +30433,7 @@ var RealtimeSyncService = class {
     }
     const state = await this.ensureDocState(relPath);
     const joined = await this.session.joinDoc(state.docId);
-    const localContent = await fs26.readFile(this.abs(relPath), "utf8").catch(() => "");
+    const localContent = await fs28.readFile(this.abs(relPath), "utf8").catch(() => "");
     if (localContent === state.localCache) {
       state.version = joined.version;
       state.remoteCache = joined.content;
@@ -30114,7 +30544,7 @@ var RealtimeSyncService = class {
         item.path = nextPath;
         if (item.localPath) item.localPath = nextPath;
         if (item.remotePath) item.remotePath = nextPath;
-        item.changeKind = path32.posix.dirname(oldPath) === path32.posix.dirname(newPath) ? "rename" : "move";
+        item.changeKind = path33.posix.dirname(oldPath) === path33.posix.dirname(newPath) ? "rename" : "move";
       }
     }
   }
@@ -30158,18 +30588,18 @@ var RealtimeSyncService = class {
   async moveLocalToTrash(relPath) {
     const source = this.abs(relPath);
     const target = trashPathFor(this.root, relPath);
-    const exists7 = await fs26.stat(source).catch(() => void 0);
+    const exists7 = await fs28.stat(source).catch(() => void 0);
     if (!exists7) {
       return;
     }
-    await fs26.mkdir(path32.dirname(target), { recursive: true });
-    await fs26.rename(source, target).catch(async () => {
+    await fs28.mkdir(path33.dirname(target), { recursive: true });
+    await fs28.rename(source, target).catch(async () => {
       if (exists7.isDirectory()) {
-        await fs26.cp(source, target, { recursive: true });
-        await fs26.rm(source, { recursive: true, force: true });
+        await fs28.cp(source, target, { recursive: true });
+        await fs28.rm(source, { recursive: true, force: true });
       } else {
-        await fs26.copyFile(source, target);
-        await fs26.rm(source, { force: true });
+        await fs28.copyFile(source, target);
+        await fs28.rm(source, { force: true });
       }
     });
     this.log(`Moved ${relPath} to local trash: ${target}`);
@@ -30179,7 +30609,7 @@ var RealtimeSyncService = class {
     if (!entry || entry.entityType !== "doc") {
       return;
     }
-    const content = await fs26.readFile(this.abs(relPath), "utf8").catch(() => void 0);
+    const content = await fs28.readFile(this.abs(relPath), "utf8").catch(() => void 0);
     if (content === void 0) {
       return;
     }
@@ -30189,11 +30619,11 @@ var RealtimeSyncService = class {
   }
   async writeLocalFile(relPath, content, bypass) {
     const absPath = this.abs(relPath);
-    await fs26.mkdir(path32.dirname(absPath), { recursive: true });
+    await fs28.mkdir(path33.dirname(absPath), { recursive: true });
     if (bypass) {
       this.bypassHashes.set(relPath, sha1(content));
     }
-    await fs26.writeFile(absPath, content);
+    await fs28.writeFile(absPath, content);
   }
   async persistManifest() {
     await this.storeFor(this.root).writeManifest(this.manifest);
@@ -30206,7 +30636,7 @@ var RealtimeSyncService = class {
     return new ManifestStore(root);
   }
   abs(relPath) {
-    return path32.join(this.root, relPath);
+    return path33.join(this.root, relPath);
   }
   requireReady() {
     if (!this.root || !this.client || !this.manifest || !this.session) {
@@ -30305,8 +30735,8 @@ function isAlwaysLocal(relPath) {
 
 // src/overleaf/keychainStore.ts
 var crypto6 = __toESM(require("crypto"));
-var fs27 = __toESM(require("fs/promises"));
-var path33 = __toESM(require("path"));
+var fs29 = __toESM(require("fs/promises"));
+var path34 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
 var systemSecurity = { run: (args, stdin) => runCommand("/usr/bin/security", args, stdin) };
@@ -30417,7 +30847,7 @@ var FileCredentialStore = class {
     const account = normalizeServerUrl(serverUrl);
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
-    const raw = await fs27.readFile(this.filePath(account), "utf8").catch((error) => {
+    const raw = await fs29.readFile(this.filePath(account), "utf8").catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
@@ -30432,7 +30862,7 @@ var FileCredentialStore = class {
     await markCredentialDeleted(account);
   }
   async clearIdentity(serverUrl) {
-    await fs27.rm(this.filePath(normalizeServerUrl(serverUrl)), { force: true });
+    await fs29.rm(this.filePath(normalizeServerUrl(serverUrl)), { force: true });
   }
   async listServers() {
     return (await readSharedState()).servers;
@@ -30447,7 +30877,7 @@ var FileCredentialStore = class {
   }
   filePath(account) {
     const digest = crypto6.createHash("sha256").update(account).digest("hex");
-    return path33.join(this.root, `${digest}.json`);
+    return path34.join(this.root, `${digest}.json`);
   }
 };
 var FallbackCredentialStore = class {
@@ -30544,18 +30974,18 @@ function parseIdentity(value) {
   };
 }
 async function writePrivateJson(target, value) {
-  const directory = path33.dirname(target);
-  await fs27.mkdir(directory, { recursive: true, mode: 448 });
-  await fs27.chmod(directory, 448).catch(() => void 0);
+  const directory = path34.dirname(target);
+  await fs29.mkdir(directory, { recursive: true, mode: 448 });
+  await fs29.chmod(directory, 448).catch(() => void 0);
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
   try {
-    await fs27.writeFile(temporary, `${JSON.stringify(value, null, 2)}
+    await fs29.writeFile(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-    await fs27.chmod(temporary, 384);
-    await fs27.rename(temporary, target);
-    await fs27.chmod(target, 384);
+    await fs29.chmod(temporary, 384);
+    await fs29.rename(temporary, target);
+    await fs29.chmod(target, 384);
   } finally {
-    await fs27.rm(temporary, { force: true }).catch(() => void 0);
+    await fs29.rm(temporary, { force: true }).catch(() => void 0);
   }
 }
 function runCommand(command, args, stdin) {
@@ -30588,12 +31018,12 @@ function isBackendUnavailable(error) {
   return /ENOENT|command not found|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
 }
 function findExecutable(command) {
-  const entries = (process.env.PATH ?? "").split(path33.delimiter).filter(Boolean);
+  const entries = (process.env.PATH ?? "").split(path34.delimiter).filter(Boolean);
   for (const entry of entries) {
-    const candidate = path33.join(entry, command);
+    const candidate = path34.join(entry, command);
     try {
-      const stat9 = require("fs").statSync(candidate);
-      if (stat9.isFile() && (stat9.mode & 73) !== 0) return candidate;
+      const stat11 = require("fs").statSync(candidate);
+      if (stat11.isFile() && (stat11.mode & 73) !== 0) return candidate;
     } catch {
     }
   }
@@ -30667,23 +31097,23 @@ var SecretStore = class {
 };
 
 // src/overleaf/mirrorRoots.ts
-var path34 = __toESM(require("path"));
+var path35 = __toESM(require("path"));
 function pathIsWithin(root, candidate) {
-  const relative8 = path34.relative(path34.resolve(root), path34.resolve(candidate));
-  return relative8 === "" || relative8 !== ".." && !relative8.startsWith(`..${path34.sep}`) && !path34.isAbsolute(relative8);
+  const relative8 = path35.relative(path35.resolve(root), path35.resolve(candidate));
+  return relative8 === "" || relative8 !== ".." && !relative8.startsWith(`..${path35.sep}`) && !path35.isAbsolute(relative8);
 }
 function firstWorkspaceMirrorRoot(workspaceRoots, hasManifest) {
   for (const workspaceRoot of workspaceRoots) {
-    const root = path34.resolve(workspaceRoot);
+    const root = path35.resolve(workspaceRoot);
     if (hasManifest(root)) return root;
   }
   return void 0;
 }
 function resolveMirrorRootForPath(candidate, workspaceRoots, hasManifest) {
-  const resolved = path34.resolve(candidate);
+  const resolved = path35.resolve(candidate);
   if (hasManifest(resolved)) return resolved;
   for (const workspaceRoot of workspaceRoots) {
-    const root = path34.resolve(workspaceRoot);
+    const root = path35.resolve(workspaceRoot);
     if (pathIsWithin(root, resolved) && hasManifest(root)) return root;
   }
   return void 0;
@@ -30694,9 +31124,9 @@ function workspaceContainsPath(candidate, workspaceRoots) {
 
 // src/overleaf/syncOwnerCoordinator.ts
 var crypto7 = __toESM(require("crypto"));
-var fs28 = __toESM(require("fs/promises"));
+var fs30 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
-var path35 = __toESM(require("path"));
+var path36 = __toESM(require("path"));
 var import_events = require("events");
 var import_child_process4 = require("child_process");
 var import_util21 = require("util");
@@ -30726,16 +31156,16 @@ var SyncOwnerCoordinator = class {
   }
   async claim(root, handler) {
     await this.release();
-    this.root = await fs28.realpath(path35.resolve(root)).catch(() => path35.resolve(root));
+    this.root = await fs30.realpath(path36.resolve(root)).catch(() => path36.resolve(root));
     this.handler = handler;
-    await fs28.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
-    await fs28.chmod(runtimeRoot(), 448).catch(() => void 0);
+    await fs30.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
+    await fs30.chmod(runtimeRoot(), 448).catch(() => void 0);
     const paths = runtimePaths(this.root);
     const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3e3);
     while (true) {
       if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return "client";
       try {
-        await fs28.mkdir(paths.lockPath, { mode: 448 });
+        await fs30.mkdir(paths.lockPath, { mode: 448 });
         break;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
@@ -30758,9 +31188,9 @@ var SyncOwnerCoordinator = class {
       processStart: await processStartSignature2(process.pid)
     };
     try {
-      await fs28.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
+      await fs30.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
 `, { mode: 384 });
-      await fs28.rm(paths.socketPath, { force: true });
+      await fs30.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
       await new Promise((resolve22, reject) => {
         this.server.once("error", reject);
@@ -30769,7 +31199,7 @@ var SyncOwnerCoordinator = class {
           resolve22();
         });
       });
-      await fs28.chmod(paths.socketPath, 384);
+      await fs30.chmod(paths.socketPath, 384);
       if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
         throw new Error("Sync owner socket did not become reachable after startup.");
       }
@@ -30779,8 +31209,8 @@ var SyncOwnerCoordinator = class {
       const server = this.server;
       this.server = void 0;
       if (server?.listening) await new Promise((resolve22) => server.close(() => resolve22()));
-      await fs28.rm(paths.lockPath, { recursive: true, force: true });
-      await fs28.rm(paths.socketPath, { force: true });
+      await fs30.rm(paths.lockPath, { recursive: true, force: true });
+      await fs30.rm(paths.socketPath, { force: true });
       throw error;
     }
   }
@@ -30885,8 +31315,8 @@ var SyncOwnerCoordinator = class {
       const paths = runtimePaths(this.root);
       const current = await readMetadata(paths.metadataPath);
       if (current?.nonce === this.metadata.nonce) {
-        await fs28.rm(paths.socketPath, { force: true });
-        await fs28.rm(paths.lockPath, { recursive: true, force: true });
+        await fs30.rm(paths.socketPath, { force: true });
+        await fs30.rm(paths.lockPath, { recursive: true, force: true });
       }
     }
     this.metadata = void 0;
@@ -30906,7 +31336,7 @@ var SyncOwnerCoordinator = class {
     });
   }
   async handleSocketRequest(socket, value) {
-    if (!isOwnerRequest(value) || !this.root || path35.resolve(value.root) !== path35.resolve(this.root)) {
+    if (!isOwnerRequest(value) || !this.root || path36.resolve(value.root) !== path36.resolve(this.root)) {
       writeBounded(socket, `${JSON.stringify(errorResponse(String(value?.id ?? ""), "invalid_request", "Invalid IPC request."))}
 `);
       return;
@@ -30939,8 +31369,8 @@ var SyncOwnerCoordinator = class {
   async lockIsStale(paths) {
     const metadata = await readMetadata(paths.metadataPath);
     if (!metadata) {
-      const stat9 = await fs28.stat(paths.lockPath).catch(() => void 0);
-      return Boolean(stat9 && Date.now() - stat9.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
+      const stat11 = await fs30.stat(paths.lockPath).catch(() => void 0);
+      return Boolean(stat11 && Date.now() - stat11.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
     }
     if (processAlive3(metadata.pid)) {
       const currentStart = await processStartSignature2(metadata.pid);
@@ -30956,24 +31386,24 @@ var SyncOwnerCoordinator = class {
     )) return false;
     try {
       if (!await this.lockIsStale(paths)) return false;
-      await fs28.rm(paths.lockPath, { recursive: true, force: true });
-      await fs28.rm(paths.socketPath, { force: true });
+      await fs30.rm(paths.lockPath, { recursive: true, force: true });
+      await fs30.rm(paths.socketPath, { force: true });
       return true;
     } finally {
-      await fs28.rm(guardPath, { recursive: true, force: true });
+      await fs30.rm(guardPath, { recursive: true, force: true });
     }
   }
 };
 function runtimePaths(root) {
-  const hash2 = crypto7.createHash("sha256").update(path35.resolve(root)).digest("hex").slice(0, 32);
-  const lockPath = path35.join(runtimeRoot(), `${hash2}.lock`);
+  const hash2 = crypto7.createHash("sha256").update(path36.resolve(root)).digest("hex").slice(0, 32);
+  const lockPath = path36.join(runtimeRoot(), `${hash2}.lock`);
   return {
     lockPath,
-    metadataPath: path35.join(lockPath, "owner.json"),
+    metadataPath: path36.join(lockPath, "owner.json"),
     // macOS limits AF_UNIX paths to roughly 104 bytes. The lock retains the
     // full 128-bit hash; the socket uses 64 bits and no suffix to leave room
     // for the user's absolute cache directory.
-    socketPath: path35.join(runtimeRoot(), hash2.slice(0, 16))
+    socketPath: path36.join(runtimeRoot(), hash2.slice(0, 16))
   };
 }
 function sendRequest(socketPath, request, timeoutMs) {
@@ -31072,16 +31502,16 @@ function delay2(ms) {
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
-    await fs28.mkdir(guardPath, { mode: 448 });
+    await fs30.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat9 = await fs28.stat(guardPath).catch(() => void 0);
-  if (!stat9 || Date.now() - stat9.mtimeMs < staleMs) return false;
-  await fs28.rm(guardPath, { recursive: true, force: true });
+  const stat11 = await fs30.stat(guardPath).catch(() => void 0);
+  if (!stat11 || Date.now() - stat11.mtimeMs < staleMs) return false;
+  await fs30.rm(guardPath, { recursive: true, force: true });
   try {
-    await fs28.mkdir(guardPath, { mode: 448 });
+    await fs30.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code === "EEXIST") return false;
@@ -31089,7 +31519,7 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   }
 }
 async function readMetadata(target) {
-  const raw = await fs28.readFile(target, "utf8").catch(() => void 0);
+  const raw = await fs30.readFile(target, "utf8").catch(() => void 0);
   if (!raw) return void 0;
   try {
     return JSON.parse(raw);
@@ -31273,7 +31703,7 @@ var OverleafService = class {
   async pdfStatus(candidate) {
     const root = await this.requireMirrorRoot(candidate);
     const pdf = await this.findPdf(root);
-    return { path: pdf ?? path36.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
+    return { path: pdf ?? path37.join(root, ".overleaf-codex", OUTPUT_DIR, "output.pdf"), exists: Boolean(pdf) };
   }
   async handle(command, payload = {}) {
     switch (command) {
@@ -31827,14 +32257,14 @@ var OverleafService = class {
   }
   async pickMirrorParentFolder() {
     const defaultRoot = this.mirrorManager.getConfiguredProjectsRoot();
-    await fs29.mkdir(defaultRoot, { recursive: true }).catch(() => void 0);
+    await fs31.mkdir(defaultRoot, { recursive: true }).catch(() => void 0);
     const picked = await vscode11.window.showOpenDialog({ title: "Select Parent Folder for Local Mirror", openLabel: "Use This Folder", canSelectFiles: false, canSelectFolders: true, canSelectMany: false, defaultUri: vscode11.Uri.file(defaultRoot) });
     return picked?.[0]?.scheme === "file" ? picked[0].fsPath : void 0;
   }
   async pickMirror() {
     const mirrors = await this.listMirrors();
     if (!mirrors.length) return void 0;
-    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path36.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
+    const picked = await vscode11.window.showQuickPick(mirrors.map((mirror) => ({ label: mirror.name, description: path37.basename(mirror.root), detail: `${mirror.serverUrl} \xB7 ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
     return picked?.mirror;
   }
   async pickStatus(statuses) {
@@ -31884,11 +32314,11 @@ var OverleafService = class {
   }
   async findPdf(root) {
     const outputRoot = metadataPath(root, OUTPUT_DIR);
-    const files = await fs29.readdir(outputRoot).catch(() => []);
+    const files = await fs31.readdir(outputRoot).catch(() => []);
     const candidate = files.find((name) => name.toLowerCase().endsWith(".pdf"));
     if (!candidate) return void 0;
-    const full = path36.join(outputRoot, candidate);
-    return (await fs29.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
+    const full = path37.join(outputRoot, candidate);
+    return (await fs31.stat(full).catch(() => void 0))?.isFile() ? full : void 0;
   }
 };
 function existsSync4(filePath) {
@@ -31913,7 +32343,7 @@ function abortSignalFromToken(token) {
 }
 async function exists6(filePath) {
   try {
-    await fs29.access(filePath);
+    await fs31.access(filePath);
     return true;
   } catch {
     return false;
@@ -31921,9 +32351,9 @@ async function exists6(filePath) {
 }
 
 // src/overleaf/cliInstaller.ts
-var fs30 = __toESM(require("fs/promises"));
-var os6 = __toESM(require("os"));
-var path37 = __toESM(require("path"));
+var fs32 = __toESM(require("fs/promises"));
+var os7 = __toESM(require("os"));
+var path38 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
 var import_util24 = require("util");
 var execFileAsync3 = (0, import_util24.promisify)(import_child_process5.execFile);
@@ -31932,42 +32362,42 @@ async function installCli(extensionRoot, version) {
   await migrateLegacyLinuxPaths();
   await assertNode20();
   const supportRoot = cliSupportRoot();
-  const installRoot = path37.join(supportRoot, version);
+  const installRoot = path38.join(supportRoot, version);
   const commandPath = cliCommandPath();
-  const commandDir = path37.dirname(commandPath);
+  const commandDir = path38.dirname(commandPath);
   await assertManagedDestination(commandPath, supportRoot);
-  await fs30.mkdir(supportRoot, { recursive: true });
-  const stagingRoot = path37.join(supportRoot, `.staging-${version}-${process.pid}-${Date.now()}`);
-  const backupRoot = path37.join(supportRoot, `.backup-${version}-${process.pid}-${Date.now()}`);
-  await fs30.mkdir(stagingRoot, { recursive: true });
+  await fs32.mkdir(supportRoot, { recursive: true });
+  const stagingRoot = path38.join(supportRoot, `.staging-${version}-${process.pid}-${Date.now()}`);
+  const backupRoot = path38.join(supportRoot, `.backup-${version}-${process.pid}-${Date.now()}`);
+  await fs32.mkdir(stagingRoot, { recursive: true });
   try {
     await Promise.all([
-      fs30.copyFile(path37.join(extensionRoot, "dist", "cli.js"), path37.join(stagingRoot, "cli.js")),
-      fs30.cp(path37.join(extensionRoot, "dist", "vendor"), path37.join(stagingRoot, "vendor"), { recursive: true, force: true })
+      fs32.copyFile(path38.join(extensionRoot, "dist", "cli.js"), path38.join(stagingRoot, "cli.js")),
+      fs32.cp(path38.join(extensionRoot, "dist", "vendor"), path38.join(stagingRoot, "vendor"), { recursive: true, force: true })
     ]);
-    await fs30.writeFile(path37.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
+    await fs32.writeFile(path38.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
 `, "utf8");
-    await fs30.chmod(path37.join(stagingRoot, "cli.js"), 493);
-    if (await fs30.stat(installRoot).then(() => true, () => false)) await fs30.rename(installRoot, backupRoot);
+    await fs32.chmod(path38.join(stagingRoot, "cli.js"), 493);
+    if (await fs32.stat(installRoot).then(() => true, () => false)) await fs32.rename(installRoot, backupRoot);
     try {
-      await fs30.rename(stagingRoot, installRoot);
+      await fs32.rename(stagingRoot, installRoot);
     } catch (error) {
-      if (await fs30.stat(backupRoot).then(() => true, () => false)) await fs30.rename(backupRoot, installRoot);
+      if (await fs32.stat(backupRoot).then(() => true, () => false)) await fs32.rename(backupRoot, installRoot);
       throw error;
     }
-    await fs30.rm(backupRoot, { recursive: true, force: true });
+    await fs32.rm(backupRoot, { recursive: true, force: true });
   } finally {
-    await fs30.rm(stagingRoot, { recursive: true, force: true });
+    await fs32.rm(stagingRoot, { recursive: true, force: true });
   }
-  await fs30.mkdir(commandDir, { recursive: true });
+  await fs32.mkdir(commandDir, { recursive: true });
   const temporary = `${commandPath}.tmp-${process.pid}`;
-  await fs30.rm(temporary, { force: true });
-  await fs30.symlink(path37.join(installRoot, "cli.js"), temporary);
-  await fs30.rename(temporary, commandPath);
+  await fs32.rm(temporary, { force: true });
+  await fs32.symlink(path38.join(installRoot, "cli.js"), temporary);
+  await fs32.rename(temporary, commandPath);
   return {
     installRoot,
     commandPath,
-    pathConfigured: (process.env.PATH ?? "").split(path37.delimiter).includes(commandDir)
+    pathConfigured: (process.env.PATH ?? "").split(path38.delimiter).includes(commandDir)
   };
 }
 async function uninstallCli() {
@@ -31976,8 +32406,8 @@ async function uninstallCli() {
   const commandPath = cliCommandPath();
   const managed = await isManagedLink(commandPath, supportRoot);
   if (!managed) return { removed: false, commandPath };
-  await fs30.rm(commandPath, { force: true });
-  await fs30.rm(supportRoot, { recursive: true, force: true });
+  await fs32.rm(commandPath, { force: true });
+  await fs32.rm(supportRoot, { recursive: true, force: true });
   return { removed: true, commandPath };
 }
 async function updateManagedCliIfInstalled(extensionRoot, version) {
@@ -31993,41 +32423,41 @@ async function assertNode20() {
   if (!Number.isFinite(major) || major < 20) throw new Error("Installing the CLI requires Node.js 20 or newer on PATH.");
 }
 function cliSupportRoot() {
-  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path37.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path37.join(os6.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path37.join(
-    process.env.XDG_DATA_HOME || path37.join(os6.homedir(), ".local", "share"),
+  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path38.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path38.join(os7.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path38.join(
+    process.env.XDG_DATA_HOME || path38.join(os7.homedir(), ".local", "share"),
     "latex-editing-toolkit",
     "cli"
   );
 }
 function cliCommandPath() {
-  return path37.join(
-    process.env.LATEX_TOOLKIT_BIN_HOME ? path37.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path37.join(os6.homedir(), ".local", "bin"),
+  return path38.join(
+    process.env.LATEX_TOOLKIT_BIN_HOME ? path38.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path38.join(os7.homedir(), ".local", "bin"),
     "latex-toolkit"
   );
 }
 async function assertManagedDestination(commandPath, supportRoot) {
-  const stat9 = await fs30.lstat(commandPath).catch(() => void 0);
-  if (!stat9) return;
+  const stat11 = await fs32.lstat(commandPath).catch(() => void 0);
+  if (!stat11) return;
   if (!await isManagedLink(commandPath, supportRoot)) {
     throw new Error(`Refusing to overwrite non-managed command: ${commandPath}`);
   }
 }
 async function isManagedLink(commandPath, supportRoot) {
-  const stat9 = await fs30.lstat(commandPath).catch(() => void 0);
-  if (!stat9?.isSymbolicLink()) return false;
-  const target = await fs30.realpath(commandPath).catch(() => void 0);
-  const canonicalSupportRoot = await fs30.realpath(supportRoot).catch(() => path37.resolve(supportRoot));
+  const stat11 = await fs32.lstat(commandPath).catch(() => void 0);
+  if (!stat11?.isSymbolicLink()) return false;
+  const target = await fs32.realpath(commandPath).catch(() => void 0);
+  const canonicalSupportRoot = await fs32.realpath(supportRoot).catch(() => path38.resolve(supportRoot));
   if (!target || !isWithin(canonicalSupportRoot, target)) return false;
-  return fs30.stat(path37.join(path37.dirname(target), MARKER)).then(() => true, () => false);
+  return fs32.stat(path38.join(path38.dirname(target), MARKER)).then(() => true, () => false);
 }
 function isWithin(root, candidate) {
-  const relative8 = path37.relative(path37.resolve(root), path37.resolve(candidate));
-  return relative8 === "" || !relative8.startsWith("..") && !path37.isAbsolute(relative8);
+  const relative8 = path38.relative(path38.resolve(root), path38.resolve(candidate));
+  return relative8 === "" || !relative8.startsWith("..") && !path38.isAbsolute(relative8);
 }
 
 // src/overleaf/sharedConfigBridge.ts
-var path38 = __toESM(require("path"));
-var os7 = __toESM(require("os"));
+var path39 = __toESM(require("path"));
+var os8 = __toESM(require("os"));
 var vscode12 = __toESM(require("vscode"));
 var MIGRATION_KEY = "latexEditingToolkit.overleaf.sharedStateMigrated.v1";
 var applyingSharedSettings = false;
@@ -32116,8 +32546,8 @@ function explicitValue(configuration, section) {
   return inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
 }
 function expandHome2(value) {
-  if (value === "~") return os7.homedir();
-  return value.startsWith("~/") ? path38.join(os7.homedir(), value.slice(2)) : path38.resolve(value);
+  if (value === "~") return os8.homedir();
+  return value.startsWith("~/") ? path39.join(os8.homedir(), value.slice(2)) : path39.resolve(value);
 }
 
 // src/extension.ts
@@ -32149,7 +32579,7 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path39.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path40.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
@@ -32379,13 +32809,13 @@ async function createProjectWizard(context, registry, treeProvider, output) {
   for (const folder of vscode13.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path39.dirname(folder.uri.fsPath));
+      suggested.add(path40.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
   const location = await vscode13.window.showQuickPick(
     [
-      ...[...suggested].map((folderPath) => ({ label: path39.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...[...suggested].map((folderPath) => ({ label: path40.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
@@ -32453,7 +32883,7 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const nextRecent = [parentPath, ...recent.filter((item) => path39.normalize(item) !== path39.normalize(parentPath))].slice(0, 8);
+  const nextRecent = [parentPath, ...recent.filter((item) => path40.normalize(item) !== path40.normalize(parentPath))].slice(0, 8);
   await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
@@ -32570,9 +33000,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path39.resolve(rootPath);
+  let canonical = path40.resolve(rootPath);
   try {
-    canonical = fs31.realpathSync.native(canonical);
+    canonical = fs33.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -32611,7 +33041,7 @@ async function openLocalProject(projectPathArg) {
     return;
   }
   try {
-    if (!(await fs31.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
+    if (!(await fs33.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
     vscode13.window.showWarningMessage(`Local note project not found: ${projectPath}`);
     return;
@@ -32646,7 +33076,7 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
     return;
   }
   const project = await registry.find(projectPath);
-  const label = project?.label ?? path39.basename(path39.normalize(projectPath));
+  const label = project?.label ?? path40.basename(path40.normalize(projectPath));
   const choice = await vscode13.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
     { modal: true },
@@ -32693,7 +33123,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs31.existsSync(path39.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs33.existsSync(path40.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode13.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -32923,7 +33353,7 @@ var ToolkitTreeProvider = class {
       return this.actionNode(
         `overleaf-mirror:${mirror.root}`,
         mirror.name,
-        `${status} \xB7 ${path39.basename(path39.dirname(mirror.root))}`,
+        `${status} \xB7 ${path40.basename(path40.dirname(mirror.root))}`,
         icon,
         "overleafCodex.openLocalMirror",
         [{ mirror }]
@@ -32949,7 +33379,7 @@ var ToolkitTreeProvider = class {
     );
   }
   localProjectNode(project, isOpen) {
-    const parent = path39.basename(path39.dirname(project.rootPath)) || path39.dirname(project.rootPath);
+    const parent = path40.basename(path40.dirname(project.rootPath)) || path40.dirname(project.rootPath);
     const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
     const presentationDescription = project.templateId === "beamer-generic" ? "Beamer \xB7 Generic Beamer \xB7 main.tex" : template?.kind === "beamer" ? `Beamer \xB7 ${template.label} \xB7 main.tex` : void 0;
     return {
@@ -32996,7 +33426,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     const activeSnippetProfile = vscode13.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path39.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path40.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -33224,8 +33654,8 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode13.Uri.file(path39.join(context.extensionPath, "dist")),
-          vscode13.Uri.file(path39.join(context.extensionPath, "dist", "monaco"))
+          vscode13.Uri.file(path40.join(context.extensionPath, "dist")),
+          vscode13.Uri.file(path40.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -33325,12 +33755,12 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists7 = false;
         try {
-          const stat9 = await fs31.promises.stat(pdfPath);
-          exists7 = stat9.isFile();
+          const stat11 = await fs33.promises.stat(pdfPath);
+          exists7 = stat11.isFile();
         } catch {
           exists7 = false;
         }
-        data = { path: rawPath || path39.basename(pdfPath), exists: exists7 };
+        data = { path: rawPath || path40.basename(pdfPath), exists: exists7 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
@@ -33385,7 +33815,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const picked = await vscode13.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
         if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs31.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs33.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
           data = { ...await service.handle("state", {}), personal_style_import: summary };
@@ -33395,8 +33825,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode13.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode13.Uri.file(path39.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs31.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode13.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode13.Uri.file(path40.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs33.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
@@ -33437,10 +33867,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode13.Uri.file(path39.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode13.Uri.file(path39.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode13.Uri.file(path39.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode13.Uri.file(path39.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode13.Uri.file(path40.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode13.Uri.file(path40.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode13.Uri.file(path40.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode13.Uri.file(path40.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -33457,7 +33887,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs31.existsSync(path39.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs33.existsSync(path40.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { EventEmitter } from 'events';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { SyncHost, SyncPolicy } from './coreInterfaces';
@@ -44,8 +45,9 @@ import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransact
 import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
-import { mapWithByteConcurrency, mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
+import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
@@ -57,6 +59,14 @@ interface BinaryUploadResult {
   name: string;
   hash?: string;
   transactionId?: string;
+}
+
+interface RemoteFileSnapshot {
+  file: ManifestFile;
+  content?: Buffer;
+  sourcePath?: string;
+  digests: FileDigests;
+  dispose(): Promise<void>;
 }
 
 export class OverleafSyncEngine {
@@ -242,7 +252,8 @@ export class OverleafSyncEngine {
       const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
-      const remoteContents = new Map<string, Uint8Array | string>();
+      const remoteContents = new Map<string, string>();
+      const remoteHashes = new Map<string, string>();
       const remoteFailures = new Map<string, string>();
       const remotePlan = this.syncHealth.planRemoteReads(this.manifest, remote, {
         mode,
@@ -272,18 +283,26 @@ export class OverleafSyncEngine {
           reportRemoteRead(file.path);
         }
       });
-      await mapWithByteConcurrency(remotePlan.binariesToGet, 4, 64 * 1024 * 1024, () => 8 * 1024 * 1024, async file => {
-        try {
-          remoteContents.set(
-            file.path,
-            await this.client.downloadProjectFile(this.manifest!.projectId, file.entityId)
-          );
-        } catch (error) {
-          remoteFailures.set(file.path, formatUnknownError(error));
-        } finally {
-          reportRemoteRead(file.path);
-        }
-      });
+      const remoteTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-health-'));
+      try {
+        await mapWithDynamicByteConcurrency(remotePlan.binariesToGet, 4, 64 * 1024 * 1024, async (file, reservation) => {
+          const target = path.join(remoteTempRoot, file.entityId);
+          try {
+            const result = await this.client.downloadProjectFileToPath(this.manifest!.projectId, file.entityId, target, {
+              onSize: bytes => reservation.reserve(bytes)
+            });
+            file.remoteSize = result.size;
+            remoteHashes.set(file.path, result.sha1);
+          } catch (error) {
+            remoteFailures.set(file.path, formatUnknownError(error));
+          } finally {
+            await fs.rm(target, { force: true }).catch(() => undefined);
+            reportRemoteRead(file.path);
+          }
+        });
+      } finally {
+        await fs.rm(remoteTempRoot, { recursive: true, force: true });
+      }
       let completed = 0;
       for (const relPath of [...paths].sort()) {
         if (requestedPaths && !requestedPaths.has(relPath)) continue;
@@ -293,9 +312,9 @@ export class OverleafSyncEngine {
         const localResult = await cachedLocalFileHash(path.join(this.root, relPath), manifestFile, mode === 'full', localScan.fileMetadata.get(relPath));
         const remoteContent = remoteContents.get(relPath);
         const remoteReadError = remoteFailures.get(relPath);
-        const remoteHash = remoteContent === undefined
+        const remoteHash = remoteHashes.get(relPath) ?? (remoteContent === undefined
           ? remotePlan.reusedPaths.has(relPath) ? manifestFile?.sha1 : undefined
-          : sha1(remoteContent);
+          : sha1(remoteContent));
         let baseHash = manifestFile?.baseHash;
         if (!baseHash && remoteFile?.entityType === 'doc') {
           const base = await readBaseDoc(this.root, remoteFile.entityId);
@@ -311,7 +330,7 @@ export class OverleafSyncEngine {
           localExists: localResult.hash !== undefined,
           remoteReadError
         });
-        if (item.status === 'diverged' && remoteFile && remoteContent !== undefined
+        if (item.status === 'diverged' && remoteFile
           && !existingConflicts.some(conflict => conflict.relPath === relPath)) {
           const suffix = path.extname(relPath) || (remoteFile.entityType === 'doc' ? '.tex' : '.remote');
           const conflictPath = metadataPath(
@@ -320,7 +339,13 @@ export class OverleafSyncEngine {
             `${relPath.replace(/[\/\\]/g, '__')}.remote.${Date.now()}${suffix}`
           );
           await fs.mkdir(path.dirname(conflictPath), { recursive: true });
-          await fs.writeFile(conflictPath, remoteContent);
+          if (remoteFile.entityType === 'doc' && remoteContent !== undefined) {
+            await fs.writeFile(conflictPath, remoteContent);
+          } else if (remoteFile.entityType === 'file') {
+            await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, conflictPath);
+          } else {
+            continue;
+          }
           await conflictStore.upsert({
             relPath,
             docId: remoteFile.entityId,
@@ -333,12 +358,14 @@ export class OverleafSyncEngine {
         }
         if (!manifestFile && remoteFile && localResult.hash === remoteHash && remoteHash !== undefined) {
           addOrUpdateFile(this.manifest, remoteFile, remoteContent);
+          this.manifest.files[relPath].sha1 = remoteHash;
           this.manifest.files[relPath].baseHash = remoteFile.entityType === 'doc' ? remoteHash : undefined;
         }
         if (item.status === 'synced' && manifestFile && remoteFile) {
           manifestFile.version = remoteFile.version;
           manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
           manifestFile.remoteRevision = remoteFile.remoteRevision;
+          manifestFile.remoteSize = remoteFile.remoteSize;
           if (remoteHash) manifestFile.sha1 = remoteHash;
         }
         items.push(item);
@@ -367,9 +394,10 @@ export class OverleafSyncEngine {
       await this.start();
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
-      const content = await fs.readFile(path.join(this.root, normalized)).catch(() => undefined);
+      const sourcePath = path.join(this.root, normalized);
+      const localStat = await fs.stat(sourcePath).catch(() => undefined);
       const entry = this.manifest.files[normalized];
-      if (!content) {
+      if (!localStat) {
         if (!entry) throw new Error(`${normalized} does not exist locally.`);
         if (!force) throw new Error(`Deleting ${normalized} from Overleaf requires --force.`);
         await this.client.deleteEntity(this.manifest.projectId, entry.entityType, entry.entityId);
@@ -377,56 +405,71 @@ export class OverleafSyncEngine {
         await writeManifest(this.root, this.manifest);
         return;
       }
+      const textFile = entry ? entry.entityType === 'doc' : isTextLike(normalized);
+      const content = textFile ? await fs.readFile(sourcePath) : undefined;
+      const localDigests = textFile
+        ? { size: content!.length, sha1: sha1(content!), gitBlobHash: gitBlobHash(content!) }
+        : await hashFileDigests(sourcePath);
       if (!entry && shouldIgnoreUntrackedLocalPath(this.manifest, normalized)) {
         throw new Error(`${normalized} is excluded by .overleaf-codexignore.`);
       }
       const remote = await this.remoteFile(normalized);
-      const effectiveEntry = selectRemoteWriteTarget(normalized, entry, remote?.file, force);
-      if (remote && !force) {
-        const base = entry?.baseHash ?? entry?.sha1;
-        if (!entry && sha1(content) !== sha1(remote.content)) {
-          throw new Error(`${normalized} already exists on Overleaf with different content; use --force only after reviewing it.`);
+      try {
+        const effectiveEntry = selectRemoteWriteTarget(normalized, entry, remote?.file, force);
+        if (remote && !force) {
+          const base = entry?.baseHash ?? entry?.sha1;
+          if (!entry && localDigests.sha1 !== remote.digests.sha1) {
+            throw new Error(`${normalized} already exists on Overleaf with different content; use --force only after reviewing it.`);
+          }
+          if (base && remote.digests.sha1 !== base && localDigests.sha1 !== remote.digests.sha1) {
+            throw new Error(`${normalized} changed remotely; use --force only after reviewing the conflict.`);
+          }
         }
-        if (base && sha1(remote.content) !== base && sha1(content) !== sha1(remote.content)) {
-          throw new Error(`${normalized} changed remotely; use --force only after reviewing the conflict.`);
+        const parentFolderId = await this.ensureRemoteParentFolders(normalized);
+        if (textFile) {
+          let target = effectiveEntry;
+          if (!target) {
+            const doc = await this.client.addDoc(this.manifest.projectId, parentFolderId, path.posix.basename(normalized));
+            target = { path: normalized, entityId: doc._id, entityType: 'doc', parentFolderId, binary: false };
+          }
+          const joined = await this.session!.joinDoc(target.entityId);
+          const text = content!.toString('utf8');
+          const op = buildOtOperations(joined.content, text);
+          if (op.length > 0) await this.session!.applyOtUpdate(target.entityId, { doc: target.entityId, v: joined.version, op });
+          target.version = joined.version + (op.length > 0 ? 1 : 0);
+          addOrUpdateFile(this.manifest, target, text);
+          this.manifest.files[normalized].baseHash = await writeBaseDoc(this.root, target.entityId, text);
+        } else {
+          if (!this.policy.syncBinaryFiles && !force) throw new Error('Binary synchronization is disabled.');
+          const uploaded: BinaryUploadResult = effectiveEntry
+            ? await this.replaceBinary(normalized, sourcePath, localDigests, effectiveEntry)
+            : await this.client.uploadFileFromPath(this.manifest.projectId, parentFolderId, path.posix.basename(normalized), sourcePath);
+          if (!effectiveEntry && (uploaded.hash
+            ? uploaded.hash !== localDigests.gitBlobHash
+            : !await this.remoteBlobMatches(uploaded._id, localDigests.gitBlobHash))) {
+            await this.client.deleteEntity(this.manifest.projectId, 'file', uploaded._id).catch(() => undefined);
+            throw new Error(`Local binary ${normalized} changed while it was being uploaded.`);
+          }
+          addOrUpdateFile(this.manifest, {
+            path: normalized,
+            entityId: uploaded._id,
+            entityType: 'file',
+            parentFolderId,
+            binary: true,
+            remoteBlobHash: uploaded.hash ?? localDigests.gitBlobHash,
+            remoteSize: localDigests.size
+          });
+          this.manifest.files[normalized].sha1 = localDigests.sha1;
+          await writeManifest(this.root, this.manifest);
+          if (uploaded.transactionId) await new BinaryTransactionStore(this.root).remove(uploaded.transactionId);
+          this.emit('pushed', { path: normalized });
+          return;
         }
-      }
-      const parentFolderId = await this.ensureRemoteParentFolders(normalized);
-      if (isTextLike(normalized)) {
-        let target = effectiveEntry;
-        if (!target) {
-          const doc = await this.client.addDoc(this.manifest.projectId, parentFolderId, path.posix.basename(normalized));
-          target = { path: normalized, entityId: doc._id, entityType: 'doc', parentFolderId, binary: false };
-        }
-        const joined = await this.session!.joinDoc(target.entityId);
-        const text = content.toString('utf8');
-        const op = buildOtOperations(joined.content, text);
-        if (op.length > 0) await this.session!.applyOtUpdate(target.entityId, { doc: target.entityId, v: joined.version, op });
-        target.version = joined.version + (op.length > 0 ? 1 : 0);
-        addOrUpdateFile(this.manifest, target, text);
-        this.manifest.files[normalized].baseHash = await writeBaseDoc(this.root, target.entityId, text);
-      } else {
-        if (!this.policy.syncBinaryFiles && !force) throw new Error('Binary synchronization is disabled.');
-        const uploaded: BinaryUploadResult = effectiveEntry
-          ? await this.replaceBinary(normalized, content, effectiveEntry)
-          : await this.client.uploadFile(this.manifest.projectId, parentFolderId, path.posix.basename(normalized), content);
-        addOrUpdateFile(this.manifest, {
-          path: normalized,
-          entityId: uploaded._id,
-          entityType: 'file',
-          parentFolderId,
-          binary: true,
-          remoteBlobHash: uploaded.hash ?? gitBlobHash(content)
-        }, content);
         await writeManifest(this.root, this.manifest);
-        if (uploaded.transactionId) {
-          await new BinaryTransactionStore(this.root).remove(uploaded.transactionId);
-        }
         this.emit('pushed', { path: normalized });
-        return;
+      } finally {
+        await remote?.dispose();
       }
-      await writeManifest(this.root, this.manifest);
-      this.emit('pushed', { path: normalized });
   }
 
   async pull(relPath: string, force: boolean): Promise<void> {
@@ -458,25 +501,39 @@ export class OverleafSyncEngine {
         this.emit('trashed', { path: normalized, trashPath: stat ? target : undefined });
         return;
       }
-      const local = await fs.readFile(path.join(this.root, normalized)).catch(() => undefined);
-      if (!force && entry && local) {
-        const base = entry.baseHash ?? entry.sha1;
-        if (base && sha1(local) !== base && sha1(local) !== sha1(remote.content)) {
-          throw new Error(`${normalized} has local changes; use --force only after reviewing them.`);
+      try {
+        const localPath = path.join(this.root, normalized);
+        const localStat = await fs.stat(localPath).catch(() => undefined);
+        if (!force && entry && localStat) {
+          const base = entry.baseHash ?? entry.sha1;
+          const localHash = remote.file.entityType === 'doc'
+            ? sha1(await fs.readFile(localPath))
+            : (await hashFileDigests(localPath)).sha1;
+          if (base && localHash !== base && localHash !== remote.digests.sha1) {
+            throw new Error(`${normalized} has local changes; use --force only after reviewing them.`);
+          }
         }
+        await fs.mkdir(path.dirname(localPath), { recursive: true });
+        if (remote.file.entityType === 'file') {
+          if (!remote.sourcePath) throw new Error(`Remote binary ${normalized} has no staged download.`);
+          await installStagedFile(remote.sourcePath, localPath);
+          addOrUpdateFile(this.manifest, { ...remote.file, remoteSize: remote.digests.size });
+          this.manifest.files[normalized].sha1 = remote.digests.sha1;
+          this.manifest.files[normalized].baseHash = remote.digests.sha1;
+        } else {
+          await fs.writeFile(localPath, remote.content!);
+          addOrUpdateFile(this.manifest, remote.file, remote.content!);
+          this.manifest.files[normalized].baseHash = await writeBaseDoc(
+            this.root,
+            remote.file.entityId,
+            remote.content!.toString('utf8')
+          );
+        }
+        await writeManifest(this.root, this.manifest);
+        this.emit('pulled', { path: normalized });
+      } finally {
+        await remote.dispose();
       }
-      await fs.mkdir(path.dirname(path.join(this.root, normalized)), { recursive: true });
-      await fs.writeFile(path.join(this.root, normalized), remote.content);
-      addOrUpdateFile(this.manifest, remote.file, remote.content);
-      if (remote.file.entityType === 'doc') {
-        this.manifest.files[normalized].baseHash = await writeBaseDoc(
-          this.root,
-          remote.file.entityId,
-          Buffer.from(remote.content).toString('utf8')
-        );
-      }
-      await writeManifest(this.root, this.manifest);
-      this.emit('pulled', { path: normalized });
   }
 
   async conflicts(): Promise<PersistedConflict[]> {
@@ -495,7 +552,7 @@ export class OverleafSyncEngine {
     this.emit('conflict-resolved', { path: normalized, use });
   }
 
-  private async remoteFile(relPath: string): Promise<{ file: ManifestFile; content: Uint8Array } | undefined> {
+  private async remoteFile(relPath: string): Promise<RemoteFileSnapshot | undefined> {
     const project = this.session!.getProject();
     if (!project || !this.manifest) return undefined;
     const remote = buildProjectTreeIndex(
@@ -505,9 +562,29 @@ export class OverleafSyncEngine {
     if (remote.entityType === 'doc') {
       const joined = await this.session!.joinDoc(remote.entityId);
       remote.version = joined.version;
-      return { file: remote, content: Buffer.from(joined.content, 'utf8') };
+      const content = Buffer.from(joined.content, 'utf8');
+      return {
+        file: remote,
+        content,
+        digests: { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) },
+        dispose: async () => undefined
+      };
     }
-    return { file: remote, content: await this.client.downloadProjectFile(this.manifest.projectId, remote.entityId) };
+    const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-pull-'));
+    const sourcePath = path.join(temporaryRoot, remote.entityId);
+    try {
+      const digests = await this.client.downloadProjectFileToPath(this.manifest.projectId, remote.entityId, sourcePath);
+      remote.remoteSize = digests.size;
+      return {
+        file: remote,
+        sourcePath,
+        digests,
+        dispose: () => fs.rm(temporaryRoot, { recursive: true, force: true })
+      };
+    } catch (error) {
+      await fs.rm(temporaryRoot, { recursive: true, force: true });
+      throw error;
+    }
   }
 
   private async ensureRemoteParentFolders(relPath: string): Promise<string> {
@@ -529,12 +606,13 @@ export class OverleafSyncEngine {
 
   private async replaceBinary(
     relPath: string,
-    content: Uint8Array,
+    sourcePath: string,
+    digests: FileDigests,
     entry: ManifestFile
   ): Promise<BinaryUploadResult> {
     try {
-      return await this.client.uploadFile(
-        this.manifest!.projectId, entry.parentFolderId, path.posix.basename(relPath), content
+      return await this.client.uploadFileFromPath(
+        this.manifest!.projectId, entry.parentFolderId, path.posix.basename(relPath), sourcePath
       );
     } catch (error) {
       if (!(error instanceof Error && 'code' in error && error.code === 'duplicate_file_name')) throw error;
@@ -543,10 +621,10 @@ export class OverleafSyncEngine {
     const finalName = path.posix.basename(relPath);
     const tempName = transactionName(finalName, `upload-${id}`);
     const backupName = transactionName(finalName, `backup-${id}`);
-    const temporary = await this.client.uploadFile(this.manifest!.projectId, entry.parentFolderId, tempName, content);
-    const expected = gitBlobHash(content);
+    const temporary = await this.client.uploadFileFromPath(this.manifest!.projectId, entry.parentFolderId, tempName, sourcePath);
+    const expected = digests.gitBlobHash;
     const verified = temporary.hash === expected
-      || gitBlobHash(await this.client.downloadProjectFile(this.manifest!.projectId, temporary._id)) === expected;
+      || await this.remoteBlobMatches(temporary._id, expected);
     if (!verified) {
       await this.client.deleteEntity(this.manifest!.projectId, 'file', temporary._id).catch(() => undefined);
       throw new Error(`Could not verify temporary binary upload for ${relPath}.`);
@@ -554,7 +632,7 @@ export class OverleafSyncEngine {
     const transaction: BinaryTransaction = {
       id, path: relPath, parentFolderId: entry.parentFolderId, finalName, tempName, backupName,
       originalEntityId: entry.entityId, tempEntityId: temporary._id, expectedBlobHash: expected,
-      expectedSha1: sha1(content),
+      expectedSha1: digests.sha1,
       stage: 'temp-uploaded', createdAt: new Date().toISOString()
     };
     const store = new BinaryTransactionStore(this.root);
@@ -567,6 +645,20 @@ export class OverleafSyncEngine {
     await store.upsert(transaction);
     await this.client.deleteEntity(this.manifest!.projectId, 'file', entry.entityId);
     return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expected, transactionId: id };
+  }
+
+  private async remoteBlobMatches(entityId: string, expectedBlobHash: string): Promise<boolean> {
+    const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-verify-'));
+    try {
+      const result = await this.client.downloadProjectFileToPath(
+        this.manifest!.projectId,
+        entityId,
+        path.join(temporaryRoot, entityId)
+      );
+      return result.gitBlobHash === expectedBlobHash;
+    } finally {
+      await fs.rm(temporaryRoot, { recursive: true, force: true });
+    }
   }
 
   private async recoverBinaryTransactions(): Promise<void> {
@@ -712,7 +804,9 @@ export class OverleafSyncEngine {
     const untrackedFiles = refreshedFiles.filter(candidate => !this.manifest!.files[candidate]);
     const localCandidates = await Promise.all(untrackedFiles.map(async candidate => ({
       path: candidate,
-      hash: await fs.readFile(path.join(this.root, candidate)).then(sha1)
+      hash: isTextLike(candidate)
+        ? await fs.readFile(path.join(this.root, candidate)).then(sha1)
+        : (await hashFileDigests(path.join(this.root, candidate))).sha1
     })));
     const candidatesByHash = new Map<string, typeof localCandidates>();
     for (const candidate of localCandidates) candidatesByHash.set(candidate.hash, [...(candidatesByHash.get(candidate.hash) ?? []), candidate]);
@@ -819,8 +913,11 @@ export class OverleafSyncEngine {
           parts.push(`D\0${child}`);
           await walk(path.join(absolute, entry.name), child);
         } else if (entry.isFile()) {
-          const content = await fs.readFile(path.join(absolute, entry.name));
-          parts.push(`F\0${child}\0${isTextLike(child) ? 'doc' : 'file'}\0${sha1(content)}`);
+          const childPath = path.join(absolute, entry.name);
+          const digest = isTextLike(child)
+            ? sha1(await fs.readFile(childPath))
+            : (await hashFileDigests(childPath)).sha1;
+          parts.push(`F\0${child}\0${isTextLike(child) ? 'doc' : 'file'}\0${digest}`);
         }
       }
     };

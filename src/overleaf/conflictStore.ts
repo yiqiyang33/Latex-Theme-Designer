@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import { atomicWriteText, CONFLICT_INDEX_NAME, metadataPath } from './manifest';
+import { assertValidConflicts, validateConflictList } from './metadataValidation';
 
 export interface PersistedConflict {
   relPath: string;
@@ -21,10 +22,12 @@ export class ConflictStore {
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.some(item => !item || typeof item.relPath !== 'string' || typeof item.docId !== 'string')) throw new Error('invalid conflict index');
+      const validationError = validateConflictList(parsed);
+      if (validationError) throw new Error(validationError);
       return parsed as PersistedConflict[];
-    } catch {
+    } catch (error) {
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
+      console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
@@ -57,6 +60,7 @@ export class ConflictStore {
   }
 
   private write(records: PersistedConflict[]): Promise<void> {
+    assertValidConflicts(records);
     return atomicWriteText(metadataPath(this.root, CONFLICT_INDEX_NAME), `${JSON.stringify(records, null, 2)}\n`);
   }
 

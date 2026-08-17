@@ -1,36 +1,31 @@
 # Overleaf Codex TODO
 
-本清单来自 2026-08-16 对当前 Overleaf 实现的第二轮稳定性与性能审查。旧清单中已经完成的历史事项已移除；只有实现并通过回归测试的项目才勾选。
+本清单来自 2026-08-17 对 Overleaf 实现的性能、稳定性与冗余代码审查。已完成的历史事项不再保留；任务只有在实现、验证并补齐相应回归测试后才能勾选。
 
-## P0 — 正确性与数据安全
+## P0 - 正确性与可用性
 
-- [x] 修复 CLI 对远端非空目录 rename/move 的处理顺序；整个子树只移动一次，目标冲突时不得覆盖本地内容，manifest 写入失败时必须回滚本地路径和内存状态。
-- [x] 将二进制替换恢复改为基于远端 entity ID 与实际名称的幂等恢复，覆盖“远端操作成功、事务 stage 尚未落盘”两个崩溃窗口。
-- [x] 将完整 `syncOnce` reconcile 串行化，并串行执行 owner IPC 命令；停止 watcher 时等待整个在途 reconcile，禁止停止过程中重新建立连接。
+- [ ] 修复远端编译锁的永久等待窗口：锁目录缺少或包含无效 `owner.json` 时，结合锁龄判断并安全回收；增加等待截止时间；使用进程启动时间校验避免 PID 复用误判。
+- [ ] 修复编译崩溃恢复目录：从真实的 `.overleaf-codex` 元数据根目录扫描并恢复或清理 `output.staging-*`、`output.backup-*`，覆盖旧 output 已移走但新 output 尚未安装的窗口。
+- [ ] 让 HTTP timeout 与外部取消信号覆盖完整响应体读取，而不只覆盖 headers；超时或取消时必须终止 text、JSON、普通下载、Range 下载和重定向链。
+- [ ] 为 owner IPC 的大型 status/event 响应设计分页、分块或摘要协议；超过限制时返回可诊断的结构化错误，不能直接销毁 socket。
 
-## P1 — 稳定性
+## P2 - 性能与去重
 
-- [x] 让目录状态同时比较 manifest、远端树和真实本地目录，正确报告及同步新建/删除的空目录。
-- [x] CLI 遇到远端读取失败时将 status 标记为 `partial`，与扩展行为保持一致。
-- [x] 扩展停止同步时等待所有 path operation 和活动 health check，再释放 owner 锁。
-- [x] 修复 owner socket 启动失败后的假 owner 状态，并为 IPC frame、发送队列和 backpressure 设置边界。
-- [x] 为共享配置锁加入进程启动时间校验，并使 reclaim guard 的失效时间不超过调用方等待时间。
-- [x] 为远端编译增加单写者锁和崩溃恢复，避免 CLI、手动编译及 compile-on-save 并发交换 output。
-- [x] 为 manifest、conflict、transaction、sync-status 和共享配置增加 schema 校验、损坏文件隔离及可诊断恢复。
+- [ ] 初始 mirror 创建按任务数和实际字节数受控并发：并行创建目录、读取文本和下载二进制，同时保证 `joinDoc`/`leaveDoc` 成对及失败时完整清理。
+- [ ] 优化本地扫描：目录遍历及 `stat`/hash 使用有界工作队列；CLI 单次 reconcile 不得无条件执行两到三次完整 `scanLocalProject`。
+- [ ] 消除 CLI rename reconciliation 的 O(n^2) 路径：预建缺失父目录、未跟踪根目录、folder fingerprint 和文件 hash 索引；禁止对未跟踪文件使用无界 `Promise.all` 和全量 `readFile`。
+- [ ] 为 manifest 维护 `entityId -> path` 的文件和目录索引，并在 create、rename、move、remove、manifest reload 时一致更新，替代实时事件处理中的反复线性扫描。
+- [ ] 将 CLI `OverleafSyncEngine` 与扩展 `RealtimeSyncService` 的 check、rename、push/pull、冲突和二进制 mutation 流程下沉为共享状态机；保留宿主 UI、日志和 watcher 适配层。
+- [ ] 合并两份目录 fingerprint 实现，并统一扩展与 CLI 的 ignore、文件类型和 hash 规则。
+- [ ] 删除未使用的 `listLocalProjectFiles` import；合并扩展 `findPdf` 与 `latestRemotePdf`，统一选择最新 PDF 的规则。
 
-## P2 — 性能与去重
+## 回归测试与基准
 
-- [x] 合并本地文件/目录扫描为一次 walk，预建 tracked-parent、entity ID、hash 和 folder fingerprint 索引，消除大项目中的 O(n²) 查找及重复扫描。
-- [x] 二进制上传/下载改为临时文件流式 I/O 和增量 hash，并按任务数与在途字节数双重限制并发。
-- [x] 在远端读取计划阶段过滤 ignore；CLI watcher 同时应用 `.overleaf-codexignore`，避免本地编译产物触发无效全量 reconcile。
-- [x] 将 CLI `OverleafSyncEngine` 与扩展 `RealtimeSyncService` 的 check、rename、push/pull、冲突及二进制流程下沉为同一套共享状态机。
-- [x] `mirrors list` 批量刷新共享状态，只在内容变化时执行一次原子写入。
-- [x] 对文本 `joinDoc` 使用受控并发，并在只读检查后释放不需要长期订阅的文档。
-
-## 回归测试
-
-- [x] 覆盖远端非空目录 rename/move、嵌套目录、目标已存在和 manifest 写入失败回滚。
-- [x] 在每个二进制远端 mutation 与事务 stage 写入之间注入崩溃，验证恢复幂等且不会丢失正式文件。
-- [x] 并发启动多个 `syncOnce`、push/pull 和 owner IPC 请求，验证没有重复远端 mutation 或 manifest 交错写入。
-- [x] 覆盖 stop、SIGINT/SIGTERM、owner 交接期间的在途 reconcile 排空。
-- [x] 增加大型目录树、大图片/PDF 和本地连续编译事件的性能基准。
+- [ ] 覆盖编译锁缺少、截断或无效 `owner.json`，PID 复用，锁等待超时，以及每个 staging/backup rename 崩溃窗口。
+- [ ] 增加 multipart 二进制上传集成测试，验证 stream chunk 类型、内容、长度和大文件内存峰值。
+- [ ] 增加“已返回 headers 但 body 停滞”的 HTTP 测试，分别验证超时和外部取消；覆盖 JSON、下载、Range 和重定向。
+- [ ] 使用真实大图片/PDF 验证生产下载路径的任务并发、实际在途字节数、临时文件清理和进程 RSS，而不只测试合成 limiter。
+- [ ] 构造超过 1 MiB 的 status/event，验证 owner 与 follower 间的分页或分块协议、backpressure、超时及错误传播。
+- [ ] 并发执行 `listSharedMirrors` 与 mirror 注册，验证新记录不会丢失且共享状态只进行必要的原子写入。
+- [ ] 建立至少万级文件/目录的扫描和 rename benchmark，记录 walk、stat、hash、fingerprint 次数及耗时，并设置合理的回归阈值。
+- [ ] 为 CLI 和扩展运行同一组共享状态机契约测试，确保相同输入产生相同 status、mutation、冲突和恢复结果。

@@ -39,7 +39,7 @@ export async function compileRemoteProject(
       if (!output.url) continue;
       const name = uniqueCompileOutputName(output, usedNames);
       const target = path.join(stagingRoot, name);
-      await fs.writeFile(target, await client.downloadCompileOutput(output.url, response));
+      await client.downloadCompileOutputToPath(output.url, response, target);
       stagedFiles.push(target);
     }
     await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);

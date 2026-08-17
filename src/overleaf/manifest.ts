@@ -9,6 +9,7 @@ import {
   SyncStatusReport
 } from './types';
 import { sha1, toPosixPath } from './util';
+import { assertValidManifest, assertValidSyncStatus, validateManifest, validateSyncStatus } from './metadataValidation';
 
 export const METADATA_DIR = '.overleaf-codex';
 export const MANIFEST_NAME = 'manifest.json';
@@ -146,11 +147,12 @@ export async function readManifest(root: string): Promise<OverleafCodexManifest>
     await quarantineCorruptFile(target);
     throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
   }
-  if (!isManifestShape(parsed)) {
+  const validationError = validateManifest(parsed);
+  if (validationError) {
     await quarantineCorruptFile(target);
-    throw new Error(`Overleaf manifest failed schema validation and was quarantined at ${target}.`);
+    throw new Error(`Overleaf manifest failed schema validation at ${validationError} and was quarantined at ${target}.`);
   }
-  const manifest = migrateManifest(parsed);
+  const manifest = migrateManifest(parsed as OverleafCodexManifest);
   const ignoreContent = await ensureLocalIgnoreFile(root);
   localIgnoreRules.set(manifest, createIgnore().add(ignoreContent));
   return manifest;
@@ -169,6 +171,7 @@ export async function ensureLocalIgnoreFile(root: string): Promise<string> {
 export async function writeManifest(root: string, manifest: OverleafCodexManifest): Promise<void> {
   manifest.schemaVersion = 3;
   manifest.lastSyncAt = new Date().toISOString();
+  assertValidManifest(manifest);
   await atomicWriteText(manifestPath(root), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
@@ -209,20 +212,14 @@ export async function readSyncStatus(root: string): Promise<SyncStatusReport | u
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw) as SyncStatusReport;
-    if (!parsed || !Array.isArray(parsed.items) || typeof parsed.checkedAt !== 'string') throw new Error('invalid sync status');
+    const validationError = validateSyncStatus(parsed);
+    if (validationError) throw new Error(validationError);
     return parsed;
-  } catch {
+  } catch (error) {
     await quarantineCorruptFile(syncStatusPath(root));
+    console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
-}
-
-function isManifestShape(value: unknown): value is OverleafCodexManifest {
-  if (!value || typeof value !== 'object') return false;
-  const manifest = value as Partial<OverleafCodexManifest>;
-  return typeof manifest.projectId === 'string' && typeof manifest.serverUrl === 'string'
-    && typeof manifest.projectName === 'string' && !!manifest.files && typeof manifest.files === 'object'
-    && !!manifest.folders && typeof manifest.folders === 'object' && Array.isArray(manifest.ignore);
 }
 
 async function quarantineCorruptFile(target: string): Promise<void> {
@@ -231,6 +228,7 @@ async function quarantineCorruptFile(target: string): Promise<void> {
 }
 
 export async function writeSyncStatus(root: string, report: SyncStatusReport): Promise<void> {
+  assertValidSyncStatus(report);
   await atomicWriteText(syncStatusPath(root), `${JSON.stringify(report, null, 2)}\n`);
 }
 

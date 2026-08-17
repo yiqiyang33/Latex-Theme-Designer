@@ -1,8 +1,11 @@
 import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
+import * as fs from 'fs/promises';
+import { createReadStream, createWriteStream } from 'fs';
 import { createRequire } from 'module';
 import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import FormData from 'form-data';
 import fetch, { Response } from 'node-fetch';
 import * as mime from 'mime-types';
@@ -22,8 +25,10 @@ import {
   NetworkTimeouts,
   SyncCodeResponse,
   SyncPdfResponse,
-  UploadFileResult
+  UploadFileResult,
+  FileTransferResult
 } from './types';
+import { hashFileDigests } from './binaryTransfer';
 import { formatUnknownError, normalizeServerUrl } from './util';
 import {
   addProjectTreeEntity,
@@ -41,6 +46,11 @@ interface RequestOptions {
   headers?: Record<string, string>;
   includeCsrfHeader?: boolean;
   signal?: AbortSignal;
+}
+
+export interface DownloadFileOptions {
+  signal?: AbortSignal;
+  onSize?: (size: number) => Promise<void> | void;
 }
 
 const DEFAULT_TIMEOUTS: NetworkTimeouts = {
@@ -183,7 +193,34 @@ export class OverleafClient {
     form.append('targetFolderId', parentFolderId);
     form.append('name', filename);
     form.append('type', mime.lookup(filename) || 'application/octet-stream');
-    form.append('qqfile', Readable.from(content), { filename });
+    const buffer = Buffer.from(content);
+    form.append('qqfile', Readable.from([buffer]), { filename, knownLength: buffer.length });
+
+    return this.uploadForm(projectId, parentFolderId, filename, form);
+  }
+
+  async uploadFileFromPath(
+    projectId: string,
+    parentFolderId: string,
+    filename: string,
+    sourcePath: string
+  ): Promise<UploadFileResult> {
+    const stat = await fs.stat(sourcePath);
+    if (!stat.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
+    const form = new FormData();
+    form.append('targetFolderId', parentFolderId);
+    form.append('name', filename);
+    form.append('type', mime.lookup(filename) || 'application/octet-stream');
+    form.append('qqfile', createReadStream(sourcePath), { filename, knownLength: stat.size });
+    return this.uploadForm(projectId, parentFolderId, filename, form);
+  }
+
+  private async uploadForm(
+    projectId: string,
+    parentFolderId: string,
+    filename: string,
+    form: FormData
+  ): Promise<UploadFileResult> {
 
     const result = await this.requestJson<{
       success?: boolean;
@@ -209,6 +246,20 @@ export class OverleafClient {
 
   async downloadProjectFile(projectId: string, fileId: string, signal?: AbortSignal): Promise<Uint8Array> {
     return this.downloadRelative(`project/${projectId}/file/${fileId}`, true, signal);
+  }
+
+  async downloadProjectFileToPath(
+    projectId: string,
+    fileId: string,
+    targetPath: string,
+    options: DownloadFileOptions = {}
+  ): Promise<FileTransferResult> {
+    return this.downloadAbsoluteToPath(
+      this.urlFor(`project/${projectId}/file/${fileId}`),
+      true,
+      targetPath,
+      options
+    );
   }
 
   async deleteEntity(projectId: string, entityType: EntityType, entityId: string): Promise<void> {
@@ -276,6 +327,26 @@ export class OverleafClient {
     }
 
     return this.downloadRelative(outputUrl.replace(/^\/+/, ''), true);
+  }
+
+  async downloadCompileOutputToPath(
+    outputUrl: string,
+    compile: CompileResponse,
+    targetPath: string,
+    options: DownloadFileOptions = {}
+  ): Promise<FileTransferResult> {
+    if (/^https?:\/\//i.test(outputUrl)) {
+      return this.downloadAbsoluteToPath(outputUrl, false, targetPath, options);
+    }
+    if (compile.pdfDownloadDomain && compile.clsiServerId) {
+      const cleanOutput = outputUrl.replace(/^\/+/, '');
+      const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, '')}/${cleanOutput}`
+        + `?compileGroup=${encodeURIComponent(compile.compileGroup)}`
+        + `&clsiserverid=${encodeURIComponent(compile.clsiServerId)}`
+        + '&enable_pdf_caching=true';
+      return this.downloadAbsoluteToPath(cdnUrl, false, targetPath, options);
+    }
+    return this.downloadAbsoluteToPath(this.urlFor(outputUrl.replace(/^\/+/, '')), true, targetPath, options);
   }
 
   async syncCode(projectId: string, file: string, line: number, column: number, buildId: string): Promise<SyncCodeResponse> {
@@ -481,6 +552,94 @@ export class OverleafClient {
       throw new Error(`Overleaf partial download was incomplete (${result.length}/${expectedTotal} bytes).`);
     }
     return new Uint8Array(result);
+  }
+
+  private async downloadAbsoluteToPath(
+    url: string,
+    includeCookies: boolean,
+    targetPath: string,
+    options: DownloadFileOptions
+  ): Promise<FileTransferResult> {
+    const identity = includeCookies ? this.requireIdentity() : undefined;
+    let currentUrl = url;
+    let offset = 0;
+    let expectedTotal: number | undefined;
+    let redirects = 0;
+    let ranges = 0;
+    let sizeReported = false;
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.rm(targetPath, { force: true });
+    try {
+      while (true) {
+        const res = await this.fetchWithTimeout(currentUrl, {
+          method: 'GET',
+          redirect: 'manual',
+          agent: this.agent,
+          headers: {
+            Connection: 'keep-alive',
+            ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
+            ...(identity ? { Cookie: identity.cookies } : {})
+          }
+        }, this.timeouts.httpMs, options.signal);
+
+        if (res.status >= 300 && res.status < 400) {
+          const location = res.headers.get('location');
+          res.body?.resume();
+          if (!location || redirects >= 5) {
+            throw new OverleafHttpError(`Overleaf download redirect failed for ${path.basename(currentUrl)}.`, res.status);
+          }
+          currentUrl = new URL(location, currentUrl).toString();
+          redirects += 1;
+          continue;
+        }
+        if (res.status !== 200 && res.status !== 206) await assertOk(res, currentUrl);
+
+        let responseStart = 0;
+        let responseEnd: number | undefined;
+        if (res.status === 206) {
+          if (ranges >= 128) throw new Error('Overleaf download returned too many partial responses.');
+          const range = parseContentRange(res.headers.get('content-range'));
+          if (range.start !== offset || range.end < range.start) {
+            throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get('content-range') ?? 'missing'}.`);
+          }
+          if (expectedTotal !== undefined && range.total !== expectedTotal) {
+            throw new Error('Overleaf changed the total download size between partial responses.');
+          }
+          expectedTotal = range.total;
+          responseStart = range.start;
+          responseEnd = range.end;
+        } else {
+          if (offset > 0) throw new Error('Overleaf ignored a Range request after returning partial content.');
+          const contentLength = parseNonNegativeInteger(res.headers.get('content-length'));
+          expectedTotal = contentLength;
+          responseEnd = contentLength === undefined ? undefined : contentLength - 1;
+        }
+        if (!sizeReported) {
+          await options.onSize?.(expectedTotal ?? Number.POSITIVE_INFINITY);
+          sizeReported = true;
+        }
+        if (!res.body) throw new Error('Overleaf download response did not contain a body.');
+        const before = offset;
+        await pipeline(res.body, createWriteStream(targetPath, { flags: offset > 0 ? 'a' : 'w' }));
+        const actualSize = (await fs.stat(targetPath)).size;
+        const received = actualSize - before;
+        if (responseEnd !== undefined && received !== responseEnd - responseStart + 1) {
+          throw new Error(`Overleaf download body length did not match its declared range (${received} bytes received).`);
+        }
+        offset = actualSize;
+        if (res.status === 200 || expectedTotal === undefined || offset === expectedTotal) break;
+        if (offset > expectedTotal) throw new Error('Overleaf partial download exceeded its declared size.');
+        ranges += 1;
+      }
+      const digests = await hashFileDigests(targetPath);
+      if (expectedTotal !== undefined && digests.size !== expectedTotal) {
+        throw new Error(`Overleaf download was incomplete (${digests.size}/${expectedTotal} bytes).`);
+      }
+      return digests;
+    } catch (error) {
+      await fs.rm(targetPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 
   private requireIdentity(): Identity {
@@ -775,6 +934,12 @@ export function parseContentRange(value: string | null): ParsedContentRange {
     throw new Error(`Invalid or missing Content-Range header: ${value ?? 'missing'}.`);
   }
   return { start: Number(match[1]), end: Number(match[2]), total: Number(match[3]) };
+}
+
+function parseNonNegativeInteger(value: string | null): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
 function abortError(signal?: AbortSignal): Error {

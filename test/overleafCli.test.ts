@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as net from 'node:net';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -18,6 +19,7 @@ import {
   applicationDataRoot,
   applicationSupportRoot,
   defaultSharedState,
+  mergeRefreshedMirrorRecords,
   readSharedState,
   registerSharedMirror,
   runtimeRoot,
@@ -25,17 +27,20 @@ import {
   updateSharedState
 } from '../src/overleaf/sharedState';
 import { runtimePaths, SyncOwnerCoordinator } from '../src/overleaf/syncOwnerCoordinator';
-import { metadataPath, OUTPUT_DIR, readManifest, writeManifest } from '../src/overleaf/manifest';
+import { metadataPath, OUTPUT_DIR, readManifest, readSyncStatus, writeManifest } from '../src/overleaf/manifest';
 import type { Identity, OverleafCodexManifest, SyncStatusReport } from '../src/overleaf/types';
 import { OverleafSyncEngine } from '../src/overleaf/overleafSyncEngine';
 import { DEFAULT_SYNC_POLICY } from '../src/overleaf/sharedState';
-import { sha1 } from '../src/overleaf/util';
+import { gitBlobHash, sha1 } from '../src/overleaf/util';
 import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCore';
 import { compileRemoteProject, latestRemotePdf } from '../src/overleaf/compileCore';
 import { BinaryTransactionStore, type BinaryTransaction } from '../src/overleaf/binaryTransactions';
+import { ConflictStore } from '../src/overleaf/conflictStore';
 import { recoverBinaryTransactions, type RemoteBinaryEntityState } from '../src/overleaf/remoteMutationCore';
 import { fileHash, scanLocalProject } from '../src/overleaf/syncStatus';
-import { mapWithByteConcurrency } from '../src/overleaf/syncHealthService';
+import { mapWithByteConcurrency, mapWithDynamicByteConcurrency } from '../src/overleaf/syncHealthService';
+import { OverleafClient } from '../src/overleaf/overleafClient';
+import { hashFileDigests } from '../src/overleaf/binaryTransfer';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -481,7 +486,11 @@ describe('Shared Overleaf mirror creation', () => {
     const client = {
       getServerUrl: () => 'https://example.test/',
       connectSocket: async () => session,
-      downloadProjectFile: async () => Buffer.from('%PDF-test')
+      downloadProjectFileToPath: async (_projectId: string, _fileId: string, target: string) => {
+        const content = Buffer.from('%PDF-test');
+        await fs.writeFile(target, content);
+        return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
+      }
     };
     try {
       const root = await createProjectMirror(client as never, project, parent, {
@@ -533,7 +542,11 @@ describe('Remote Overleaf compile output transactions', () => {
     };
     const client = {
       compile: async () => response,
-      downloadCompileOutput: async (url: string) => Buffer.from(`download:${url}`)
+      downloadCompileOutputToPath: async (url: string, _compile: unknown, target: string) => {
+        const content = Buffer.from(`download:${url}`);
+        await fs.writeFile(target, content);
+        return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
+      }
     };
     try {
       const result = await compileRemoteProject(temporary, client as never);
@@ -552,9 +565,11 @@ describe('Remote Overleaf compile output transactions', () => {
       await fs.writeFile(path.join(outputRoot, 'preserve.txt'), 'trusted-old-output');
       const failing = {
         compile: async () => response,
-        downloadCompileOutput: async (url: string) => {
+        downloadCompileOutputToPath: async (url: string, _compile: unknown, target: string) => {
           if (url.includes('second')) throw new Error('download failed');
-          return Buffer.from('partial');
+          const content = Buffer.from('partial');
+          await fs.writeFile(target, content);
+          return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
         }
       };
       await expect(compileRemoteProject(temporary, failing as never)).rejects.toThrow('download failed');
@@ -581,12 +596,14 @@ describe('Remote Overleaf compile output transactions', () => {
           outputFiles: [{ path: 'main.pdf', url: `/compile-${id}/main.pdf` }]
         };
       },
-      downloadCompileOutput: async (url: string) => {
+      downloadCompileOutputToPath: async (url: string, _compile: unknown, target: string) => {
         activeDownloads += 1;
         maximumDownloads = Math.max(maximumDownloads, activeDownloads);
         await new Promise(resolve => setTimeout(resolve, 20));
         activeDownloads -= 1;
-        return Buffer.from(url);
+        const content = Buffer.from(url);
+        await fs.writeFile(target, content);
+        return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
       }
     };
     try {
@@ -986,13 +1003,16 @@ describe('Shared Overleaf sync command contract', () => {
     };
     const client = {
       connectSocket: async () => session,
-      downloadProjectFile: async (_projectId: string, entityId: string) => {
+      downloadProjectFileToPath: async (_projectId: string, entityId: string, target: string, options: { onSize?: (size: number) => Promise<void> } = {}) => {
         downloadCount += 1;
         activeDownloads += 1;
         maxActiveDownloads = Math.max(maxActiveDownloads, activeDownloads);
         await new Promise(resolve => setTimeout(resolve, 25));
+        const content = files.find(file => file.id === entityId)!.content;
+        await options.onSize?.(content.length);
+        await fs.writeFile(target, content);
         activeDownloads -= 1;
-        return files.find(file => file.id === entityId)!.content;
+        return { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) };
       }
     };
     const engine = new OverleafSyncEngine(
@@ -1156,6 +1176,123 @@ describe('Large mirror performance regressions', () => {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   }, 20_000);
+});
+
+describe('P1 resource and persistence regressions', () => {
+  it('streams file uploads and downloads through path-based client APIs', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-stream-transfer-'));
+    const source = path.join(temporary, 'source.bin');
+    const target = path.join(temporary, 'target.bin');
+    const content = Buffer.alloc(2 * 1024 * 1024 + 17, 0x5a);
+    content.write('stream-boundary-check', 1024);
+    await fs.writeFile(source, content);
+    let uploadedBody = Buffer.alloc(0);
+    const server = http.createServer((request, response) => {
+      if (request.method === 'GET') {
+        const broken = request.url?.endsWith('/broken');
+        if (broken) {
+          request.socket.destroy();
+          return;
+        }
+        response.writeHead(200, { 'Content-Length': content.length });
+        response.end(content);
+        return;
+      }
+      const chunks: Buffer[] = [];
+      request.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      request.on('end', () => {
+        uploadedBody = Buffer.concat(chunks);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ entity_id: 'uploaded-file', hash: gitBlobHash(content) }));
+      });
+    });
+    server.keepAliveTimeout = 30_000;
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('HTTP test server did not expose a TCP address.');
+      const client = new OverleafClient(`http://127.0.0.1:${address.port}/`, { csrfToken: 'csrf', cookies: 'sid=test' });
+      let reportedSize = 0;
+      const downloaded = await client.downloadProjectFileToPath('project', 'file', target, {
+        onSize: size => { reportedSize = size; }
+      });
+      expect(reportedSize).toBe(content.length);
+      expect(downloaded).toEqual(await hashFileDigests(source));
+      expect(await hashFileDigests(target)).toEqual(downloaded);
+      const uploaded = await client.uploadFileFromPath('project', 'root', 'source.bin', source);
+      expect(uploaded._id).toBe('uploaded-file');
+      expect(uploadedBody.includes(content)).toBe(true);
+      const incomplete = path.join(temporary, 'incomplete.bin');
+      await expect(client.downloadProjectFileToPath('project', 'broken', incomplete)).rejects.toThrow();
+      await expect(fs.stat(incomplete)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('reserves actual response sizes and never exceeds the dynamic byte budget', async () => {
+    const sizes = [6, 5, 4, 3].map(value => value * 1024 * 1024);
+    let activeBytes = 0;
+    let maximumBytes = 0;
+    await mapWithDynamicByteConcurrency(sizes, 4, 8 * 1024 * 1024, async (size, reservation) => {
+      await reservation.reserve(size);
+      activeBytes += Math.min(size, 8 * 1024 * 1024);
+      maximumBytes = Math.max(maximumBytes, activeBytes);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      activeBytes -= Math.min(size, 8 * 1024 * 1024);
+    });
+    expect(maximumBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
+  });
+
+  it('keeps mirrors registered after a list scan began when merging refreshed records', () => {
+    const scanned = { root: '/tmp/scanned', name: 'Old', projectId: 'one', serverUrl: 'https://example.test/' };
+    const refreshed = { ...scanned, name: 'Refreshed' };
+    const registeredLater = { root: '/tmp/later', name: 'Later', projectId: 'two', serverUrl: 'https://example.test/' };
+    const merged = mergeRefreshedMirrorRecords(
+      [scanned, registeredLater],
+      new Map([[path.resolve(scanned.root), refreshed]])
+    );
+    expect(merged).toEqual([refreshed, registeredLater]);
+  });
+
+  it('quarantines nested manifest, status, conflict, and transaction schema violations', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-schema-'));
+    try {
+      const state = manifest();
+      state.files['bad.pdf'] = {
+        path: 'different.pdf', entityId: 'bad', entityType: 'file', parentFolderId: 'root'
+      };
+      await fs.mkdir(metadataPath(temporary), { recursive: true });
+      await fs.writeFile(metadataPath(temporary, 'manifest.json'), JSON.stringify(state));
+      await expect(readManifest(temporary)).rejects.toThrow(/files\["bad\.pdf"\]\.path/);
+
+      const status: SyncStatusReport = {
+        schemaVersion: 2, checkedAt: new Date().toISOString(), projectId: 'project', projectName: 'Project',
+        hasBlocking: true, items: [{ path: 'bad.pdf', status: 'error', blocking: true }]
+      };
+      (status.items[0] as unknown as { blocking: string }).blocking = 'yes';
+      await fs.writeFile(metadataPath(temporary, 'sync-status.json'), JSON.stringify(status));
+      expect(await readSyncStatus(temporary)).toBeUndefined();
+
+      await fs.writeFile(metadataPath(temporary, 'conflicts.json'), JSON.stringify([{
+        relPath: 'main.tex', docId: 'doc', remoteVersion: 'wrong', remotePath: '/tmp/remote',
+        reason: 'test', createdAt: new Date().toISOString()
+      }]));
+      expect(await new ConflictStore(temporary).list()).toEqual([]);
+
+      await fs.writeFile(metadataPath(temporary, 'transactions.json'), JSON.stringify([{
+        id: 'tx', path: 'figure.pdf', parentFolderId: 'root', finalName: 'figure.pdf', tempName: 'temp.pdf',
+        backupName: 'backup.pdf', originalEntityId: 'old', tempEntityId: 'new', expectedBlobHash: 'hash',
+        stage: 'invalid', createdAt: new Date().toISOString()
+      }]));
+      expect(await new BinaryTransactionStore(temporary).list()).toEqual([]);
+      expect((await fs.readdir(metadataPath(temporary))).filter(name => name.includes('.corrupt-'))).toHaveLength(4);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
 });
 
 async function binaryRecoveryFixture(

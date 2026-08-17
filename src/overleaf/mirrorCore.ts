@@ -126,10 +126,11 @@ async function writeInitialFile(
     file.baseHash = await writeBaseDoc(root, file.entityId, joined.content);
     await session.leaveDoc(file.entityId).catch(() => undefined);
   } else {
-    const content = await client.downloadProjectFile(projectId, file.entityId);
-    await fs.writeFile(target, content);
+    const result = await client.downloadProjectFileToPath(projectId, file.entityId, target);
     file.binary = true;
-    file.sha1 = sha1(content);
+    file.sha1 = result.sha1;
+    file.remoteSize = result.size;
+    file.remoteBlobHash ??= result.gitBlobHash;
   }
 }
 

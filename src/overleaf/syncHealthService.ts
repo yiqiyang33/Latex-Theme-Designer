@@ -84,6 +84,50 @@ export async function mapWithByteConcurrency<T>(
   await Promise.all(workers);
 }
 
+export interface DynamicByteReservation {
+  reserve(bytes: number): Promise<void>;
+}
+
+/** Starts a bounded number of requests, then reserves their real response size before body consumption. */
+export async function mapWithDynamicByteConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  maxBytes: number,
+  handler: (item: T, reservation: DynamicByteReservation) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0;
+  let reservedBytes = 0;
+  const waiters: Array<() => void> = [];
+  const wake = (): void => waiters.splice(0).forEach(resolve => resolve());
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex++];
+      let amount = 0;
+      let didReserve = false;
+      const reservation: DynamicByteReservation = {
+        reserve: async bytes => {
+          if (didReserve) throw new Error('Transfer size was reserved more than once.');
+          didReserve = true;
+          amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
+          while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
+            await new Promise<void>(resolve => waiters.push(resolve));
+          }
+          reservedBytes += amount;
+        }
+      };
+      try {
+        await handler(item, reservation);
+      } finally {
+        if (didReserve) {
+          reservedBytes = Math.max(0, reservedBytes - amount);
+          wake();
+        }
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+
 export function canReuseRemoteMetadata(previous: ManifestFile | undefined, remote: ManifestFile): boolean {
   if (!previous?.sha1 || previous.entityId !== remote.entityId || previous.entityType !== remote.entityType) {
     return false;

@@ -200,7 +200,8 @@ function walkFolder(
       parentFolderId: folder._id,
       binary: true,
       remoteBlobHash: file.hash,
-      remoteRevision: file.rev
+      remoteRevision: file.rev,
+      remoteSize: file.size
     });
   }
 }
