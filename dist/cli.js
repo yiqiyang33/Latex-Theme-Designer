@@ -15444,6 +15444,7 @@ var require_lib2 = __commonJS({
 var cli_exports = {};
 __export(cli_exports, {
   blockingExitCode: () => blockingExitCode,
+  installStopSignalHandlers: () => installStopSignalHandlers,
   main: () => main,
   makeSuccessEnvelope: () => makeSuccessEnvelope,
   openCommand: () => openCommand,
@@ -23445,8 +23446,7 @@ async function watchWithTakeover(root, policy, credentials, output) {
     activeSocket?.destroy();
     activeOwner?.requestStop();
   };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  const disposeSignalHandlers = installStopSignalHandlers(stop);
   try {
     while (!stopping) {
       const owner = new OwnerFacade(root, policy, credentials, output);
@@ -23477,8 +23477,7 @@ async function watchWithTakeover(root, policy, credentials, output) {
       }
     }
   } finally {
-    process.removeListener("SIGINT", stop);
-    process.removeListener("SIGTERM", stop);
+    disposeSignalHandlers();
     activeSocket?.destroy();
     await activeOwner?.close();
   }
@@ -23713,6 +23712,14 @@ function openCommand() {
   if (process.platform === "linux") return "xdg-open";
   throw new Error(`Opening files is not supported on ${process.platform}.`);
 }
+function installStopSignalHandlers(stop) {
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  return () => {
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+  };
+}
 if (require.main === module) {
   void main().then((code) => {
     process.exitCode = code;
@@ -23721,6 +23728,7 @@ if (require.main === module) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   blockingExitCode,
+  installStopSignalHandlers,
   main,
   makeSuccessEnvelope,
   openCommand,

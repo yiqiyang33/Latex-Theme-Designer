@@ -3,7 +3,7 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { blockingExitCode, makeSuccessEnvelope, openCommand, parseArgs } from '../src/cli';
+import { blockingExitCode, installStopSignalHandlers, makeSuccessEnvelope, openCommand, parseArgs } from '../src/cli';
 import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
 import {
   FallbackCredentialStore,
@@ -34,6 +34,8 @@ import { createProjectMirror, projectMirrorRoot } from '../src/overleaf/mirrorCo
 import { compileRemoteProject, latestRemotePdf } from '../src/overleaf/compileCore';
 import { BinaryTransactionStore, type BinaryTransaction } from '../src/overleaf/binaryTransactions';
 import { recoverBinaryTransactions, type RemoteBinaryEntityState } from '../src/overleaf/remoteMutationCore';
+import { fileHash, scanLocalProject } from '../src/overleaf/syncStatus';
+import { mapWithByteConcurrency } from '../src/overleaf/syncHealthService';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -311,6 +313,86 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
+  it('drains an in-flight IPC command before owner handoff', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-owner-handoff-'));
+    process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
+    const root = path.join(temporary, 'mirror');
+    await fs.mkdir(root, { recursive: true });
+    const owner = new SyncOwnerCoordinator();
+    const client = new SyncOwnerCoordinator();
+    const successor = new SyncOwnerCoordinator();
+    let commandStarted!: () => void;
+    let finishCommand!: () => void;
+    const started = new Promise<void>(resolve => { commandStarted = resolve; });
+    const finish = new Promise<void>(resolve => { finishCommand = resolve; });
+    try {
+      await owner.claim(root, async () => {
+        commandStarted();
+        await finish;
+        return 'finished';
+      });
+      await client.claim(root, async () => undefined);
+      const request = client.request('sync-once');
+      await started;
+      let released = false;
+      const releasing = owner.release().then(() => { released = true; });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(released).toBe(false);
+      finishCommand();
+      expect(await request).toBe('finished');
+      await releasing;
+      expect(await successor.claim(root, async () => 'successor')).toBe('owner');
+    } finally {
+      finishCommand?.();
+      await successor.release();
+      await client.release();
+      await owner.release();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes concurrent sync-once, push and pull IPC mutations', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-owner-mutations-'));
+    process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
+    const root = path.join(temporary, 'mirror');
+    await fs.mkdir(root, { recursive: true });
+    const owner = new SyncOwnerCoordinator();
+    const client = new SyncOwnerCoordinator();
+    let active = 0;
+    let maximumActive = 0;
+    const calls: string[] = [];
+    const mutate = async (name: string): Promise<void> => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      calls.push(name);
+      await new Promise(resolve => setTimeout(resolve, 15));
+      active -= 1;
+    };
+    const backend: SyncCommandBackend = {
+      status: async () => syncReport(),
+      syncOnce: async () => { await mutate('sync-once'); return syncReport(); },
+      push: async relPath => mutate(`push:${relPath}`),
+      pull: async relPath => mutate(`pull:${relPath}`),
+      conflicts: async () => [],
+      resolveConflict: async () => undefined
+    };
+    try {
+      await owner.claim(root, (command, args) => executeSyncCommand(backend, command, args));
+      await client.claim(root, async () => undefined);
+      await Promise.all([
+        client.request('sync-once'),
+        client.request('push', { path: 'local.tex' }),
+        client.request('pull', { path: 'remote.tex' })
+      ]);
+      expect(maximumActive).toBe(1);
+      expect(calls).toEqual(['sync-once', 'push:local.tex', 'pull:remote.tex']);
+    } finally {
+      await client.release();
+      await owner.release();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('cleans a stale lock even when its PID has been reused', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-stale-'));
     process.env.LATEX_TOOLKIT_CACHE_HOME = path.join(temporary, 'runtime');
@@ -483,9 +565,57 @@ describe('Remote Overleaf compile output transactions', () => {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });
+
+  it('serializes concurrent output swaps and leaves no interrupted compile artifacts', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-compile-concurrent-'));
+    await writeManifest(temporary, manifest());
+    let compileSequence = 0;
+    let activeDownloads = 0;
+    let maximumDownloads = 0;
+    const client = {
+      compile: async () => {
+        const id = ++compileSequence;
+        return {
+          status: 'success' as const,
+          compileGroup: `compile-${id}`,
+          outputFiles: [{ path: 'main.pdf', url: `/compile-${id}/main.pdf` }]
+        };
+      },
+      downloadCompileOutput: async (url: string) => {
+        activeDownloads += 1;
+        maximumDownloads = Math.max(maximumDownloads, activeDownloads);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        activeDownloads -= 1;
+        return Buffer.from(url);
+      }
+    };
+    try {
+      const results = await Promise.all(Array.from({ length: 4 }, () => compileRemoteProject(temporary, client as never)));
+      expect(maximumDownloads).toBe(1);
+      expect(results.every(result => result.pdfPath === path.join(metadataPath(temporary, OUTPUT_DIR), 'main.pdf'))).toBe(true);
+      expect(await fs.readFile(path.join(metadataPath(temporary, OUTPUT_DIR), 'main.pdf'), 'utf8')).toMatch(/^\/compile-\d+\/main\.pdf$/);
+      expect((await fs.readdir(metadataPath(temporary))).filter(name => /^output\.(?:lock|staging|backup)/.test(name))).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('Overleaf CLI parser and managed installation', () => {
+  it('routes SIGINT and SIGTERM through the graceful stop hook and removes listeners', () => {
+    const beforeInt = process.listenerCount('SIGINT');
+    const beforeTerm = process.listenerCount('SIGTERM');
+    let stops = 0;
+    const dispose = installStopSignalHandlers(() => { stops += 1; });
+    expect(process.listenerCount('SIGINT')).toBe(beforeInt + 1);
+    expect(process.listenerCount('SIGTERM')).toBe(beforeTerm + 1);
+    process.emit('SIGTERM');
+    expect(stops).toBe(1);
+    dispose();
+    expect(process.listenerCount('SIGINT')).toBe(beforeInt);
+    expect(process.listenerCount('SIGTERM')).toBe(beforeTerm);
+  });
+
   it('parses global options independently from command positionals and reserves exit code 2 for blocking reports', () => {
     const parsed = parseArgs(['--root', '/tmp/mirror', 'sync', '--once', '--json']);
     expect(parsed.positionals).toEqual(['sync']);
@@ -901,6 +1031,25 @@ describe('Shared Overleaf sync command contract', () => {
 });
 
 describe('Binary replacement crash recovery', () => {
+  it('removes an uploaded temporary when the original was never renamed', async () => {
+    const fixture = await binaryRecoveryFixture('temp-uploaded', 'final', 'temporary');
+    try {
+      expect(await recoverBinaryTransactions(
+        fixture.client as never,
+        'project',
+        fixture.manifest,
+        fixture.store,
+        { inspectEntity: id => fixture.entities.get(id) }
+      )).toBe(false);
+      expect(fixture.entities.get('original')?.name).toBe('figure.pdf');
+      expect(fixture.entities.has('temporary')).toBe(false);
+      expect(fixture.manifest.files['figure.pdf'].entityId).toBe('original');
+      expect(await fixture.store.list()).toEqual([]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it('rolls back when backup rename succeeded before its stage was persisted', async () => {
     const fixture = await binaryRecoveryFixture('temp-uploaded', 'backup', 'temporary');
     try {
@@ -966,6 +1115,47 @@ describe('Binary replacement crash recovery', () => {
       await fixture.dispose();
     }
   });
+});
+
+describe('Large mirror performance regressions', () => {
+  it('scans a large tree once, hashes a large binary incrementally, and bounds bytes in flight', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-large-mirror-'));
+    try {
+      const state = manifest();
+      await writeManifest(temporary, state);
+      for (let directory = 0; directory < 40; directory += 1) {
+        const relDir = `chapters/chapter-${directory}`;
+        await fs.mkdir(path.join(temporary, relDir), { recursive: true });
+        await Promise.all(Array.from({ length: 10 }, (_, file) =>
+          fs.writeFile(path.join(temporary, relDir, `section-${file}.tex`), `content ${directory}:${file}\n`)
+        ));
+      }
+      const binary = Buffer.alloc(8 * 1024 * 1024, 0x5a);
+      await fs.writeFile(path.join(temporary, 'large.pdf'), binary);
+      const loaded = await readManifest(temporary);
+      const startedAt = performance.now();
+      const scan = await scanLocalProject(temporary, loaded);
+      const digest = await fileHash(path.join(temporary, 'large.pdf'));
+      expect(performance.now() - startedAt).toBeLessThan(10_000);
+      expect(scan.files).toHaveLength(401);
+      expect(scan.folders).toHaveLength(41);
+      expect(scan.fileMetadata.get('large.pdf')?.size).toBe(binary.length);
+      expect(digest).toBe(sha1(binary));
+
+      const sizes = [5, 5, 3, 3].map(value => value * 1024 * 1024);
+      let activeBytes = 0;
+      let maximumBytes = 0;
+      await mapWithByteConcurrency(sizes, 4, 8 * 1024 * 1024, size => size, async size => {
+        activeBytes += size;
+        maximumBytes = Math.max(maximumBytes, activeBytes);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        activeBytes -= size;
+      });
+      expect(maximumBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  }, 20_000);
 });
 
 async function binaryRecoveryFixture(

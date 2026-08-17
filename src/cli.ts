@@ -350,8 +350,7 @@ async function watchWithTakeover(
     activeSocket?.destroy();
     activeOwner?.requestStop();
   };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const disposeSignalHandlers = installStopSignalHandlers(stop);
   try {
     while (!stopping) {
       const owner = new OwnerFacade(root, policy, credentials, output);
@@ -379,8 +378,7 @@ async function watchWithTakeover(
       }
     }
   } finally {
-    process.removeListener('SIGINT', stop);
-    process.removeListener('SIGTERM', stop);
+    disposeSignalHandlers();
     activeSocket?.destroy();
     await activeOwner?.close();
   }
@@ -612,8 +610,17 @@ function openCommand(): string {
   throw new Error(`Opening files is not supported on ${process.platform}.`);
 }
 
+function installStopSignalHandlers(stop: () => void): () => void {
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  return () => {
+    process.removeListener('SIGINT', stop);
+    process.removeListener('SIGTERM', stop);
+  };
+}
+
 if (require.main === module) {
   void main().then(code => { process.exitCode = code; });
 }
 
-export { main, parseArgs, blockingExitCode, makeSuccessEnvelope, openCommand };
+export { main, parseArgs, blockingExitCode, makeSuccessEnvelope, openCommand, installStopSignalHandlers };

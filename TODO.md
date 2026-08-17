@@ -29,8 +29,8 @@
 
 ## 回归测试
 
-- [ ] 覆盖远端非空目录 rename/move、嵌套目录、目标已存在和 manifest 写入失败回滚。
-- [ ] 在每个二进制远端 mutation 与事务 stage 写入之间注入崩溃，验证恢复幂等且不会丢失正式文件。
-- [ ] 并发启动多个 `syncOnce`、push/pull 和 owner IPC 请求，验证没有重复远端 mutation 或 manifest 交错写入。
-- [ ] 覆盖 stop、SIGINT/SIGTERM、owner 交接期间的在途 reconcile 排空。
-- [ ] 增加大型目录树、大图片/PDF 和本地连续编译事件的性能基准。
+- [x] 覆盖远端非空目录 rename/move、嵌套目录、目标已存在和 manifest 写入失败回滚。
+- [x] 在每个二进制远端 mutation 与事务 stage 写入之间注入崩溃，验证恢复幂等且不会丢失正式文件。
+- [x] 并发启动多个 `syncOnce`、push/pull 和 owner IPC 请求，验证没有重复远端 mutation 或 manifest 交错写入。
+- [x] 覆盖 stop、SIGINT/SIGTERM、owner 交接期间的在途 reconcile 排空。
+- [x] 增加大型目录树、大图片/PDF 和本地连续编译事件的性能基准。
