@@ -9,6 +9,7 @@ import {
   OverleafProject
 } from './types';
 import { DEFAULT_IGNORE_PATTERNS } from './manifest';
+import { validateProjectPathSegment } from './util';
 
 export interface ProjectTreeIndex {
   manifest: OverleafCodexManifest;
@@ -151,9 +152,11 @@ export function buildProjectTreeIndex(
   walkFolder(root, '', undefined, folders, files);
 
   for (const folder of folders) {
+    if (manifest.folders[folder.path]) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || '.'}`);
     manifest.folders[folder.path] = folder;
   }
   for (const file of files) {
+    if (manifest.files[file.path] || manifest.folders[file.path]) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
     manifest.files[file.path] = file;
     if (project.rootDoc_id && file.entityId === project.rootDoc_id) {
       manifest.rootDocPath = file.path;
@@ -177,11 +180,12 @@ function walkFolder(
   });
 
   for (const child of folder.folders ?? []) {
-    const childPath = path.posix.join(folderPath, child.name);
+    const childPath = path.posix.join(folderPath, validateProjectPathSegment(child.name));
     walkFolder(child, childPath, folder._id, folders, files);
   }
 
   for (const doc of folder.docs ?? []) {
+    validateProjectPathSegment(doc.name);
     files.push({
       path: path.posix.join(folderPath, doc.name),
       entityId: doc._id,
@@ -193,6 +197,7 @@ function walkFolder(
   }
 
   for (const file of folder.fileRefs ?? []) {
+    validateProjectPathSegment(file.name);
     files.push({
       path: path.posix.join(folderPath, file.name),
       entityId: file._id,

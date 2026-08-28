@@ -73,6 +73,26 @@ export function resolveWorkspacePath(rootDir: string, relPath: string, mustStayI
   return resolved;
 }
 
+/** Reject symlinked components before a workspace file is read or replaced. */
+export async function assertWorkspacePathSafe(rootDir: string, candidate: string): Promise<string> {
+  const root = path.resolve(rootDir);
+  const absolute = path.resolve(candidate);
+  if (!isSubpath(absolute, root)) throw new Error(`Path is outside workspace: ${candidate}`);
+  if (absolute === root) return absolute;
+  let current = root;
+  for (const segment of path.relative(root, absolute).split(path.sep)) {
+    current = path.join(current, segment);
+    const stat = await fs.lstat(current).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (!stat) break;
+    if (stat.isSymbolicLink()) throw new Error(`Refusing to access symlinked workspace path: ${candidate}`);
+    if (!stat.isDirectory() && current !== absolute) throw new Error(`Workspace path component is not a directory: ${candidate}`);
+  }
+  return absolute;
+}
+
 export function safeWorkspaceRel(rootDir: string, maybePath: unknown): string {
   if (typeof maybePath !== "string" || !maybePath.trim()) return "";
   try {

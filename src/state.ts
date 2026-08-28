@@ -19,6 +19,7 @@ import {
 import { beamerHooksEnabled, defaultBeamerSettings, detectWorkspaceTemplate, readBeamerSettings, starterTemplate } from "./beamer";
 import type { PresetMeta, ResponseState, StarterTemplateGroup, StarterTemplateMeta, StylePresetDefinition, StylePresetSchema, ToolkitState } from "./types";
 import {
+  assertWorkspacePathSafe,
   assertValidBodyFontSize,
   boolFromTex,
   compileOutputPdfRelpath,
@@ -738,6 +739,7 @@ export class StateService {
   }
 
   private async writeFileAtomic(targetPath: string, text: string): Promise<void> {
+    await assertWorkspacePathSafe(this.rootDir, targetPath);
     const tempPath = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     try {

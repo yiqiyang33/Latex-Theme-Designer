@@ -69,6 +69,32 @@ afterEach(() => {
 });
 
 describe('Overleaf CLI shared infrastructure', () => {
+  it('falls back from malformed persisted policy and server entries', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-invalid-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    try {
+      await fs.mkdir(path.dirname(sharedStatePath()), { recursive: true });
+      await fs.writeFile(sharedStatePath(), JSON.stringify({
+        schemaVersion: 1,
+        serverUrl: 'ftp://untrusted.example',
+        servers: ['https://valid.example', 'ftp://bad.example', 42],
+        policy: {
+          autoPushLocalAhead: 'yes',
+          syncBinaryFiles: false,
+          networkTimeouts: { httpMs: -1, connectMs: Number.NaN }
+        }
+      }));
+      const state = await readSharedState();
+      expect(state.serverUrl).toBe('https://www.overleaf.com/');
+      expect(state.servers).toEqual(['https://valid.example/']);
+      expect(state.policy.autoPushLocalAhead).toBe(true);
+      expect(state.policy.syncBinaryFiles).toBe(false);
+      expect(state.policy.networkTimeouts.httpMs).toBe(DEFAULT_SYNC_POLICY.networkTimeouts.httpMs);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('writes shared configuration atomically and registers compatible mirrors', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-'));
     process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
@@ -1397,6 +1423,43 @@ describe('Large mirror performance regressions', () => {
 });
 
 describe('P1 resource and persistence regressions', () => {
+  it('does not forward identity cookies across download redirects to another origin', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-redirect-cookie-'));
+    let receivedCookie = 'unset';
+    const targetServer = http.createServer((request, response) => {
+      receivedCookie = String(request.headers.cookie ?? '');
+      response.writeHead(200, { 'Content-Length': '2' });
+      response.end('ok');
+    });
+    const sourceServer = http.createServer((_request, response) => {
+      const address = targetServer.address();
+      if (!address || typeof address === 'string') throw new Error('Target server did not expose a TCP address.');
+      response.writeHead(302, { Location: `http://127.0.0.1:${address.port}/target` });
+      response.end();
+    });
+    await new Promise<void>(resolve => targetServer.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>(resolve => sourceServer.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = sourceServer.address();
+      if (!address || typeof address === 'string') throw new Error('Source server did not expose a TCP address.');
+      const client = new OverleafClient(`http://127.0.0.1:${address.port}/`, { csrfToken: 'csrf', cookies: 'sid=secret' });
+      await client.downloadProjectFileToPath('project', 'redirect', path.join(temporary, 'redirect.bin'));
+      expect(receivedCookie).toBe('');
+    } finally {
+      sourceServer.closeAllConnections();
+      targetServer.closeAllConnections();
+      await new Promise<void>(resolve => sourceServer.close(() => resolve()));
+      await new Promise<void>(resolve => targetServer.close(() => resolve()));
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects compile output URLs outside the configured server or declared CDN', async () => {
+    const client = new OverleafClient('https://trusted.example/', { csrfToken: 'csrf', cookies: 'sid=secret' });
+    const compile = { status: 'success' as const, compileGroup: 'group', outputFiles: [] };
+    await expect(client.downloadCompileOutput('https://attacker.example/output.pdf', compile)).rejects.toThrow(/untrusted host/);
+  });
+
   it('streams file uploads and downloads through path-based client APIs', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-stream-transfer-'));
     const source = path.join(temporary, 'source.bin');

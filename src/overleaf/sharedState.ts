@@ -5,7 +5,7 @@ import * as path from 'path';
 import type { NetworkTimeouts } from './types';
 import type { SyncPolicy } from './coreInterfaces';
 import { atomicWriteText, manifestPath, readManifest } from './manifest';
-import { normalizeServerUrl } from './util';
+import { normalizeServerUrl, processAlive, processStartSignature } from './util';
 import { mapWithConcurrency } from './syncHealthService';
 
 export interface SharedMirrorRecord {
@@ -102,26 +102,39 @@ export async function readSharedState(): Promise<SharedOverleafState> {
     return defaultSharedState();
   }
   const defaults = defaultSharedState();
+  const parsedPolicy: Record<string, any> = isRecord(parsed.policy) ? parsed.policy : {};
+  const parsedTimeouts: Record<string, any> = isRecord(parsedPolicy.networkTimeouts) ? parsedPolicy.networkTimeouts : {};
   return {
     ...defaults,
     ...parsed,
     schemaVersion: 1,
-    servers: Array.isArray(parsed.servers) ? [...new Set(parsed.servers.map(normalizeServerUrl))].sort() : [],
+    servers: normalizeServerList(parsed.servers),
     mirrors: Array.isArray(parsed.mirrors) ? parsed.mirrors.filter(isMirrorRecord) : [],
     credentialMigrations: Array.isArray(parsed.credentialMigrations)
-      ? [...new Set(parsed.credentialMigrations.map(normalizeServerUrl))].sort()
+      ? normalizeServerList(parsed.credentialMigrations)
       : [],
     credentialTombstones: Array.isArray(parsed.credentialTombstones)
-      ? [...new Set(parsed.credentialTombstones.map(normalizeServerUrl))].sort()
+      ? normalizeServerList(parsed.credentialTombstones)
       : [],
     policy: {
-      ...defaults.policy,
-      ...(parsed.policy ?? {}),
+      autoPushLocalAhead: typeof parsedPolicy.autoPushLocalAhead === 'boolean'
+        ? parsedPolicy.autoPushLocalAhead : defaults.policy.autoPushLocalAhead,
+      syncBinaryFiles: typeof parsedPolicy.syncBinaryFiles === 'boolean'
+        ? parsedPolicy.syncBinaryFiles : defaults.policy.syncBinaryFiles,
+      syncDestructiveChanges: typeof parsedPolicy.syncDestructiveChanges === 'boolean'
+        ? parsedPolicy.syncDestructiveChanges : defaults.policy.syncDestructiveChanges,
       networkTimeouts: {
         ...defaults.policy.networkTimeouts,
-        ...(parsed.policy?.networkTimeouts ?? {})
+        connectMs: validTimeout(parsedTimeouts.connectMs, defaults.policy.networkTimeouts.connectMs),
+        projectJoinMs: validTimeout(parsedTimeouts.projectJoinMs, defaults.policy.networkTimeouts.projectJoinMs),
+        httpMs: validTimeout(parsedTimeouts.httpMs, defaults.policy.networkTimeouts.httpMs),
+        joinDocMs: validTimeout(parsedTimeouts.joinDocMs, defaults.policy.networkTimeouts.joinDocMs),
+        otAckMs: validTimeout(parsedTimeouts.otAckMs, defaults.policy.networkTimeouts.otAckMs)
       }
-    }
+    },
+    serverUrl: safeNormalizeServerUrl(parsed.serverUrl, defaults.serverUrl),
+    localProjectsRoot: typeof parsed.localProjectsRoot === 'string' && parsed.localProjectsRoot.trim()
+      ? path.resolve(parsed.localProjectsRoot) : defaults.localProjectsRoot
   };
 }
 
@@ -257,11 +270,35 @@ function normalizeSharedState(state: SharedOverleafState): SharedOverleafState {
   return {
     ...state,
     schemaVersion: 1,
-    servers: [...new Set(state.servers.map(normalizeServerUrl))].sort(),
-    credentialMigrations: [...new Set(state.credentialMigrations.map(normalizeServerUrl))].sort(),
-    credentialTombstones: [...new Set(state.credentialTombstones.map(normalizeServerUrl))].sort(),
+    servers: normalizeServerList(state.servers),
+    credentialMigrations: normalizeServerList(state.credentialMigrations),
+    credentialTombstones: normalizeServerList(state.credentialTombstones),
     mirrors: dedupeMirrors(state.mirrors)
   };
+}
+
+function normalizeServerList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    try { normalized.push(normalizeServerUrl(item)); } catch { /* discard malformed persisted entries */ }
+  }
+  return [...new Set(normalized)].sort();
+}
+
+function safeNormalizeServerUrl(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  try { return normalizeServerUrl(value); } catch { return fallback; }
+}
+
+function validTimeout(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 10 * 60 * 1000
+    ? value : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 async function writeSharedStateUnlocked(state: SharedOverleafState): Promise<void> {
@@ -360,23 +397,6 @@ async function readSharedStateLockMetadata(target: string): Promise<SharedStateL
       : undefined;
   } catch {
     return undefined;
-  }
-}
-
-async function processStartSignature(pid: number): Promise<string | undefined> {
-  try {
-    const raw = await fs.readFile(`/proc/${pid}/stat`, 'utf8');
-    const fields = raw.trim().split(' ');
-    return fields[21];
-  } catch { return undefined; }
-}
-
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
   }
 }
 

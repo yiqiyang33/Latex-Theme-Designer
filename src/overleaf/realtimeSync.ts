@@ -46,7 +46,7 @@ import {
   repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
-import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
+import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
@@ -318,7 +318,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       if (signal?.aborted) throw signal.reason ?? new Error('Operation cancelled.');
       progress?.report({ message: `Pulling safe remote changes ${pulled + 1}/${plan.pulls.length}: ${item.path}` });
       if (item.entityType === 'folder') {
-        await fs.mkdir(this.abs(item.path), { recursive: true });
+        await fs.mkdir(await assertNoSymlinkPath(this.root!, item.path), { recursive: true });
       } else {
         await this.pullRemoteFile(item.path, false);
       }
@@ -546,7 +546,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async retrySyncPath(relPath: string, signal?: AbortSignal): Promise<SyncStatusItem> {
     this.requireReady();
-    const normalized = toPosixPath(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
     const report = await this.checkSyncStatus(this.root, this.client, undefined, {
       mode: 'incremental',
       paths: [normalized],
@@ -570,7 +570,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async pushLocalFile(relPath: string, refreshStatus = true, forceDestructive = false): Promise<void> {
     this.requireReady();
-    const normalized = toPosixPath(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === 'error') {
       throw new Error(`${normalized} has an unresolved remote read error. Retry its sync check before pushing.`);
     }
@@ -584,7 +584,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       throw new Error(`${normalized} is excluded by ${LOCAL_IGNORE_NAME} and cannot be pushed to Overleaf.`);
     }
     await this.saveOpenLocalDocument(normalized);
-    const localPath = this.abs(normalized);
+    const localPath = await assertNoSymlinkPath(this.root!, normalized);
     const localStat = await fs.stat(localPath).catch(() => undefined);
     const binary = entry ? entry.entityType === 'file' : !isTextLike(normalized);
     const localContent = localStat && !binary ? await fs.readFile(localPath) : undefined;
@@ -654,7 +654,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async pullRemoteFile(relPath: string, refreshStatus = true): Promise<void> {
     this.requireReady();
-    const normalized = toPosixPath(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === 'error') {
       throw new Error(`${normalized} has an unresolved remote read error. Retry its sync check before pulling.`);
     }
@@ -670,7 +670,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
 
     if (remoteFile.entityType === 'file') {
-      const target = this.abs(normalized);
+      const target = await assertNoSymlinkPath(this.root!, normalized);
       const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
       const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, remoteFile.entityId, staging);
       await installStagedFile(staging, target);
@@ -711,7 +711,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async openSyncDiff(relPath: string): Promise<void> {
     this.requireReady();
-    const normalized = toPosixPath(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
     const remote = await this.fetchFreshRemoteSnapshot([normalized]);
     const remoteContent = remote.contents.get(normalized);
     const remoteFailure = remote.failures.get(normalized);
@@ -740,7 +740,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async moveRemoteDeletedToTrash(relPath: string): Promise<void> {
     this.requireReady();
-    const normalized = toPosixPath(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
     await this.moveLocalToTrash(normalized);
     delete this.manifest!.files[normalized];
     this.docStates.delete(normalized);
@@ -983,51 +983,54 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   async openConflictDiff(relPath: string): Promise<void> {
-    const state = this.docStates.get(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
+    const state = this.docStates.get(normalized);
     if (!state?.paused || !state.conflictPath) {
-      throw new Error(`No active conflict for ${relPath}.`);
+      throw new Error(`No active conflict for ${normalized}.`);
     }
     await vscode.commands.executeCommand(
       'vscode.diff',
       vscode.Uri.file(state.conflictPath),
-      vscode.Uri.file(this.abs(relPath)),
-      `Overleaf remote vs local: ${relPath}`
+      vscode.Uri.file(this.abs(normalized)),
+      `Overleaf remote vs local: ${normalized}`
     );
-    void this.promptConflictActions(relPath);
+    void this.promptConflictActions(normalized);
   }
 
   async acceptRemoteConflict(relPath: string): Promise<void> {
-    const state = this.requireConflict(relPath);
-    await this.writeLocalFile(relPath, Buffer.from(state.remoteCache, 'utf8'), true);
+    const normalized = normalizeProjectRelativePath(relPath);
+    const state = this.requireConflict(normalized);
+    await this.writeLocalFile(normalized, Buffer.from(state.remoteCache, 'utf8'), true);
     state.localCache = state.remoteCache;
     state.paused = false;
     state.conflictPath = undefined;
     state.conflictReason = undefined;
-    this.manifest!.files[relPath].version = state.version;
-    addOrUpdateFile(this.manifest!, this.manifest!.files[relPath], state.remoteCache);
-    this.manifest!.files[relPath].baseHash = await writeBaseDoc(this.root!, state.docId, state.remoteCache);
+    this.manifest!.files[normalized].version = state.version;
+    addOrUpdateFile(this.manifest!, this.manifest!.files[normalized], state.remoteCache);
+    this.manifest!.files[normalized].baseHash = await writeBaseDoc(this.root!, state.docId, state.remoteCache);
     await this.persistManifest();
-    this.syncGate.clearPath(relPath);
-    await this.conflictStore?.remove(relPath);
+    this.syncGate.clearPath(normalized);
+    await this.conflictStore?.remove(normalized);
     this.conflictsChanged.fire();
-    await this.checkTargeted([relPath], 'conflict-accept-remote');
-    vscode.window.showInformationMessage(`Accepted Overleaf remote version for ${relPath}.`);
+    await this.checkTargeted([normalized], 'conflict-accept-remote');
+    vscode.window.showInformationMessage(`Accepted Overleaf remote version for ${normalized}.`);
   }
 
   async useLocalConflict(relPath: string): Promise<void> {
-    const state = this.requireConflict(relPath);
-    await this.saveOpenLocalDocument(relPath);
-    const localContent = await fs.readFile(this.abs(relPath), 'utf8');
+    const normalized = normalizeProjectRelativePath(relPath);
+    const state = this.requireConflict(normalized);
+    await this.saveOpenLocalDocument(normalized);
+    const localContent = await fs.readFile(await assertNoSymlinkPath(this.root!, normalized), 'utf8');
     state.paused = false;
     state.conflictPath = undefined;
     state.conflictReason = undefined;
     state.localCache = state.remoteCache;
-    this.syncGate.clearPath(relPath);
-    await this.conflictStore?.remove(relPath);
+    this.syncGate.clearPath(normalized);
+    await this.conflictStore?.remove(normalized);
     this.conflictsChanged.fire();
-    await this.syncDocContent(relPath, localContent);
-    await this.checkTargeted([relPath], 'conflict-use-local');
-    vscode.window.showInformationMessage(`Used current local version for ${relPath} and resumed sync.`);
+    await this.syncDocContent(normalized, localContent);
+    await this.checkTargeted([normalized], 'conflict-use-local');
+    vscode.window.showInformationMessage(`Used current local version for ${normalized} and resumed sync.`);
   }
 
   private async promptConflictActions(relPath: string): Promise<void> {
@@ -1056,9 +1059,10 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   private requireConflict(relPath: string): DocState {
     this.requireReady();
-    const state = this.docStates.get(relPath);
+    const normalized = normalizeProjectRelativePath(relPath);
+    const state = this.docStates.get(normalized);
     if (!state?.paused) {
-      throw new Error(`No active conflict for ${relPath}.`);
+      throw new Error(`No active conflict for ${normalized}.`);
     }
     return state;
   }
@@ -1304,7 +1308,9 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async registerPotentialRenameCreate(relPath: string): Promise<void> {
-    const stat = await fs.stat(this.abs(relPath)).catch(() => undefined);
+    const safePath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+    if (!safePath) return;
+    const stat = await fs.stat(safePath).catch(() => undefined);
     if (!stat) return;
     if (this.hasPendingFolderRenameAncestor(relPath)) {
       this.scheduleLocalChange(relPath, 'create', 1000);
@@ -1325,8 +1331,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.scheduleLocalChange(relPath, 'create', 650);
       return;
     }
-    const content = isTextLike(relPath) ? await fs.readFile(this.abs(relPath)).catch(() => undefined) : undefined;
-    const hash = content ? sha1(content) : (await hashFileDigests(this.abs(relPath)).catch(() => undefined))?.sha1;
+    const content = isTextLike(relPath) ? await fs.readFile(safePath).catch(() => undefined) : undefined;
+    const hash = content ? sha1(content) : (await hashFileDigests(safePath).catch(() => undefined))?.sha1;
     if (!hash) return;
     const detection = this.renameDetector.registerCreate({
       path: relPath,
@@ -1607,7 +1613,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       if (typeof content !== 'string') {
         continue;
       }
-      const localContent = await fs.readFile(this.abs(relPath), 'utf8').catch(() => content);
+      const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+      const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => content) : content;
       this.docStates.set(relPath, {
         relPath,
         docId: remoteFile.entityId,
@@ -1889,7 +1896,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
-    const absPath = this.abs(relPath);
+    const absPath = await assertNoSymlinkPath(this.root!, relPath);
     const stat = await fs.stat(absPath).catch(() => undefined);
     if (!stat) {
       await this.handleLocalDelete(relPath);
@@ -2022,7 +2029,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     this.pendingLocalCreates.add(relPath);
     try {
-      const sourcePath = this.abs(relPath);
+      const sourcePath = await assertNoSymlinkPath(this.root!, relPath);
       const digests = await hashFileDigests(sourcePath);
       const file = await this.client!.uploadFileFromPath(this.manifest!.projectId, ensured.parentFolderId, path.posix.basename(relPath), sourcePath);
       if (file.hash ? file.hash !== digests.gitBlobHash : !await this.remoteBlobMatches(file._id, digests.gitBlobHash)) {
@@ -2304,7 +2311,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.resyncOrConflict(relPath, 'Remote version changed unexpectedly.');
       return;
     }
-    const localContent = await fs.readFile(this.abs(relPath), 'utf8').catch(() => state.localCache);
+    const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+    const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => state.localCache) : state.localCache;
 
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
@@ -2337,7 +2345,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.resyncOrConflict('', 'Remote create used an unknown parent folder.');
       return;
     }
-    const relPath = path.posix.join(parentPath, entity.name);
+    const relPath = path.posix.join(parentPath, validateProjectPathSegment(entity.name));
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5000, [relPath]);
@@ -2362,7 +2370,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.writeLocalFile(relPath, Buffer.from(doc.content, 'utf8'), true);
       await this.session!.leaveDoc(entity._id).catch(() => undefined);
     } else {
-      const target = this.abs(relPath);
+      const target = await assertNoSymlinkPath(this.root!, relPath);
       const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
       const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, entity._id, staging);
       await installStagedFile(staging, target);
@@ -2391,7 +2399,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (parentPath === undefined) {
       return;
     }
-    const relPath = path.posix.join(parentPath, folder.name);
+    const relPath = path.posix.join(parentPath, validateProjectPathSegment(folder.name));
     if (this.pendingLocalCreates.has(relPath)) return;
     if (!this.syncGate.canSync(relPath)) {
       this.scheduleSyncStatusCheck(5000, [relPath]);
@@ -2402,7 +2410,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       entityId: folder._id,
       parentFolderId
     });
-    await fs.mkdir(this.abs(relPath), { recursive: true });
+    await fs.mkdir(await assertNoSymlinkPath(this.root!, relPath), { recursive: true });
     await this.persistManifest();
   }
 
@@ -2419,7 +2427,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         return;
       }
       const file = this.manifest!.files[oldPath];
-      const newPath = path.posix.join(path.posix.dirname(oldPath), newName).replace(/^\.\//, '');
+      const newPath = path.posix.join(path.posix.dirname(oldPath), validateProjectPathSegment(newName)).replace(/^\.\//, '');
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, file.parentFolderId);
       } catch (error) {
@@ -2430,7 +2438,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     const folder = Object.values(this.manifest!.folders).find(item => item.entityId === entityId);
     if (folder) {
-      const newPath = path.posix.join(path.posix.dirname(folder.path), newName).replace(/^\.\//, '');
+      const newPath = path.posix.join(path.posix.dirname(folder.path), validateProjectPathSegment(newName)).replace(/^\.\//, '');
       const oldPath = folder.path;
       try {
         await this.remapFolderPath(oldPath, newPath, true, folder.parentFolderId);
@@ -2547,19 +2555,22 @@ export class RealtimeSyncService implements vscode.Disposable {
   private async restoreConflicts(): Promise<void> {
     const conflicts = await this.conflictStore?.list() ?? [];
     for (const conflict of conflicts) {
-      const state = this.docStates.get(conflict.relPath);
-      const snapshotExists = await fs.stat(conflict.remotePath).then(() => true, () => false);
+      const normalized = normalizeProjectRelativePath(conflict.relPath);
+      const state = this.docStates.get(normalized);
+      let snapshotPath: string;
+      try { snapshotPath = assertPathWithin(metadataPath(this.root!, 'conflicts'), conflict.remotePath); } catch { snapshotPath = ''; }
+      const snapshotExists = Boolean(snapshotPath) && await fs.lstat(snapshotPath).then(stat => stat.isFile(), () => false);
       if (!state || state.docId !== conflict.docId || !snapshotExists) {
-        await this.conflictStore?.remove(conflict.relPath);
+        await this.conflictStore?.remove(normalized);
         continue;
       }
-      const remoteContent = await fs.readFile(conflict.remotePath, 'utf8');
+      const remoteContent = await fs.readFile(snapshotPath, 'utf8');
       state.version = Math.max(state.version, conflict.remoteVersion);
       state.remoteCache = remoteContent;
       state.paused = true;
-      state.conflictPath = conflict.remotePath;
+      state.conflictPath = snapshotPath;
       state.conflictReason = conflict.reason;
-      this.syncGate.setPath(conflict.relPath, 'conflict', conflict.reason);
+      this.syncGate.setPath(normalized, 'conflict', conflict.reason);
     }
     if (conflicts.length > 0) {
       this.conflictsChanged.fire();
@@ -2573,7 +2584,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     const state = await this.ensureDocState(relPath);
     const joined = await this.session!.joinDoc(state.docId);
-    const localContent = await fs.readFile(this.abs(relPath), 'utf8').catch(() => '');
+    const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+    const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => '') : '';
     if (localContent === state.localCache) {
       state.version = joined.version;
       state.remoteCache = joined.content;
@@ -2747,7 +2759,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async moveLocalToTrash(relPath: string): Promise<void> {
-    const source = this.abs(relPath);
+    const source = await assertNoSymlinkPath(this.root!, relPath);
     const target = trashPathFor(this.root!, relPath);
     const exists = await fs.stat(source).catch(() => undefined);
     if (!exists) {
@@ -2771,7 +2783,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (!entry || entry.entityType !== 'doc') {
       return;
     }
-    const content = await fs.readFile(this.abs(relPath), 'utf8').catch(() => undefined);
+    const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+    const content = localPath ? await fs.readFile(localPath, 'utf8').catch(() => undefined) : undefined;
     if (content === undefined) {
       return;
     }
@@ -2781,7 +2794,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async writeLocalFile(relPath: string, content: Uint8Array, bypass: boolean): Promise<void> {
-    const absPath = this.abs(relPath);
+    const absPath = await assertNoSymlinkPath(this.root!, relPath);
     await fs.mkdir(path.dirname(absPath), { recursive: true });
     if (bypass) {
       this.bypassHashes.set(relPath, sha1(content));
@@ -2803,7 +2816,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private abs(relPath: string): string {
-    return path.join(this.root!, relPath);
+    return path.join(this.root!, normalizeProjectRelativePath(relPath));
   }
 
   private requireReady(): void {

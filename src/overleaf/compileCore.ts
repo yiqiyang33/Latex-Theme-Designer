@@ -4,6 +4,7 @@ import * as path from 'path';
 import { metadataPath, OUTPUT_DIR, readManifest } from './manifest';
 import type { CompileOutputFile } from './types';
 import { OverleafClient } from './overleafClient';
+import { processAlive, processStartSignature } from './util';
 
 export interface RemoteCompileResult {
   rootDocPath?: string;
@@ -123,22 +124,6 @@ async function acquireCompileLock(outputRoot: string, options: CompileOptions = 
 async function lockAge(lock: string): Promise<number> {
   const stat = await fs.stat(lock).catch(() => undefined);
   return stat ? Math.max(0, Date.now() - stat.mtimeMs) : Number.POSITIVE_INFINITY;
-}
-
-async function processStartSignature(pid: number): Promise<string | undefined> {
-  if (process.platform === 'linux') {
-    try {
-      const raw = await fs.readFile(`/proc/${pid}/stat`, 'utf8');
-      const endOfCommand = raw.lastIndexOf(')');
-      if (endOfCommand < 0) return undefined;
-      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
-    } catch { return undefined; }
-  }
-  return undefined;
-}
-
-function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
 export async function latestRemotePdf(root: string): Promise<string | undefined> {

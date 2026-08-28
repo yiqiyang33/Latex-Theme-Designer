@@ -182,6 +182,10 @@ export class ChangeHistoryService {
 
   private async restoreValues(entries: Array<{ target: string; value: ToolkitSnapshotValue }>): Promise<void> {
     for (const { target, value } of entries.filter((entry) => entry.value.kind === "directory")) {
+      const existing = await fs.lstat(target).catch(() => undefined);
+      if (existing && (!existing.isDirectory() || existing.isSymbolicLink())) {
+        await fs.rm(target, { recursive: true, force: true });
+      }
       await fs.mkdir(target, { recursive: true });
       if (value.mode !== undefined) await fs.chmod(target, value.mode).catch(() => undefined);
     }
@@ -250,8 +254,12 @@ export class ChangeHistoryService {
     const manifest = this.manifestPath();
     if (!manifest) return undefined;
     try {
-      const parsed = JSON.parse(await fs.readFile(manifest, "utf8")) as ToolkitChangeRecord;
-      return parsed?.version === 1 && parsed.rootPath === this.rootDir ? parsed : undefined;
+      const parsed = JSON.parse(await fs.readFile(manifest, "utf8")) as Partial<ToolkitChangeRecord>;
+      if (parsed.version !== 1 || parsed.rootPath !== this.rootDir || !Array.isArray(parsed.files)) return undefined;
+      if (parsed.files.some((file) => !file || typeof file.path !== "string" || !isSubpath(path.resolve(this.rootDir, file.path), this.rootDir))) {
+        return undefined;
+      }
+      return parsed as ToolkitChangeRecord;
     } catch {
       return undefined;
     }

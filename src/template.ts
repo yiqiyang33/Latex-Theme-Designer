@@ -5,7 +5,7 @@ import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { defaultBeamerSettings, writeBeamerSettings, writeTemplateMetadata } from "./beamer";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
 import type { UpgradeThemeAssetsOptions, UpgradeThemeAssetsResult } from "./types";
-import { exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
+import { assertWorkspacePathSafe, exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
 
 const UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
@@ -59,6 +59,7 @@ export class TemplateService {
     await fs.mkdir(backupDir, { recursive: true });
     for (const target of targets) {
       this.assertInsideWorkspace(target);
+      await assertWorkspacePathSafe(this.rootDir, target);
       const existed = await exists(target);
       existedBefore.set(target, existed);
       if (existed) await this.backupFile(target, backupDir);
@@ -99,6 +100,7 @@ export class TemplateService {
       ?? STARTER_TEMPLATE_DEFINITIONS[0];
     if (!template) throw new Error("No starter templates available.");
     const targetAbs = path.resolve(this.rootDir, normalizedTarget);
+    await assertWorkspacePathSafe(this.rootDir, targetAbs);
     const assetDestination = template.kind === "beamer" ? path.dirname(targetAbs) : this.rootDir;
     await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);

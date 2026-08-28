@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { createReadStream, createWriteStream } from 'fs';
 import { createRequire } from 'module';
-import { Readable } from 'stream';
+import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 import FormData from 'form-data';
 import fetch, { Response } from 'node-fetch';
@@ -60,6 +60,10 @@ const DEFAULT_TIMEOUTS: NetworkTimeouts = {
   joinDocMs: 30_000,
   otAckMs: 15_000
 };
+
+const MAX_BUFFERED_DOWNLOAD_BYTES = 256 * 1024 * 1024;
+const MAX_STREAMED_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+const MAX_RESPONSE_TEXT_BYTES = 8 * 1024 * 1024;
 
 export class OverleafHttpError extends Error {
   constructor(
@@ -126,7 +130,7 @@ export class OverleafClient {
       throw new Error('Cookie login was redirected. The cookie is probably expired or incomplete.');
     }
 
-    const html = await res.text();
+    const html = await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
     const csrfToken = extractCsrfToken(html);
     if (!csrfToken) {
       throw new Error('Could not find a CSRF token on the Overleaf project page.');
@@ -314,7 +318,7 @@ export class OverleafClient {
 
   async downloadCompileOutput(outputUrl: string, compile: CompileResponse): Promise<Uint8Array> {
     if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsolute(outputUrl, false);
+      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false);
     }
 
     if (compile.pdfDownloadDomain && compile.clsiServerId) {
@@ -323,7 +327,7 @@ export class OverleafClient {
         + `?compileGroup=${encodeURIComponent(compile.compileGroup)}`
         + `&clsiserverid=${encodeURIComponent(compile.clsiServerId)}`
         + '&enable_pdf_caching=true';
-      return this.downloadAbsolute(cdnUrl, false);
+      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false);
     }
 
     return this.downloadRelative(outputUrl.replace(/^\/+/, ''), true);
@@ -336,7 +340,7 @@ export class OverleafClient {
     options: DownloadFileOptions = {}
   ): Promise<FileTransferResult> {
     if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsoluteToPath(outputUrl, false, targetPath, options);
+      return this.downloadAbsoluteToPath(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false, targetPath, options);
     }
     if (compile.pdfDownloadDomain && compile.clsiServerId) {
       const cleanOutput = outputUrl.replace(/^\/+/, '');
@@ -344,7 +348,7 @@ export class OverleafClient {
         + `?compileGroup=${encodeURIComponent(compile.compileGroup)}`
         + `&clsiserverid=${encodeURIComponent(compile.clsiServerId)}`
         + '&enable_pdf_caching=true';
-      return this.downloadAbsoluteToPath(cdnUrl, false, targetPath, options);
+      return this.downloadAbsoluteToPath(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false, targetPath, options);
     }
     return this.downloadAbsoluteToPath(this.urlFor(outputUrl.replace(/^\/+/, '')), true, targetPath, options);
   }
@@ -448,7 +452,7 @@ export class OverleafClient {
         Connection: 'keep-alive'
       }
     });
-    await res.text();
+    await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
     const setCookie = res.headers.raw()['set-cookie']?.[0]?.split(';')[0];
     if (setCookie && !identity.cookies.includes(setCookie)) {
       return {
@@ -497,7 +501,7 @@ export class OverleafClient {
     }, this.timeouts.httpMs, options.signal);
 
     await assertOk(res, route);
-    return res.status === 204 ? '' : res.text();
+    return res.status === 204 ? '' : readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
   }
 
   private async downloadRelative(route: string, includeCookies: boolean, signal?: AbortSignal): Promise<Uint8Array> {
@@ -506,6 +510,7 @@ export class OverleafClient {
 
   private async downloadAbsolute(url: string, includeCookies: boolean, signal?: AbortSignal): Promise<Uint8Array> {
     const identity = includeCookies ? this.requireIdentity() : undefined;
+    let sendCookies = Boolean(identity);
     const chunks: Buffer[] = [];
     let currentUrl = url;
     let offset = 0;
@@ -521,7 +526,7 @@ export class OverleafClient {
         headers: {
           Connection: 'keep-alive',
           ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
-          ...(identity ? { Cookie: identity.cookies } : {})
+          ...(sendCookies && identity ? { Cookie: identity.cookies } : {})
         }
       }, this.timeouts.httpMs, signal);
 
@@ -531,7 +536,9 @@ export class OverleafClient {
         if (!location || redirects >= 5) {
           throw new OverleafHttpError(`Overleaf download redirect failed for ${path.basename(currentUrl)}.`, res.status);
         }
-        currentUrl = new URL(location, currentUrl).toString();
+        const nextUrl = new URL(location, currentUrl);
+        sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
+        currentUrl = nextUrl.toString();
         redirects += 1;
         continue;
       }
@@ -540,10 +547,13 @@ export class OverleafClient {
         await assertOk(res, currentUrl);
       }
 
-      const chunk = await res.buffer();
+      const chunk = await readResponseBufferLimited(res, MAX_BUFFERED_DOWNLOAD_BYTES);
       if (res.status === 200) {
         if (offset > 0) {
           throw new Error('Overleaf ignored a Range request after returning partial content.');
+        }
+        if (chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
+          throw new Error('Overleaf download exceeded its size limit.');
         }
         chunks.push(chunk);
         break;
@@ -555,6 +565,9 @@ export class OverleafClient {
       const range = parseContentRange(res.headers.get('content-range'));
       if (range.start !== offset || range.end < range.start || chunk.length !== range.end - range.start + 1) {
         throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get('content-range') ?? 'missing'}.`);
+      }
+      if (offset + chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
+        throw new Error('Overleaf download exceeded its size limit.');
       }
       if (expectedTotal !== undefined && range.total !== expectedTotal) {
         throw new Error('Overleaf changed the total download size between partial responses.');
@@ -589,6 +602,7 @@ export class OverleafClient {
     options: DownloadFileOptions
   ): Promise<FileTransferResult> {
     const identity = includeCookies ? this.requireIdentity() : undefined;
+    let sendCookies = Boolean(identity);
     let currentUrl = url;
     let offset = 0;
     let expectedTotal: number | undefined;
@@ -606,7 +620,7 @@ export class OverleafClient {
           headers: {
             Connection: 'keep-alive',
             ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
-            ...(identity ? { Cookie: identity.cookies } : {})
+            ...(sendCookies && identity ? { Cookie: identity.cookies } : {})
           }
         }, this.timeouts.httpMs, options.signal);
 
@@ -616,7 +630,9 @@ export class OverleafClient {
           if (!location || redirects >= 5) {
             throw new OverleafHttpError(`Overleaf download redirect failed for ${path.basename(currentUrl)}.`, res.status);
           }
-          currentUrl = new URL(location, currentUrl).toString();
+          const nextUrl = new URL(location, currentUrl);
+          sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
+          currentUrl = nextUrl.toString();
           redirects += 1;
           continue;
         }
@@ -648,7 +664,18 @@ export class OverleafClient {
         }
         if (!res.body) throw new Error('Overleaf download response did not contain a body.');
         const before = offset;
-        await pipeline(res.body, createWriteStream(targetPath, { flags: offset > 0 ? 'a' : 'w' }));
+        let bodyBytes = 0;
+        const limiter = new Transform({
+          transform(chunk, _encoding, callback) {
+            bodyBytes += Buffer.byteLength(chunk);
+            if (before + bodyBytes > MAX_STREAMED_DOWNLOAD_BYTES) {
+              callback(new Error('Overleaf download exceeded its size limit.'));
+            } else {
+              callback(null, chunk);
+            }
+          }
+        });
+        await pipeline(res.body, limiter, createWriteStream(targetPath, { flags: offset > 0 ? 'a' : 'w' }));
         const actualSize = (await fs.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== undefined && received !== responseEnd - responseStart + 1) {
@@ -675,6 +702,26 @@ export class OverleafClient {
       throw new Error('Not logged in to Overleaf.');
     }
     return this.identity;
+  }
+
+  private assertAllowedCompileDownloadUrl(rawUrl: string, compile: CompileResponse): string {
+    let candidate: URL;
+    try {
+      candidate = new URL(rawUrl, this.serverUrl);
+    } catch {
+      throw new Error('Overleaf compile returned an invalid output URL.');
+    }
+    if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') {
+      throw new Error('Overleaf compile returned an unsupported output URL scheme.');
+    }
+    const allowedOrigins = new Set<string>([new URL(this.serverUrl).origin]);
+    if (compile.pdfDownloadDomain) {
+      try { allowedOrigins.add(new URL(compile.pdfDownloadDomain).origin); } catch { /* validated by the candidate check */ }
+    }
+    if (!allowedOrigins.has(candidate.origin)) {
+      throw new Error(`Refusing to download compile output from an untrusted host: ${candidate.host}.`);
+    }
+    return candidate.toString();
   }
 
   private urlFor(route: string): string {
@@ -790,14 +837,24 @@ export class OverleafSocketSession {
   }
 
   async joinProject(projectId: string, signal?: AbortSignal): Promise<OverleafProject> {
-    const rejectPromise = new Promise<never>((_, reject) => {
-      this.socket.once('connectionRejected', (error: { message?: string }) => {
-        reject(new Error(error?.message || 'Overleaf rejected the realtime connection.'));
-      });
+    return new Promise<OverleafProject>((resolve, reject) => {
+      let settled = false;
+      const onRejected = (error: { message?: string }): void => finish(new Error(error?.message || 'Overleaf rejected the realtime connection.'));
+      const cleanup = (): void => this.socket.removeListener('connectionRejected', onRejected);
+      const finish = (error?: Error, project?: OverleafProject): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        error ? reject(error) : resolve(project!);
+      };
+      this.socket.once('connectionRejected', onRejected);
+      void this.emitAck('joinProject', this.timeouts.projectJoinMs, signal, { project_id: projectId })
+        .then(values => {
+          const project = values[0] as OverleafProject | undefined;
+          finish(project ? undefined : new Error('Overleaf did not return a project in joinProject acknowledgement.'), project);
+        })
+        .catch(error => finish(error instanceof Error ? error : new Error(formatUnknownError(error))));
     });
-    const joinPromise = this.emitAck('joinProject', this.timeouts.projectJoinMs, signal, { project_id: projectId })
-      .then(values => values[0] as OverleafProject);
-    return Promise.race([rejectPromise, joinPromise]);
   }
 
   waitForJoinProjectResponse(signal?: AbortSignal, timeoutMs?: number): Promise<OverleafProject> {
@@ -1317,7 +1374,7 @@ async function assertOk(res: Response, route: string): Promise<void> {
   if (res.status >= 200 && res.status < 300) {
     return;
   }
-  const body = await res.text().catch(() => '');
+  const body = await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES).catch(() => '');
   let code: string | undefined;
   try {
     const parsed = JSON.parse(body) as { error?: unknown };
@@ -1331,4 +1388,24 @@ async function assertOk(res: Response, route: string): Promise<void> {
     code,
     body.slice(0, 500)
   );
+}
+
+async function readResponseBufferLimited(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of response.body as any) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > maxBytes) {
+      (response.body as any).destroy?.(new Error('Overleaf response exceeded its size limit.'));
+      throw new Error('Overleaf response exceeded its size limit.');
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function readResponseTextLimited(response: Response, maxBytes: number): Promise<string> {
+  return (await readResponseBufferLimited(response, maxBytes)).toString('utf8');
 }

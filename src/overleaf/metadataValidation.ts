@@ -1,6 +1,7 @@
 import type { BinaryTransaction } from './binaryTransactions';
 import type { PersistedConflict } from './conflictStore';
 import type { OverleafCodexManifest, SyncStatusItem, SyncStatusReport } from './types';
+import { normalizeProjectRelativePath } from './util';
 
 type ValidationResult = string | undefined;
 
@@ -25,6 +26,9 @@ export function validateManifest(value: unknown): ValidationResult {
     const error = requiredStrings(item, ['path', 'entityId', 'parentFolderId'], at);
     if (error) return error;
     if (item.path !== key) return `${at}.path must match its map key`;
+    try {
+      if (normalizeProjectRelativePath(item.path) !== item.path) return `${at}.path must use canonical relative separators`;
+    } catch { return `${at}.path must be a safe relative project path`; }
     if (item.entityType !== 'doc' && item.entityType !== 'file') return `${at}.entityType must be "doc" or "file"`;
     if (item.binary !== undefined && typeof item.binary !== 'boolean') return `${at}.binary must be a boolean`;
     for (const field of HASH_FIELDS) if (item[field] !== undefined && typeof item[field] !== 'string') return `${at}.${field} must be a string`;
@@ -38,10 +42,18 @@ export function validateManifest(value: unknown): ValidationResult {
     const error = requiredStrings(item, ['path', 'entityId'], at);
     if (error) return error;
     if (item.path !== key) return `${at}.path must match its map key`;
+    try {
+      if (normalizeProjectRelativePath(item.path, true) !== item.path) return `${at}.path must use canonical relative separators`;
+    } catch { return `${at}.path must be a safe relative project path`; }
     if (item.parentFolderId !== undefined && typeof item.parentFolderId !== 'string') return `${at}.parentFolderId must be a string`;
   }
   for (const field of ['rootDocId', 'rootDocPath', 'compiler', 'lastFullAuditAt'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return `$.${field} must be a string`;
+  }
+  if (value.rootDocPath !== undefined) {
+    try {
+      if (normalizeProjectRelativePath(value.rootDocPath as string) !== value.rootDocPath) return '$.rootDocPath must use canonical relative separators';
+    } catch { return '$.rootDocPath must be a safe relative project path'; }
   }
   if (value.projectVersion !== undefined && !isNonNegativeNumber(value.projectVersion)) return '$.projectVersion must be a non-negative finite number';
   return undefined;
@@ -72,6 +84,9 @@ export function validateConflictList(value: unknown): ValidationResult {
     if (!isRecord(item)) return `${at} must be an object`;
     const error = requiredStrings(item, ['relPath', 'docId', 'remotePath', 'reason', 'createdAt'], at);
     if (error) return error;
+    try {
+      if (normalizeProjectRelativePath(item.relPath as string) !== item.relPath) return `${at}.relPath must be a safe canonical relative project path`;
+    } catch { return `${at}.relPath must be a safe relative project path`; }
     if (!isNonNegativeNumber(item.remoteVersion)) return `${at}.remoteVersion must be a non-negative finite number`;
   }
   return undefined;
@@ -88,6 +103,9 @@ export function validateTransactionList(value: unknown): ValidationResult {
       'tempEntityId', 'expectedBlobHash', 'createdAt'
     ], at);
     if (error) return error;
+    try {
+      if (normalizeProjectRelativePath(item.path as string) !== item.path) return `${at}.path must be a safe canonical relative project path`;
+    } catch { return `${at}.path must be a safe relative project path`; }
     if (!['temp-uploaded', 'original-backed-up', 'promoted'].includes(item.stage as string)) return `${at}.stage is invalid`;
     if (item.expectedSha1 !== undefined && typeof item.expectedSha1 !== 'string') return `${at}.expectedSha1 must be a string`;
   }
@@ -117,6 +135,7 @@ export function assertValidTransactions(value: BinaryTransaction[]): void {
 function validateStatusItem(value: unknown, at: string): ValidationResult {
   if (!isRecord(value)) return `${at} must be an object`;
   if (typeof value.path !== 'string') return `${at}.path must be a string`;
+  try { normalizeProjectRelativePath(value.path); } catch { return `${at}.path must be a safe relative project path`; }
   if (!STATUS_VALUES.has(value.status as string)) return `${at}.status is invalid`;
   if (typeof value.blocking !== 'boolean') return `${at}.blocking must be a boolean`;
   if (value.entityType !== undefined && !ENTITY_TYPES.has(value.entityType as string)) return `${at}.entityType is invalid`;

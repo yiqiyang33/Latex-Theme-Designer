@@ -764,6 +764,21 @@ describe("TypeScript Toolkit migration", () => {
     await expect(service.handle("undo-last-change", { force: true })).resolves.toBeDefined();
   });
 
+  it("ignores history records that target files outside the workspace", async () => {
+    const root = await tempWorkspace();
+    const history = await tempWorkspace();
+    await copyBaseAssets(root);
+    await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{article}\n", "utf8");
+    await fs.writeFile(path.join(history, "last-change.json"), JSON.stringify({
+      version: 1,
+      rootPath: root,
+      state: "applied",
+      files: [{ path: "../outside.txt", before: { kind: "missing", fingerprint: "x" }, after: { kind: "missing", fingerprint: "x" } }]
+    }));
+    const service = new ToolkitService(root, repoRoot, { historyStorageDir: history });
+    await expect(service.handle("undo-last-change", { force: true })).rejects.toThrow("No Toolkit change is available");
+  });
+
   it("restores deleted override files through file-based undo and redo", async () => {
     const root = await tempWorkspace();
     const history = await tempWorkspace();

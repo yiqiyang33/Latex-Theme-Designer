@@ -3,10 +3,8 @@ import * as fs from 'fs/promises';
 import * as net from 'net';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { runtimeRoot } from './sharedState';
-import { formatUnknownError } from './util';
+import { formatUnknownError, processAlive, processStartSignature } from './util';
 
 export const SYNC_IPC_VERSION = 1;
 const MAX_IPC_FRAME_BYTES = 1024 * 1024;
@@ -55,8 +53,6 @@ interface IpcChunk {
   total: number;
   payload: string;
 }
-
-const execFileAsync = promisify(execFile);
 
 export type OwnerHandler = (command: string, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -579,19 +575,6 @@ async function readMetadata(target: string): Promise<OwnerMetadata | undefined> 
   const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
   if (!raw) return undefined;
   try { return JSON.parse(raw) as OwnerMetadata; } catch { return undefined; }
-}
-
-function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
-}
-
-async function processStartSignature(pid: number): Promise<string | undefined> {
-  try {
-    const result = await execFileAsync('/bin/ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8' });
-    return String(result.stdout ?? '').trim() || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function isOwnerRequest(value: unknown): value is OwnerRequest {

@@ -12123,7 +12123,7 @@ var require_form_data = __commonJS({
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs16 = require("fs");
+    var fs17 = require("fs");
     var Stream = require("stream").Stream;
     var crypto8 = require("crypto");
     var mime2 = require_mime_types();
@@ -12190,7 +12190,7 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs16.stat(value.path, function(err, stat13) {
+          fs17.stat(value.path, function(err, stat13) {
             if (err) {
               callback(err);
               return;
@@ -14491,7 +14491,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve7, reject) {
+      return new Body.Promise(function(resolve8, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14525,7 +14525,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve7(Buffer.concat(accum, accumBytes));
+            resolve8(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -15200,7 +15200,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve7, reject) {
+      return new fetch2.Promise(function(resolve8, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15333,7 +15333,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve7(fetch2(new Request(locationURL, requestOpts)));
+                resolve8(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15354,7 +15354,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve7(response);
+            resolve8(response);
             return;
           }
           const zlibOptions = {
@@ -15364,7 +15364,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve7(response);
+            resolve8(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15376,12 +15376,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve7(response);
+              resolve8(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve7(response);
+                resolve8(response);
               }
             });
             return;
@@ -15389,11 +15389,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve7(response);
+            resolve8(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve7(response);
+          resolve8(response);
         });
         writeToStream(req, request);
       });
@@ -15451,14 +15451,14 @@ __export(cli_exports, {
   parseArgs: () => parseArgs
 });
 module.exports = __toCommonJS(cli_exports);
-var fs15 = __toESM(require("fs/promises"));
+var fs16 = __toESM(require("fs/promises"));
 var path17 = __toESM(require("path"));
 var import_child_process4 = require("child_process");
-var import_util18 = require("util");
+var import_util21 = require("util");
 var readline = __toESM(require("readline"));
 
 // src/overleaf/cliSyncEngine.ts
-var fs8 = __toESM(require("fs/promises"));
+var fs9 = __toESM(require("fs/promises"));
 var path10 = __toESM(require("path"));
 var os2 = __toESM(require("os"));
 var import_events2 = require("events");
@@ -16317,7 +16317,7 @@ var NodeFsHandler = class {
         this._addToNodeFs(path18, initialAdd, wh, depth + 1);
       }
     }).on(EV.ERROR, this._boundHandleError);
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       if (!stream)
         return reject();
       stream.once(STR_END, () => {
@@ -16326,7 +16326,7 @@ var NodeFsHandler = class {
           return;
         }
         const wasThrottled = throttler ? throttler.clear() : false;
-        resolve7(void 0);
+        resolve8(void 0);
         previous.getChildren().filter((item) => {
           return item !== directory && !current.has(item);
         }).forEach((item) => {
@@ -16470,11 +16470,11 @@ function createPattern(matcher) {
       if (matcher.path === string)
         return true;
       if (matcher.recursive) {
-        const relative5 = sysPath2.relative(matcher.path, string);
-        if (!relative5) {
+        const relative6 = sysPath2.relative(matcher.path, string);
+        if (!relative6) {
           return false;
         }
-        return !relative5.startsWith("..") && !sysPath2.isAbsolute(relative5);
+        return !relative6.startsWith("..") && !sysPath2.isAbsolute(relative6);
       }
       return false;
     };
@@ -17155,7 +17155,7 @@ function watch(paths, options = {}) {
 var esm_default = { watch, FSWatcher };
 
 // src/overleaf/manifest.ts
-var fs = __toESM(require("fs/promises"));
+var fs2 = __toESM(require("fs/promises"));
 var path3 = __toESM(require("path"));
 
 // node_modules/minimatch/dist/esm/index.js
@@ -18696,13 +18696,30 @@ var import_ignore = __toESM(require_ignore());
 
 // src/overleaf/util.ts
 var crypto = __toESM(require("crypto"));
+var import_child_process = require("child_process");
+var fs = __toESM(require("fs/promises"));
 var os = __toESM(require("os"));
 var path2 = __toESM(require("path"));
 var import_util = require("util");
+var import_util2 = require("util");
+var execFileAsync = (0, import_util2.promisify)(import_child_process.execFile);
 function normalizeServerUrl(raw) {
   const trimmed = raw.trim() || "https://www.overleaf.com/";
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  return url.endsWith("/") ? url : `${url}/`;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid Overleaf server URL: ${raw}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Overleaf server URL must use HTTP(S): ${raw}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`Overleaf server URL must not contain credentials: ${raw}`);
+  }
+  parsed.pathname = parsed.pathname.endsWith("/") ? parsed.pathname : `${parsed.pathname}/`;
+  return parsed.toString();
 }
 function expandHome(input) {
   if (input === "~") {
@@ -18742,6 +18759,87 @@ function isTextLike(filePath) {
 }
 function toPosixPath(input) {
   return input.replace(/[\\/]+/g, "/").replace(/^\/+/, "");
+}
+function normalizeProjectRelativePath(input, allowRoot = false) {
+  if (typeof input !== "string" || input.includes("\0")) {
+    throw new Error(`Invalid project path: ${String(input)}`);
+  }
+  const slashPath = input.replace(/\\/g, "/");
+  if (slashPath.startsWith("/") || /^[A-Za-z]:\//.test(slashPath)) {
+    throw new Error(`Project path must be relative: ${input}`);
+  }
+  const normalized = path2.posix.normalize(slashPath);
+  if (!normalized || normalized === ".") {
+    if (allowRoot) return "";
+    throw new Error(`Project path cannot be empty: ${input}`);
+  }
+  if (normalized === ".." || normalized.startsWith("../")) {
+    throw new Error(`Project path escapes the mirror: ${input}`);
+  }
+  return normalized;
+}
+function validateProjectPathSegment(input) {
+  if (typeof input !== "string" || !input || input === "." || input === ".." || /[\\/\0]/.test(input)) {
+    throw new Error(`Invalid remote project path segment: ${String(input)}`);
+  }
+  return input;
+}
+async function assertNoSymlinkPath(root, relativePath) {
+  const normalized = normalizeProjectRelativePath(relativePath);
+  const absoluteRoot = path2.resolve(root);
+  let current = absoluteRoot;
+  for (const segment of normalized.split("/")) {
+    current = path2.join(current, segment);
+    const stat13 = await fs.lstat(current).catch((error) => {
+      if (error.code === "ENOENT") return void 0;
+      throw error;
+    });
+    if (!stat13) break;
+    if (stat13.isSymbolicLink()) {
+      throw new Error(`Refusing to access symlinked mirror path: ${relativePath}`);
+    }
+    if (!stat13.isDirectory() && current !== path2.join(absoluteRoot, ...normalized.split("/"))) {
+      throw new Error(`Mirror path component is not a directory: ${relativePath}`);
+    }
+  }
+  return path2.join(absoluteRoot, ...normalized.split("/"));
+}
+function assertPathWithin(root, candidate) {
+  const absoluteRoot = path2.resolve(root);
+  const absoluteCandidate = path2.resolve(candidate);
+  const relative6 = path2.relative(absoluteRoot, absoluteCandidate);
+  if (relative6 === ".." || relative6.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative6)) {
+    throw new Error(`Path is outside the trusted root: ${candidate}`);
+  }
+  return absoluteCandidate;
+}
+async function processStartSignature(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return void 0;
+  if (process.platform === "linux") {
+    try {
+      const raw = await fs.readFile(`/proc/${pid}/stat`, "utf8");
+      const endOfCommand = raw.lastIndexOf(")");
+      if (endOfCommand < 0) return void 0;
+      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
+    } catch {
+      return void 0;
+    }
+  }
+  try {
+    const result = await execFileAsync("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
+    return String(result.stdout ?? "").trim() || void 0;
+  } catch {
+    return void 0;
+  }
+}
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 function formatUnknownError(error) {
   if (error instanceof Error) {
@@ -18817,6 +18915,11 @@ function validateManifest(value) {
     const error = requiredStrings(item, ["path", "entityId", "parentFolderId"], at);
     if (error) return error;
     if (item.path !== key) return `${at}.path must match its map key`;
+    try {
+      if (normalizeProjectRelativePath(item.path) !== item.path) return `${at}.path must use canonical relative separators`;
+    } catch {
+      return `${at}.path must be a safe relative project path`;
+    }
     if (item.entityType !== "doc" && item.entityType !== "file") return `${at}.entityType must be "doc" or "file"`;
     if (item.binary !== void 0 && typeof item.binary !== "boolean") return `${at}.binary must be a boolean`;
     for (const field of HASH_FIELDS) if (item[field] !== void 0 && typeof item[field] !== "string") return `${at}.${field} must be a string`;
@@ -18830,10 +18933,22 @@ function validateManifest(value) {
     const error = requiredStrings(item, ["path", "entityId"], at);
     if (error) return error;
     if (item.path !== key) return `${at}.path must match its map key`;
+    try {
+      if (normalizeProjectRelativePath(item.path, true) !== item.path) return `${at}.path must use canonical relative separators`;
+    } catch {
+      return `${at}.path must be a safe relative project path`;
+    }
     if (item.parentFolderId !== void 0 && typeof item.parentFolderId !== "string") return `${at}.parentFolderId must be a string`;
   }
   for (const field of ["rootDocId", "rootDocPath", "compiler", "lastFullAuditAt"]) {
     if (value[field] !== void 0 && typeof value[field] !== "string") return `$.${field} must be a string`;
+  }
+  if (value.rootDocPath !== void 0) {
+    try {
+      if (normalizeProjectRelativePath(value.rootDocPath) !== value.rootDocPath) return "$.rootDocPath must use canonical relative separators";
+    } catch {
+      return "$.rootDocPath must be a safe relative project path";
+    }
   }
   if (value.projectVersion !== void 0 && !isNonNegativeNumber(value.projectVersion)) return "$.projectVersion must be a non-negative finite number";
   return void 0;
@@ -18862,6 +18977,11 @@ function validateConflictList(value) {
     if (!isRecord(item)) return `${at} must be an object`;
     const error = requiredStrings(item, ["relPath", "docId", "remotePath", "reason", "createdAt"], at);
     if (error) return error;
+    try {
+      if (normalizeProjectRelativePath(item.relPath) !== item.relPath) return `${at}.relPath must be a safe canonical relative project path`;
+    } catch {
+      return `${at}.relPath must be a safe relative project path`;
+    }
     if (!isNonNegativeNumber(item.remoteVersion)) return `${at}.remoteVersion must be a non-negative finite number`;
   }
   return void 0;
@@ -18885,6 +19005,11 @@ function validateTransactionList(value) {
       "createdAt"
     ], at);
     if (error) return error;
+    try {
+      if (normalizeProjectRelativePath(item.path) !== item.path) return `${at}.path must be a safe canonical relative project path`;
+    } catch {
+      return `${at}.path must be a safe relative project path`;
+    }
     if (!["temp-uploaded", "original-backed-up", "promoted"].includes(item.stage)) return `${at}.stage is invalid`;
     if (item.expectedSha1 !== void 0 && typeof item.expectedSha1 !== "string") return `${at}.expectedSha1 must be a string`;
   }
@@ -18909,6 +19034,11 @@ function assertValidTransactions(value) {
 function validateStatusItem(value, at) {
   if (!isRecord(value)) return `${at} must be an object`;
   if (typeof value.path !== "string") return `${at}.path must be a string`;
+  try {
+    normalizeProjectRelativePath(value.path);
+  } catch {
+    return `${at}.path must be a safe relative project path`;
+  }
   if (!STATUS_VALUES.has(value.status)) return `${at}.status is invalid`;
   if (typeof value.blocking !== "boolean") return `${at}.blocking must be a boolean`;
   if (value.entityType !== void 0 && !ENTITY_TYPES.has(value.entityType)) return `${at}.entityType is invalid`;
@@ -19051,7 +19181,7 @@ function metadataPath(root, ...parts) {
 }
 async function readManifest(root) {
   const target = manifestPath(root);
-  const raw = await fs.readFile(target, "utf8");
+  const raw = await fs2.readFile(target, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -19071,12 +19201,12 @@ async function readManifest(root) {
 }
 async function ensureLocalIgnoreFile(root) {
   const target = path3.join(root, LOCAL_IGNORE_NAME);
-  const existing = await fs.readFile(target, "utf8").catch(() => void 0);
+  const existing = await fs2.readFile(target, "utf8").catch(() => void 0);
   if (existing !== void 0) {
     return existing;
   }
-  await fs.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: "utf8", flag: "wx" }).catch(() => void 0);
-  return fs.readFile(target, "utf8").catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
+  await fs2.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: "utf8", flag: "wx" }).catch(() => void 0);
+  return fs2.readFile(target, "utf8").catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
 }
 async function writeManifest(root, manifest) {
   manifest.schemaVersion = 3;
@@ -19103,7 +19233,7 @@ function baseDocPath(root, docId) {
   return metadataPath(root, BASE_DIR, "docs", `${docId}.tex`);
 }
 async function readBaseDoc(root, docId) {
-  return fs.readFile(baseDocPath(root, docId), "utf8").catch(() => void 0);
+  return fs2.readFile(baseDocPath(root, docId), "utf8").catch(() => void 0);
 }
 async function writeBaseDoc(root, docId, content) {
   const target = baseDocPath(root, docId);
@@ -19114,7 +19244,7 @@ function syncStatusPath(root) {
   return metadataPath(root, SYNC_STATUS_NAME);
 }
 async function readSyncStatus(root) {
-  const raw = await fs.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
+  const raw = await fs2.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
   if (!raw) return void 0;
   try {
     const parsed = JSON.parse(raw);
@@ -19129,7 +19259,7 @@ async function readSyncStatus(root) {
 }
 async function quarantineCorruptFile(target) {
   const quarantine = `${target}.corrupt-${Date.now()}`;
-  await fs.rename(target, quarantine).catch(() => void 0);
+  await fs2.rename(target, quarantine).catch(() => void 0);
 }
 async function writeSyncStatus(root, report) {
   assertValidSyncStatus(report);
@@ -19139,13 +19269,13 @@ async function writeSyncStatus(root, report) {
 var metadataWriteQueues = /* @__PURE__ */ new Map();
 async function atomicWriteText(target, content) {
   return enqueueMetadataWrite(target, async () => {
-    await fs.mkdir(path3.dirname(target), { recursive: true });
+    await fs2.mkdir(path3.dirname(target), { recursive: true });
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      await fs.writeFile(temporary, content, "utf8");
-      await fs.rename(temporary, target);
+      await fs2.writeFile(temporary, content, "utf8");
+      await fs2.rename(temporary, target);
     } finally {
-      await fs.rm(temporary, { force: true }).catch(() => void 0);
+      await fs2.rm(temporary, { force: true }).catch(() => void 0);
     }
   });
 }
@@ -19296,9 +19426,11 @@ function buildProjectTreeIndex(serverUrl, projectId, projectName, project) {
   };
   walkFolder(root, "", void 0, folders, files);
   for (const folder of folders) {
+    if (manifest.folders[folder.path]) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || "."}`);
     manifest.folders[folder.path] = folder;
   }
   for (const file of files) {
+    if (manifest.files[file.path] || manifest.folders[file.path]) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
     manifest.files[file.path] = file;
     if (project.rootDoc_id && file.entityId === project.rootDoc_id) {
       manifest.rootDocPath = file.path;
@@ -19313,10 +19445,11 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
     parentFolderId
   });
   for (const child of folder.folders ?? []) {
-    const childPath = path4.posix.join(folderPath, child.name);
+    const childPath = path4.posix.join(folderPath, validateProjectPathSegment(child.name));
     walkFolder(child, childPath, folder._id, folders, files);
   }
   for (const doc of folder.docs ?? []) {
+    validateProjectPathSegment(doc.name);
     files.push({
       path: path4.posix.join(folderPath, doc.name),
       entityId: doc._id,
@@ -19327,6 +19460,7 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
     });
   }
   for (const file of folder.fileRefs ?? []) {
+    validateProjectPathSegment(file.name);
     files.push({
       path: path4.posix.join(folderPath, file.name),
       entityId: file._id,
@@ -19341,7 +19475,7 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
 }
 
 // src/overleaf/syncStatus.ts
-var fs2 = __toESM(require("fs/promises"));
+var fs3 = __toESM(require("fs/promises"));
 var import_fs3 = require("fs");
 var import_crypto = require("crypto");
 var path5 = __toESM(require("path"));
@@ -19596,7 +19730,7 @@ async function scanLocalProject(root, manifest) {
   folders.sort();
   return { files, folders, fileMetadata, trackedOrParentPaths };
   async function walk(absDir, relDir) {
-    const entries = await runFs(() => fs2.readdir(absDir, { withFileTypes: true }).catch(() => []));
+    const entries = await runFs(() => fs3.readdir(absDir, { withFileTypes: true }).catch(() => []));
     const childDirectories = [];
     for (const entry of entries) {
       const relPath = toPosixPath(path5.posix.join(relDir, entry.name));
@@ -19608,7 +19742,7 @@ async function scanLocalProject(root, manifest) {
         childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat13 = await runFs(() => fs2.stat(absPath).catch(() => void 0));
+        const stat13 = await runFs(() => fs3.stat(absPath).catch(() => void 0));
         if (stat13) {
           fileMetadata.set(relPath, {
             size: stat13.size,
@@ -19632,8 +19766,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve7, reject) => {
-      pending.push(() => task().then(resolve7, reject).finally(() => {
+    return new Promise((resolve8, reject) => {
+      pending.push(() => task().then(resolve8, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -19656,11 +19790,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash = (0, import_fs3.createReadStream)(filePath);
-    const digest = await new Promise((resolve7, reject) => {
+    const digest = await new Promise((resolve8, reject) => {
       const state = (0, import_crypto.createHash)("sha1");
       hash.on("data", (chunk) => state.update(chunk));
       hash.on("error", reject);
-      hash.on("end", () => resolve7(state.digest("hex")));
+      hash.on("end", () => resolve8(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -19674,7 +19808,7 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
-  } : await fs2.stat(filePath).catch(() => void 0);
+  } : await fs3.stat(filePath).catch(() => void 0);
   if (!stat13?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
@@ -19729,7 +19863,7 @@ function buildOtOperations(before, after) {
 }
 
 // src/overleaf/conflictStore.ts
-var fs3 = __toESM(require("fs/promises"));
+var fs4 = __toESM(require("fs/promises"));
 var ConflictStore = class {
   constructor(root) {
     this.root = root;
@@ -19738,7 +19872,7 @@ var ConflictStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
-    const raw = await fs3.readFile(target, "utf8").catch(() => void 0);
+    const raw = await fs4.readFile(target, "utf8").catch(() => void 0);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
@@ -19746,7 +19880,7 @@ var ConflictStore = class {
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
-      await fs3.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      await fs4.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
@@ -19789,7 +19923,7 @@ var ConflictStore = class {
 };
 
 // src/overleaf/binaryTransactions.ts
-var fs4 = __toESM(require("fs/promises"));
+var fs5 = __toESM(require("fs/promises"));
 var BinaryTransactionStore = class {
   constructor(root) {
     this.root = root;
@@ -19798,7 +19932,7 @@ var BinaryTransactionStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
-    const raw = await fs4.readFile(target, "utf8").catch(() => void 0);
+    const raw = await fs5.readFile(target, "utf8").catch(() => void 0);
     if (!raw) return [];
     try {
       const parsed = JSON.parse(raw);
@@ -19806,7 +19940,7 @@ var BinaryTransactionStore = class {
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
-      await fs4.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
+      await fs5.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
@@ -20046,7 +20180,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve7) => resolve7());
+  const wake = () => waiters.splice(0).forEach((resolve8) => resolve8());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -20058,7 +20192,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve7) => waiters.push(resolve7));
+            await new Promise((resolve8) => waiters.push(resolve8));
           }
           reservedBytes += amount;
         }
@@ -20089,7 +20223,7 @@ function canReuseRemoteMetadata(previous, remote) {
 }
 
 // src/overleaf/localRename.ts
-var fs5 = __toESM(require("fs/promises"));
+var fs6 = __toESM(require("fs/promises"));
 var path7 = __toESM(require("path"));
 var LocalRenameConflictError = class extends Error {
   constructor(oldPath, newPath) {
@@ -20107,19 +20241,19 @@ async function renameLocalPathSafely(root, oldPath, newPath) {
   if (normalizedOld === normalizedNew) return;
   const oldAbsolute = resolveWithinRoot(root, normalizedOld);
   const newAbsolute = resolveWithinRoot(root, normalizedNew);
-  const source = await fs5.lstat(oldAbsolute).catch((error) => {
+  const source = await fs6.lstat(oldAbsolute).catch((error) => {
     if (error.code === "ENOENT") return void 0;
     throw error;
   });
   if (!source) throw new Error(`Cannot apply remote rename; the local source does not exist: ${normalizedOld}`);
-  const target = await fs5.lstat(newAbsolute).catch((error) => {
+  const target = await fs6.lstat(newAbsolute).catch((error) => {
     if (error.code === "ENOENT") return void 0;
     throw error;
   });
   const sameEntity = target && source.dev === target.dev && source.ino === target.ino;
   if (target && !sameEntity) throw new LocalRenameConflictError(normalizedOld, normalizedNew);
-  await fs5.mkdir(path7.dirname(newAbsolute), { recursive: true });
-  await fs5.rename(oldAbsolute, newAbsolute);
+  await fs6.mkdir(path7.dirname(newAbsolute), { recursive: true });
+  await fs6.rename(oldAbsolute, newAbsolute);
 }
 async function renameLocalPathTransactionally(root, oldPath, newPath, commit, rollback) {
   await renameLocalPathSafely(root, oldPath, newPath);
@@ -20148,8 +20282,8 @@ function validateRelativePath(value) {
 function resolveWithinRoot(root, relPath) {
   const absoluteRoot = path7.resolve(root);
   const absolute = path7.resolve(absoluteRoot, relPath);
-  const relative5 = path7.relative(absoluteRoot, absolute);
-  if (!relative5 || relative5.startsWith("..") || path7.isAbsolute(relative5)) {
+  const relative6 = path7.relative(absoluteRoot, absolute);
+  if (!relative6 || relative6.startsWith("..") || path7.isAbsolute(relative6)) {
     throw new Error(`Path escapes the local mirror: ${relPath}`);
   }
   return absolute;
@@ -20158,23 +20292,23 @@ function resolveWithinRoot(root, relPath) {
 // src/overleaf/binaryTransfer.ts
 var import_crypto2 = require("crypto");
 var import_fs4 = require("fs");
-var fs6 = __toESM(require("fs/promises"));
+var fs7 = __toESM(require("fs/promises"));
 var path8 = __toESM(require("path"));
 var import_crypto3 = require("crypto");
 async function hashFileDigests(filePath) {
-  const stat13 = await fs6.stat(filePath);
+  const stat13 = await fs7.stat(filePath);
   if (!stat13.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
   const sha13 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat13.size}\0`);
-  await new Promise((resolve7, reject) => {
+  await new Promise((resolve8, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha13.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve7);
+    input.on("end", resolve8);
   });
   return { size: stat13.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
 }
@@ -20183,28 +20317,28 @@ async function installStagedFile(stagedPath, targetPath) {
   const backupPath = path8.join(path8.dirname(targetPath), `.${path8.basename(targetPath)}.backup-${token}`);
   let backedUp = false;
   try {
-    await fs6.mkdir(path8.dirname(targetPath), { recursive: true });
+    await fs7.mkdir(path8.dirname(targetPath), { recursive: true });
     try {
-      await fs6.rename(targetPath, backupPath);
+      await fs7.rename(targetPath, backupPath);
       backedUp = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    await fs6.rename(stagedPath, targetPath);
-    if (backedUp) await fs6.rm(backupPath, { force: true });
+    await fs7.rename(stagedPath, targetPath);
+    if (backedUp) await fs7.rm(backupPath, { force: true });
   } catch (error) {
     if (backedUp) {
-      await fs6.rm(targetPath, { force: true }).catch(() => void 0);
-      await fs6.rename(backupPath, targetPath).catch(() => void 0);
+      await fs7.rm(targetPath, { force: true }).catch(() => void 0);
+      await fs7.rename(backupPath, targetPath).catch(() => void 0);
     }
     throw error;
   } finally {
-    await fs6.rm(stagedPath, { force: true }).catch(() => void 0);
+    await fs7.rm(stagedPath, { force: true }).catch(() => void 0);
   }
 }
 
 // src/overleaf/folderFingerprint.ts
-var fs7 = __toESM(require("fs/promises"));
+var fs8 = __toESM(require("fs/promises"));
 var path9 = __toESM(require("path"));
 function buildManifestFolderFingerprints(manifest) {
   const parts = /* @__PURE__ */ new Map();
@@ -20241,10 +20375,10 @@ function valueForFolder(folder, relPath, value) {
 async function folderFingerprintFromLocal(root, relPath, manifest, concurrency = 4) {
   const parts = [];
   const files = [];
-  const walk = async (absolute, relative5) => {
-    const entries = await fs7.readdir(absolute, { withFileTypes: true }).catch(() => []);
+  const walk = async (absolute, relative6) => {
+    const entries = await fs8.readdir(absolute, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      const child = toPosixPath(path9.posix.join(relative5, entry.name));
+      const child = toPosixPath(path9.posix.join(relative6, entry.name));
       const projectPath = toPosixPath(path9.posix.join(relPath, child));
       if (shouldIgnore(manifest, projectPath) || shouldIgnoreUntrackedLocalPath(manifest, projectPath)) continue;
       if (entry.isDirectory()) {
@@ -20257,7 +20391,7 @@ async function folderFingerprintFromLocal(root, relPath, manifest, concurrency =
   };
   await walk(path9.join(root, relPath), "");
   await mapWithConcurrency(files, concurrency, async (file) => {
-    const digest = file.type === "doc" ? sha1(await fs7.readFile(file.absolute)) : (await hashFileDigests(file.absolute)).sha1;
+    const digest = file.type === "doc" ? sha1(await fs8.readFile(file.absolute)) : (await hashFileDigests(file.absolute)).sha1;
     parts.push(`F\0${file.relative}\0${file.type}\0${digest}`);
   });
   return sha1(`folder\0${parts.sort().join("\n")}`);
@@ -20359,7 +20493,7 @@ var OverleafSyncEngine = class {
       const plan = planSafeSyncActions(report, this.policy);
       for (const item of plan.pulls) {
         if (item.entityType === "folder") {
-          await fs8.mkdir(path10.join(this.root, item.path), { recursive: true });
+          await fs9.mkdir(await assertNoSymlinkPath(this.root, item.path), { recursive: true });
         } else {
           await this.pullNow(item.path, false);
         }
@@ -20386,7 +20520,7 @@ var OverleafSyncEngine = class {
         this.scheduleSync(`local:${event}`);
       });
     }
-    await new Promise((resolve7) => this.events.once("stop", resolve7));
+    await new Promise((resolve8) => this.events.once("stop", resolve8));
   }
   requestStop() {
     this.events.emit("stop");
@@ -20471,7 +20605,7 @@ var OverleafSyncEngine = class {
         reportRemoteRead(file.path);
       }
     });
-    const remoteTempRoot = await fs8.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-health-"));
+    const remoteTempRoot = await fs9.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-health-"));
     try {
       await mapWithDynamicByteConcurrency(remotePlan.binariesToGet, 4, 64 * 1024 * 1024, async (file, reservation) => {
         const target = path10.join(remoteTempRoot, file.entityId);
@@ -20484,12 +20618,12 @@ var OverleafSyncEngine = class {
         } catch (error) {
           remoteFailures.set(file.path, formatUnknownError(error));
         } finally {
-          await fs8.rm(target, { force: true }).catch(() => void 0);
+          await fs9.rm(target, { force: true }).catch(() => void 0);
           reportRemoteRead(file.path);
         }
       });
     } finally {
-      await fs8.rm(remoteTempRoot, { recursive: true, force: true });
+      await fs9.rm(remoteTempRoot, { recursive: true, force: true });
     }
     let completed = 0;
     for (const relPath of [...paths].sort()) {
@@ -20523,9 +20657,9 @@ var OverleafSyncEngine = class {
           "conflicts",
           `${relPath.replace(/[\/\\]/g, "__")}.remote.${Date.now()}${suffix}`
         );
-        await fs8.mkdir(path10.dirname(conflictPath), { recursive: true });
+        await fs9.mkdir(path10.dirname(conflictPath), { recursive: true });
         if (remoteFile.entityType === "doc" && remoteContent !== void 0) {
-          await fs8.writeFile(conflictPath, remoteContent);
+          await fs9.writeFile(conflictPath, remoteContent);
         } else if (remoteFile.entityType === "file") {
           await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, conflictPath);
         } else {
@@ -20575,8 +20709,8 @@ var OverleafSyncEngine = class {
     await this.start();
     this.manifest = await readManifest(this.root);
     const normalized = this.validatePath(relPath);
-    const sourcePath = path10.join(this.root, normalized);
-    const localStat = await fs8.stat(sourcePath).catch(() => void 0);
+    const sourcePath = await assertNoSymlinkPath(this.root, normalized);
+    const localStat = await fs9.stat(sourcePath).catch(() => void 0);
     const entry = this.manifest.files[normalized];
     if (!localStat) {
       if (!entry) throw new Error(`${normalized} does not exist locally.`);
@@ -20587,7 +20721,7 @@ var OverleafSyncEngine = class {
       return;
     }
     const textFile = entry ? entry.entityType === "doc" : isTextLike(normalized);
-    const content = textFile ? await fs8.readFile(sourcePath) : void 0;
+    const content = textFile ? await fs9.readFile(sourcePath) : void 0;
     const localDigests = textFile ? { size: content.length, sha1: sha1(content), gitBlobHash: gitBlobHash(content) } : await hashFileDigests(sourcePath);
     if (!entry && shouldIgnoreUntrackedLocalPath(this.manifest, normalized)) {
       throw new Error(`${normalized} is excluded by .overleaf-codexignore.`);
@@ -20658,15 +20792,15 @@ var OverleafSyncEngine = class {
     if (!remote) {
       if (!entry) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
       if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
-      const source = path10.join(this.root, normalized);
+      const source = await assertNoSymlinkPath(this.root, normalized);
       const target = trashPathFor(this.root, normalized);
-      const stat13 = await fs8.stat(source).catch(() => void 0);
+      const stat13 = await fs9.stat(source).catch(() => void 0);
       if (stat13) {
-        await fs8.mkdir(path10.dirname(target), { recursive: true });
-        await fs8.rename(source, target).catch(async () => {
-          if (stat13.isDirectory()) await fs8.cp(source, target, { recursive: true });
-          else await fs8.copyFile(source, target);
-          await fs8.rm(source, { recursive: stat13.isDirectory(), force: true });
+        await fs9.mkdir(path10.dirname(target), { recursive: true });
+        await fs9.rename(source, target).catch(async () => {
+          if (stat13.isDirectory()) await fs9.cp(source, target, { recursive: true });
+          else await fs9.copyFile(source, target);
+          await fs9.rm(source, { recursive: stat13.isDirectory(), force: true });
         });
       }
       delete this.manifest.files[normalized];
@@ -20675,16 +20809,16 @@ var OverleafSyncEngine = class {
       return;
     }
     try {
-      const localPath = path10.join(this.root, normalized);
-      const localStat = await fs8.stat(localPath).catch(() => void 0);
+      const localPath = await assertNoSymlinkPath(this.root, normalized);
+      const localStat = await fs9.stat(localPath).catch(() => void 0);
       if (!force && entry && localStat) {
         const base = entry.baseHash ?? entry.sha1;
-        const localHash = remote.file.entityType === "doc" ? sha1(await fs8.readFile(localPath)) : (await hashFileDigests(localPath)).sha1;
+        const localHash = remote.file.entityType === "doc" ? sha1(await fs9.readFile(localPath)) : (await hashFileDigests(localPath)).sha1;
         if (base && localHash !== base && localHash !== remote.digests.sha1) {
           throw new Error(`${normalized} has local changes; use --force only after reviewing them.`);
         }
       }
-      await fs8.mkdir(path10.dirname(localPath), { recursive: true });
+      await fs9.mkdir(path10.dirname(localPath), { recursive: true });
       if (remote.file.entityType === "file") {
         if (!remote.sourcePath) throw new Error(`Remote binary ${normalized} has no staged download.`);
         await installStagedFile(remote.sourcePath, localPath);
@@ -20692,7 +20826,7 @@ var OverleafSyncEngine = class {
         this.manifest.files[normalized].sha1 = remote.digests.sha1;
         this.manifest.files[normalized].baseHash = remote.digests.sha1;
       } else {
-        await fs8.writeFile(localPath, remote.content);
+        await fs9.writeFile(localPath, remote.content);
         addOrUpdateFile(this.manifest, remote.file, remote.content);
         this.manifest.files[normalized].baseHash = await writeBaseDoc(
           this.root,
@@ -20716,7 +20850,12 @@ var OverleafSyncEngine = class {
     if (!conflict) throw new Error(`No persisted conflict exists for ${normalized}.`);
     if (use === "local") await this.push(normalized, true);
     else await this.pull(normalized, true);
-    await fs8.rm(conflict.remotePath, { force: true });
+    const conflictPath = assertPathWithin(metadataPath(this.root, "conflicts"), conflict.remotePath);
+    const conflictStat = await fs9.lstat(conflictPath).catch(() => void 0);
+    if (conflictStat?.isSymbolicLink() || conflictStat?.isDirectory()) {
+      throw new Error(`Persisted conflict path is not a regular snapshot: ${conflict.remotePath}`);
+    }
+    await fs9.rm(conflictPath, { force: true });
     await store.remove(normalized);
     this.emit("conflict-resolved", { path: normalized, use });
   }
@@ -20741,7 +20880,7 @@ var OverleafSyncEngine = class {
         dispose: async () => void 0
       };
     }
-    const temporaryRoot = await fs8.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-pull-"));
+    const temporaryRoot = await fs9.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-pull-"));
     const sourcePath = path10.join(temporaryRoot, remote.entityId);
     try {
       const digests = await this.client.downloadProjectFileToPath(this.manifest.projectId, remote.entityId, sourcePath);
@@ -20750,10 +20889,10 @@ var OverleafSyncEngine = class {
         file: remote,
         sourcePath,
         digests,
-        dispose: () => fs8.rm(temporaryRoot, { recursive: true, force: true })
+        dispose: () => fs9.rm(temporaryRoot, { recursive: true, force: true })
       };
     } catch (error) {
-      await fs8.rm(temporaryRoot, { recursive: true, force: true });
+      await fs9.rm(temporaryRoot, { recursive: true, force: true });
       throw error;
     }
   }
@@ -20824,7 +20963,7 @@ var OverleafSyncEngine = class {
     return { _id: temporary._id, name: finalName, hash: temporary.hash ?? expected, transactionId: id };
   }
   async remoteBlobMatches(entityId, expectedBlobHash) {
-    const temporaryRoot = await fs8.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-verify-"));
+    const temporaryRoot = await fs9.mkdtemp(path10.join(os2.tmpdir(), "latex-toolkit-verify-"));
     try {
       const result = await this.client.downloadProjectFileToPath(
         this.manifest.projectId,
@@ -20833,7 +20972,7 @@ var OverleafSyncEngine = class {
       );
       return result.gitBlobHash === expectedBlobHash;
     } finally {
-      await fs8.rm(temporaryRoot, { recursive: true, force: true });
+      await fs9.rm(temporaryRoot, { recursive: true, force: true });
     }
   }
   async recoverBinaryTransactions() {
@@ -20871,7 +21010,8 @@ var OverleafSyncEngine = class {
       const oldPath = folderPathById(this.manifest, candidate.local.entityId);
       if (!oldPath || oldPath === candidate.remote.path) continue;
       const newPath = candidate.remote.path;
-      const source = await fs8.stat(path10.join(this.root, oldPath)).catch(() => void 0);
+      const sourcePath = await assertNoSymlinkPath(this.root, oldPath).catch(() => void 0);
+      const source = sourcePath ? await fs9.stat(sourcePath).catch(() => void 0) : void 0;
       if (!source?.isDirectory()) continue;
       const oldParentFolderId = this.manifest.folders[oldPath]?.parentFolderId;
       try {
@@ -20902,7 +21042,9 @@ var OverleafSyncEngine = class {
       if (!remoteEntry || remoteEntry.path === entry.path) continue;
       const oldPath = entry.path;
       const newPath = remoteEntry.path;
-      const hash = await cachedLocalFileHash(path10.join(this.root, oldPath), entry);
+      const oldFilePath = await assertNoSymlinkPath(this.root, oldPath).catch(() => void 0);
+      if (!oldFilePath) continue;
+      const hash = await cachedLocalFileHash(oldFilePath, entry);
       if (hash.hash !== entry.sha1) continue;
       if (this.manifest.files[newPath] || this.manifest.folders[newPath]) {
         const message = `Remote file rename to ${newPath} conflicts with an existing manifest path.`;
@@ -20969,7 +21111,7 @@ var OverleafSyncEngine = class {
     const untrackedFiles = refreshedFiles.filter((candidate) => !this.manifest.files[candidate]);
     const localCandidates = await mapWithConcurrencyResult(untrackedFiles, 4, async (candidate) => ({
       path: candidate,
-      hash: (await hashFileDigests(path10.join(this.root, candidate))).sha1
+      hash: (await hashFileDigests(await assertNoSymlinkPath(this.root, candidate))).sha1
     }));
     const candidatesByHash = /* @__PURE__ */ new Map();
     for (const candidate of localCandidates) candidatesByHash.set(candidate.hash, [...candidatesByHash.get(candidate.hash) ?? [], candidate]);
@@ -21070,9 +21212,7 @@ var OverleafSyncEngine = class {
     return this.manifest ? shouldIgnore(this.manifest, rel) || shouldIgnoreUntrackedLocalPath(this.manifest, rel) : false;
   }
   validatePath(relPath) {
-    const normalized = toPosixPath(relPath);
-    if (!normalized || normalized.startsWith("..") || path10.isAbsolute(relPath)) throw new Error(`Invalid project path: ${relPath}`);
-    return normalized;
+    return normalizeProjectRelativePath(relPath);
   }
   emit(event, data) {
     this.events.emit("event", { event, data });
@@ -21105,13 +21245,13 @@ async function mapWithConcurrencyResult(items, concurrency, handler) {
 
 // src/overleaf/keychainStore.ts
 var crypto3 = __toESM(require("crypto"));
-var fs10 = __toESM(require("fs/promises"));
+var fs11 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
-var import_child_process = require("child_process");
+var import_child_process2 = require("child_process");
 
 // src/overleaf/sharedState.ts
 var crypto2 = __toESM(require("crypto"));
-var fs9 = __toESM(require("fs/promises"));
+var fs10 = __toESM(require("fs/promises"));
 var os3 = __toESM(require("os"));
 var path11 = __toESM(require("path"));
 var DEFAULT_NETWORK_TIMEOUTS = {
@@ -21159,32 +21299,41 @@ function defaultSharedState() {
 }
 async function readSharedState() {
   await migrateLegacyLinuxPaths();
-  const raw = await fs9.readFile(sharedStatePath(), "utf8").catch(() => void 0);
+  const raw = await fs10.readFile(sharedStatePath(), "utf8").catch(() => void 0);
   if (!raw) return defaultSharedState();
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    await fs9.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => void 0);
+    await fs10.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => void 0);
     return defaultSharedState();
   }
   const defaults2 = defaultSharedState();
+  const parsedPolicy = isRecord2(parsed.policy) ? parsed.policy : {};
+  const parsedTimeouts = isRecord2(parsedPolicy.networkTimeouts) ? parsedPolicy.networkTimeouts : {};
   return {
     ...defaults2,
     ...parsed,
     schemaVersion: 1,
-    servers: Array.isArray(parsed.servers) ? [...new Set(parsed.servers.map(normalizeServerUrl))].sort() : [],
+    servers: normalizeServerList(parsed.servers),
     mirrors: Array.isArray(parsed.mirrors) ? parsed.mirrors.filter(isMirrorRecord) : [],
-    credentialMigrations: Array.isArray(parsed.credentialMigrations) ? [...new Set(parsed.credentialMigrations.map(normalizeServerUrl))].sort() : [],
-    credentialTombstones: Array.isArray(parsed.credentialTombstones) ? [...new Set(parsed.credentialTombstones.map(normalizeServerUrl))].sort() : [],
+    credentialMigrations: Array.isArray(parsed.credentialMigrations) ? normalizeServerList(parsed.credentialMigrations) : [],
+    credentialTombstones: Array.isArray(parsed.credentialTombstones) ? normalizeServerList(parsed.credentialTombstones) : [],
     policy: {
-      ...defaults2.policy,
-      ...parsed.policy ?? {},
+      autoPushLocalAhead: typeof parsedPolicy.autoPushLocalAhead === "boolean" ? parsedPolicy.autoPushLocalAhead : defaults2.policy.autoPushLocalAhead,
+      syncBinaryFiles: typeof parsedPolicy.syncBinaryFiles === "boolean" ? parsedPolicy.syncBinaryFiles : defaults2.policy.syncBinaryFiles,
+      syncDestructiveChanges: typeof parsedPolicy.syncDestructiveChanges === "boolean" ? parsedPolicy.syncDestructiveChanges : defaults2.policy.syncDestructiveChanges,
       networkTimeouts: {
         ...defaults2.policy.networkTimeouts,
-        ...parsed.policy?.networkTimeouts ?? {}
+        connectMs: validTimeout(parsedTimeouts.connectMs, defaults2.policy.networkTimeouts.connectMs),
+        projectJoinMs: validTimeout(parsedTimeouts.projectJoinMs, defaults2.policy.networkTimeouts.projectJoinMs),
+        httpMs: validTimeout(parsedTimeouts.httpMs, defaults2.policy.networkTimeouts.httpMs),
+        joinDocMs: validTimeout(parsedTimeouts.joinDocMs, defaults2.policy.networkTimeouts.joinDocMs),
+        otAckMs: validTimeout(parsedTimeouts.otAckMs, defaults2.policy.networkTimeouts.otAckMs)
       }
-    }
+    },
+    serverUrl: safeNormalizeServerUrl(parsed.serverUrl, defaults2.serverUrl),
+    localProjectsRoot: typeof parsed.localProjectsRoot === "string" && parsed.localProjectsRoot.trim() ? path11.resolve(parsed.localProjectsRoot) : defaults2.localProjectsRoot
   };
 }
 async function migrateLegacyLinuxPaths() {
@@ -21199,19 +21348,19 @@ async function migrateLegacyLinuxPaths() {
   if (await exists(marker)) return;
   const legacyState = path11.join(legacySupport, "overleaf.json");
   if (!await exists(sharedStatePath()) && await exists(legacyState)) {
-    await fs9.mkdir(configRoot, { recursive: true, mode: 448 });
-    await fs9.copyFile(legacyState, sharedStatePath());
+    await fs10.mkdir(configRoot, { recursive: true, mode: 448 });
+    await fs10.copyFile(legacyState, sharedStatePath());
   }
   await copyDirectoryIfMissing(path11.join(legacySupport, "cli"), path11.join(dataRoot, "cli"));
   await copyDirectoryIfMissing(path11.join(legacyCache, "runtime"), cacheRoot);
-  await fs9.mkdir(configRoot, { recursive: true, mode: 448 });
-  await fs9.writeFile(marker, `${(/* @__PURE__ */ new Date()).toISOString()}
+  await fs10.mkdir(configRoot, { recursive: true, mode: 448 });
+  await fs10.writeFile(marker, `${(/* @__PURE__ */ new Date()).toISOString()}
 `, { mode: 384 });
 }
 async function copyDirectoryIfMissing(source, target) {
   if (await exists(target) || !await exists(source)) return;
-  await fs9.mkdir(path11.dirname(target), { recursive: true, mode: 448 });
-  await fs9.cp(source, target, { recursive: true });
+  await fs10.mkdir(path11.dirname(target), { recursive: true, mode: 448 });
+  await fs10.cp(source, target, { recursive: true });
 }
 async function updateSharedState(mutate) {
   const release = await acquireSharedStateLock();
@@ -21289,11 +21438,37 @@ function normalizeSharedState(state) {
   return {
     ...state,
     schemaVersion: 1,
-    servers: [...new Set(state.servers.map(normalizeServerUrl))].sort(),
-    credentialMigrations: [...new Set(state.credentialMigrations.map(normalizeServerUrl))].sort(),
-    credentialTombstones: [...new Set(state.credentialTombstones.map(normalizeServerUrl))].sort(),
+    servers: normalizeServerList(state.servers),
+    credentialMigrations: normalizeServerList(state.credentialMigrations),
+    credentialTombstones: normalizeServerList(state.credentialTombstones),
     mirrors: dedupeMirrors(state.mirrors)
   };
+}
+function normalizeServerList(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    try {
+      normalized.push(normalizeServerUrl(item));
+    } catch {
+    }
+  }
+  return [...new Set(normalized)].sort();
+}
+function safeNormalizeServerUrl(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  try {
+    return normalizeServerUrl(value);
+  } catch {
+    return fallback;
+  }
+}
+function validTimeout(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 10 * 60 * 1e3 ? value : fallback;
+}
+function isRecord2(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 async function writeSharedStateUnlocked(state) {
   await atomicWriteText(sharedStatePath(), `${JSON.stringify(state, null, 2)}
@@ -21303,7 +21478,7 @@ async function acquireSharedStateLock() {
   const lockPath = sharedStateLockPath();
   const metadataPath2 = path11.join(lockPath, "owner.json");
   const deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
-  await fs9.mkdir(path11.dirname(lockPath), { recursive: true, mode: 448 });
+  await fs10.mkdir(path11.dirname(lockPath), { recursive: true, mode: 448 });
   while (true) {
     const metadata = {
       pid: process.pid,
@@ -21312,18 +21487,18 @@ async function acquireSharedStateLock() {
       processStart: await processStartSignature(process.pid)
     };
     try {
-      await fs9.mkdir(lockPath, { mode: 448 });
+      await fs10.mkdir(lockPath, { mode: 448 });
       try {
-        await fs9.writeFile(metadataPath2, `${JSON.stringify(metadata)}
+        await fs10.writeFile(metadataPath2, `${JSON.stringify(metadata)}
 `, { mode: 384 });
       } catch (error) {
-        await fs9.rm(lockPath, { recursive: true, force: true });
+        await fs10.rm(lockPath, { recursive: true, force: true });
         throw error;
       }
       return async () => {
         const current = await readSharedStateLockMetadata(metadataPath2);
         if (current?.nonce === metadata.nonce) {
-          await fs9.rm(lockPath, { recursive: true, force: true });
+          await fs10.rm(lockPath, { recursive: true, force: true });
         }
       };
     } catch (error) {
@@ -21343,24 +21518,24 @@ async function clearStaleSharedStateLock(lockPath, metadataPath2, deadline) {
   if (!await acquireReclaimGuard(guardPath, Math.max(1, Math.min(SHARED_STATE_LOCK_TIMEOUT_MS * 2, deadline - Date.now())))) return false;
   try {
     if (!await sharedStateLockIsStale(lockPath, metadataPath2)) return false;
-    await fs9.rm(lockPath, { recursive: true, force: true });
+    await fs10.rm(lockPath, { recursive: true, force: true });
     return true;
   } finally {
-    await fs9.rm(guardPath, { recursive: true, force: true });
+    await fs10.rm(guardPath, { recursive: true, force: true });
   }
 }
 async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOUT_MS * 2) {
   try {
-    await fs9.mkdir(guardPath, { mode: 448 });
+    await fs10.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs9.stat(guardPath).catch(() => void 0);
+  const stat13 = await fs10.stat(guardPath).catch(() => void 0);
   if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
-  await fs9.rm(guardPath, { recursive: true, force: true });
+  await fs10.rm(guardPath, { recursive: true, force: true });
   try {
-    await fs9.mkdir(guardPath, { mode: 448 });
+    await fs10.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code === "EEXIST") return false;
@@ -21374,11 +21549,11 @@ async function sharedStateLockIsStale(lockPath, metadataPath2) {
     const currentStart = await processStartSignature(metadata.pid);
     return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
   }
-  const stat13 = await fs9.stat(lockPath).catch(() => void 0);
+  const stat13 = await fs10.stat(lockPath).catch(() => void 0);
   return Boolean(stat13 && Date.now() - stat13.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
-  const raw = await fs9.readFile(target, "utf8").catch(() => void 0);
+  const raw = await fs10.readFile(target, "utf8").catch(() => void 0);
   if (!raw) return void 0;
   try {
     const parsed = JSON.parse(raw);
@@ -21387,25 +21562,8 @@ async function readSharedStateLockMetadata(target) {
     return void 0;
   }
 }
-async function processStartSignature(pid) {
-  try {
-    const raw = await fs9.readFile(`/proc/${pid}/stat`, "utf8");
-    const fields = raw.trim().split(" ");
-    return fields[21];
-  } catch {
-    return void 0;
-  }
-}
-function processAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 function delay(ms) {
-  return new Promise((resolve7) => setTimeout(resolve7, ms));
+  return new Promise((resolve8) => setTimeout(resolve8, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -21413,7 +21571,7 @@ function isMirrorRecord(value) {
   return typeof record.root === "string" && typeof record.projectId === "string" && typeof record.serverUrl === "string" && typeof record.name === "string";
 }
 async function exists(target) {
-  return fs9.stat(target).then(() => true, () => false);
+  return fs10.stat(target).then(() => true, () => false);
 }
 
 // src/overleaf/keychainStore.ts
@@ -21526,7 +21684,7 @@ var FileCredentialStore = class {
     const account = normalizeServerUrl(serverUrl);
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
-    const raw = await fs10.readFile(this.filePath(account), "utf8").catch((error) => {
+    const raw = await fs11.readFile(this.filePath(account), "utf8").catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
@@ -21541,7 +21699,7 @@ var FileCredentialStore = class {
     await markCredentialDeleted(account);
   }
   async clearIdentity(serverUrl) {
-    await fs10.rm(this.filePath(normalizeServerUrl(serverUrl)), { force: true });
+    await fs11.rm(this.filePath(normalizeServerUrl(serverUrl)), { force: true });
   }
   async listServers() {
     return (await readSharedState()).servers;
@@ -21654,22 +21812,22 @@ function parseIdentity(value) {
 }
 async function writePrivateJson(target, value) {
   const directory = path12.dirname(target);
-  await fs10.mkdir(directory, { recursive: true, mode: 448 });
-  await fs10.chmod(directory, 448).catch(() => void 0);
+  await fs11.mkdir(directory, { recursive: true, mode: 448 });
+  await fs11.chmod(directory, 448).catch(() => void 0);
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
   try {
-    await fs10.writeFile(temporary, `${JSON.stringify(value, null, 2)}
+    await fs11.writeFile(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-    await fs10.chmod(temporary, 384);
-    await fs10.rename(temporary, target);
-    await fs10.chmod(target, 384);
+    await fs11.chmod(temporary, 384);
+    await fs11.rename(temporary, target);
+    await fs11.chmod(target, 384);
   } finally {
-    await fs10.rm(temporary, { force: true }).catch(() => void 0);
+    await fs11.rm(temporary, { force: true }).catch(() => void 0);
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve7, reject) => {
-    const child = (0, import_child_process.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
+  return new Promise((resolve8, reject) => {
+    const child = (0, import_child_process2.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
@@ -21677,7 +21835,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve7(output);
+      if (code === 0) resolve8(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -21711,7 +21869,7 @@ function findExecutable(command) {
 
 // src/overleaf/compileCore.ts
 var crypto4 = __toESM(require("crypto"));
-var fs11 = __toESM(require("fs/promises"));
+var fs12 = __toESM(require("fs/promises"));
 var path13 = __toESM(require("path"));
 var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
 var DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5e3;
@@ -21730,7 +21888,7 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
     const stagedFiles = [];
     const usedNames = /* @__PURE__ */ new Set();
     let committed = false;
-    await fs11.mkdir(stagingRoot, { recursive: true });
+    await fs12.mkdir(stagingRoot, { recursive: true });
     try {
       for (const output of response.outputFiles ?? []) {
         if (!output.url) continue;
@@ -21742,8 +21900,8 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
       await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
       committed = true;
     } finally {
-      await fs11.rm(stagingRoot, { recursive: true, force: true });
-      if (committed) await fs11.rm(backupRoot, { recursive: true, force: true }).catch(() => void 0);
+      await fs12.rm(stagingRoot, { recursive: true, force: true });
+      if (committed) await fs12.rm(backupRoot, { recursive: true, force: true }).catch(() => void 0);
     }
     const files = stagedFiles.map((file) => path13.join(outputRoot, path13.basename(file)));
     const pdfPath = await latestPathByExtension(files, ".pdf");
@@ -21755,8 +21913,8 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
 }
 async function cleanupInterruptedCompileArtifacts(root) {
   const dir = metadataPath(root);
-  const entries = await fs11.readdir(dir, { withFileTypes: true }).catch(() => []);
-  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).map((entry) => fs11.rm(path13.join(dir, entry.name), { recursive: true, force: true })));
+  const entries = await fs12.readdir(dir, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).map((entry) => fs12.rm(path13.join(dir, entry.name), { recursive: true, force: true })));
 }
 async function acquireCompileLock(outputRoot, options = {}) {
   const lock = `${outputRoot}.lock`;
@@ -21765,74 +21923,53 @@ async function acquireCompileLock(outputRoot, options = {}) {
   const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
   for (; ; ) {
     try {
-      await fs11.mkdir(lock, { recursive: false });
+      await fs12.mkdir(lock, { recursive: false });
       const nonce = crypto4.randomBytes(8).toString("hex");
-      await fs11.writeFile(owner, JSON.stringify({
+      await fs12.writeFile(owner, JSON.stringify({
         pid: process.pid,
         startedAt: Date.now(),
-        processStart: await processStartSignature2(process.pid),
+        processStart: await processStartSignature(process.pid),
         nonce
       }));
       return async () => {
-        const current = await fs11.readFile(owner, "utf8").catch(() => void 0);
-        if (current?.includes(nonce)) await fs11.rm(lock, { recursive: true, force: true });
+        const current = await fs12.readFile(owner, "utf8").catch(() => void 0);
+        if (current?.includes(nonce)) await fs12.rm(lock, { recursive: true, force: true });
       };
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const raw = await fs11.readFile(owner, "utf8").catch(() => void 0);
+      const raw = await fs12.readFile(owner, "utf8").catch(() => void 0);
       let stale = false;
       try {
         const value = JSON.parse(raw ?? "");
         if (typeof value.pid !== "number" || typeof value.startedAt !== "number") {
           stale = await lockAge(lock) >= missingOwnerGraceMs;
-        } else if (!processAlive2(value.pid)) {
+        } else if (!processAlive(value.pid)) {
           stale = true;
         } else if (value.processStart) {
-          const currentStart = await processStartSignature2(value.pid);
+          const currentStart = await processStartSignature(value.pid);
           stale = Boolean(currentStart && currentStart !== value.processStart);
         }
       } catch {
         stale = await lockAge(lock) >= missingOwnerGraceMs;
       }
       if (stale) {
-        await fs11.rm(lock, { recursive: true, force: true });
+        await fs12.rm(lock, { recursive: true, force: true });
         continue;
       }
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve7) => setTimeout(resolve7, 50));
+      await new Promise((resolve8) => setTimeout(resolve8, 50));
     }
   }
 }
 async function lockAge(lock) {
-  const stat13 = await fs11.stat(lock).catch(() => void 0);
+  const stat13 = await fs12.stat(lock).catch(() => void 0);
   return stat13 ? Math.max(0, Date.now() - stat13.mtimeMs) : Number.POSITIVE_INFINITY;
-}
-async function processStartSignature2(pid) {
-  if (process.platform === "linux") {
-    try {
-      const raw = await fs11.readFile(`/proc/${pid}/stat`, "utf8");
-      const endOfCommand = raw.lastIndexOf(")");
-      if (endOfCommand < 0) return void 0;
-      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
-    } catch {
-      return void 0;
-    }
-  }
-  return void 0;
-}
-function processAlive2(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 async function latestRemotePdf(root) {
   const outputRoot = metadataPath(root, OUTPUT_DIR);
-  const entries = await fs11.readdir(outputRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await fs12.readdir(outputRoot, { withFileTypes: true }).catch(() => []);
   return latestPathByExtension(
     entries.filter((entry) => entry.isFile()).map((entry) => path13.join(outputRoot, entry.name)),
     ".pdf"
@@ -21840,9 +21977,9 @@ async function latestRemotePdf(root) {
 }
 async function replaceOutputDirectory(outputRoot, stagingRoot, backupRoot) {
   const hadPreviousOutput = await exists2(outputRoot);
-  if (hadPreviousOutput) await fs11.rename(outputRoot, backupRoot);
+  if (hadPreviousOutput) await fs12.rename(outputRoot, backupRoot);
   try {
-    await fs11.rename(stagingRoot, outputRoot);
+    await fs12.rename(stagingRoot, outputRoot);
   } catch (error) {
     if (hadPreviousOutput) {
       try {
@@ -21859,14 +21996,14 @@ async function replaceOutputDirectory(outputRoot, stagingRoot, backupRoot) {
 }
 async function restoreOutputBackup(outputRoot, backupRoot) {
   if (!await exists2(backupRoot)) return;
-  await fs11.rm(outputRoot, { recursive: true, force: true });
-  await fs11.rename(backupRoot, outputRoot);
+  await fs12.rm(outputRoot, { recursive: true, force: true });
+  await fs12.rename(backupRoot, outputRoot);
 }
 async function latestPathByExtension(files, extension) {
   const candidates = await Promise.all(files.filter((file) => file.toLowerCase().endsWith(extension)).map(async (file, index) => ({
     file,
     index,
-    mtimeMs: (await fs11.stat(file).catch(() => void 0))?.mtimeMs ?? Number.NEGATIVE_INFINITY
+    mtimeMs: (await fs12.stat(file).catch(() => void 0))?.mtimeMs ?? Number.NEGATIVE_INFINITY
   })));
   candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || b.index - a.index || b.file.localeCompare(a.file));
   return candidates[0]?.file;
@@ -21888,7 +22025,7 @@ async function detectRootDoc(root) {
   const manifest = await readManifest(root);
   for (const file of Object.values(manifest.files)) {
     if (!file.path.endsWith(".tex")) continue;
-    const content = await fs11.readFile(path13.join(root, file.path), "utf8").catch(() => "");
+    const content = await fs12.readFile(path13.join(root, file.path), "utf8").catch(() => "");
     if (/\\documentclass(?:\[[^\]]*\])?\{[^}]+\}/.test(content)) return file.path;
   }
   return void 0;
@@ -21900,16 +22037,16 @@ function compileOutputName(output) {
   return output.type ? `output.${output.type.replace(/^\./, "")}` : "output.bin";
 }
 async function exists2(target) {
-  return fs11.stat(target).then(() => true, () => false);
+  return fs12.stat(target).then(() => true, () => false);
 }
 
 // src/overleaf/mirrorCore.ts
-var fs12 = __toESM(require("fs/promises"));
+var fs13 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path14 = __toESM(require("path"));
-var import_child_process2 = require("child_process");
-var import_util13 = require("util");
-var execFileAsync = (0, import_util13.promisify)(import_child_process2.execFile);
+var import_child_process3 = require("child_process");
+var import_util17 = require("util");
+var execFileAsync2 = (0, import_util17.promisify)(import_child_process3.execFile);
 var AGENTS_CONTENT = `# AGENTS.md
 
 This folder is a real local mirror of an Overleaf project.
@@ -21957,9 +22094,9 @@ function projectMirrorRoot(parentRoot, project) {
 }
 async function createProjectMirror(client, project, parentRoot, options = {}) {
   const targetRoot = projectMirrorRoot(parentRoot, project);
-  await fs12.mkdir(path14.dirname(targetRoot), { recursive: true });
+  await fs13.mkdir(path14.dirname(targetRoot), { recursive: true });
   try {
-    await fs12.mkdir(targetRoot);
+    await fs13.mkdir(targetRoot);
   } catch (error) {
     if (error.code === "EEXIST") {
       throw new Error(`Mirror target already exists: ${targetRoot}`);
@@ -21976,7 +22113,7 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
       index.folders.filter((folder) => Boolean(folder.path)),
       options.taskConcurrency ?? 4,
       async (folder) => {
-        await fs12.mkdir(path14.join(targetRoot, folder.path), { recursive: true });
+        await fs13.mkdir(path14.join(targetRoot, folder.path), { recursive: true });
       }
     );
     await mapWithDynamicByteConcurrency(
@@ -21986,14 +22123,14 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
       async (file, reservation) => writeInitialFile(client, session, project.id, targetRoot, file, reservation)
     );
     for (const name of ["output", "conflicts", path14.join("base", "docs"), "trash"]) {
-      await fs12.mkdir(metadataPath(targetRoot, name), { recursive: true });
+      await fs13.mkdir(metadataPath(targetRoot, name), { recursive: true });
     }
     await ensureLocalIgnoreFile(targetRoot);
     await writeManifest(targetRoot, index.manifest);
     await writeMirrorSupportFiles(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
     await initializeMirrorGitRepository(targetRoot, `Initial Overleaf mirror: ${project.name}`);
   } catch (error) {
-    await fs12.rm(targetRoot, { recursive: true, force: true });
+    await fs13.rm(targetRoot, { recursive: true, force: true });
     throw error;
   } finally {
     session?.disconnect();
@@ -22003,12 +22140,12 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
 }
 async function writeInitialFile(client, session, projectId, root, file, reservation) {
   const target = path14.join(root, file.path);
-  await fs12.mkdir(path14.dirname(target), { recursive: true });
+  await fs13.mkdir(path14.dirname(target), { recursive: true });
   if (file.entityType === "doc") {
     const joined = await session.joinDoc(file.entityId);
     try {
       await reservation?.reserve(Buffer.byteLength(joined.content, "utf8"));
-      await fs12.writeFile(target, joined.content, "utf8");
+      await fs13.writeFile(target, joined.content, "utf8");
       file.version = joined.version;
       file.binary = !isTextLike(file.path);
       file.sha1 = sha1(joined.content);
@@ -22032,12 +22169,12 @@ async function writeMirrorSupportFiles(root, rootDocPath, compiler) {
   await Promise.all([
     writeLocalVsCodeSettings(root, rootDocPath, compiler),
     writeLocalLatexmkRc(root, rootDocPath),
-    fs12.writeFile(path14.join(root, "AGENTS.md"), AGENTS_CONTENT, "utf8")
+    fs13.writeFile(path14.join(root, "AGENTS.md"), AGENTS_CONTENT, "utf8")
   ]);
 }
 async function initializeMirrorGitRepository(root, commitMessage = "Initial Overleaf mirror") {
-  await fs12.mkdir(root, { recursive: true });
-  await fs12.writeFile(path14.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
+  await fs13.mkdir(root, { recursive: true });
+  await fs13.writeFile(path14.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
   if (!await exists3(path14.join(root, ".git"))) {
     await runGit(root, ["init"]);
     await runGit(root, ["add", "-A"]);
@@ -22062,7 +22199,7 @@ async function initializeMirrorGitRepository(root, commitMessage = "Initial Over
 }
 async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
   const settingsPath = path14.join(root, ".vscode", "settings.json");
-  await fs12.mkdir(path14.dirname(settingsPath), { recursive: true });
+  await fs13.mkdir(path14.dirname(settingsPath), { recursive: true });
   const rootFile = rootDocPath ? `./${rootDocPath}` : void 0;
   const rootDir = rootDocPath ? path14.posix.dirname(rootDocPath) : ".";
   const texFile = rootDocPath ? path14.posix.basename(rootDocPath) : "%DOC%";
@@ -22118,7 +22255,7 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
     }],
     "latex-workshop.latex.recipes": [{ name: "latexmk (local mirror)", tools: ["latexmk-local-mirror"] }]
   };
-  await fs12.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
+  await fs13.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
 }
 async function writeLocalLatexmkRc(root, rootDocPath) {
@@ -22163,8 +22300,8 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
     "$ENV{'PAR_TEMP'} = $overleaf_codex_biber_cache;",
     ""
   ].join("\n");
-  await fs12.mkdir(path14.dirname(rcPath), { recursive: true });
-  await fs12.writeFile(rcPath, content, "utf8");
+  await fs13.mkdir(path14.dirname(rcPath), { recursive: true });
+  await fs13.writeFile(rcPath, content, "utf8");
 }
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -22173,21 +22310,21 @@ function perlSingleQuote(value) {
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 async function runGit(cwd, args) {
-  const result = await execFileAsync("git", args, { cwd, encoding: "utf8", maxBuffer: 1024 * 1024 * 10 });
+  const result = await execFileAsync2("git", args, { cwd, encoding: "utf8", maxBuffer: 1024 * 1024 * 10 });
   return `${result.stdout ?? ""}${result.stderr ?? ""}`;
 }
 function isGitDiffExitCode(error) {
   return Boolean(error) && typeof error === "object" && error.code === 1;
 }
 async function exists3(target) {
-  return fs12.stat(target).then(() => true, () => false);
+  return fs13.stat(target).then(() => true, () => false);
 }
 
 // src/overleaf/overleafClient.ts
 var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path15 = __toESM(require("path"));
-var fs13 = __toESM(require("fs/promises"));
+var fs14 = __toESM(require("fs/promises"));
 var import_fs5 = require("fs");
 var import_module = require("module");
 var import_stream = require("stream");
@@ -22251,6 +22388,9 @@ var DEFAULT_TIMEOUTS = {
   joinDocMs: 3e4,
   otAckMs: 15e3
 };
+var MAX_BUFFERED_DOWNLOAD_BYTES = 256 * 1024 * 1024;
+var MAX_STREAMED_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+var MAX_RESPONSE_TEXT_BYTES = 8 * 1024 * 1024;
 var OverleafHttpError = class extends Error {
   constructor(message, status, code, responseBody) {
     super(message);
@@ -22304,7 +22444,7 @@ var OverleafClient = class {
     if (res.status >= 300 && res.status < 400) {
       throw new Error("Cookie login was redirected. The cookie is probably expired or incomplete.");
     }
-    const html = await res.text();
+    const html = await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
     const csrfToken = extractCsrfToken(html);
     if (!csrfToken) {
       throw new Error("Could not find a CSRF token on the Overleaf project page.");
@@ -22365,7 +22505,7 @@ var OverleafClient = class {
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadFileFromPath(projectId, parentFolderId, filename, sourcePath) {
-    const stat13 = await fs13.stat(sourcePath);
+    const stat13 = await fs14.stat(sourcePath);
     if (!stat13.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
     const form = new import_form_data.default();
     form.append("targetFolderId", parentFolderId);
@@ -22441,23 +22581,23 @@ var OverleafClient = class {
   }
   async downloadCompileOutput(outputUrl, compile) {
     if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsolute(outputUrl, false);
+      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false);
     }
     if (compile.pdfDownloadDomain && compile.clsiServerId) {
       const cleanOutput = outputUrl.replace(/^\/+/, "");
       const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, "")}/${cleanOutput}?compileGroup=${encodeURIComponent(compile.compileGroup)}&clsiserverid=${encodeURIComponent(compile.clsiServerId)}&enable_pdf_caching=true`;
-      return this.downloadAbsolute(cdnUrl, false);
+      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false);
     }
     return this.downloadRelative(outputUrl.replace(/^\/+/, ""), true);
   }
   async downloadCompileOutputToPath(outputUrl, compile, targetPath, options = {}) {
     if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsoluteToPath(outputUrl, false, targetPath, options);
+      return this.downloadAbsoluteToPath(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false, targetPath, options);
     }
     if (compile.pdfDownloadDomain && compile.clsiServerId) {
       const cleanOutput = outputUrl.replace(/^\/+/, "");
       const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, "")}/${cleanOutput}?compileGroup=${encodeURIComponent(compile.compileGroup)}&clsiserverid=${encodeURIComponent(compile.clsiServerId)}&enable_pdf_caching=true`;
-      return this.downloadAbsoluteToPath(cdnUrl, false, targetPath, options);
+      return this.downloadAbsoluteToPath(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false, targetPath, options);
     }
     return this.downloadAbsoluteToPath(this.urlFor(outputUrl.replace(/^\/+/, "")), true, targetPath, options);
   }
@@ -22551,7 +22691,7 @@ var OverleafClient = class {
         Connection: "keep-alive"
       }
     });
-    await res.text();
+    await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
     const setCookie = res.headers.raw()["set-cookie"]?.[0]?.split(";")[0];
     if (setCookie && !identity.cookies.includes(setCookie)) {
       return {
@@ -22594,13 +22734,14 @@ var OverleafClient = class {
       body
     }, this.timeouts.httpMs, options.signal);
     await assertOk(res, route);
-    return res.status === 204 ? "" : res.text();
+    return res.status === 204 ? "" : readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
   }
   async downloadRelative(route, includeCookies, signal) {
     return this.downloadAbsolute(this.urlFor(route), includeCookies, signal);
   }
   async downloadAbsolute(url, includeCookies, signal) {
     const identity = includeCookies ? this.requireIdentity() : void 0;
+    let sendCookies = Boolean(identity);
     const chunks = [];
     let currentUrl = url;
     let offset = 0;
@@ -22615,7 +22756,7 @@ var OverleafClient = class {
         headers: {
           Connection: "keep-alive",
           ...offset > 0 ? { Range: `bytes=${offset}-` } : {},
-          ...identity ? { Cookie: identity.cookies } : {}
+          ...sendCookies && identity ? { Cookie: identity.cookies } : {}
         }
       }, this.timeouts.httpMs, signal);
       if (res.status >= 300 && res.status < 400) {
@@ -22624,17 +22765,22 @@ var OverleafClient = class {
         if (!location || redirects >= 5) {
           throw new OverleafHttpError(`Overleaf download redirect failed for ${path15.basename(currentUrl)}.`, res.status);
         }
-        currentUrl = new URL(location, currentUrl).toString();
+        const nextUrl = new URL(location, currentUrl);
+        sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
+        currentUrl = nextUrl.toString();
         redirects += 1;
         continue;
       }
       if (res.status !== 200 && res.status !== 206) {
         await assertOk(res, currentUrl);
       }
-      const chunk = await res.buffer();
+      const chunk = await readResponseBufferLimited(res, MAX_BUFFERED_DOWNLOAD_BYTES);
       if (res.status === 200) {
         if (offset > 0) {
           throw new Error("Overleaf ignored a Range request after returning partial content.");
+        }
+        if (chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
+          throw new Error("Overleaf download exceeded its size limit.");
         }
         chunks.push(chunk);
         break;
@@ -22645,6 +22791,9 @@ var OverleafClient = class {
       const range = parseContentRange(res.headers.get("content-range"));
       if (range.start !== offset || range.end < range.start || chunk.length !== range.end - range.start + 1) {
         throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get("content-range") ?? "missing"}.`);
+      }
+      if (offset + chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
+        throw new Error("Overleaf download exceeded its size limit.");
       }
       if (expectedTotal !== void 0 && range.total !== expectedTotal) {
         throw new Error("Overleaf changed the total download size between partial responses.");
@@ -22672,14 +22821,15 @@ var OverleafClient = class {
   }
   async downloadAbsoluteToPath(url, includeCookies, targetPath, options) {
     const identity = includeCookies ? this.requireIdentity() : void 0;
+    let sendCookies = Boolean(identity);
     let currentUrl = url;
     let offset = 0;
     let expectedTotal;
     let redirects = 0;
     let ranges = 0;
     let sizeReported = false;
-    await fs13.mkdir(path15.dirname(targetPath), { recursive: true });
-    await fs13.rm(targetPath, { force: true });
+    await fs14.mkdir(path15.dirname(targetPath), { recursive: true });
+    await fs14.rm(targetPath, { force: true });
     try {
       while (true) {
         const res = await this.fetchWithTimeout(currentUrl, {
@@ -22689,7 +22839,7 @@ var OverleafClient = class {
           headers: {
             Connection: "keep-alive",
             ...offset > 0 ? { Range: `bytes=${offset}-` } : {},
-            ...identity ? { Cookie: identity.cookies } : {}
+            ...sendCookies && identity ? { Cookie: identity.cookies } : {}
           }
         }, this.timeouts.httpMs, options.signal);
         if (res.status >= 300 && res.status < 400) {
@@ -22698,7 +22848,9 @@ var OverleafClient = class {
           if (!location || redirects >= 5) {
             throw new OverleafHttpError(`Overleaf download redirect failed for ${path15.basename(currentUrl)}.`, res.status);
           }
-          currentUrl = new URL(location, currentUrl).toString();
+          const nextUrl = new URL(location, currentUrl);
+          sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
+          currentUrl = nextUrl.toString();
           redirects += 1;
           continue;
         }
@@ -22729,8 +22881,19 @@ var OverleafClient = class {
         }
         if (!res.body) throw new Error("Overleaf download response did not contain a body.");
         const before = offset;
-        await (0, import_promises4.pipeline)(res.body, (0, import_fs5.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
-        const actualSize = (await fs13.stat(targetPath)).size;
+        let bodyBytes = 0;
+        const limiter = new import_stream.Transform({
+          transform(chunk, _encoding, callback) {
+            bodyBytes += Buffer.byteLength(chunk);
+            if (before + bodyBytes > MAX_STREAMED_DOWNLOAD_BYTES) {
+              callback(new Error("Overleaf download exceeded its size limit."));
+            } else {
+              callback(null, chunk);
+            }
+          }
+        });
+        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs5.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        const actualSize = (await fs14.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
           throw new Error(`Overleaf download body length did not match its declared range (${received} bytes received).`);
@@ -22746,7 +22909,7 @@ var OverleafClient = class {
       }
       return digests;
     } catch (error) {
-      await fs13.rm(targetPath, { force: true }).catch(() => void 0);
+      await fs14.rm(targetPath, { force: true }).catch(() => void 0);
       throw error;
     }
   }
@@ -22755,6 +22918,28 @@ var OverleafClient = class {
       throw new Error("Not logged in to Overleaf.");
     }
     return this.identity;
+  }
+  assertAllowedCompileDownloadUrl(rawUrl, compile) {
+    let candidate;
+    try {
+      candidate = new URL(rawUrl, this.serverUrl);
+    } catch {
+      throw new Error("Overleaf compile returned an invalid output URL.");
+    }
+    if (candidate.protocol !== "http:" && candidate.protocol !== "https:") {
+      throw new Error("Overleaf compile returned an unsupported output URL scheme.");
+    }
+    const allowedOrigins = /* @__PURE__ */ new Set([new URL(this.serverUrl).origin]);
+    if (compile.pdfDownloadDomain) {
+      try {
+        allowedOrigins.add(new URL(compile.pdfDownloadDomain).origin);
+      } catch {
+      }
+    }
+    if (!allowedOrigins.has(candidate.origin)) {
+      throw new Error(`Refusing to download compile output from an untrusted host: ${candidate.host}.`);
+    }
+    return candidate.toString();
   }
   urlFor(route) {
     if (/^https?:\/\//i.test(route)) {
@@ -22838,7 +23023,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -22851,7 +23036,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve7();
+        error ? reject(error) : resolve8();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -22866,17 +23051,26 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    const rejectPromise = new Promise((_, reject) => {
-      this.socket.once("connectionRejected", (error) => {
-        reject(new Error(error?.message || "Overleaf rejected the realtime connection."));
-      });
+    return new Promise((resolve8, reject) => {
+      let settled = false;
+      const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
+      const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
+      const finish = (error, project) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        error ? reject(error) : resolve8(project);
+      };
+      this.socket.once("connectionRejected", onRejected);
+      void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
+        const project = values[0];
+        finish(project ? void 0 : new Error("Overleaf did not return a project in joinProject acknowledgement."), project);
+      }).catch((error) => finish(error instanceof Error ? error : new Error(formatUnknownError(error))));
     });
-    const joinPromise = this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => values[0]);
-    return Promise.race([rejectPromise, joinPromise]);
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -22888,7 +23082,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve7(project);
+        error ? reject(error) : resolve8(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -22940,7 +23134,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -22950,7 +23144,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve7(values ?? []);
+        error ? reject(error) : resolve8(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -23160,7 +23354,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve7) => setTimeout(resolve7, 250 * 2 ** attempt));
+      await new Promise((resolve8) => setTimeout(resolve8, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -23192,7 +23386,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -23220,7 +23414,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve7({
+            resolve8({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -23305,7 +23499,7 @@ async function assertOk(res, route) {
   if (res.status >= 200 && res.status < 300) {
     return;
   }
-  const body = await res.text().catch(() => "");
+  const body = await readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES).catch(() => "");
   let code;
   try {
     const parsed = JSON.parse(body);
@@ -23320,20 +23514,35 @@ async function assertOk(res, route) {
     body.slice(0, 500)
   );
 }
+async function readResponseBufferLimited(response, maxBytes) {
+  if (!response.body) return Buffer.alloc(0);
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of response.body) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > maxBytes) {
+      response.body.destroy?.(new Error("Overleaf response exceeded its size limit."));
+      throw new Error("Overleaf response exceeded its size limit.");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+async function readResponseTextLimited(response, maxBytes) {
+  return (await readResponseBufferLimited(response, maxBytes)).toString("utf8");
+}
 
 // src/overleaf/syncOwnerCoordinator.ts
 var crypto7 = __toESM(require("crypto"));
-var fs14 = __toESM(require("fs/promises"));
+var fs15 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path16 = __toESM(require("path"));
 var import_events3 = require("events");
-var import_child_process3 = require("child_process");
-var import_util16 = require("util");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
 var IPC_CHUNK_BYTES = 512 * 1024;
-var execFileAsync2 = (0, import_util16.promisify)(import_child_process3.execFile);
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
     this.options = options;
@@ -23358,16 +23567,16 @@ var SyncOwnerCoordinator = class {
   }
   async claim(root, handler) {
     await this.release();
-    this.root = await fs14.realpath(path16.resolve(root)).catch(() => path16.resolve(root));
+    this.root = await fs15.realpath(path16.resolve(root)).catch(() => path16.resolve(root));
     this.handler = handler;
-    await fs14.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
-    await fs14.chmod(runtimeRoot(), 448).catch(() => void 0);
+    await fs15.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
+    await fs15.chmod(runtimeRoot(), 448).catch(() => void 0);
     const paths = runtimePaths(this.root);
     const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3e3);
     while (true) {
       if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return "client";
       try {
-        await fs14.mkdir(paths.lockPath, { mode: 448 });
+        await fs15.mkdir(paths.lockPath, { mode: 448 });
         break;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
@@ -23387,21 +23596,21 @@ var SyncOwnerCoordinator = class {
       socketPath: paths.socketPath,
       nonce: crypto7.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature3(process.pid)
+      processStart: await processStartSignature(process.pid)
     };
     try {
-      await fs14.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
+      await fs15.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
 `, { mode: 384 });
-      await fs14.rm(paths.socketPath, { force: true });
+      await fs15.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve7, reject) => {
+      await new Promise((resolve8, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve7();
+          resolve8();
         });
       });
-      await fs14.chmod(paths.socketPath, 384);
+      await fs15.chmod(paths.socketPath, 384);
       if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
         throw new Error("Sync owner socket did not become reachable after startup.");
       }
@@ -23410,9 +23619,9 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve7) => server.close(() => resolve7()));
-      await fs14.rm(paths.lockPath, { recursive: true, force: true });
-      await fs14.rm(paths.socketPath, { force: true });
+      if (server?.listening) await new Promise((resolve8) => server.close(() => resolve8()));
+      await fs15.rm(paths.lockPath, { recursive: true, force: true });
+      await fs15.rm(paths.socketPath, { force: true });
       throw error;
     }
   }
@@ -23466,7 +23675,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve7, reject) => {
+    const subscribed = new Promise((resolve8, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -23478,7 +23687,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve7();
+        error ? reject(error) : resolve8();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -23520,14 +23729,14 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve7) => server.close(() => resolve7()));
+      await new Promise((resolve8) => server.close(() => resolve8()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
       const current = await readMetadata(paths.metadataPath);
       if (current?.nonce === this.metadata.nonce) {
-        await fs14.rm(paths.socketPath, { force: true });
-        await fs14.rm(paths.lockPath, { recursive: true, force: true });
+        await fs15.rm(paths.socketPath, { force: true });
+        await fs15.rm(paths.lockPath, { recursive: true, force: true });
       }
     }
     this.metadata = void 0;
@@ -23581,11 +23790,11 @@ var SyncOwnerCoordinator = class {
   async lockIsStale(paths) {
     const metadata = await readMetadata(paths.metadataPath);
     if (!metadata) {
-      const stat13 = await fs14.stat(paths.lockPath).catch(() => void 0);
+      const stat13 = await fs15.stat(paths.lockPath).catch(() => void 0);
       return Boolean(stat13 && Date.now() - stat13.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
     }
-    if (processAlive3(metadata.pid)) {
-      const currentStart = await processStartSignature3(metadata.pid);
+    if (processAlive(metadata.pid)) {
+      const currentStart = await processStartSignature(metadata.pid);
       if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
     }
     return true;
@@ -23598,11 +23807,11 @@ var SyncOwnerCoordinator = class {
     )) return false;
     try {
       if (!await this.lockIsStale(paths)) return false;
-      await fs14.rm(paths.lockPath, { recursive: true, force: true });
-      await fs14.rm(paths.socketPath, { force: true });
+      await fs15.rm(paths.lockPath, { recursive: true, force: true });
+      await fs15.rm(paths.socketPath, { force: true });
       return true;
     } finally {
-      await fs14.rm(guardPath, { recursive: true, force: true });
+      await fs15.rm(guardPath, { recursive: true, force: true });
     }
   }
 };
@@ -23623,7 +23832,7 @@ async function inspectOwner(root) {
   return { reachable: await canConnect(paths.socketPath), metadata: await readMetadata(paths.metadataPath) };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -23632,7 +23841,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve7(result);
+      error ? reject(error) : resolve8(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -23730,7 +23939,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -23738,7 +23947,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve7();
+      error ? reject(error) : resolve8();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -23766,7 +23975,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -23775,7 +23984,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve7();
+      error ? reject(error) : resolve8();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -23784,7 +23993,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -23793,27 +24002,27 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve7(value);
+      resolve8(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve7) => setTimeout(resolve7, ms));
+  return new Promise((resolve8) => setTimeout(resolve8, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
-    await fs14.mkdir(guardPath, { mode: 448 });
+    await fs15.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs14.stat(guardPath).catch(() => void 0);
+  const stat13 = await fs15.stat(guardPath).catch(() => void 0);
   if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
-  await fs14.rm(guardPath, { recursive: true, force: true });
+  await fs15.rm(guardPath, { recursive: true, force: true });
   try {
-    await fs14.mkdir(guardPath, { mode: 448 });
+    await fs15.mkdir(guardPath, { mode: 448 });
     return true;
   } catch (error) {
     if (error.code === "EEXIST") return false;
@@ -23821,26 +24030,10 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   }
 }
 async function readMetadata(target) {
-  const raw = await fs14.readFile(target, "utf8").catch(() => void 0);
+  const raw = await fs15.readFile(target, "utf8").catch(() => void 0);
   if (!raw) return void 0;
   try {
     return JSON.parse(raw);
-  } catch {
-    return void 0;
-  }
-}
-function processAlive3(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function processStartSignature3(pid) {
-  try {
-    const result = await execFileAsync2("/bin/ps", ["-p", String(pid), "-o", "lstart="], { encoding: "utf8" });
-    return String(result.stdout ?? "").trim() || void 0;
   } catch {
     return void 0;
   }
@@ -23860,7 +24053,7 @@ function errorResponse(id, code, message) {
 }
 
 // src/cli.ts
-var execFileAsync3 = (0, import_util18.promisify)(import_child_process4.execFile);
+var execFileAsync3 = (0, import_util21.promisify)(import_child_process4.execFile);
 var CliError = class extends Error {
   constructor(message, exitCode, code) {
     super(message);
@@ -24158,13 +24351,13 @@ async function watchWithTakeover(root, policy, credentials, output) {
         await owner.runWatchAsOwner();
       } else {
         activeSocket = await owner.subscribe((event) => output.event(event.event, event.root, event.data));
-        await new Promise((resolve7) => {
-          activeSocket.once("close", resolve7);
-          activeSocket.once("error", resolve7);
+        await new Promise((resolve8) => {
+          activeSocket.once("close", resolve8);
+          activeSocket.once("error", resolve8);
           const interval = setInterval(() => {
             if (stopping) {
               clearInterval(interval);
-              resolve7();
+              resolve8();
             }
           }, 250);
         });
@@ -24221,7 +24414,7 @@ async function makeClient(serverUrl, credentials, policy) {
 }
 async function resolveMirrorRoot(candidate) {
   let current = path17.resolve(candidate);
-  const stat13 = await fs15.stat(current).catch(() => void 0);
+  const stat13 = await fs16.stat(current).catch(() => void 0);
   if (stat13?.isFile()) current = path17.dirname(current);
   while (true) {
     if (await exists4(manifestPath(current))) return current;
@@ -24328,7 +24521,7 @@ async function readSecret(prompt) {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding("utf8");
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     let value = "";
     const onData = (chunk) => {
       if (chunk === "\r" || chunk === "\n") {
@@ -24336,7 +24529,7 @@ async function readSecret(prompt) {
         process.stdin.setRawMode(false);
         process.stdin.pause();
         process.stderr.write("\n");
-        resolve7(value);
+        resolve8(value);
       } else if (chunk === "") {
         process.stdin.off("data", onData);
         process.stdin.setRawMode(false);
@@ -24367,9 +24560,9 @@ async function confirm(prompt) {
 }
 function question(prompt) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve7) => rl.question(prompt, (answer) => {
+  return new Promise((resolve8) => rl.question(prompt, (answer) => {
     rl.close();
-    resolve7(answer);
+    resolve8(answer);
   }));
 }
 function blockingExitCode(result) {
@@ -24400,10 +24593,10 @@ function toPosix(value) {
   return value.replace(/[\\/]+/g, "/").replace(/^\/+/, "");
 }
 function delay3(ms) {
-  return new Promise((resolve7) => setTimeout(resolve7, ms));
+  return new Promise((resolve8) => setTimeout(resolve8, ms));
 }
 function exists4(target) {
-  return fs15.stat(target).then(() => true, () => false);
+  return fs16.stat(target).then(() => true, () => false);
 }
 function humanValue(value) {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);

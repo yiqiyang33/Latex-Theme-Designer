@@ -1,12 +1,26 @@
 import * as crypto from 'crypto';
+import { execFile } from 'child_process';
+import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { inspect } from 'util';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 export function normalizeServerUrl(raw: string): string {
   const trimmed = raw.trim() || 'https://www.overleaf.com/';
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  return url.endsWith('/') ? url : `${url}/`;
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error(`Invalid Overleaf server URL: ${raw}`); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Overleaf server URL must use HTTP(S): ${raw}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`Overleaf server URL must not contain credentials: ${raw}`);
+  }
+  parsed.pathname = parsed.pathname.endsWith('/') ? parsed.pathname : `${parsed.pathname}/`;
+  return parsed.toString();
 }
 
 export function expandHome(input: string): string {
@@ -54,6 +68,97 @@ export function isTextLike(filePath: string): boolean {
 
 export function toPosixPath(input: string): string {
   return input.replace(/[\\/]+/g, '/').replace(/^\/+/, '');
+}
+
+/** Normalize and validate a path that is relative to an Overleaf mirror. */
+export function normalizeProjectRelativePath(input: string, allowRoot = false): string {
+  if (typeof input !== 'string' || input.includes('\0')) {
+    throw new Error(`Invalid project path: ${String(input)}`);
+  }
+  const slashPath = input.replace(/\\/g, '/');
+  if (slashPath.startsWith('/') || /^[A-Za-z]:\//.test(slashPath)) {
+    throw new Error(`Project path must be relative: ${input}`);
+  }
+  const normalized = path.posix.normalize(slashPath);
+  if (!normalized || normalized === '.') {
+    if (allowRoot) return '';
+    throw new Error(`Project path cannot be empty: ${input}`);
+  }
+  if (normalized === '..' || normalized.startsWith('../')) {
+    throw new Error(`Project path escapes the mirror: ${input}`);
+  }
+  return normalized;
+}
+
+/** Validate one remote entity name before it is joined into a project path. */
+export function validateProjectPathSegment(input: string): string {
+  if (typeof input !== 'string' || !input || input === '.' || input === '..' || /[\\/\0]/.test(input)) {
+    throw new Error(`Invalid remote project path segment: ${String(input)}`);
+  }
+  return input;
+}
+
+/** Reject symlink components below a mirror before reading or mutating a path. */
+export async function assertNoSymlinkPath(root: string, relativePath: string): Promise<string> {
+  const normalized = normalizeProjectRelativePath(relativePath);
+  const absoluteRoot = path.resolve(root);
+  let current = absoluteRoot;
+  for (const segment of normalized.split('/')) {
+    current = path.join(current, segment);
+    const stat = await fs.lstat(current).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (!stat) break;
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing to access symlinked mirror path: ${relativePath}`);
+    }
+    if (!stat.isDirectory() && current !== path.join(absoluteRoot, ...normalized.split('/'))) {
+      throw new Error(`Mirror path component is not a directory: ${relativePath}`);
+    }
+  }
+  return path.join(absoluteRoot, ...normalized.split('/'));
+}
+
+/** Ensure an absolute path remains inside a trusted directory. */
+export function assertPathWithin(root: string, candidate: string): string {
+  const absoluteRoot = path.resolve(root);
+  const absoluteCandidate = path.resolve(candidate);
+  const relative = path.relative(absoluteRoot, absoluteCandidate);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Path is outside the trusted root: ${candidate}`);
+  }
+  return absoluteCandidate;
+}
+
+export async function processStartSignature(pid: number): Promise<string | undefined> {
+  if (!Number.isInteger(pid) || pid <= 0) return undefined;
+  if (process.platform === 'linux') {
+    try {
+      const raw = await fs.readFile(`/proc/${pid}/stat`, 'utf8');
+      const endOfCommand = raw.lastIndexOf(')');
+      if (endOfCommand < 0) return undefined;
+      return raw.slice(endOfCommand + 2).trim().split(/\s+/)[19];
+    } catch {
+      return undefined;
+    }
+  }
+  try {
+    const result = await execFileAsync('/bin/ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8' });
+    return String(result.stdout ?? '').trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function processAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function sleep(ms: number): Promise<void> {

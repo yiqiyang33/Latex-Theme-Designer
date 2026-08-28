@@ -23,7 +23,8 @@ import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalCha
 import { OtDocumentSession, type OtDocumentTransport } from "../src/overleaf/otDocumentSession";
 import { getWithLegacyFallback, hasExplicitConfigurationValue, needsGlobalConfigurationUpdate, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
-import { formatUnknownError, gitBlobHash } from "../src/overleaf/util";
+import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectRelativePath, normalizeServerUrl } from "../src/overleaf/util";
+import { validateManifest } from "../src/overleaf/metadataValidation";
 import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
 import { RenameDetector } from "../src/overleaf/renameDetector";
 import { performRemotePathChange, transactionName } from "../src/overleaf/remoteMutationCore";
@@ -62,6 +63,63 @@ function fakeConfig(values: Record<string, unknown>, inspections: Record<string,
 }
 
 describe("Overleaf integration primitives", () => {
+  it("rejects unsafe and non-canonical project paths", () => {
+    expect(normalizeProjectRelativePath("figures\\plot.png")).toBe("figures/plot.png");
+    expect(() => normalizeProjectRelativePath("../outside.tex")).toThrow();
+    expect(() => normalizeProjectRelativePath("/absolute.tex")).toThrow();
+    expect(() => normalizeProjectRelativePath("C:/absolute.tex")).toThrow();
+    expect(() => normalizeProjectRelativePath("a/../b.tex")).not.toThrow();
+    expect(normalizeProjectRelativePath("a//b.tex")).toBe("a/b.tex");
+    expect(() => normalizeProjectRelativePath("\0bad.tex")).toThrow();
+    expect(normalizeProjectRelativePath(".", true)).toBe("");
+    expect(() => normalizeServerUrl("ftp://example.test")).toThrow();
+    expect(() => normalizeServerUrl("https://user:pass@example.test")).toThrow();
+  });
+
+  it("validates remote tree names and rejects duplicate paths", () => {
+    const project = {
+      rootFolder: {
+        _id: "root",
+        name: "",
+        folders: [],
+        docs: [{ _id: "doc-1", name: "../escape.tex", version: 1 }]
+      }
+    } as unknown as OverleafProject;
+    expect(() => buildProjectTreeIndex("https://example.test/", "p", "P", project)).toThrow();
+
+    const duplicate = {
+      rootFolder: {
+        _id: "root",
+        name: "",
+        folders: [],
+        docs: [{ _id: "doc-1", name: "same.tex", version: 1 }, { _id: "doc-2", name: "same.tex", version: 2 }]
+      }
+    } as unknown as OverleafProject;
+    expect(() => buildProjectTreeIndex("https://example.test/", "p", "P", duplicate)).toThrow(/duplicate path/);
+  });
+
+  it("rejects symlinked mirror paths and traversal metadata", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-path-"));
+    try {
+      await fs.mkdir(path.join(root, "outside"));
+      await fs.symlink(path.join(root, "outside"), path.join(root, "linked"));
+      await expect(assertNoSymlinkPath(root, "linked/file.tex")).rejects.toThrow(/symlink/);
+      const invalid = {
+        schemaVersion: 3,
+        serverUrl: "https://www.overleaf.com/",
+        projectId: "p",
+        projectName: "P",
+        files: { "../escape.tex": { path: "../escape.tex", entityId: "d", entityType: "doc", parentFolderId: "r" } },
+        folders: {},
+        ignore: [],
+        lastSyncAt: "now"
+      };
+      expect(validateManifest(invalid)).toMatch(/safe relative project path/);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("migrates old manifests and applies gitignore-style local rules", async () => {
     const manifest = migrateManifest({
       schemaVersion: 1,

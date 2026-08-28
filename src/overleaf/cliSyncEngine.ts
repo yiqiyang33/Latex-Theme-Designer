@@ -42,7 +42,7 @@ import {
 import { buildOtOperations } from './ot';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
-import { formatUnknownError, gitBlobHash, isTextLike, sha1, toPosixPath } from './util';
+import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
@@ -164,7 +164,7 @@ export class OverleafSyncEngine {
       const plan = planSafeSyncActions(report, this.policy);
       for (const item of plan.pulls) {
         if (item.entityType === 'folder') {
-          await fs.mkdir(path.join(this.root, item.path), { recursive: true });
+          await fs.mkdir(await assertNoSymlinkPath(this.root, item.path), { recursive: true });
         } else {
           await this.pullNow(item.path, false);
         }
@@ -399,7 +399,7 @@ export class OverleafSyncEngine {
       await this.start();
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
-      const sourcePath = path.join(this.root, normalized);
+      const sourcePath = await assertNoSymlinkPath(this.root, normalized);
       const localStat = await fs.stat(sourcePath).catch(() => undefined);
       const entry = this.manifest.files[normalized];
       if (!localStat) {
@@ -490,7 +490,7 @@ export class OverleafSyncEngine {
       if (!remote) {
         if (!entry) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
         if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
-        const source = path.join(this.root, normalized);
+        const source = await assertNoSymlinkPath(this.root, normalized);
         const target = trashPathFor(this.root, normalized);
         const stat = await fs.stat(source).catch(() => undefined);
         if (stat) {
@@ -507,7 +507,7 @@ export class OverleafSyncEngine {
         return;
       }
       try {
-        const localPath = path.join(this.root, normalized);
+        const localPath = await assertNoSymlinkPath(this.root, normalized);
         const localStat = await fs.stat(localPath).catch(() => undefined);
         if (!force && entry && localStat) {
           const base = entry.baseHash ?? entry.sha1;
@@ -552,7 +552,12 @@ export class OverleafSyncEngine {
     if (!conflict) throw new Error(`No persisted conflict exists for ${normalized}.`);
     if (use === 'local') await this.push(normalized, true);
     else await this.pull(normalized, true);
-    await fs.rm(conflict.remotePath, { force: true });
+    const conflictPath = assertPathWithin(metadataPath(this.root, 'conflicts'), conflict.remotePath);
+    const conflictStat = await fs.lstat(conflictPath).catch(() => undefined);
+    if (conflictStat?.isSymbolicLink() || conflictStat?.isDirectory()) {
+      throw new Error(`Persisted conflict path is not a regular snapshot: ${conflict.remotePath}`);
+    }
+    await fs.rm(conflictPath, { force: true });
     await store.remove(normalized);
     this.emit('conflict-resolved', { path: normalized, use });
   }
@@ -707,7 +712,8 @@ export class OverleafSyncEngine {
       const oldPath = folderPathById(this.manifest!, candidate.local.entityId);
       if (!oldPath || oldPath === candidate.remote.path) continue;
       const newPath = candidate.remote.path;
-      const source = await fs.stat(path.join(this.root, oldPath)).catch(() => undefined);
+      const sourcePath = await assertNoSymlinkPath(this.root, oldPath).catch(() => undefined);
+      const source = sourcePath ? await fs.stat(sourcePath).catch(() => undefined) : undefined;
       if (!source?.isDirectory()) continue;
       const oldParentFolderId = this.manifest!.folders[oldPath]?.parentFolderId;
       try {
@@ -739,7 +745,9 @@ export class OverleafSyncEngine {
       if (!remoteEntry || remoteEntry.path === entry.path) continue;
       const oldPath = entry.path;
       const newPath = remoteEntry.path;
-      const hash = await cachedLocalFileHash(path.join(this.root, oldPath), entry);
+      const oldFilePath = await assertNoSymlinkPath(this.root, oldPath).catch(() => undefined);
+      if (!oldFilePath) continue;
+      const hash = await cachedLocalFileHash(oldFilePath, entry);
       if (hash.hash !== entry.sha1) continue;
       if (this.manifest!.files[newPath] || this.manifest!.folders[newPath]) {
         const message = `Remote file rename to ${newPath} conflicts with an existing manifest path.`;
@@ -811,7 +819,7 @@ export class OverleafSyncEngine {
     const untrackedFiles = refreshedFiles.filter(candidate => !this.manifest!.files[candidate]);
     const localCandidates = await mapWithConcurrencyResult(untrackedFiles, 4, async candidate => ({
       path: candidate,
-      hash: (await hashFileDigests(path.join(this.root, candidate))).sha1
+      hash: (await hashFileDigests(await assertNoSymlinkPath(this.root, candidate))).sha1
     }));
     const candidatesByHash = new Map<string, typeof localCandidates>();
     for (const candidate of localCandidates) candidatesByHash.set(candidate.hash, [...(candidatesByHash.get(candidate.hash) ?? []), candidate]);
@@ -922,9 +930,7 @@ export class OverleafSyncEngine {
   }
 
   private validatePath(relPath: string): string {
-    const normalized = toPosixPath(relPath);
-    if (!normalized || normalized.startsWith('..') || path.isAbsolute(relPath)) throw new Error(`Invalid project path: ${relPath}`);
-    return normalized;
+    return normalizeProjectRelativePath(relPath);
   }
 
   private emit(event: string, data?: unknown): void {
