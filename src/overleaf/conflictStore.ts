@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { atomicWriteText, CONFLICT_INDEX_NAME, metadataPath } from './manifest';
+import { atomicWriteText, CONFLICT_INDEX_NAME, MAX_METADATA_JSON_BYTES, metadataPath, readTextFileBounded } from './manifest';
 import { assertValidConflicts, validateConflictList } from './metadataValidation';
 
 export interface PersistedConflict {
@@ -18,9 +18,12 @@ export class ConflictStore {
 
   async list(): Promise<PersistedConflict[]> {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
-    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
-    if (!raw) return [];
     try {
+      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateConflictList(parsed);
       if (validationError) throw new Error(validationError);

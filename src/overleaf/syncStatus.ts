@@ -21,6 +21,8 @@ export interface SyncStatusDecisionInput {
   baseHash?: string;
   localExists: boolean;
   remoteReadError?: string;
+  localSize?: number;
+  localMtimeMs?: number;
 }
 
 export interface LocalProjectFileMetadata {
@@ -49,7 +51,10 @@ export function classifySyncStatus(input: SyncStatusDecisionInput): SyncStatusIt
     remoteVersion: input.remoteFile?.version,
     localHash: input.localHash,
     remoteHash: input.remoteHash,
-    baseHash
+    baseHash,
+    localSize: input.localSize,
+    remoteSize: input.remoteFile?.remoteSize,
+    localMtimeMs: input.localMtimeMs
   };
 
   let status: SyncStatusKind;

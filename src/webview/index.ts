@@ -49,6 +49,8 @@ let snippetEditor: any = null;
 let snippetEditorLoading: Promise<void> | null = null;
 let snippetApplyingContent = false;
 let overleafState: any = null;
+let syncSelectionMode = false;
+const selectedSyncPaths = new Set<string>();
 
 function request(command: string, payload: Record<string, unknown> = {}): Promise<any> {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -409,24 +411,41 @@ function renderSyncPanel(): void {
   byId("syncServer").textContent = state.serverUrl || "—";
   byId("syncProject").textContent = state.projectName || "—";
   byId("syncMirror").textContent = state.mirrorRoot || "—";
-  const status = state.conflicts?.length ? "Conflict" : state.running ? "Syncing" : state.syncStatus?.hasBlocking ? "Needs attention" : "Ready";
+  const status = state.conflicts?.length || state.syncItems?.some((item: any) => item.entityType === "file" && item.status === "diverged") ? "Conflict" : state.running ? "Syncing" : state.syncStatus?.hasBlocking ? "Needs attention" : "Ready";
   byId("syncStatus").textContent = status;
+  byId("syncRole").textContent = state.ownerRole === "owner" ? "Owner" : state.ownerRole === "client" ? "Client" : "—";
+  byId("syncConnection").textContent = formatSyncConnection(state.connectionState);
+  byId("syncReconnects").textContent = state.reconnectAttempts ? String(state.reconnectAttempts) : "—";
   byId("syncContextTitle").textContent = state.projectName || "Overleaf mirror";
   byId("syncContextBadge").textContent = status;
-  byId("syncContextDescription").textContent = state.error || (state.authenticated ? "Remote mirror is available for synchronization." : "Login is required before starting sync.");
+  byId("syncContextDescription").textContent = state.error || state.connectionReason || (state.authenticated ? "Remote mirror is available for synchronization." : "Login is required before starting sync.");
   byId("syncContextEmpty").hidden = true;
   byId("syncContextSummary").hidden = false;
   byId("syncContextServer").textContent = state.serverUrl || "—";
   byId("syncContextLastSync").textContent = state.lastSyncAt ? new Date(state.lastSyncAt).toLocaleString() : "—";
   byId("syncContextFiles").textContent = `${state.syncItems?.length || 0} needing attention · ${state.conflicts?.length || 0} conflicts`;
   const items = (state.syncItems || []).filter((item: any) => item.status !== "synced");
+  const selectablePaths = new Set(items.filter(isSelectableSyncItem).map((item: any) => item.path));
+  for (const selected of [...selectedSyncPaths]) if (!selectablePaths.has(selected)) selectedSyncPaths.delete(selected);
   byId("syncItemCount").textContent = String(items.length);
   const itemList = byId("syncItemList");
   itemList.innerHTML = items.length ? items.map((item: any) => syncItemMarkup(item)).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>Everything is synced</strong><p>No file needs attention.</p></div></div>`;
+  byId<HTMLButtonElement>("syncPreviewBtn").textContent = syncSelectionMode ? "Cancel selection" : "Preview and select";
+  byId<HTMLButtonElement>("syncApplySelectedBtn").hidden = !syncSelectionMode;
+  byId("syncSelectionSummary").textContent = syncSelectionMode
+    ? `${selectedSyncPaths.size} selected. Only safe remote-ahead/local-ahead changes can be applied in bulk.`
+    : "";
   const conflicts = state.conflicts || [];
-  byId("syncConflictCount").textContent = String(conflicts.length);
+  const binaryConflicts = items.filter((item: any) => item.entityType === "file" && item.status === "diverged");
+  byId("syncConflictCount").textContent = String(conflicts.length + binaryConflicts.length);
   const conflictList = byId("syncConflictList");
-  conflictList.innerHTML = conflicts.length ? conflicts.map((item: any) => `<div class="sync-item"><span><strong>${escapeHtml(item.relPath)}</strong><small>${escapeHtml(item.reason || "manual resolution required")}</small></span><span class="toolbar compact"><button class="icon-button" data-conflict-action="diff" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Open conflict diff for ${escapeHtml(item.relPath)}" title="Open conflict diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-conflict-action="local" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Use local version for ${escapeHtml(item.relPath)}" title="Use local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-conflict-action="remote" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Accept remote version for ${escapeHtml(item.relPath)}" title="Accept remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("") : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>No conflicts</strong><p>Conflicts will appear here instead of being overwritten silently.</p></div></div>`;
+  const textConflictMarkup = conflicts.map((item: any) => `<div class="sync-item"><span><strong>${escapeHtml(item.relPath)}</strong><small>${escapeHtml(item.reason || "manual resolution required")}</small></span><span class="toolbar compact"><button class="icon-button" data-conflict-action="diff" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Open conflict diff for ${escapeHtml(item.relPath)}" title="Open three-way diff"><i class="codicon codicon-diff"></i></button><button class="icon-button" data-conflict-action="local" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Use local version for ${escapeHtml(item.relPath)}" title="Use local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-conflict-action="remote" data-conflict-path="${escapeHtml(item.relPath)}" aria-label="Accept remote version for ${escapeHtml(item.relPath)}" title="Accept remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("");
+  const binaryConflictMarkup = binaryConflicts.map((item: any) => `<div class="sync-item"><span><strong>${escapeHtml(item.path)}</strong><small>Binary diverged · local ${formatBytes(item.localSize)}${item.localMtimeMs ? ` (${escapeHtml(new Date(item.localMtimeMs).toLocaleString())})` : ""} · remote ${formatBytes(item.remoteSize)} · local ${escapeHtml(shortHash(item.localHash))} · remote ${escapeHtml(shortHash(item.remoteHash))}</small></span><span class="toolbar compact"><button class="icon-button" data-sync-action="push" data-sync-path="${escapeHtml(item.path)}" aria-label="Keep local binary ${escapeHtml(item.path)}" title="Keep local"><i class="codicon codicon-cloud-upload"></i></button><button class="icon-button" data-sync-action="pull" data-sync-path="${escapeHtml(item.path)}" aria-label="Accept remote binary ${escapeHtml(item.path)}" title="Accept remote"><i class="codicon codicon-cloud-download"></i></button></span></div>`).join("");
+  conflictList.innerHTML = textConflictMarkup || binaryConflictMarkup ? textConflictMarkup + binaryConflictMarkup : `<div class="empty-state compact"><i class="codicon codicon-pass-filled"></i><div><strong>No conflicts</strong><p>Conflicts will appear here instead of being overwritten silently.</p></div></div>`;
+  const activity = state.activityLog || [];
+  byId("syncActivityList").innerHTML = activity.length
+    ? activity.slice(-20).reverse().map((entry: any) => `<li><time>${escapeHtml(new Date(entry.at).toLocaleTimeString())}</time><span>${escapeHtml(entry.message)}</span></li>`).join("")
+    : "<li>No sync activity recorded.</li>";
   itemList.querySelectorAll<HTMLButtonElement>("[data-sync-action]").forEach(button => button.addEventListener("click", () => run(async () => {
     const command = button.dataset.syncAction === "diff"
       ? "overleaf-open-diff"
@@ -445,10 +464,63 @@ function renderSyncPanel(): void {
     await request("overleaf-resolve-conflict", overleafPayload({ path: button.dataset.conflictPath, resolution: action === "local" ? "local" : action === "remote" ? "remote" : "diff" }));
     await refreshOverleafState();
   })));
+  conflictList.querySelectorAll<HTMLButtonElement>("[data-sync-action]").forEach(button => button.addEventListener("click", () => run(async () => {
+    await request(button.dataset.syncAction === "pull" ? "overleaf-pull" : "overleaf-push", overleafPayload({ path: button.dataset.syncPath }));
+    await refreshOverleafState();
+  })));
+  itemList.querySelectorAll<HTMLInputElement>("[data-sync-select]").forEach(input => input.addEventListener("change", () => {
+    if (input.checked) selectedSyncPaths.add(input.dataset.syncSelect!); else selectedSyncPaths.delete(input.dataset.syncSelect!);
+    byId("syncSelectionSummary").textContent = `${selectedSyncPaths.size} selected. Only safe remote-ahead/local-ahead changes can be applied in bulk.`;
+  }));
+}
+
+function isSelectableSyncItem(item: any): boolean {
+  return item?.entityType !== "folder" && ["remote ahead", "remote only", "local ahead", "local only"].includes(item?.status);
+}
+
+function formatBytes(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "unknown size";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function shortHash(value: unknown): string {
+  return typeof value === "string" && value ? value.slice(0, 12) : "unknown";
+}
+
+async function applySelectedSync(): Promise<void> {
+  const items = (overleafState?.syncItems || []).filter((item: any) => selectedSyncPaths.has(item.path) && isSelectableSyncItem(item));
+  if (!items.length) {
+    setStatus("Select at least one safe sync item first.", "warning");
+    return;
+  }
+  for (const item of items) {
+    await request(item.status === "remote ahead" || item.status === "remote only" ? "overleaf-pull" : "overleaf-push", overleafPayload({ path: item.path }));
+  }
+  selectedSyncPaths.clear();
+  syncSelectionMode = false;
+  await refreshOverleafState();
+  setStatus(`Applied ${items.length} selected sync item(s).`, "ok");
+}
+
+function formatSyncConnection(value: string | undefined): string {
+  switch (value) {
+    case "ready": return "Connected";
+    case "checking": return "Checking";
+    case "reconnecting": return "Reconnecting";
+    case "blocked-auth": return "Authentication blocked";
+    case "blocked-tree": return "Project tree blocked";
+    case "stopped": return "Stopped";
+    default: return "—";
+  }
 }
 
 function syncItemMarkup(item: any): string {
   const encodedPath = escapeHtml(item.path);
+  const selection = syncSelectionMode && isSelectableSyncItem(item)
+    ? `<input type="checkbox" data-sync-select="${encodedPath}" ${selectedSyncPaths.has(item.path) ? "checked" : ""} aria-label="Select ${encodedPath} for bulk sync">`
+    : "";
   const actions = [
     `<button class="icon-button" data-sync-action="diff" data-sync-path="${encodedPath}" aria-label="Open diff for ${encodedPath}" title="Open diff"><i class="codicon codicon-diff"></i></button>`,
     `<button class="icon-button" data-sync-action="push" data-sync-path="${encodedPath}" aria-label="Push ${encodedPath}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button>`,
@@ -460,7 +532,7 @@ function syncItemMarkup(item: any): string {
   if (item.status === "remote deleted") {
     actions.push(`<button class="icon-button danger" data-sync-action="trash" data-sync-path="${encodedPath}" aria-label="Move ${encodedPath} to trash" title="Move local copy to Overleaf trash"><i class="codicon codicon-trash"></i></button>`);
   }
-  return `<div class="sync-item"><span><strong>${encodedPath}</strong><small>${escapeHtml(item.status)}${item.message ? ` · ${escapeHtml(item.message)}` : ""}</small></span><span class="toolbar compact">${actions.join("")}</span></div>`;
+  return `<div class="sync-item">${selection}<span><strong>${encodedPath}</strong><small>${escapeHtml(item.status)}${item.message ? ` · ${escapeHtml(item.message)}` : ""}</small></span><span class="toolbar compact">${actions.join("")}</span></div>`;
 }
 
 function renderHistoryActions(): void {
@@ -1680,7 +1752,14 @@ function wire(): void {
   byId("syncStopBtn").addEventListener("click", () => run(async () => { await request("overleaf-stop-sync", overleafPayload()); await refreshOverleafState(); }));
   byId("syncCheckBtn").addEventListener("click", () => run(async () => { await request("overleaf-check-sync", overleafPayload({ mode: "incremental" })); await refreshOverleafState(); }));
   byId("syncFullAuditBtn").addEventListener("click", () => run(async () => { await request("overleaf-full-audit", overleafPayload()); await refreshOverleafState(); }));
+  byId("syncPreviewBtn").addEventListener("click", () => {
+    syncSelectionMode = !syncSelectionMode;
+    if (!syncSelectionMode) selectedSyncPaths.clear();
+    renderSyncPanel();
+  });
+  byId("syncApplySelectedBtn").addEventListener("click", () => run(applySelectedSync));
   byId("syncCollaboratorsBtn").addEventListener("click", () => run(async () => { await request("overleaf-show-collaborators", overleafPayload()); await refreshOverleafState(); }));
+  byId("syncCopyDiagnosticsBtn").addEventListener("click", () => run(async () => { await request("overleaf-copy-diagnostics", overleafPayload()); }));
   byId("syncGitBtn").addEventListener("click", () => run(async () => { await request("overleaf-init-git", overleafPayload()); await refreshOverleafState(); }));
   byId("compileModeSelect").addEventListener("change", () => run(async () => {
     const mode = byId<HTMLSelectElement>("compileModeSelect").value === "overleaf" ? "overleaf" : "local";
@@ -2038,9 +2117,10 @@ function shell(): void {
             <header class="section-heading"><div><p class="eyebrow">Overleaf</p><h2>Realtime Sync</h2><p class="hint">Mirror local source and Toolkit configuration safely with explicit conflict handling.</p></div><div class="toolbar compact"><button id="overleafRefreshBtn" class="ghost-button"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Refresh</span></button></div></header>
             <div id="syncUnavailable" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>No Overleaf mirror detected</strong><p>Open an Overleaf project locally to manage realtime sync here.</p></div></div>
             <div id="syncDetails" hidden>
-            <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">—</dd></div><div><dt>Project</dt><dd id="syncProject">—</dd></div><div><dt>Mirror</dt><dd id="syncMirror">—</dd></div><div><dt>Status</dt><dd id="syncStatus">—</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncProjectsBtn" class="ghost-button"><i class="codicon codicon-list-unordered" aria-hidden="true"></i><span>Projects</span></button><button id="syncOpenBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Mirror</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button><button id="syncFullAuditBtn" class="ghost-button"><i class="codicon codicon-search-fuzzy" aria-hidden="true"></i><span>Full Audit</span></button><button id="syncCollaboratorsBtn" class="ghost-button"><i class="codicon codicon-organization" aria-hidden="true"></i><span>Collaborators</span></button><button id="syncGitBtn" class="ghost-button"><i class="codicon codicon-git-branch" aria-hidden="true"></i><span>Init Git</span></button></div></div>
-              <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div id="syncItemList" class="sync-item-list"></div></div>
+            <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">—</dd></div><div><dt>Project</dt><dd id="syncProject">—</dd></div><div><dt>Mirror</dt><dd id="syncMirror">—</dd></div><div><dt>Status</dt><dd id="syncStatus">—</dd></div><div><dt>Role</dt><dd id="syncRole">—</dd></div><div><dt>Connection</dt><dd id="syncConnection">—</dd></div><div><dt>Reconnects</dt><dd id="syncReconnects">—</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncProjectsBtn" class="ghost-button"><i class="codicon codicon-list-unordered" aria-hidden="true"></i><span>Projects</span></button><button id="syncOpenBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Mirror</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button><button id="syncFullAuditBtn" class="ghost-button"><i class="codicon codicon-search-fuzzy" aria-hidden="true"></i><span>Full Audit</span></button><button id="syncCollaboratorsBtn" class="ghost-button"><i class="codicon codicon-organization" aria-hidden="true"></i><span>Collaborators</span></button><button id="syncCopyDiagnosticsBtn" class="ghost-button"><i class="codicon codicon-copy" aria-hidden="true"></i><span>Copy diagnostics</span></button><button id="syncGitBtn" class="ghost-button"><i class="codicon codicon-git-branch" aria-hidden="true"></i><span>Init Git</span></button></div></div>
+              <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div class="toolbar compact"><button id="syncPreviewBtn" class="ghost-button"><i class="codicon codicon-list-selection" aria-hidden="true"></i><span>Preview and select</span></button><button id="syncApplySelectedBtn" class="primary" hidden><i class="codicon codicon-check" aria-hidden="true"></i><span>Apply selected</span></button></div><p id="syncSelectionSummary" class="hint"></p><div id="syncItemList" class="sync-item-list"></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Conflicts</h3><span id="syncConflictCount" class="value-pill">0</span></div><div id="syncConflictList" class="sync-item-list"></div></div>
+              <details class="settings-group"><summary>Recent sync activity</summary><ol id="syncActivityList" class="activity-list"></ol></details>
             </div>
           </section>
 

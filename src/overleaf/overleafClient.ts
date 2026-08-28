@@ -757,44 +757,43 @@ export class OverleafSocketSession {
       }
     });
     this.socket.on('connectionAccepted', (_payload: unknown, publicId: unknown) => {
-      if (typeof publicId === 'string') {
+      if (isBoundedString(publicId)) {
         this.publicId = publicId;
       }
     });
     this.socket.on('reciveNewDoc', (parentFolderId: unknown, doc: unknown) => {
-      if (this.project && typeof parentFolderId === 'string') {
-        addProjectTreeEntity(this.project, parentFolderId, 'doc', doc as OverleafDoc);
+      if (this.project && isBoundedString(parentFolderId) && isOverleafDoc(doc)) {
+        addProjectTreeEntity(this.project, parentFolderId, 'doc', doc);
       }
     });
     this.socket.on('reciveNewFile', (parentFolderId: unknown, file: unknown) => {
-      if (this.project && typeof parentFolderId === 'string') {
-        addProjectTreeEntity(this.project, parentFolderId, 'file', file as OverleafFileRef);
+      if (this.project && isBoundedString(parentFolderId) && isOverleafFileRef(file)) {
+        addProjectTreeEntity(this.project, parentFolderId, 'file', file);
       }
     });
     this.socket.on('reciveNewFolder', (parentFolderId: unknown, folder: unknown) => {
-      if (this.project && typeof parentFolderId === 'string') {
-        addProjectTreeEntity(this.project, parentFolderId, 'folder', folder as OverleafFolder);
+      if (this.project && isBoundedString(parentFolderId) && isOverleafFolder(folder)) {
+        addProjectTreeEntity(this.project, parentFolderId, 'folder', folder);
       }
     });
     this.socket.on('reciveEntityRename', (entityId: unknown, newName: unknown) => {
-      if (this.project && typeof entityId === 'string' && typeof newName === 'string') {
+      if (this.project && isBoundedString(entityId) && isBoundedString(newName)) {
         renameProjectTreeEntity(this.project, entityId, newName);
       }
     });
     this.socket.on('reciveEntityMove', (entityId: unknown, newParentFolderId: unknown) => {
-      if (this.project && typeof entityId === 'string' && typeof newParentFolderId === 'string') {
+      if (this.project && isBoundedString(entityId) && isBoundedString(newParentFolderId)) {
         moveProjectTreeEntity(this.project, entityId, newParentFolderId);
       }
     });
     this.socket.on('removeEntity', (entityId: unknown) => {
-      if (this.project && typeof entityId === 'string') {
+      if (this.project && isBoundedString(entityId)) {
         removeProjectTreeEntity(this.project, entityId);
       }
     });
     this.socket.on('otUpdateApplied', (update: unknown) => {
-      const candidate = update as Partial<OtUpdate>;
-      if (this.project && typeof candidate.doc === 'string' && typeof candidate.v === 'number') {
-        updateProjectTreeDocVersion(this.project, candidate.doc, candidate.v + 1);
+      if (this.project && isOverleafOtUpdate(update)) {
+        updateProjectTreeDocVersion(this.project, update.doc, update.v + 1);
       }
     });
   }
@@ -959,6 +958,79 @@ export class OverleafSocketSession {
       });
     });
   }
+}
+
+const MAX_SOCKET_STRING_LENGTH = 4096;
+const MAX_OT_TEXT_LENGTH = 8 * 1024 * 1024;
+
+export function isBoundedString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_SOCKET_STRING_LENGTH;
+}
+
+export function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+export function isOverleafDoc(value: unknown): value is OverleafDoc {
+  if (!isEntityWithName(value)) return false;
+  const version = (value as Partial<OverleafDoc>).version;
+  return version === undefined || isNonNegativeInteger(version);
+}
+
+export function isOverleafFileRef(value: unknown): value is OverleafFileRef {
+  return isEntityWithName(value);
+}
+
+export function isOverleafFolder(value: unknown, depth = 0): value is OverleafFolder {
+  if (depth > 64) return false;
+  if (!isEntityWithName(value)) return false;
+  const folder = value as Partial<OverleafFolder>;
+  return (folder.docs === undefined || Array.isArray(folder.docs) && folder.docs.every(isOverleafDoc))
+    && (folder.fileRefs === undefined || Array.isArray(folder.fileRefs) && folder.fileRefs.every(isOverleafFileRef))
+    && (folder.folders === undefined || Array.isArray(folder.folders) && folder.folders.every(child => isOverleafFolder(child, depth + 1)));
+}
+
+function isEntityWithName(value: unknown): value is { _id: string; name: string } {
+  if (!value || typeof value !== 'object') return false;
+  const entity = value as { _id?: unknown; name?: unknown };
+  return isBoundedString(entity._id) && isBoundedString(entity.name);
+}
+
+export function isOverleafOtUpdate(value: unknown): value is OtUpdate {
+  if (!value || typeof value !== 'object') return false;
+  const update = value as Partial<OtUpdate>;
+  if (!isBoundedString(update.doc) || !isNonNegativeInteger(update.v)) return false;
+  if (update.lastV !== undefined && !isNonNegativeInteger(update.lastV)) return false;
+  if (update.hash !== undefined && !isBoundedString(update.hash)) return false;
+  return update.op === undefined || Array.isArray(update.op) && update.op.every(operation => {
+    if (!operation || typeof operation !== 'object' || !isNonNegativeInteger((operation as { p?: unknown }).p)) return false;
+    const candidate = operation as { i?: unknown; d?: unknown; u?: unknown };
+    return (candidate.i === undefined || typeof candidate.i === 'string' && candidate.i.length <= MAX_OT_TEXT_LENGTH)
+      && (candidate.d === undefined || typeof candidate.d === 'string' && candidate.d.length <= MAX_OT_TEXT_LENGTH)
+      && (candidate.u === undefined || typeof candidate.u === 'boolean');
+  });
+}
+
+export function isCollaboratorPosition(value: unknown): value is {
+  id: string;
+  user_id?: string;
+  name?: string;
+  email?: string;
+  doc_id?: string;
+  row?: number;
+  column?: number;
+  last_updated_at?: number;
+} {
+  if (!value || typeof value !== 'object') return false;
+  const user = value as Record<string, unknown>;
+  return isBoundedString(user.id)
+    && (user.user_id === undefined || isBoundedString(user.user_id))
+    && (user.name === undefined || isBoundedString(user.name))
+    && (user.email === undefined || isBoundedString(user.email))
+    && (user.doc_id === undefined || isBoundedString(user.doc_id))
+    && (user.row === undefined || isNonNegativeInteger(user.row))
+    && (user.column === undefined || isNonNegativeInteger(user.column))
+    && (user.last_updated_at === undefined || typeof user.last_updated_at === 'number' && Number.isFinite(user.last_updated_at));
 }
 
 export interface ParsedSocketAck {

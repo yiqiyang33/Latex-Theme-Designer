@@ -196,6 +196,9 @@ export interface SyncStatusItem {
   localPath?: string;
   remotePath?: string;
   changeKind?: 'content' | 'create' | 'delete' | 'rename' | 'move' | 'type-change' | 'read-error';
+  localSize?: number;
+  remoteSize?: number;
+  localMtimeMs?: number;
 }
 
 export interface SyncStatusReport {

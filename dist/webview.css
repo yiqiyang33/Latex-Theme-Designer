@@ -412,6 +412,9 @@ summary { cursor: pointer; font-weight: 650; }
 .summary-list div { display: grid; grid-template-columns: 68px 1fr; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--soft-line); }
 .summary-list dt { color: var(--muted); }
 .summary-list dd { margin: 0; overflow-wrap: anywhere; }
+.activity-list { display: grid; gap: var(--space-1); max-height: 220px; overflow: auto; margin: var(--space-2) 0 0; padding-left: 22px; color: var(--muted); font-size: 11px; }
+.activity-list li { display: grid; grid-template-columns: 72px 1fr; gap: var(--space-2); line-height: 1.4; }
+.activity-list time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .context-actions { margin-top: var(--space-4); }
 .context-actions .primary { flex: 1 1 150px; }
 .safety-note { display: flex; gap: var(--space-2); margin-top: var(--space-4); border-radius: var(--radius-md); padding: var(--space-3); color: var(--muted); background: color-mix(in srgb, var(--accent) 8%, transparent); line-height: 1.45; }

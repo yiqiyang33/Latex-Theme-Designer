@@ -142,7 +142,7 @@ function validateStatusItem(value: unknown, at: string): ValidationResult {
   for (const field of ['entityId', 'parentFolderId', 'localHash', 'remoteHash', 'baseHash', 'message', 'localPath', 'remotePath'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return `${at}.${field} must be a string`;
   }
-  for (const field of ['version', 'remoteVersion'] as const) {
+  for (const field of ['version', 'remoteVersion', 'localSize', 'remoteSize', 'localMtimeMs'] as const) {
     if (value[field] !== undefined && !isNonNegativeNumber(value[field])) return `${at}.${field} must be a non-negative finite number`;
   }
   if (value.blockingScope !== undefined && !['none', 'path', 'subtree', 'project'].includes(value.blockingScope as string)) return `${at}.blockingScope is invalid`;

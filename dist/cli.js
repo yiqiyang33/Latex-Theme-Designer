@@ -17156,6 +17156,7 @@ var esm_default = { watch, FSWatcher };
 
 // src/overleaf/manifest.ts
 var fs2 = __toESM(require("fs/promises"));
+var import_buffer = require("buffer");
 var path3 = __toESM(require("path"));
 
 // node_modules/minimatch/dist/esm/index.js
@@ -18618,8 +18619,8 @@ var Minimatch = class {
       });
       return pp.filter((p) => p !== GLOBSTAR).join("/");
     }).join("|");
-    const [open2, close] = set.length > 1 ? ["(?:", ")"] : ["", ""];
-    re = "^" + open2 + re + close + "$";
+    const [open3, close] = set.length > 1 ? ["(?:", ")"] : ["", ""];
+    re = "^" + open3 + re + close + "$";
     if (this.negate)
       re = "^(?!" + re + ").+$";
     try {
@@ -19045,7 +19046,7 @@ function validateStatusItem(value, at) {
   for (const field of ["entityId", "parentFolderId", "localHash", "remoteHash", "baseHash", "message", "localPath", "remotePath"]) {
     if (value[field] !== void 0 && typeof value[field] !== "string") return `${at}.${field} must be a string`;
   }
-  for (const field of ["version", "remoteVersion"]) {
+  for (const field of ["version", "remoteVersion", "localSize", "remoteSize", "localMtimeMs"]) {
     if (value[field] !== void 0 && !isNonNegativeNumber(value[field])) return `${at}.${field} must be a non-negative finite number`;
   }
   if (value.blockingScope !== void 0 && !["none", "path", "subtree", "project"].includes(value.blockingScope)) return `${at}.blockingScope is invalid`;
@@ -19072,6 +19073,8 @@ var SYNC_STATUS_NAME = "sync-status.json";
 var TRANSACTIONS_NAME = "transactions.json";
 var CONFLICT_INDEX_NAME = "conflicts.json";
 var LOCAL_IGNORE_NAME = ".overleaf-codexignore";
+var MAX_MANIFEST_JSON_BYTES = 32 * 1024 * 1024;
+var MAX_METADATA_JSON_BYTES = 8 * 1024 * 1024;
 var DEFAULT_IGNORE_PATTERNS = [
   ".overleaf-codex/**",
   ".vscode/**",
@@ -19181,13 +19184,12 @@ function metadataPath(root, ...parts) {
 }
 async function readManifest(root) {
   const target = manifestPath(root);
-  const raw = await fs2.readFile(target, "utf8");
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(await readTextFileBounded(target, MAX_MANIFEST_JSON_BYTES));
   } catch (error) {
     await quarantineCorruptFile(target);
-    throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
+    throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
   }
   const validationError = validateManifest(parsed);
   if (validationError) {
@@ -19244,10 +19246,10 @@ function syncStatusPath(root) {
   return metadataPath(root, SYNC_STATUS_NAME);
 }
 async function readSyncStatus(root) {
-  const raw = await fs2.readFile(syncStatusPath(root), "utf8").catch(() => void 0);
-  if (!raw) return void 0;
   try {
-    const parsed = JSON.parse(raw);
+    const bounded = await readTextFileBounded(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
+    if (!bounded) return void 0;
+    const parsed = JSON.parse(bounded);
     const validationError = validateSyncStatus(parsed);
     if (validationError) throw new Error(validationError);
     return parsed;
@@ -19255,6 +19257,24 @@ async function readSyncStatus(root) {
     await quarantineCorruptFile(syncStatusPath(root));
     console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return void 0;
+  }
+}
+async function readTextFileBounded(target, maxBytes) {
+  const handle = await fs2.open(target, "r");
+  try {
+    const initialSize = (await handle.stat()).size;
+    if (initialSize > maxBytes) throw new Error(`File exceeds the ${maxBytes}-byte limit.`);
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of handle.createReadStream()) {
+      const buffer = import_buffer.Buffer.isBuffer(chunk) ? chunk : import_buffer.Buffer.from(chunk);
+      total += buffer.length;
+      if (total > maxBytes) throw new Error(`File exceeds the ${maxBytes}-byte limit.`);
+      chunks.push(buffer);
+    }
+    return import_buffer.Buffer.concat(chunks, total).toString("utf8");
+  } finally {
+    await handle.close().catch(() => void 0);
   }
 }
 async function quarantineCorruptFile(target) {
@@ -19491,7 +19511,10 @@ function classifySyncStatus(input) {
     remoteVersion: input.remoteFile?.version,
     localHash: input.localHash,
     remoteHash: input.remoteHash,
-    baseHash
+    baseHash,
+    localSize: input.localSize,
+    remoteSize: input.remoteFile?.remoteSize,
+    localMtimeMs: input.localMtimeMs
   };
   let status;
   let message;
@@ -19872,9 +19895,12 @@ var ConflictStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
-    const raw = await fs4.readFile(target, "utf8").catch(() => void 0);
-    if (!raw) return [];
     try {
+      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
+        if (error.code === "ENOENT") return void 0;
+        throw error;
+      });
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateConflictList(parsed);
       if (validationError) throw new Error(validationError);
@@ -19932,9 +19958,12 @@ var BinaryTransactionStore = class {
   queue = Promise.resolve();
   async list() {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
-    const raw = await fs5.readFile(target, "utf8").catch(() => void 0);
-    if (!raw) return [];
     try {
+      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
+        if (error.code === "ENOENT") return void 0;
+        throw error;
+      });
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateTransactionList(parsed);
       if (validationError) throw new Error(validationError);
@@ -22969,44 +22998,43 @@ var OverleafSocketSession = class {
       }
     });
     this.socket.on("connectionAccepted", (_payload, publicId) => {
-      if (typeof publicId === "string") {
+      if (isBoundedString(publicId)) {
         this.publicId = publicId;
       }
     });
     this.socket.on("reciveNewDoc", (parentFolderId, doc) => {
-      if (this.project && typeof parentFolderId === "string") {
+      if (this.project && isBoundedString(parentFolderId) && isOverleafDoc(doc)) {
         addProjectTreeEntity(this.project, parentFolderId, "doc", doc);
       }
     });
     this.socket.on("reciveNewFile", (parentFolderId, file) => {
-      if (this.project && typeof parentFolderId === "string") {
+      if (this.project && isBoundedString(parentFolderId) && isOverleafFileRef(file)) {
         addProjectTreeEntity(this.project, parentFolderId, "file", file);
       }
     });
     this.socket.on("reciveNewFolder", (parentFolderId, folder) => {
-      if (this.project && typeof parentFolderId === "string") {
+      if (this.project && isBoundedString(parentFolderId) && isOverleafFolder(folder)) {
         addProjectTreeEntity(this.project, parentFolderId, "folder", folder);
       }
     });
     this.socket.on("reciveEntityRename", (entityId, newName) => {
-      if (this.project && typeof entityId === "string" && typeof newName === "string") {
+      if (this.project && isBoundedString(entityId) && isBoundedString(newName)) {
         renameProjectTreeEntity(this.project, entityId, newName);
       }
     });
     this.socket.on("reciveEntityMove", (entityId, newParentFolderId) => {
-      if (this.project && typeof entityId === "string" && typeof newParentFolderId === "string") {
+      if (this.project && isBoundedString(entityId) && isBoundedString(newParentFolderId)) {
         moveProjectTreeEntity(this.project, entityId, newParentFolderId);
       }
     });
     this.socket.on("removeEntity", (entityId) => {
-      if (this.project && typeof entityId === "string") {
+      if (this.project && isBoundedString(entityId)) {
         removeProjectTreeEntity(this.project, entityId);
       }
     });
     this.socket.on("otUpdateApplied", (update) => {
-      const candidate = update;
-      if (this.project && typeof candidate.doc === "string" && typeof candidate.v === "number") {
-        updateProjectTreeDocVersion(this.project, candidate.doc, candidate.v + 1);
+      if (this.project && isOverleafOtUpdate(update)) {
+        updateProjectTreeDocVersion(this.project, update.doc, update.v + 1);
       }
     });
   }
@@ -23164,6 +23192,45 @@ var OverleafSocketSession = class {
     });
   }
 };
+var MAX_SOCKET_STRING_LENGTH = 4096;
+var MAX_OT_TEXT_LENGTH = 8 * 1024 * 1024;
+function isBoundedString(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_SOCKET_STRING_LENGTH;
+}
+function isNonNegativeInteger(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+function isOverleafDoc(value) {
+  if (!isEntityWithName(value)) return false;
+  const version = value.version;
+  return version === void 0 || isNonNegativeInteger(version);
+}
+function isOverleafFileRef(value) {
+  return isEntityWithName(value);
+}
+function isOverleafFolder(value, depth = 0) {
+  if (depth > 64) return false;
+  if (!isEntityWithName(value)) return false;
+  const folder = value;
+  return (folder.docs === void 0 || Array.isArray(folder.docs) && folder.docs.every(isOverleafDoc)) && (folder.fileRefs === void 0 || Array.isArray(folder.fileRefs) && folder.fileRefs.every(isOverleafFileRef)) && (folder.folders === void 0 || Array.isArray(folder.folders) && folder.folders.every((child) => isOverleafFolder(child, depth + 1)));
+}
+function isEntityWithName(value) {
+  if (!value || typeof value !== "object") return false;
+  const entity = value;
+  return isBoundedString(entity._id) && isBoundedString(entity.name);
+}
+function isOverleafOtUpdate(value) {
+  if (!value || typeof value !== "object") return false;
+  const update = value;
+  if (!isBoundedString(update.doc) || !isNonNegativeInteger(update.v)) return false;
+  if (update.lastV !== void 0 && !isNonNegativeInteger(update.lastV)) return false;
+  if (update.hash !== void 0 && !isBoundedString(update.hash)) return false;
+  return update.op === void 0 || Array.isArray(update.op) && update.op.every((operation) => {
+    if (!operation || typeof operation !== "object" || !isNonNegativeInteger(operation.p)) return false;
+    const candidate = operation;
+    return (candidate.i === void 0 || typeof candidate.i === "string" && candidate.i.length <= MAX_OT_TEXT_LENGTH) && (candidate.d === void 0 || typeof candidate.d === "string" && candidate.d.length <= MAX_OT_TEXT_LENGTH) && (candidate.u === void 0 || typeof candidate.u === "boolean");
+  });
+}
 function parseSocketAck(args) {
   if (args.length === 0) {
     return { values: [] };

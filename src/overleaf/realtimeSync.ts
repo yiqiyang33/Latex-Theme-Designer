@@ -2,11 +2,21 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
-import { OverleafClient, OverleafSocketSession } from './overleafClient';
+import {
+  isBoundedString,
+  isCollaboratorPosition,
+  isOverleafDoc,
+  isOverleafFileRef,
+  isOverleafFolder,
+  isOverleafOtUpdate,
+  OverleafClient,
+  OverleafSocketSession
+} from './overleafClient';
 import { BinaryTransaction, BinaryTransactionStore } from './binaryTransactions';
 import {
   addOrUpdateFile,
   addOrUpdateFolder,
+  baseDocPath,
   filePathById,
   folderPathById,
   LOCAL_IGNORE_NAME,
@@ -95,6 +105,11 @@ interface CollaboratorState extends CollaboratorPosition {
   decoration: vscode.TextEditorDecorationType;
 }
 
+export interface SyncActivityEntry {
+  at: string;
+  message: string;
+}
+
 type LocalChangeKind = 'create' | 'change' | 'delete';
 
 interface RemoteSnapshot {
@@ -175,6 +190,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private generation = 0;
   private checkSequence = 0;
   private manifestMutationEpoch = 0;
+  private readonly activityLog: SyncActivityEntry[] = [];
 
   constructor(private readonly context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
     this.output = output ?? vscode.window.createOutputChannel('LaTeX Editing Toolkit');
@@ -202,6 +218,22 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   get currentRoot(): string | undefined {
     return this.root;
+  }
+
+  get projectSyncState(): import('./syncGate').ProjectSyncGate {
+    return this.syncGate.project;
+  }
+
+  get projectSyncReason(): string | undefined {
+    return this.syncGate.reason;
+  }
+
+  get reconnectAttempts(): number {
+    return this.reconnectAttempt;
+  }
+
+  getActivityLog(): SyncActivityEntry[] {
+    return [...this.activityLog];
   }
 
   get onDidChangeStatus(): vscode.Event<void> {
@@ -429,7 +461,9 @@ export class RealtimeSyncService implements vscode.Disposable {
         remoteHash,
         baseHash,
         localExists: localHash !== undefined,
-        remoteReadError
+        remoteReadError,
+        localSize: localScan.fileMetadata.get(relPath)?.size,
+        localMtimeMs: localScan.fileMetadata.get(relPath)?.mtimeMs
       });
 
       if (item.status === 'synced' && manifestFile && remoteFile) {
@@ -853,31 +887,38 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     this.session.on('otUpdateApplied', update => {
       if (!current()) return;
-      void this.handleRemoteUpdate(update as OtUpdate);
+      if (!isOverleafOtUpdate(update)) return;
+      void this.handleRemoteUpdate(update).catch(error => this.log(`Could not apply remote document update: ${formatUnknownError(error)}`));
     });
     this.session.on('reciveNewDoc', (parentFolderId, doc) => {
       if (!current()) return;
-      void this.handleRemoteCreated(parentFolderId as string, 'doc', doc as OverleafDoc);
+      if (!isBoundedString(parentFolderId) || !isOverleafDoc(doc)) return;
+      void this.handleRemoteCreated(parentFolderId, 'doc', doc).catch(error => this.log(`Could not apply remote document creation: ${formatUnknownError(error)}`));
     });
     this.session.on('reciveNewFile', (parentFolderId, file) => {
       if (!current()) return;
-      void this.handleRemoteCreated(parentFolderId as string, 'file', file as OverleafFileRef);
+      if (!isBoundedString(parentFolderId) || !isOverleafFileRef(file)) return;
+      void this.handleRemoteCreated(parentFolderId, 'file', file).catch(error => this.log(`Could not apply remote file creation: ${formatUnknownError(error)}`));
     });
     this.session.on('reciveNewFolder', (parentFolderId, folder) => {
       if (!current()) return;
-      void this.handleRemoteFolderCreated(parentFolderId as string, folder as OverleafFolder);
+      if (!isBoundedString(parentFolderId) || !isOverleafFolder(folder)) return;
+      void this.handleRemoteFolderCreated(parentFolderId, folder).catch(error => this.log(`Could not apply remote folder creation: ${formatUnknownError(error)}`));
     });
     this.session.on('reciveEntityRename', (entityId, newName) => {
       if (!current()) return;
-      void this.handleRemoteRenamed(entityId as string, newName as string);
+      if (!isBoundedString(entityId) || !isBoundedString(newName)) return;
+      void this.handleRemoteRenamed(entityId, newName).catch(error => this.log(`Could not apply remote rename: ${formatUnknownError(error)}`));
     });
     this.session.on('reciveEntityMove', (entityId, newParentFolderId) => {
       if (!current()) return;
-      void this.handleRemoteMoved(entityId as string, newParentFolderId as string);
+      if (!isBoundedString(entityId) || !isBoundedString(newParentFolderId)) return;
+      void this.handleRemoteMoved(entityId, newParentFolderId).catch(error => this.log(`Could not apply remote move: ${formatUnknownError(error)}`));
     });
     this.session.on('removeEntity', entityId => {
       if (!current()) return;
-      void this.handleRemoteRemoved(entityId as string);
+      if (!isBoundedString(entityId)) return;
+      void this.handleRemoteRemoved(entityId).catch(error => this.log(`Could not apply remote deletion: ${formatUnknownError(error)}`));
     });
     this.session.on('disconnect', () => {
       if (!current()) return;
@@ -894,9 +935,9 @@ export class RealtimeSyncService implements vscode.Disposable {
     });
     this.session.on('rootDocUpdated', rootDocId => {
       if (!current()) return;
-      if (this.manifest) {
-        this.manifest.rootDocId = rootDocId as string;
-        this.manifest.rootDocPath = filePathById(this.manifest, rootDocId as string);
+      if (this.manifest && isBoundedString(rootDocId)) {
+        this.manifest.rootDocId = rootDocId;
+        this.manifest.rootDocPath = filePathById(this.manifest, rootDocId);
         void this.persistManifest();
       }
     });
@@ -908,14 +949,14 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
 
     this.session.on('clientTracking.clientUpdated', user => {
-      this.updateCollaborator(user as CollaboratorPosition);
+      if (isCollaboratorPosition(user)) this.updateCollaborator(user);
     });
     this.session.on('clientTracking.clientDisconnected', id => {
-      this.removeCollaborator(id as string);
+      if (isBoundedString(id)) this.removeCollaborator(id);
     });
     this.session.on('connectionAccepted', (_payload, publicId) => {
-      if (this.session) {
-        this.session.publicId = publicId as string;
+      if (this.session && isBoundedString(publicId)) {
+        this.session.publicId = publicId;
       }
     });
 
@@ -988,12 +1029,32 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (!state?.paused || !state.conflictPath) {
       throw new Error(`No active conflict for ${normalized}.`);
     }
-    await vscode.commands.executeCommand(
-      'vscode.diff',
-      vscode.Uri.file(state.conflictPath),
-      vscode.Uri.file(this.abs(normalized)),
-      `Overleaf remote vs local: ${normalized}`
-    );
+    const remoteUri = vscode.Uri.file(state.conflictPath);
+    const localUri = vscode.Uri.file(this.abs(normalized));
+    const basePath = baseDocPath(this.root!, state.docId);
+    const baseExists = await fs.lstat(basePath).then(stat => stat.isFile(), () => false);
+    if (baseExists) {
+      const baseUri = vscode.Uri.file(basePath);
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        baseUri,
+        localUri,
+        `Conflict base vs local: ${normalized}`
+      );
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        baseUri,
+        remoteUri,
+        `Conflict base vs remote: ${normalized}`
+      );
+    } else {
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        remoteUri,
+        localUri,
+        `Overleaf remote vs local: ${normalized}`
+      );
+    }
     void this.promptConflictActions(normalized);
   }
 
@@ -2897,7 +2958,10 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private log(message: string): void {
-    this.output.appendLine(`[${new Date().toISOString()}] ${message}`);
+    const at = new Date().toISOString();
+    this.output.appendLine(`[${at}] ${message}`);
+    this.activityLog.push({ at, message });
+    if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
   }
 
   private markLocalMutation(entityId: string): void {

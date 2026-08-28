@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { Buffer } from 'buffer';
 import * as path from 'path';
 import { minimatch } from 'minimatch';
 import createIgnore, { Ignore } from 'ignore';
@@ -21,6 +22,8 @@ export const SYNC_STATUS_NAME = 'sync-status.json';
 export const TRANSACTIONS_NAME = 'transactions.json';
 export const CONFLICT_INDEX_NAME = 'conflicts.json';
 export const LOCAL_IGNORE_NAME = '.overleaf-codexignore';
+export const MAX_MANIFEST_JSON_BYTES = 32 * 1024 * 1024;
+export const MAX_METADATA_JSON_BYTES = 8 * 1024 * 1024;
 
 export const DEFAULT_IGNORE_PATTERNS = [
   '.overleaf-codex/**',
@@ -146,11 +149,12 @@ export function metadataPath(root: string, ...parts: string[]): string {
 
 export async function readManifest(root: string): Promise<OverleafCodexManifest> {
   const target = manifestPath(root);
-  const raw = await fs.readFile(target, 'utf8');
   let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch (error) {
+  try {
+    parsed = JSON.parse(await readTextFileBounded(target, MAX_MANIFEST_JSON_BYTES));
+  } catch (error) {
     await quarantineCorruptFile(target);
-    throw new Error(`Overleaf manifest is corrupted and was quarantined at ${target}.`, { cause: error });
+    throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
   }
   const validationError = validateManifest(parsed);
   if (validationError) {
@@ -214,10 +218,10 @@ export function syncStatusPath(root: string): string {
 }
 
 export async function readSyncStatus(root: string): Promise<SyncStatusReport | undefined> {
-  const raw = await fs.readFile(syncStatusPath(root), 'utf8').catch(() => undefined);
-  if (!raw) return undefined;
   try {
-    const parsed = JSON.parse(raw) as SyncStatusReport;
+    const bounded = await readTextFileBounded(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
+    if (!bounded) return undefined;
+    const parsed = JSON.parse(bounded) as SyncStatusReport;
     const validationError = validateSyncStatus(parsed);
     if (validationError) throw new Error(validationError);
     return parsed;
@@ -225,6 +229,25 @@ export async function readSyncStatus(root: string): Promise<SyncStatusReport | u
     await quarantineCorruptFile(syncStatusPath(root));
     console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
+  }
+}
+
+export async function readTextFileBounded(target: string, maxBytes: number): Promise<string> {
+  const handle = await fs.open(target, 'r');
+  try {
+    const initialSize = (await handle.stat()).size;
+    if (initialSize > maxBytes) throw new Error(`File exceeds the ${maxBytes}-byte limit.`);
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of handle.createReadStream()) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buffer.length;
+      if (total > maxBytes) throw new Error(`File exceeds the ${maxBytes}-byte limit.`);
+      chunks.push(buffer);
+    }
+    return Buffer.concat(chunks, total).toString('utf8');
+  } finally {
+    await handle.close().catch(() => undefined);
   }
 }
 

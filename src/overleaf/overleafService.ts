@@ -8,7 +8,7 @@ import { manifestPath, readManifest, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord } from "./mirrorManager";
 import { OverleafClient } from "./overleafClient";
-import { RealtimeSyncService, type ConflictInfo } from "./realtimeSync";
+import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
@@ -16,6 +16,7 @@ import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncSta
 import { formatUnknownError, normalizeServerUrl } from "./util";
 import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
+import type { ProjectSyncGate } from "./syncGate";
 
 export interface OverleafState {
   available: boolean;
@@ -33,6 +34,21 @@ export interface OverleafState {
   lastSyncAt?: string;
   error?: string;
   compileMode: "local" | "overleaf";
+  ownerRole: "owner" | "client" | "none";
+  connectionState: ProjectSyncGate;
+  connectionReason?: string;
+  reconnectAttempts: number;
+  activityLog: SyncActivityEntry[];
+}
+
+interface OwnerStateSnapshot {
+  syncStatus?: SyncStatusReport;
+  conflicts: ConflictInfo[];
+  collaborators: unknown[];
+  connectionState: ProjectSyncGate;
+  connectionReason?: string;
+  reconnectAttempts: number;
+  activityLog: SyncActivityEntry[];
 }
 
 type CommandRegistrar = (id: string, handler: (...args: any[]) => unknown) => vscode.Disposable;
@@ -48,6 +64,15 @@ export class OverleafService implements vscode.Disposable {
   private takeoverTimer?: NodeJS.Timeout;
   private takeoverEnabled = false;
   private externalSyncStatus?: SyncStatusReport;
+  private externalConflicts: ConflictInfo[] = [];
+  private externalCollaborators: unknown[] = [];
+  private externalConnectionState?: ProjectSyncGate;
+  private externalConnectionReason?: string;
+  private externalReconnectAttempts = 0;
+  private externalActivityLog: SyncActivityEntry[] = [];
+  private compileOnSaveTimer?: NodeJS.Timeout;
+  private compileOnSaveDocument?: vscode.TextDocument;
+  private compileOnSaveInFlight?: Promise<void>;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -68,15 +93,15 @@ export class OverleafService implements vscode.Disposable {
       this.realtimeSync.onDidChangeConflicts(() => this.onChanged()),
       this.realtimeSync.onDidChangeCollaborators(() => this.onChanged()),
       vscode.workspace.onDidSaveTextDocument(document => {
-        void this.compileOnSave(document).catch(error => {
-          this.output.appendLine(`[${new Date().toISOString()}] Overleaf compile-on-save failed: ${formatError(error)}`);
-          this.onChanged();
-        });
+        this.scheduleCompileOnSave(document);
       })
     );
-    this.disposables.push(this.realtimeSync.onDidChangeSyncStatus(() => {
-      this.ownerCoordinator.emit("status", this.realtimeSync.getSyncStatusReport());
-    }));
+    this.disposables.push(
+      this.realtimeSync.onDidChangeStatus(() => this.broadcastOwnerSnapshot()),
+      this.realtimeSync.onDidChangeSyncStatus(() => this.broadcastOwnerSnapshot()),
+      this.realtimeSync.onDidChangeConflicts(() => this.broadcastOwnerSnapshot()),
+      this.realtimeSync.onDidChangeCollaborators(() => this.broadcastOwnerSnapshot())
+    );
   }
 
   registerCommands(register: CommandRegistrar): void {
@@ -123,7 +148,11 @@ export class OverleafService implements vscode.Disposable {
         syncItems: [],
         conflicts: [],
         collaborators: [],
-        compileMode: this.compileMode()
+        compileMode: this.compileMode(),
+        ownerRole: "none",
+        connectionState: "stopped",
+        reconnectAttempts: 0,
+        activityLog: []
       };
     }
     try {
@@ -145,10 +174,19 @@ export class OverleafService implements vscode.Disposable {
         syncItems: this.realtimeSync.currentRoot === mirrorRoot
           ? this.realtimeSync.getSyncStatusItems()
           : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus?.items ?? [] : [],
-        conflicts: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getConflicts() : [],
-        collaborators: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getCollaborators() : [],
+        conflicts: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getConflicts()
+          : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalConflicts : [],
+        collaborators: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getCollaborators()
+          : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalCollaborators : [],
         lastSyncAt: manifest.lastSyncAt,
-        compileMode: this.compileMode()
+        compileMode: this.compileMode(),
+        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
+          ? this.ownerCoordinator.isOwner ? "owner" : "client"
+          : "none",
+        connectionState: this.connectionStateForRoot(mirrorRoot),
+        connectionReason: this.connectionReasonForRoot(mirrorRoot),
+        reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
+        activityLog: this.activityLogForRoot(mirrorRoot)
       };
     } catch (error) {
       return {
@@ -160,7 +198,14 @@ export class OverleafService implements vscode.Disposable {
         conflicts: [],
         collaborators: [],
         error: formatUnknownError(error),
-        compileMode: this.compileMode()
+        compileMode: this.compileMode(),
+        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
+          ? this.ownerCoordinator.isOwner ? "owner" : "client"
+          : "none",
+        connectionState: this.connectionStateForRoot(mirrorRoot),
+        connectionReason: this.connectionReasonForRoot(mirrorRoot),
+        reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
+        activityLog: this.activityLogForRoot(mirrorRoot)
       };
     }
   }
@@ -175,6 +220,7 @@ export class OverleafService implements vscode.Disposable {
       await this.realtimeSync.stop();
       this.takeoverEnabled = false;
       this.ownerSubscription = undefined;
+      this.clearExternalSnapshot();
       await this.ownerCoordinator.release();
       this.onChanged();
     }
@@ -216,6 +262,7 @@ export class OverleafService implements vscode.Disposable {
       case "overleaf-remote-compile": await this.compileRemote(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-open-pdf": await this.openRemotePdf(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-show-log": await this.showCompileLog(payload.workspacePath); return this.state(payload.workspacePath);
+      case "overleaf-copy-diagnostics": await this.copyDiagnostics(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-refresh": this.refresh(); return this.state(payload.workspacePath);
       case "overleaf-open-mirror": await this.openLocalMirror({ mirror: { root: String(payload.mirrorRoot ?? payload.workspacePath ?? "") } }); return this.state(payload.workspacePath);
       case "overleaf-delete-mirror": await this.deleteLocalMirror({ mirror: { root: String(payload.mirrorRoot ?? payload.workspacePath ?? "") } }); return this.state(payload.workspacePath);
@@ -237,6 +284,7 @@ export class OverleafService implements vscode.Disposable {
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = undefined;
     this.ownerSubscription = undefined;
+    this.cancelCompileOnSave();
     await this.realtimeSync.stop().catch(() => undefined);
     await this.ownerCoordinator.release().catch(() => undefined);
     this.dispose();
@@ -246,6 +294,7 @@ export class OverleafService implements vscode.Disposable {
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.ownerSubscription = undefined;
+    this.cancelCompileOnSave();
     void this.ownerCoordinator.release();
     while (this.disposables.length) this.disposables.pop()?.dispose();
   }
@@ -323,6 +372,7 @@ export class OverleafService implements vscode.Disposable {
     if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner && this.ownerSubscription) return;
     this.takeoverEnabled = true;
     this.ownerSubscription = undefined;
+    this.clearExternalSnapshot();
     const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
     if (role === "client") {
       this.output.appendLine(`[${new Date().toISOString()}] Using existing sync owner for ${root}.`);
@@ -331,7 +381,6 @@ export class OverleafService implements vscode.Disposable {
       return;
     }
     try {
-      this.externalSyncStatus = undefined;
       const manifest = await readManifest(root);
       const client = await this.makeClient(manifest.serverUrl);
       await vscode.window.withProgress(
@@ -352,6 +401,7 @@ export class OverleafService implements vscode.Disposable {
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = undefined;
     this.ownerSubscription = undefined;
+    this.clearExternalSnapshot();
     await this.realtimeSync.stop();
     await this.ownerCoordinator.release();
     this.onChanged();
@@ -520,6 +570,25 @@ export class OverleafService implements vscode.Disposable {
     this.onChanged();
   }
 
+  private async copyDiagnostics(candidate?: unknown): Promise<void> {
+    const state = await this.state(candidate);
+    const lines = [
+      "LaTeX Editing Toolkit Overleaf diagnostics",
+      `server=${state.serverUrl ?? ""}`,
+      `project=${state.projectId ?? ""}`,
+      `role=${state.ownerRole}`,
+      `connection=${state.connectionState}`,
+      `connectionReason=${state.connectionReason ?? ""}`,
+      `reconnectAttempts=${state.reconnectAttempts}`,
+      `syncItems=${state.syncItems.length}`,
+      `conflicts=${state.conflicts.length}`,
+      "activity:",
+      ...state.activityLog.slice(-50).map(entry => `[${entry.at}] ${entry.message}`)
+    ];
+    await vscode.env.clipboard.writeText(lines.join("\n"));
+    vscode.window.setStatusBarMessage("Copied Overleaf diagnostics.", 2500);
+  }
+
   private refresh(): void {
     this.onChanged();
   }
@@ -568,6 +637,7 @@ export class OverleafService implements vscode.Disposable {
       return;
     }
     this.ownerSubscription = undefined;
+    this.clearExternalSnapshot();
     const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
     if (role === "client") {
       await this.connectToExistingOwner(root);
@@ -584,12 +654,19 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async connectToExistingOwner(root: string): Promise<void> {
-    const status = await this.ownerCoordinator.request("status").catch(() => undefined);
-    if (isSyncStatusReport(status)) this.externalSyncStatus = status;
+    const snapshot = await this.ownerCoordinator.request("snapshot").catch(() => undefined);
+    this.applyExternalSnapshot(snapshot);
+    if (!isOwnerStateSnapshot(snapshot)) {
+      const status = await this.ownerCoordinator.request("status").catch(() => undefined);
+      if (isSyncStatusReport(status)) this.externalSyncStatus = status;
+    }
     let socket: Socket;
     try {
       socket = await this.ownerCoordinator.subscribe(event => {
-        if (event.event === "status" && isSyncStatusReport(event.data)) {
+        if (event.event === "snapshot") {
+          this.applyExternalSnapshot(event.data);
+          this.onChanged();
+        } else if (event.event === "status" && isSyncStatusReport(event.data)) {
           this.externalSyncStatus = event.data;
           this.onChanged();
         }
@@ -621,6 +698,7 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async handleOwnerCommand(command: string, args: Record<string, unknown>): Promise<unknown> {
+    if (command === "snapshot") return this.ownerSnapshot();
     const backend: SyncCommandBackend = {
       status: request => request.refresh || request.full || request.paths
         ? this.realtimeSync.checkSyncStatus(
@@ -645,6 +723,65 @@ export class OverleafService implements vscode.Disposable {
       authorize: (ownerCommand, relPath, force) => this.assertIpcForceIfDestructive(relPath, ownerCommand, force)
     };
     return executeSyncCommand(backend, command, args);
+  }
+
+  private ownerSnapshot(): OwnerStateSnapshot {
+    return {
+      syncStatus: this.realtimeSync.getSyncStatusReport(),
+      conflicts: this.realtimeSync.getConflicts(),
+      collaborators: this.realtimeSync.getCollaborators(),
+      connectionState: this.realtimeSync.projectSyncState,
+      connectionReason: this.realtimeSync.projectSyncReason,
+      reconnectAttempts: this.realtimeSync.reconnectAttempts,
+      activityLog: this.realtimeSync.getActivityLog()
+    };
+  }
+
+  private broadcastOwnerSnapshot(): void {
+    if (!this.ownerCoordinator.isOwner || !this.realtimeSync.currentRoot) return;
+    this.ownerCoordinator.emit("snapshot", this.ownerSnapshot());
+  }
+
+  private applyExternalSnapshot(value: unknown): void {
+    if (!isOwnerStateSnapshot(value)) return;
+    this.externalSyncStatus = value.syncStatus;
+    this.externalConflicts = value.conflicts;
+    this.externalCollaborators = value.collaborators;
+    this.externalConnectionState = value.connectionState ?? "checking";
+    this.externalConnectionReason = value.connectionReason;
+    this.externalReconnectAttempts = value.reconnectAttempts ?? 0;
+    this.externalActivityLog = value.activityLog ?? [];
+  }
+
+  private clearExternalSnapshot(): void {
+    this.externalSyncStatus = undefined;
+    this.externalConflicts = [];
+    this.externalCollaborators = [];
+    this.externalConnectionState = undefined;
+    this.externalConnectionReason = undefined;
+    this.externalReconnectAttempts = 0;
+    this.externalActivityLog = [];
+  }
+
+  private connectionStateForRoot(root: string): ProjectSyncGate {
+    if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncState;
+    if (this.ownerCoordinator.currentRoot === root) return this.externalConnectionState ?? "checking";
+    return "stopped";
+  }
+
+  private connectionReasonForRoot(root: string): string | undefined {
+    if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncReason;
+    return this.ownerCoordinator.currentRoot === root ? this.externalConnectionReason : undefined;
+  }
+
+  private reconnectAttemptsForRoot(root: string): number {
+    if (this.realtimeSync.currentRoot === root) return this.realtimeSync.reconnectAttempts;
+    return this.ownerCoordinator.currentRoot === root ? this.externalReconnectAttempts : 0;
+  }
+
+  private activityLogForRoot(root: string): SyncActivityEntry[] {
+    if (this.realtimeSync.currentRoot === root) return this.realtimeSync.getActivityLog();
+    return this.ownerCoordinator.currentRoot === root ? this.externalActivityLog : [];
   }
 
   private async pullForOwnerCommand(relPath: string, force: boolean): Promise<void> {
@@ -710,6 +847,38 @@ export class OverleafService implements vscode.Disposable {
     );
     vscode.window.setStatusBarMessage("Overleaf compile completed.", 2500);
     this.onChanged();
+  }
+
+  private scheduleCompileOnSave(document: vscode.TextDocument): void {
+    if (this.compileOnSaveTimer) clearTimeout(this.compileOnSaveTimer);
+    this.compileOnSaveDocument = document;
+    this.compileOnSaveTimer = setTimeout(() => {
+      this.compileOnSaveTimer = undefined;
+      const latest = this.compileOnSaveDocument;
+      this.compileOnSaveDocument = undefined;
+      if (!latest) return;
+      const previous = this.compileOnSaveInFlight ?? Promise.resolve();
+      const current = previous.catch(() => undefined).then(() => this.compileOnSave(latest));
+      this.compileOnSaveInFlight = current;
+      void current.catch(error => {
+        this.output.appendLine(`[${new Date().toISOString()}] Overleaf compile-on-save failed: ${formatError(error)}`);
+        this.onChanged();
+      }).finally(() => {
+        if (this.compileOnSaveInFlight === current) this.compileOnSaveInFlight = undefined;
+      });
+    }, this.compileOnSaveDebounceMs());
+  }
+
+  private cancelCompileOnSave(): void {
+    if (this.compileOnSaveTimer) clearTimeout(this.compileOnSaveTimer);
+    this.compileOnSaveTimer = undefined;
+    this.compileOnSaveDocument = undefined;
+  }
+
+  private compileOnSaveDebounceMs(): number {
+    const configured = vscode.workspace.getConfiguration("latexEditingToolkit.overleaf")
+      .get<number>("compileOnSaveDebounceMs", 750);
+    return Number.isFinite(configured) ? Math.max(0, Math.min(10_000, configured)) : 750;
   }
 
   private clientTimeout(): number {
@@ -846,6 +1015,24 @@ function isSyncStatusReport(value: unknown): value is SyncStatusReport {
   return Boolean(value) && typeof value === "object"
     && Array.isArray((value as SyncStatusReport).items)
     && typeof (value as SyncStatusReport).hasBlocking === "boolean";
+}
+
+function isOwnerStateSnapshot(value: unknown): value is OwnerStateSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as Partial<OwnerStateSnapshot>;
+  return (snapshot.syncStatus === undefined || isSyncStatusReport(snapshot.syncStatus))
+    && Array.isArray(snapshot.conflicts)
+    && snapshot.conflicts.every(conflict => Boolean(conflict)
+      && typeof conflict === "object"
+      && typeof (conflict as ConflictInfo).relPath === "string")
+    && Array.isArray(snapshot.collaborators)
+    && (snapshot.connectionState === undefined || ["ready", "checking", "reconnecting", "blocked-auth", "blocked-tree", "stopped"].includes(snapshot.connectionState))
+    && (snapshot.connectionReason === undefined || typeof snapshot.connectionReason === "string")
+    && (snapshot.reconnectAttempts === undefined || Number.isSafeInteger(snapshot.reconnectAttempts) && snapshot.reconnectAttempts >= 0)
+    && (snapshot.activityLog === undefined || Array.isArray(snapshot.activityLog) && snapshot.activityLog.every(entry => Boolean(entry)
+      && typeof entry === "object"
+      && typeof (entry as SyncActivityEntry).at === "string"
+      && typeof (entry as SyncActivityEntry).message === "string"));
 }
 
 function abortSignalFromToken(token: vscode.CancellationToken): AbortSignal {

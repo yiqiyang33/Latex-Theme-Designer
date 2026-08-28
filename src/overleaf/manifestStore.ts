@@ -5,6 +5,8 @@ import {
   baseDocPath,
   metadataPath,
   readManifest,
+  MAX_METADATA_JSON_BYTES,
+  readTextFileBounded,
   syncStatusPath,
   writeBaseDoc,
   writeManifest,
@@ -35,9 +37,12 @@ export class ManifestStore {
 
   async readJson<T>(name: string, fallback: T): Promise<T> {
     const target = metadataPath(this.root, name);
-    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
-    if (!raw) return fallback;
     try {
+      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (!raw) return fallback;
       return JSON.parse(raw) as T;
     } catch (error) {
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);

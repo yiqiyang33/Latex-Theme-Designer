@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { isSubpath } from '../utils';
 
 export interface ParsedLatexDiagnostic {
   filePath?: string;
@@ -28,7 +29,9 @@ export class CompileDiagnosticProvider implements vscode.Disposable {
       if (!relPath) {
         continue;
       }
-      const uri = vscode.Uri.file(path.join(root, relPath));
+      const candidate = path.resolve(root, relPath);
+      if (!isSubpath(candidate, root)) continue;
+      const uri = vscode.Uri.file(candidate);
       const range = new vscode.Range(Math.max(item.line - 1, 0), 0, Math.max(item.line - 1, 0), 120);
       const diagnostic = new vscode.Diagnostic(range, item.message, item.severity);
       diagnostic.source = this.collection.name;

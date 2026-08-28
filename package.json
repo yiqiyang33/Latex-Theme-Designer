@@ -2,7 +2,7 @@
   "name": "latex-editing-toolkit",
   "displayName": "LaTeX Editing Toolkit",
   "description": "An integrated LaTeX workspace for themes, programmable hsnips, local and Overleaf builds, realtime sync, mirrors, and conflict resolution.",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "publisher": "yiqiyang33",
   "icon": "assets/icon.png",
   "license": "MIT",
@@ -661,6 +661,13 @@
           "type": "boolean",
           "default": false,
           "description": "Compile the active Overleaf mirror after saving a supported source file. Overrides overleafCodex.compileOnSave when set."
+        },
+        "latexEditingToolkit.overleaf.compileOnSaveDebounceMs": {
+          "type": "number",
+          "default": 750,
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Wait this many milliseconds after the last save before starting an Overleaf compile-on-save run."
         },
         "latexEditingToolkit.overleaf.compileMode": {
           "type": "string",

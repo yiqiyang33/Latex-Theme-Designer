@@ -52,6 +52,12 @@ class MemoryProjectStateStore implements LocalProjectStateStore {
 }
 
 describe("TypeScript Toolkit migration", () => {
+  it("keeps workspace-relative paths inside the workspace", () => {
+    const root = path.join(os.tmpdir(), "latex-toolkit-diagnostics");
+    expect(path.resolve(root, "Sections/main.tex").startsWith(`${root}${path.sep}`)).toBe(true);
+    expect(path.resolve(root, "../../outside.tex").startsWith(`${root}${path.sep}`)).toBe(false);
+  });
+
   it("exposes five complete unified style presets with the documented pairings", async () => {
     const root = await tempWorkspace();
     await copyBaseAssets(root);

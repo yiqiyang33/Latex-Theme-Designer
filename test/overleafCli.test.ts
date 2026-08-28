@@ -34,6 +34,7 @@ import {
   filePathById,
   folderPathById,
   metadataPath,
+  MAX_METADATA_JSON_BYTES,
   OUTPUT_DIR,
   readManifest,
   readSyncStatus,
@@ -1630,6 +1631,19 @@ describe('P1 resource and persistence regressions', () => {
       }]));
       expect(await new BinaryTransactionStore(temporary).list()).toEqual([]);
       expect((await fs.readdir(metadataPath(temporary))).filter(name => name.includes('.corrupt-'))).toHaveLength(4);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds metadata JSON reads and quarantines oversized status files', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-metadata-limit-'));
+    try {
+      const target = metadataPath(temporary, 'sync-status.json');
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, Buffer.alloc(MAX_METADATA_JSON_BYTES + 1, 0x20));
+      expect(await readSyncStatus(temporary)).toBeUndefined();
+      expect((await fs.readdir(metadataPath(temporary))).some(name => name.includes('.corrupt-'))).toBe(true);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }

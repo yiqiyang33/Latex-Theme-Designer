@@ -25,7 +25,16 @@ import { getWithLegacyFallback, hasExplicitConfigurationValue, needsGlobalConfig
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
 import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectRelativePath, normalizeServerUrl } from "../src/overleaf/util";
 import { validateManifest } from "../src/overleaf/metadataValidation";
-import { parseContentRange, mergeCookieHeader, loadSocketIoClient, parseSocketAck } from "../src/overleaf/overleafClient";
+import {
+  isCollaboratorPosition,
+  isOverleafDoc,
+  isOverleafFolder,
+  isOverleafOtUpdate,
+  parseContentRange,
+  mergeCookieHeader,
+  loadSocketIoClient,
+  parseSocketAck
+} from "../src/overleaf/overleafClient";
 import { RenameDetector } from "../src/overleaf/renameDetector";
 import { performRemotePathChange, transactionName } from "../src/overleaf/remoteMutationCore";
 import {
@@ -96,6 +105,17 @@ describe("Overleaf integration primitives", () => {
       }
     } as unknown as OverleafProject;
     expect(() => buildProjectTreeIndex("https://example.test/", "p", "P", duplicate)).toThrow(/duplicate path/);
+  });
+
+  it("validates realtime event payloads before they enter sync state", () => {
+    expect(isOverleafDoc({ _id: "doc", name: "main.tex", version: 2 })).toBe(true);
+    expect(isOverleafDoc({ _id: "doc", name: "main.tex", version: Number.NaN })).toBe(false);
+    expect(isOverleafFolder({ _id: "folder", name: "src", folders: [{ _id: "nested", name: "nested" }] })).toBe(true);
+    expect(isOverleafFolder({ _id: "folder", name: "src", folders: [{ _id: "nested", name: "nested", folders: "invalid" }] })).toBe(false);
+    expect(isOverleafOtUpdate({ doc: "doc", v: 4, op: [{ p: 0, i: "hello" }] })).toBe(true);
+    expect(isOverleafOtUpdate({ doc: "doc", v: -1 })).toBe(false);
+    expect(isCollaboratorPosition({ id: "client", row: 0, column: 3 })).toBe(true);
+    expect(isCollaboratorPosition({ id: "client", row: -1 })).toBe(false);
   });
 
   it("rejects symlinked mirror paths and traversal metadata", async () => {

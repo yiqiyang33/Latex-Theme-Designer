@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { atomicWriteText, metadataPath, TRANSACTIONS_NAME } from './manifest';
+import { atomicWriteText, MAX_METADATA_JSON_BYTES, metadataPath, readTextFileBounded, TRANSACTIONS_NAME } from './manifest';
 import { assertValidTransactions, validateTransactionList } from './metadataValidation';
 
 export type BinaryTransactionStage = 'temp-uploaded' | 'original-backed-up' | 'promoted';
@@ -26,9 +26,12 @@ export class BinaryTransactionStore {
 
   async list(): Promise<BinaryTransaction[]> {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
-    const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
-    if (!raw) return [];
     try {
+      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateTransactionList(parsed);
       if (validationError) throw new Error(validationError);
