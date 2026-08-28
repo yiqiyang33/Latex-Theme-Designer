@@ -1424,6 +1424,34 @@ describe('Large mirror performance regressions', () => {
 });
 
 describe('P1 resource and persistence regressions', () => {
+  it('falls back from project POST only for unsupported endpoints', async () => {
+    let postCount = 0;
+    let getCount = 0;
+    const server = http.createServer((request, response) => {
+      if (request.method === 'POST') {
+        postCount += 1;
+        response.writeHead(404);
+        response.end('unsupported');
+        return;
+      }
+      getCount += 1;
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ projects: [{ id: 'p1', name: 'Demo' }] }));
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('HTTP test server did not expose a TCP address.');
+      const client = new OverleafClient(`http://127.0.0.1:${address.port}/`, { csrfToken: 'csrf', cookies: 'sid=test' });
+      await expect(client.listProjects()).resolves.toEqual([{ id: 'p1', name: 'Demo', archived: false, trashed: false }]);
+      expect(postCount).toBe(1);
+      expect(getCount).toBe(1);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('does not forward identity cookies across download redirects to another origin', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-redirect-cookie-'));
     let receivedCookie = 'unset';

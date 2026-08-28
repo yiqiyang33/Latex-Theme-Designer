@@ -17,6 +17,8 @@ export interface RemoteCompileResult {
 export interface CompileOptions {
   lockWaitMs?: number;
   lockMissingOwnerGraceMs?: number;
+  signal?: AbortSignal;
+  onProgress?: (message: string) => void;
 }
 
 const DEFAULT_COMPILE_LOCK_WAIT_MS = 120_000;
@@ -30,7 +32,8 @@ export async function compileRemoteProject(
 ): Promise<RemoteCompileResult> {
   const manifest = await readManifest(root);
   const rootDocPath = rootDocOverride ?? manifest.rootDocPath ?? await detectRootDoc(root);
-  const response = await client.compile(manifest.projectId, rootDocPath ?? null);
+  options.signal?.throwIfAborted();
+  const response = await client.compile(manifest.projectId, rootDocPath ?? null, false, false, options.signal);
   if (response.status !== 'success') throw new Error(`Overleaf compile failed with status: ${response.status}`);
 
   const outputRoot = metadataPath(root, OUTPUT_DIR);
@@ -46,10 +49,12 @@ export async function compileRemoteProject(
   await fs.mkdir(stagingRoot, { recursive: true });
   try {
     for (const output of response.outputFiles ?? []) {
+      options.signal?.throwIfAborted();
       if (!output.url) continue;
       const name = uniqueCompileOutputName(output, usedNames);
       const target = path.join(stagingRoot, name);
-      await client.downloadCompileOutputToPath(output.url, response, target);
+      options.onProgress?.(`Downloading ${name}`);
+      await client.downloadCompileOutputToPath(output.url, response, target, { signal: options.signal });
       stagedFiles.push(target);
     }
     await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);

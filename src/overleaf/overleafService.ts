@@ -7,7 +7,7 @@ import { CompileService } from "./compileService";
 import { manifestPath, readManifest, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord } from "./mirrorManager";
-import { OverleafClient } from "./overleafClient";
+import { OverleafClient, OverleafHttpError } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
@@ -39,6 +39,11 @@ export interface OverleafState {
   connectionReason?: string;
   reconnectAttempts: number;
   activityLog: SyncActivityEntry[];
+  lastRemoteCompile?: {
+    completedAt: string;
+    pdfPath?: string;
+    logPath?: string;
+  };
 }
 
 interface OwnerStateSnapshot {
@@ -179,6 +184,7 @@ export class OverleafService implements vscode.Disposable {
         collaborators: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getCollaborators()
           : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalCollaborators : [],
         lastSyncAt: manifest.lastSyncAt,
+        lastRemoteCompile: manifest.lastRemoteCompile,
         compileMode: this.compileMode(),
         ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
           ? this.ownerCoordinator.isOwner ? "owner" : "client"
@@ -272,6 +278,12 @@ export class OverleafService implements vscode.Disposable {
       case "overleaf-show-conflicts": await this.showConflicts(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-retry": await this.retrySyncPath({ path: payload.path, workspacePath: payload.workspacePath }); return this.state(payload.workspacePath);
       case "overleaf-trash": await this.moveRemoteDeletedToTrash({ path: payload.path, workspacePath: payload.workspacePath }); return this.state(payload.workspacePath);
+      case "overleaf-bulk-sync":
+        await this.bulkSync(payload.paths, payload.workspacePath);
+        return this.state(payload.workspacePath);
+      case "overleaf-clear-activity":
+        await this.clearActivityLog(payload.workspacePath);
+        return this.state(payload.workspacePath);
       case "overleaf-set-compile-mode":
         await vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").update("compileMode", payload.mode === "overleaf" ? "overleaf" : "local", vscode.ConfigurationTarget.Global);
         return this.state(payload.workspacePath);
@@ -299,8 +311,10 @@ export class OverleafService implements vscode.Disposable {
     while (this.disposables.length) this.disposables.pop()?.dispose();
   }
 
-  private async loginWithCookie(_candidate?: unknown): Promise<void> {
-    const serverUrl = await this.pickServerUrl("Login Server", true);
+  private async loginWithCookie(candidate?: unknown): Promise<void> {
+    const requestedServer = candidate && typeof candidate === 'object' && typeof (candidate as { serverUrl?: unknown }).serverUrl === 'string'
+      ? (candidate as { serverUrl: string }).serverUrl : undefined;
+    const serverUrl = requestedServer ? normalizeServerUrl(requestedServer) : await this.pickServerUrl("Login Server", true);
     if (!serverUrl) return;
     const cookie = await vscode.window.showInputBox({
       title: "Overleaf Cookie",
@@ -324,10 +338,20 @@ export class OverleafService implements vscode.Disposable {
     const serverUrl = await this.pickServerUrl("Project Server");
     if (!serverUrl) return;
     const client = await this.makeClient(serverUrl);
-    const projects = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "Loading Overleaf projects", cancellable: false },
-      () => client.listProjects()
-    );
+    let projects: ProjectSummary[];
+    try {
+      projects = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "Loading Overleaf projects", cancellable: false },
+        () => client.listProjects()
+      );
+    } catch (error) {
+      if (error instanceof OverleafHttpError && [401, 403].includes(error.status)) {
+        await this.secrets.deleteIdentity(serverUrl);
+        const action = await vscode.window.showErrorMessage("Overleaf login expired. Sign in again with a fresh Cookie.", "Login again");
+        if (action === "Login again") await this.loginWithCookie({ serverUrl });
+      }
+      throw error;
+    }
     const picked = await this.pickProject(projects);
     if (picked) vscode.window.setStatusBarMessage(`${picked.name} · ${picked.id}`, 3000);
   }
@@ -429,6 +453,11 @@ export class OverleafService implements vscode.Disposable {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["error"]);
     if (!item) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("retry", { path: item.path });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.retrySyncPath(item.path);
     this.onChanged();
   }
@@ -464,7 +493,12 @@ export class OverleafService implements vscode.Disposable {
   private async openSyncDiff(candidate?: unknown): Promise<void> {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus();
-    if (item) await this.realtimeSync.openSyncDiff(item.path);
+    if (!item) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("open-diff", { path: item.path });
+      return;
+    }
+    await this.realtimeSync.openSyncDiff(item.path);
   }
 
   private async resolveConflictUseLocal(candidate?: unknown): Promise<void> {
@@ -494,17 +528,107 @@ export class OverleafService implements vscode.Disposable {
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["remote deleted"]);
     if (!item) return;
     await this.confirmDestructive(`Move ${item.path} to the local Overleaf trash?`);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("trash", { path: item.path });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.moveRemoteDeletedToTrash(item.path);
+    this.onChanged();
+  }
+
+  private async bulkSync(rawPaths: unknown, candidate?: unknown): Promise<void> {
+    const paths = Array.isArray(rawPaths)
+      ? rawPaths.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())).slice(0, 500)
+      : [];
+    if (!paths.length) throw new Error('Select at least one safe sync item first.');
+    const root = await this.requireMirrorRoot(candidate);
+    await this.ensureRunning(root);
+    const run = async (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken): Promise<void> => {
+      const items = (this.realtimeSync.getSyncStatusItems()).filter(item => paths.includes(item.path)
+        && item.entityType !== 'folder'
+        && ['remote ahead', 'remote only', 'local ahead', 'local only'].includes(item.status));
+      if (!items.length) throw new Error('The selected paths are no longer safe to sync. Refresh status and try again.');
+      const total = items.length;
+      const failures: string[] = [];
+      for (let index = 0; index < items.length; index += 1) {
+        if (token.isCancellationRequested) {
+          this.output.appendLine(`[${new Date().toISOString()}] Bulk sync cancelled after ${index}/${total} item(s).`);
+          break;
+        }
+        const item = items[index];
+        progress.report({ message: `${index + 1}/${total} ${item.status === 'remote ahead' || item.status === 'remote only' ? 'Pulling' : 'Pushing'} ${item.path}` });
+        try {
+          if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+            await this.ownerCoordinator.request(item.status === 'remote ahead' || item.status === 'remote only' ? 'pull' : 'push', { path: item.path, force: false });
+          } else if (item.status === 'remote ahead' || item.status === 'remote only') {
+            await this.realtimeSync.pullRemoteFile(item.path, false);
+          } else {
+            await this.realtimeSync.pushLocalFile(item.path, false);
+          }
+        } catch (error) {
+          failures.push(`${item.path}: ${formatUnknownError(error)}`);
+        }
+        progress.report({ increment: 100 / total });
+      }
+      await this.realtimeSync.checkSyncStatus(root, undefined, undefined, { mode: 'incremental', reason: 'bulk-sync' }).catch(() => undefined);
+      if (failures.length) vscode.window.showWarningMessage(`Bulk sync finished with ${failures.length} failure(s). ${failures.slice(0, 3).join(' · ')}`);
+    };
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Applying Overleaf sync', cancellable: true }, run);
+    this.onChanged();
+  }
+
+  private async clearActivityLog(candidate?: unknown): Promise<void> {
+    const root = await this.requireMirrorRoot(candidate);
+    if (this.realtimeSync.currentRoot === root) await this.realtimeSync.clearActivityLog();
+    else if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) await this.ownerCoordinator.request('clear-activity');
     this.onChanged();
   }
 
   private async compileRemote(candidate?: unknown): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
+    await this.ensureRunning(root);
+    const preflight = await this.remoteCompilePreflight(root);
+    if (preflight && (preflight.globalBlockReason || preflight.items.some(item => item.status !== "synced"))) {
+      const pending = preflight.items.filter(item => item.status !== "synced");
+      const choice = await vscode.window.showWarningMessage(
+        `Overleaf has ${pending.length} path(s) that are not synced. Compile the latest local changes first?`,
+        { modal: true },
+        "Sync and Compile",
+        "Compile Remote Version",
+        "Cancel"
+      );
+      if (choice === "Cancel" || !choice) throw new Error("Operation cancelled.");
+      if (choice === "Sync and Compile") {
+        if (this.ownerCoordinator.isOwner) await this.realtimeSync.syncOnce();
+        else if (this.ownerCoordinator.currentRoot) await this.ownerCoordinator.request("sync-once");
+        const verified = await this.remoteCompilePreflight(root);
+        if (verified && (verified.globalBlockReason || verified.items.some(item => item.status !== "synced"))) {
+          throw new Error("Sync completed with unresolved changes. Review Sync Status before compiling.");
+        }
+      }
+    }
     const manifest = await readManifest(root);
     const client = await this.makeClient(manifest.serverUrl);
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Compiling on Overleaf", cancellable: false }, () => this.compileService.compile(root, client));
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "Compiling on Overleaf", cancellable: true },
+      (progress, token) => this.compileService.compile(root, client, {
+        signal: abortSignalFromToken(token),
+        onProgress: message => progress.report({ message })
+      })
+    );
     this.output.appendLine(`[${new Date().toISOString()}] Remote Overleaf compile completed for ${root}`);
     this.onChanged();
+  }
+
+  private async remoteCompilePreflight(root: string): Promise<SyncStatusReport | undefined> {
+    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+      const result = await this.ownerCoordinator.request("status", { refresh: true, reason: "compile-preflight" });
+      return isSyncStatusReport(result) ? result : undefined;
+    }
+    const manifest = await readManifest(root);
+    const client = await this.makeClient(manifest.serverUrl);
+    return this.realtimeSync.checkSyncStatus(root, client, undefined, { mode: "incremental", reason: "compile-preflight" });
   }
 
   private async openRemotePdf(candidate?: unknown): Promise<void> {
@@ -554,12 +678,21 @@ export class OverleafService implements vscode.Disposable {
   private async openConflictDiff(candidate?: unknown): Promise<void> {
     await this.ensureRunning(candidate);
     const conflict = this.conflictFromArgument(candidate) ?? await this.pickConflict();
-    if (conflict) await this.realtimeSync.openConflictDiff(conflict.relPath);
+    if (!conflict) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("conflict-diff", { path: conflict.relPath });
+      return;
+    }
+    await this.realtimeSync.openConflictDiff(conflict.relPath);
   }
 
   private async showConflicts(candidate?: unknown): Promise<void> {
     const root = this.resolveMirrorRoot(candidate);
     if (root && this.realtimeSync.currentRoot !== root) await this.ensureRunning(root);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("show-conflicts");
+      return;
+    }
     await this.realtimeSync.showConflicts();
   }
 
@@ -699,6 +832,45 @@ export class OverleafService implements vscode.Disposable {
 
   private async handleOwnerCommand(command: string, args: Record<string, unknown>): Promise<unknown> {
     if (command === "snapshot") return this.ownerSnapshot();
+    if (command === "retry") {
+      const relPath = ownerCommandPath(args);
+      return this.realtimeSync.retrySyncPath(relPath);
+    }
+    if (command === "open-diff") {
+      await this.realtimeSync.openSyncDiff(ownerCommandPath(args));
+      return undefined;
+    }
+    if (command === "conflict-diff") {
+      await this.realtimeSync.openConflictDiff(ownerCommandPath(args));
+      return undefined;
+    }
+    if (command === "show-conflicts") {
+      await this.realtimeSync.showConflicts();
+      return undefined;
+    }
+    if (command === "show-collaborators") {
+      await this.realtimeSync.showCollaborators();
+      return undefined;
+    }
+    if (command === "trash") {
+      await this.realtimeSync.moveRemoteDeletedToTrash(ownerCommandPath(args));
+      return this.realtimeSync.getSyncStatusReport();
+    }
+    if (command === "clear-activity") {
+      await this.realtimeSync.clearActivityLog();
+      return undefined;
+    }
+    if (command === "bulk-sync") {
+      const paths = Array.isArray(args.paths) ? args.paths : [];
+      for (const value of paths) {
+        if (typeof value !== 'string') continue;
+        const status = this.realtimeSync.getSyncStatusItems().find(item => item.path === value);
+        if (!status || !['remote ahead', 'remote only', 'local ahead', 'local only'].includes(status.status)) continue;
+        if (status.status === 'remote ahead' || status.status === 'remote only') await this.realtimeSync.pullRemoteFile(value, false);
+        else await this.realtimeSync.pushLocalFile(value, false);
+      }
+      return this.realtimeSync.getSyncStatusReport();
+    }
     const backend: SyncCommandBackend = {
       status: request => request.refresh || request.full || request.paths
         ? this.realtimeSync.checkSyncStatus(
@@ -916,7 +1088,13 @@ export class OverleafService implements vscode.Disposable {
     if (!picked) return undefined;
     if (picked.server) return picked.server;
     const input = await vscode.window.showInputBox({ title: "Overleaf Server URL", value: configured, ignoreFocusOut: true });
-    return input ? normalizeServerUrl(input) : undefined;
+    if (!input) return undefined;
+    try {
+      return normalizeServerUrl(input);
+    } catch {
+      vscode.window.showErrorMessage("Enter a valid http(s) Overleaf server URL.");
+      return undefined;
+    }
   }
 
   private async pickProject(projects: ProjectSummary[]): Promise<ProjectSummary | undefined> {
@@ -939,14 +1117,14 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async pickStatus(statuses?: SyncStatusItem["status"][]): Promise<SyncStatusItem | undefined> {
-    const items = this.realtimeSync.getSyncStatusItems().filter(item => item.status !== "synced").filter(item => !statuses || statuses.includes(item.status));
+    const items = this.syncItemsForSelection().filter(item => item.status !== "synced").filter(item => !statuses || statuses.includes(item.status));
     if (!items.length) return undefined;
     const picked = await vscode.window.showQuickPick(items.map(item => ({ label: item.path, description: item.status, detail: item.message, item })), { title: "Overleaf Sync Status", placeHolder: "Select a file" });
     return picked?.item;
   }
 
   private async pickConflict(): Promise<ConflictInfo | undefined> {
-    const conflicts = this.realtimeSync.getConflicts();
+    const conflicts = this.conflictsForSelection();
     if (!conflicts.length) return undefined;
     const picked = await vscode.window.showQuickPick(conflicts.map(conflict => ({ label: conflict.relPath, description: conflict.reason, conflict })), { title: "Overleaf Conflicts", placeHolder: "Select a conflict" });
     return picked?.conflict;
@@ -958,7 +1136,7 @@ export class OverleafService implements vscode.Disposable {
       : value;
     if (candidate && typeof candidate === "object" && typeof (candidate as { path?: unknown }).path === "string") {
       const pathValue = (candidate as { path: string }).path;
-      const current = this.realtimeSync.getSyncStatusItems().find(item => item.path === pathValue);
+      const current = this.syncItemsForSelection().find(item => item.path === pathValue);
       if (current) return current;
       return { path: pathValue, status: "error", blocking: true } as SyncStatusItem;
     }
@@ -980,7 +1158,25 @@ export class OverleafService implements vscode.Disposable {
     if (root && this.realtimeSync.currentRoot !== root) {
       await this.ensureRunning(root);
     }
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("show-collaborators");
+      return;
+    }
     await this.realtimeSync.showCollaborators();
+  }
+
+  private syncItemsForSelection(): SyncStatusItem[] {
+    const local = this.realtimeSync.getSyncStatusItems();
+    return local.length > 0 || this.ownerCoordinator.isOwner || !this.ownerCoordinator.currentRoot
+      ? local
+      : this.externalSyncStatus?.items ?? [];
+  }
+
+  private conflictsForSelection(): ConflictInfo[] {
+    const local = this.realtimeSync.getConflicts();
+    return local.length > 0 || this.ownerCoordinator.isOwner || !this.ownerCoordinator.currentRoot
+      ? local
+      : this.externalConflicts;
   }
 
   private isDestructive(item: SyncStatusItem): boolean {
@@ -1033,6 +1229,14 @@ function isOwnerStateSnapshot(value: unknown): value is OwnerStateSnapshot {
       && typeof entry === "object"
       && typeof (entry as SyncActivityEntry).at === "string"
       && typeof (entry as SyncActivityEntry).message === "string"));
+}
+
+function ownerCommandPath(args: Record<string, unknown>): string {
+  const value = args.path;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("A project-relative path is required.");
+  }
+  return value;
 }
 
 function abortSignalFromToken(token: vscode.CancellationToken): AbortSignal {

@@ -21,6 +21,7 @@ export const TRASH_DIR = 'trash';
 export const SYNC_STATUS_NAME = 'sync-status.json';
 export const TRANSACTIONS_NAME = 'transactions.json';
 export const CONFLICT_INDEX_NAME = 'conflicts.json';
+export const ACTIVITY_LOG_NAME = 'activity-log.json';
 export const LOCAL_IGNORE_NAME = '.overleaf-codexignore';
 export const MAX_MANIFEST_JSON_BYTES = 32 * 1024 * 1024;
 export const MAX_METADATA_JSON_BYTES = 8 * 1024 * 1024;

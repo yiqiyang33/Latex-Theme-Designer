@@ -99,6 +99,8 @@ var require_brace_expansion = __commonJS({
     var escClose = "\0CLOSE" + Math.random() + "\0";
     var escComma = "\0COMMA" + Math.random() + "\0";
     var escPeriod = "\0PERIOD" + Math.random() + "\0";
+    var EXPANSION_MAX = 1e5;
+    var EXPANSION_MAX_LENGTH = 4e6;
     function numeric(str) {
       return parseInt(str, 10) == str ? parseInt(str, 10) : str.charCodeAt(0);
     }
@@ -132,11 +134,12 @@ var require_brace_expansion = __commonJS({
       if (!str)
         return [];
       options = options || {};
-      var max = options.max == null ? Infinity : options.max;
+      var max = options.max == null ? EXPANSION_MAX : options.max;
+      var maxLength = options.maxLength == null ? EXPANSION_MAX_LENGTH : options.maxLength;
       if (str.substr(0, 2) === "{}") {
         str = "\\{\\}" + str.substr(2);
       }
-      return expand2(escapeBraces(str), max, true).map(unescapeBraces);
+      return expand2(escapeBraces(str), max, maxLength, true).map(unescapeBraces);
     }
     function embrace(str) {
       return "{" + str + "}";
@@ -150,19 +153,89 @@ var require_brace_expansion = __commonJS({
     function gte(i, y) {
       return i >= y;
     }
-    function expand2(str, max, isTop) {
-      var expansions = [];
+    function combine(acc, pre, values, max, maxLength, dropEmpties) {
+      var out = [];
+      var length = 0;
+      for (var a = 0; a < acc.length; a++) {
+        for (var v = 0; v < values.length; v++) {
+          if (out.length >= max) return out;
+          var expansion = acc[a] + pre + values[v];
+          if (dropEmpties && !expansion) continue;
+          if (length + expansion.length > maxLength) return out;
+          out.push(expansion);
+          length += expansion.length;
+        }
+      }
+      return out;
+    }
+    function expandSequence(body, isAlphaSequence, max, maxLength) {
+      var n = body.split(/\.\./);
+      var N = [];
+      if (n[0] === void 0 || n[1] === void 0) {
+        return N;
+      }
+      var x = numeric(n[0]);
+      var y = numeric(n[1]);
+      var width = Math.max(n[0].length, n[1].length);
+      var incr = n.length === 3 && n[2] !== void 0 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
+      var test = lte;
+      var reverse = y < x;
+      if (reverse) {
+        incr *= -1;
+        test = gte;
+      }
+      var pad = n.some(isPadded);
+      var length = 0;
+      for (var i = x; test(i, y) && N.length < max; i += incr) {
+        var c;
+        if (isAlphaSequence) {
+          c = String.fromCharCode(i);
+          if (c === "\\") {
+            c = "";
+          }
+        } else {
+          c = String(i);
+          if (pad) {
+            var need = width - c.length;
+            if (need > 0) {
+              var z = new Array(need + 1).join("0");
+              if (i < 0) {
+                c = "-" + z + c.slice(1);
+              } else {
+                c = z + c;
+              }
+            }
+          }
+        }
+        if (length + c.length > maxLength) break;
+        N.push(c);
+        length += c.length;
+      }
+      return N;
+    }
+    function expand2(str, max, maxLength, isTop) {
+      var acc = [""];
+      var dropEmpties = false;
+      var firstGroup = true;
       for (; ; ) {
         const m = balanced("{", "}", str);
-        if (!m) return [str];
+        if (!m) {
+          return combine(acc, str, [""], max, maxLength, dropEmpties);
+        }
         const pre = m.pre;
-        if (/\$$/.test(m.pre)) {
-          const post2 = m.post.length ? expand2(m.post, max, false) : [""];
-          for (let k2 = 0; k2 < post2.length && k2 < max; k2++) {
-            const expansion2 = pre + "{" + m.body + "}" + post2[k2];
-            expansions.push(expansion2);
-          }
-          return expansions;
+        if (/\$$/.test(pre)) {
+          acc = combine(
+            acc,
+            pre + "{" + m.body + "}",
+            [""],
+            max,
+            maxLength,
+            dropEmpties && !m.post.length
+          );
+          firstGroup = false;
+          if (!m.post.length) break;
+          str = m.post;
+          continue;
         }
         var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
         var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
@@ -174,73 +247,66 @@ var require_brace_expansion = __commonJS({
             isTop = true;
             continue;
           }
-          return [str];
+          return combine(
+            acc,
+            pre + "{" + m.body + "}" + m.post,
+            [""],
+            max,
+            maxLength,
+            dropEmpties
+          );
         }
-        const post = m.post.length ? expand2(m.post, max, false) : [""];
-        var n;
+        if (firstGroup) {
+          dropEmpties = isTop && !isSequence;
+          firstGroup = false;
+        }
+        var values;
         if (isSequence) {
-          n = m.body.split(/\.\./);
+          values = expandSequence(m.body, isAlphaSequence, max, maxLength);
         } else {
-          n = parseCommaParts(m.body);
-          if (n.length === 1) {
-            n = expand2(n[0], max, false).map(embrace);
+          var n = parseCommaParts(m.body);
+          if (n.length === 1 && n[0] !== void 0) {
+            n = expand2(n[0], max, maxLength, false).map(embrace);
             if (n.length === 1) {
-              return post.map(function(p) {
-                return m.pre + n[0] + p;
-              });
+              acc = combine(
+                acc,
+                pre + n[0],
+                [""],
+                max,
+                maxLength,
+                dropEmpties && !m.post.length
+              );
+              if (!m.post.length) break;
+              str = m.post;
+              continue;
             }
           }
-        }
-        var N;
-        if (isSequence) {
-          var x = numeric(n[0]);
-          var y = numeric(n[1]);
-          var width = Math.max(n[0].length, n[1].length);
-          var incr = n.length == 3 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
-          var test = lte;
-          var reverse = y < x;
-          if (reverse) {
-            incr *= -1;
-            test = gte;
+          var dropsEmpties = dropEmpties && !m.post.length && !pre;
+          for (var d = 0; dropsEmpties && d < acc.length; d++) {
+            if (acc[d]) {
+              dropsEmpties = false;
+            }
           }
-          var pad = n.some(isPadded);
-          N = [];
-          for (var i = x; test(i, y) && N.length < max; i += incr) {
-            var c;
-            if (isAlphaSequence) {
-              c = String.fromCharCode(i);
-              if (c === "\\")
-                c = "";
-            } else {
-              c = String(i);
-              if (pad) {
-                var need = width - c.length;
-                if (need > 0) {
-                  var z = new Array(need + 1).join("0");
-                  if (i < 0)
-                    c = "-" + z + c.slice(1);
-                  else
-                    c = z + c;
-                }
+          values = [];
+          var valuesLength = 0;
+          outer: for (var j = 0; j < n.length; j++) {
+            var expanded = expand2(n[j], max, maxLength, false);
+            for (var k = 0; k < expanded.length; k++) {
+              var v = expanded[k];
+              if (dropsEmpties && !v) continue;
+              if (values.length >= max || valuesLength + v.length > maxLength) {
+                break outer;
               }
+              values.push(v);
+              valuesLength += v.length;
             }
-            N.push(c);
-          }
-        } else {
-          N = [];
-          for (var j = 0; j < n.length; j++) {
-            N.push.apply(N, expand2(n[j], max, false));
           }
         }
-        for (var j = 0; j < N.length; j++) {
-          for (var k = 0; k < post.length && expansions.length < max; k++) {
-            var expansion = pre + N[j] + post[k];
-            if (!isTop || isSequence || expansion)
-              expansions.push(expansion);
-          }
-        }
-        return expansions;
+        acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m.post.length);
+        if (!m.post.length) break;
+        str = m.post;
       }
+      return acc;
     }
   }
 });
@@ -12125,7 +12191,7 @@ var require_form_data = __commonJS({
     var parseUrl = require("url").parse;
     var fs17 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto8 = require("crypto");
+    var crypto7 = require("crypto");
     var mime2 = require_mime_types();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -12331,7 +12397,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData2.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto8.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto7.randomBytes(12).toString("hex");
     };
     FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -18696,7 +18762,7 @@ minimatch.unescape = unescape;
 var import_ignore = __toESM(require_ignore());
 
 // src/overleaf/util.ts
-var crypto = __toESM(require("crypto"));
+var crypto2 = __toESM(require("crypto"));
 var import_child_process = require("child_process");
 var fs = __toESM(require("fs/promises"));
 var os = __toESM(require("os"));
@@ -18732,11 +18798,11 @@ function expandHome(input) {
   return input;
 }
 function sha1(content) {
-  return crypto.createHash("sha1").update(content).digest("hex");
+  return crypto2.createHash("sha1").update(content).digest("hex");
 }
 function gitBlobHash(content) {
   const bytes = Buffer.from(content);
-  return crypto.createHash("sha1").update(`blob ${bytes.length}\0`, "utf8").update(bytes).digest("hex");
+  return crypto2.createHash("sha1").update(`blob ${bytes.length}\0`, "utf8").update(bytes).digest("hex");
 }
 function isTextLike(filePath) {
   const ext2 = path2.extname(filePath).toLowerCase();
@@ -18943,6 +19009,21 @@ function validateManifest(value) {
   }
   for (const field of ["rootDocId", "rootDocPath", "compiler", "lastFullAuditAt"]) {
     if (value[field] !== void 0 && typeof value[field] !== "string") return `$.${field} must be a string`;
+  }
+  if (value.lastRemoteCompile !== void 0) {
+    if (!isRecord(value.lastRemoteCompile)) return "$.lastRemoteCompile must be an object";
+    if (typeof value.lastRemoteCompile.completedAt !== "string") return "$.lastRemoteCompile.completedAt must be a string";
+    for (const field of ["pdfPath", "logPath"]) {
+      const filePath = value.lastRemoteCompile[field];
+      if (filePath !== void 0) {
+        if (typeof filePath !== "string") return `$.lastRemoteCompile.${field} must be a string`;
+        try {
+          if (normalizeProjectRelativePath(filePath) !== filePath) return `$.lastRemoteCompile.${field} must be a safe relative project path`;
+        } catch {
+          return `$.lastRemoteCompile.${field} must be a safe relative project path`;
+        }
+      }
+    }
   }
   if (value.rootDocPath !== void 0) {
     try {
@@ -21273,13 +21354,13 @@ async function mapWithConcurrencyResult(items, concurrency, handler) {
 }
 
 // src/overleaf/keychainStore.ts
-var crypto3 = __toESM(require("crypto"));
+var crypto4 = __toESM(require("crypto"));
 var fs11 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
 
 // src/overleaf/sharedState.ts
-var crypto2 = __toESM(require("crypto"));
+var crypto3 = __toESM(require("crypto"));
 var fs10 = __toESM(require("fs/promises"));
 var os3 = __toESM(require("os"));
 var path11 = __toESM(require("path"));
@@ -21511,7 +21592,7 @@ async function acquireSharedStateLock() {
   while (true) {
     const metadata = {
       pid: process.pid,
-      nonce: crypto2.randomBytes(16).toString("hex"),
+      nonce: crypto3.randomBytes(16).toString("hex"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       processStart: await processStartSignature(process.pid)
     };
@@ -21742,7 +21823,7 @@ var FileCredentialStore = class {
     };
   }
   filePath(account) {
-    const digest = crypto3.createHash("sha256").update(account).digest("hex");
+    const digest = crypto4.createHash("sha256").update(account).digest("hex");
     return path12.join(this.root, `${digest}.json`);
   }
 };
@@ -21897,7 +21978,7 @@ function findExecutable(command) {
 }
 
 // src/overleaf/compileCore.ts
-var crypto4 = __toESM(require("crypto"));
+var crypto5 = __toESM(require("crypto"));
 var fs12 = __toESM(require("fs/promises"));
 var path13 = __toESM(require("path"));
 var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
@@ -21905,13 +21986,14 @@ var DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5e3;
 async function compileRemoteProject(root, client, rootDocOverride, options = {}) {
   const manifest = await readManifest(root);
   const rootDocPath = rootDocOverride ?? manifest.rootDocPath ?? await detectRootDoc(root);
-  const response = await client.compile(manifest.projectId, rootDocPath ?? null);
+  options.signal?.throwIfAborted();
+  const response = await client.compile(manifest.projectId, rootDocPath ?? null, false, false, options.signal);
   if (response.status !== "success") throw new Error(`Overleaf compile failed with status: ${response.status}`);
   const outputRoot = metadataPath(root, OUTPUT_DIR);
   const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
     await cleanupInterruptedCompileArtifacts(root);
-    const token = `${process.pid}-${Date.now()}-${crypto4.randomBytes(6).toString("hex")}`;
+    const token = `${process.pid}-${Date.now()}-${crypto5.randomBytes(6).toString("hex")}`;
     const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
     const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
     const stagedFiles = [];
@@ -21920,10 +22002,12 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
     await fs12.mkdir(stagingRoot, { recursive: true });
     try {
       for (const output of response.outputFiles ?? []) {
+        options.signal?.throwIfAborted();
         if (!output.url) continue;
         const name = uniqueCompileOutputName(output, usedNames);
         const target = path13.join(stagingRoot, name);
-        await client.downloadCompileOutputToPath(output.url, response, target);
+        options.onProgress?.(`Downloading ${name}`);
+        await client.downloadCompileOutputToPath(output.url, response, target, { signal: options.signal });
         stagedFiles.push(target);
       }
       await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
@@ -21953,7 +22037,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
   for (; ; ) {
     try {
       await fs12.mkdir(lock, { recursive: false });
-      const nonce = crypto4.randomBytes(8).toString("hex");
+      const nonce = crypto5.randomBytes(8).toString("hex");
       await fs12.writeFile(owner, JSON.stringify({
         pid: process.pid,
         startedAt: Date.now(),
@@ -22362,44 +22446,41 @@ var import_form_data = __toESM(require_form_data());
 var import_node_fetch = __toESM(require_lib2());
 var mime = __toESM(require_mime_types());
 
-// node_modules/uuid/dist/esm-node/rng.js
-var import_crypto4 = __toESM(require("crypto"));
-var rnds8Pool = new Uint8Array(256);
-var poolPtr = rnds8Pool.length;
-function rng() {
-  if (poolPtr > rnds8Pool.length - 16) {
-    import_crypto4.default.randomFillSync(rnds8Pool);
-    poolPtr = 0;
-  }
-  return rnds8Pool.slice(poolPtr, poolPtr += 16);
-}
-
-// node_modules/uuid/dist/esm-node/stringify.js
+// node_modules/uuid/dist-node/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
 }
 function unsafeStringify(arr, offset = 0) {
-  return byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]];
+  return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
 }
 
-// node_modules/uuid/dist/esm-node/native.js
-var import_crypto5 = __toESM(require("crypto"));
-var native_default = {
-  randomUUID: import_crypto5.default.randomUUID
-};
+// node_modules/uuid/dist-node/rng.js
+var rnds8 = new Uint8Array(16);
+function rng() {
+  return crypto.getRandomValues(rnds8);
+}
 
-// node_modules/uuid/dist/esm-node/v4.js
+// node_modules/uuid/dist-node/v4.js
 function v4(options, buf, offset) {
-  if (native_default.randomUUID && !buf && !options) {
-    return native_default.randomUUID();
+  if (!buf && !options && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
+  return _v4(options, buf, offset);
+}
+function _v4(options, buf, offset) {
   options = options || {};
-  const rnds = options.random || (options.rng || rng)();
+  const rnds = options.random ?? options.rng?.() ?? rng();
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
   rnds[6] = rnds[6] & 15 | 64;
   rnds[8] = rnds[8] & 63 | 128;
   if (buf) {
     offset = offset || 0;
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
     for (let i = 0; i < 16; ++i) {
       buf[offset + i] = rnds[i];
     }
@@ -22500,7 +22581,8 @@ var OverleafClient = class {
         body: {}
       });
       return normalizeProjects(result.projects);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof OverleafHttpError) || ![404, 405].includes(error.status)) throw error;
       const result = await this.requestJson("GET", "user/projects");
       return normalizeProjects(result.projects);
     }
@@ -22591,7 +22673,7 @@ var OverleafClient = class {
       includeCsrfHeader: true
     });
   }
-  async compile(projectId, rootResourcePath, draft = false, stopOnFirstError = false) {
+  async compile(projectId, rootResourcePath, draft = false, stopOnFirstError = false, signal) {
     return this.requestJson("POST", `project/${projectId}/compile?auto_compile=true`, {
       body: {
         check: "silent",
@@ -22600,7 +22682,8 @@ var OverleafClient = class {
         rootResourcePath,
         stopOnFirstError
       },
-      includeCsrfHeader: true
+      includeCsrfHeader: true,
+      signal
     });
   }
   async stopCompile(projectId) {
@@ -23348,6 +23431,10 @@ function patchSocketIoHandshake(socketIo, runtimeRoot2) {
       const query = socketIo.util.query(this.socket.options.query);
       this.websocket = new Ws(this.prepareUrl() + query, void 0, {
         origin: this.socket.options.overleafCodexOrigin,
+        // Bound legacy ws frame buffering. The Overleaf protocol sends small OT
+        // messages; rejecting oversized frames prevents memory exhaustion while
+        // keeping compatibility with the pinned Socket.IO 0.9 transport.
+        maxPayload: 64 * 1024 * 1024,
         headers: {
           Cookie: cookie,
           Origin: this.socket.options.overleafCodexOrigin
@@ -23601,7 +23688,7 @@ async function readResponseTextLimited(response, maxBytes) {
 }
 
 // src/overleaf/syncOwnerCoordinator.ts
-var crypto7 = __toESM(require("crypto"));
+var crypto6 = __toESM(require("crypto"));
 var fs15 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path16 = __toESM(require("path"));
@@ -23661,7 +23748,7 @@ var SyncOwnerCoordinator = class {
       pid: process.pid,
       root: this.root,
       socketPath: paths.socketPath,
-      nonce: crypto7.randomBytes(16).toString("hex"),
+      nonce: crypto6.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
       processStart: await processStartSignature(process.pid)
     };
@@ -23700,7 +23787,7 @@ var SyncOwnerCoordinator = class {
     }
     const request = {
       version: 1,
-      id: crypto7.randomUUID(),
+      id: crypto6.randomUUID(),
       command,
       root: this.root,
       args
@@ -23771,7 +23858,7 @@ var SyncOwnerCoordinator = class {
     try {
       await this.enqueueMessage(socket, {
         version: 1,
-        id: crypto7.randomUUID(),
+        id: crypto6.randomUUID(),
         command: "subscribe",
         root: this.root,
         args: {}
@@ -23883,7 +23970,7 @@ var SyncOwnerCoordinator = class {
   }
 };
 function runtimePaths(root) {
-  const hash = crypto7.createHash("sha256").update(path16.resolve(root)).digest("hex").slice(0, 32);
+  const hash = crypto6.createHash("sha256").update(path16.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path16.join(runtimeRoot(), `${hash}.lock`);
   return {
     lockPath,
@@ -23986,7 +24073,7 @@ function writeMessageBounded(socket, value) {
     return Promise.reject(new Error("Sync IPC message exceeded its limit."));
   }
   const candidateId = value?.id;
-  const id = typeof candidateId === "string" ? candidateId : crypto7.randomUUID();
+  const id = typeof candidateId === "string" ? candidateId : crypto6.randomUUID();
   const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
   return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES)).reduce(
     (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({

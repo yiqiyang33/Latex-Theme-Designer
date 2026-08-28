@@ -50,6 +50,19 @@ export function validateManifest(value: unknown): ValidationResult {
   for (const field of ['rootDocId', 'rootDocPath', 'compiler', 'lastFullAuditAt'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return `$.${field} must be a string`;
   }
+  if (value.lastRemoteCompile !== undefined) {
+    if (!isRecord(value.lastRemoteCompile)) return '$.lastRemoteCompile must be an object';
+    if (typeof value.lastRemoteCompile.completedAt !== 'string') return '$.lastRemoteCompile.completedAt must be a string';
+    for (const field of ['pdfPath', 'logPath'] as const) {
+      const filePath = value.lastRemoteCompile[field];
+      if (filePath !== undefined) {
+        if (typeof filePath !== 'string') return `$.lastRemoteCompile.${field} must be a string`;
+        try {
+          if (normalizeProjectRelativePath(filePath) !== filePath) return `$.lastRemoteCompile.${field} must be a safe relative project path`;
+        } catch { return `$.lastRemoteCompile.${field} must be a safe relative project path`; }
+      }
+    }
+  }
   if (value.rootDocPath !== undefined) {
     try {
       if (normalizeProjectRelativePath(value.rootDocPath as string) !== value.rootDocPath) return '$.rootDocPath must use canonical relative separators';

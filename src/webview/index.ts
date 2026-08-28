@@ -411,14 +411,14 @@ function renderSyncPanel(): void {
   byId("syncServer").textContent = state.serverUrl || "—";
   byId("syncProject").textContent = state.projectName || "—";
   byId("syncMirror").textContent = state.mirrorRoot || "—";
-  const status = state.conflicts?.length || state.syncItems?.some((item: any) => item.entityType === "file" && item.status === "diverged") ? "Conflict" : state.running ? "Syncing" : state.syncStatus?.hasBlocking ? "Needs attention" : "Ready";
+  const status = syncProjectStatus(state);
   byId("syncStatus").textContent = status;
   byId("syncRole").textContent = state.ownerRole === "owner" ? "Owner" : state.ownerRole === "client" ? "Client" : "—";
   byId("syncConnection").textContent = formatSyncConnection(state.connectionState);
   byId("syncReconnects").textContent = state.reconnectAttempts ? String(state.reconnectAttempts) : "—";
   byId("syncContextTitle").textContent = state.projectName || "Overleaf mirror";
   byId("syncContextBadge").textContent = status;
-  byId("syncContextDescription").textContent = state.error || state.connectionReason || (state.authenticated ? "Remote mirror is available for synchronization." : "Login is required before starting sync.");
+  byId("syncContextDescription").textContent = state.error || state.connectionReason || syncProjectAction(state);
   byId("syncContextEmpty").hidden = true;
   byId("syncContextSummary").hidden = false;
   byId("syncContextServer").textContent = state.serverUrl || "—";
@@ -474,6 +474,26 @@ function renderSyncPanel(): void {
   }));
 }
 
+function syncProjectStatus(state: any): string {
+  if (!state?.authenticated) return "Authentication required";
+  if (state.conflicts?.length || state.syncItems?.some((item: any) => item.status === "diverged")) return "Conflict";
+  if (state.connectionState === "blocked-tree" || state.syncStatus?.globalBlockReason) return "Project tree blocked";
+  if (state.connectionState === "reconnecting") return "Reconnecting";
+  if (state.connectionState === "checking") return "Checking";
+  if (state.running) return "Syncing";
+  if (state.syncStatus?.hasBlocking) return "Needs attention";
+  return "Ready";
+}
+
+function syncProjectAction(state: any): string {
+  if (!state?.authenticated) return "Login is required before starting sync.";
+  if (state.connectionState === "reconnecting") return "The connection will retry automatically.";
+  if (state.connectionState === "blocked-tree") return "Run a full audit and resolve the project tree issue.";
+  if (state.conflicts?.length) return "Review conflicts before continuing sync.";
+  if (state.syncStatus?.hasBlocking) return "Review the files needing attention below.";
+  return "Remote mirror is available for synchronization.";
+}
+
 function isSelectableSyncItem(item: any): boolean {
   return item?.entityType !== "folder" && ["remote ahead", "remote only", "local ahead", "local only"].includes(item?.status);
 }
@@ -495,9 +515,7 @@ async function applySelectedSync(): Promise<void> {
     setStatus("Select at least one safe sync item first.", "warning");
     return;
   }
-  for (const item of items) {
-    await request(item.status === "remote ahead" || item.status === "remote only" ? "overleaf-pull" : "overleaf-push", overleafPayload({ path: item.path }));
-  }
+  await request("overleaf-bulk-sync", overleafPayload({ paths: items.map((item: any) => item.path) }));
   selectedSyncPaths.clear();
   syncSelectionMode = false;
   await refreshOverleafState();
@@ -971,7 +989,10 @@ function renderBuildContext(): void {
     badge.textContent = overleafState.conflicts?.length ? "Conflict" : "Remote";
     badge.dataset.kind = overleafState.conflicts?.length ? "error" : "ok";
     title.textContent = overleafState.conflicts?.length ? "Remote sync needs attention" : "Overleaf Remote Compile";
-    description.textContent = overleafState.mirrorRoot || "Open an Overleaf mirror before remote compile.";
+    const compiledAt = overleafState.lastRemoteCompile?.completedAt;
+    description.textContent = compiledAt
+      ? `Remote output from ${new Date(compiledAt).toLocaleString()}`
+      : overleafState.mirrorRoot || "Open an Overleaf mirror before remote compile.";
     open.disabled = !pdfStatus.exists;
   } else if (pdfStatus.checking) {
     badge.textContent = "Checking";
@@ -1760,6 +1781,7 @@ function wire(): void {
   byId("syncApplySelectedBtn").addEventListener("click", () => run(applySelectedSync));
   byId("syncCollaboratorsBtn").addEventListener("click", () => run(async () => { await request("overleaf-show-collaborators", overleafPayload()); await refreshOverleafState(); }));
   byId("syncCopyDiagnosticsBtn").addEventListener("click", () => run(async () => { await request("overleaf-copy-diagnostics", overleafPayload()); }));
+  byId("syncClearActivityBtn").addEventListener("click", () => run(async () => { await request("overleaf-clear-activity", overleafPayload()); await refreshOverleafState(); }));
   byId("syncGitBtn").addEventListener("click", () => run(async () => { await request("overleaf-init-git", overleafPayload()); await refreshOverleafState(); }));
   byId("compileModeSelect").addEventListener("change", () => run(async () => {
     const mode = byId<HTMLSelectElement>("compileModeSelect").value === "overleaf" ? "overleaf" : "local";
@@ -2120,7 +2142,7 @@ function shell(): void {
             <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">—</dd></div><div><dt>Project</dt><dd id="syncProject">—</dd></div><div><dt>Mirror</dt><dd id="syncMirror">—</dd></div><div><dt>Status</dt><dd id="syncStatus">—</dd></div><div><dt>Role</dt><dd id="syncRole">—</dd></div><div><dt>Connection</dt><dd id="syncConnection">—</dd></div><div><dt>Reconnects</dt><dd id="syncReconnects">—</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncProjectsBtn" class="ghost-button"><i class="codicon codicon-list-unordered" aria-hidden="true"></i><span>Projects</span></button><button id="syncOpenBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Mirror</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button><button id="syncFullAuditBtn" class="ghost-button"><i class="codicon codicon-search-fuzzy" aria-hidden="true"></i><span>Full Audit</span></button><button id="syncCollaboratorsBtn" class="ghost-button"><i class="codicon codicon-organization" aria-hidden="true"></i><span>Collaborators</span></button><button id="syncCopyDiagnosticsBtn" class="ghost-button"><i class="codicon codicon-copy" aria-hidden="true"></i><span>Copy diagnostics</span></button><button id="syncGitBtn" class="ghost-button"><i class="codicon codicon-git-branch" aria-hidden="true"></i><span>Init Git</span></button></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div class="toolbar compact"><button id="syncPreviewBtn" class="ghost-button"><i class="codicon codicon-list-selection" aria-hidden="true"></i><span>Preview and select</span></button><button id="syncApplySelectedBtn" class="primary" hidden><i class="codicon codicon-check" aria-hidden="true"></i><span>Apply selected</span></button></div><p id="syncSelectionSummary" class="hint"></p><div id="syncItemList" class="sync-item-list"></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Conflicts</h3><span id="syncConflictCount" class="value-pill">0</span></div><div id="syncConflictList" class="sync-item-list"></div></div>
-              <details class="settings-group"><summary>Recent sync activity</summary><ol id="syncActivityList" class="activity-list"></ol></details>
+              <details class="settings-group"><summary>Recent sync activity</summary><div class="toolbar compact"><button id="syncClearActivityBtn" class="ghost-button"><i class="codicon codicon-clear-all" aria-hidden="true"></i><span>Clear</span></button></div><ol id="syncActivityList" class="activity-list"></ol></details>
             </div>
           </section>
 

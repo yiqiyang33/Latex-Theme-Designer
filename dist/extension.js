@@ -817,8 +817,8 @@ function toPosixPath(value) {
 function isSubpath(child, parent) {
   const childResolved = path.resolve(child);
   const parentResolved = path.resolve(parent);
-  const relative9 = path.relative(parentResolved, childResolved);
-  return relative9 === "" || !!relative9 && !relative9.startsWith("..") && !path.isAbsolute(relative9);
+  const relative10 = path.relative(parentResolved, childResolved);
+  return relative10 === "" || !!relative10 && !relative10.startsWith("..") && !path.isAbsolute(relative10);
 }
 function workspaceRel(rootDir, absolutePath) {
   if (!isSubpath(absolutePath, rootDir)) {
@@ -1170,6 +1170,8 @@ var require_brace_expansion = __commonJS({
     var escClose = "\0CLOSE" + Math.random() + "\0";
     var escComma = "\0COMMA" + Math.random() + "\0";
     var escPeriod = "\0PERIOD" + Math.random() + "\0";
+    var EXPANSION_MAX = 1e5;
+    var EXPANSION_MAX_LENGTH = 4e6;
     function numeric(str) {
       return parseInt(str, 10) == str ? parseInt(str, 10) : str.charCodeAt(0);
     }
@@ -1203,11 +1205,12 @@ var require_brace_expansion = __commonJS({
       if (!str)
         return [];
       options = options || {};
-      var max = options.max == null ? Infinity : options.max;
+      var max = options.max == null ? EXPANSION_MAX : options.max;
+      var maxLength = options.maxLength == null ? EXPANSION_MAX_LENGTH : options.maxLength;
       if (str.substr(0, 2) === "{}") {
         str = "\\{\\}" + str.substr(2);
       }
-      return expand2(escapeBraces(str), max, true).map(unescapeBraces);
+      return expand2(escapeBraces(str), max, maxLength, true).map(unescapeBraces);
     }
     function embrace(str) {
       return "{" + str + "}";
@@ -1221,19 +1224,89 @@ var require_brace_expansion = __commonJS({
     function gte(i, y) {
       return i >= y;
     }
-    function expand2(str, max, isTop) {
-      var expansions = [];
+    function combine(acc, pre, values, max, maxLength, dropEmpties) {
+      var out = [];
+      var length = 0;
+      for (var a = 0; a < acc.length; a++) {
+        for (var v = 0; v < values.length; v++) {
+          if (out.length >= max) return out;
+          var expansion = acc[a] + pre + values[v];
+          if (dropEmpties && !expansion) continue;
+          if (length + expansion.length > maxLength) return out;
+          out.push(expansion);
+          length += expansion.length;
+        }
+      }
+      return out;
+    }
+    function expandSequence(body, isAlphaSequence, max, maxLength) {
+      var n = body.split(/\.\./);
+      var N = [];
+      if (n[0] === void 0 || n[1] === void 0) {
+        return N;
+      }
+      var x = numeric(n[0]);
+      var y = numeric(n[1]);
+      var width = Math.max(n[0].length, n[1].length);
+      var incr = n.length === 3 && n[2] !== void 0 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
+      var test = lte;
+      var reverse = y < x;
+      if (reverse) {
+        incr *= -1;
+        test = gte;
+      }
+      var pad = n.some(isPadded);
+      var length = 0;
+      for (var i = x; test(i, y) && N.length < max; i += incr) {
+        var c;
+        if (isAlphaSequence) {
+          c = String.fromCharCode(i);
+          if (c === "\\") {
+            c = "";
+          }
+        } else {
+          c = String(i);
+          if (pad) {
+            var need = width - c.length;
+            if (need > 0) {
+              var z = new Array(need + 1).join("0");
+              if (i < 0) {
+                c = "-" + z + c.slice(1);
+              } else {
+                c = z + c;
+              }
+            }
+          }
+        }
+        if (length + c.length > maxLength) break;
+        N.push(c);
+        length += c.length;
+      }
+      return N;
+    }
+    function expand2(str, max, maxLength, isTop) {
+      var acc = [""];
+      var dropEmpties = false;
+      var firstGroup = true;
       for (; ; ) {
         const m = balanced("{", "}", str);
-        if (!m) return [str];
+        if (!m) {
+          return combine(acc, str, [""], max, maxLength, dropEmpties);
+        }
         const pre = m.pre;
-        if (/\$$/.test(m.pre)) {
-          const post2 = m.post.length ? expand2(m.post, max, false) : [""];
-          for (let k2 = 0; k2 < post2.length && k2 < max; k2++) {
-            const expansion2 = pre + "{" + m.body + "}" + post2[k2];
-            expansions.push(expansion2);
-          }
-          return expansions;
+        if (/\$$/.test(pre)) {
+          acc = combine(
+            acc,
+            pre + "{" + m.body + "}",
+            [""],
+            max,
+            maxLength,
+            dropEmpties && !m.post.length
+          );
+          firstGroup = false;
+          if (!m.post.length) break;
+          str = m.post;
+          continue;
         }
         var isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
         var isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
@@ -1245,73 +1318,66 @@ var require_brace_expansion = __commonJS({
             isTop = true;
             continue;
           }
-          return [str];
+          return combine(
+            acc,
+            pre + "{" + m.body + "}" + m.post,
+            [""],
+            max,
+            maxLength,
+            dropEmpties
+          );
         }
-        const post = m.post.length ? expand2(m.post, max, false) : [""];
-        var n;
+        if (firstGroup) {
+          dropEmpties = isTop && !isSequence;
+          firstGroup = false;
+        }
+        var values;
         if (isSequence) {
-          n = m.body.split(/\.\./);
+          values = expandSequence(m.body, isAlphaSequence, max, maxLength);
         } else {
-          n = parseCommaParts(m.body);
-          if (n.length === 1) {
-            n = expand2(n[0], max, false).map(embrace);
+          var n = parseCommaParts(m.body);
+          if (n.length === 1 && n[0] !== void 0) {
+            n = expand2(n[0], max, maxLength, false).map(embrace);
             if (n.length === 1) {
-              return post.map(function(p) {
-                return m.pre + n[0] + p;
-              });
+              acc = combine(
+                acc,
+                pre + n[0],
+                [""],
+                max,
+                maxLength,
+                dropEmpties && !m.post.length
+              );
+              if (!m.post.length) break;
+              str = m.post;
+              continue;
             }
           }
-        }
-        var N;
-        if (isSequence) {
-          var x = numeric(n[0]);
-          var y = numeric(n[1]);
-          var width = Math.max(n[0].length, n[1].length);
-          var incr = n.length == 3 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
-          var test = lte;
-          var reverse = y < x;
-          if (reverse) {
-            incr *= -1;
-            test = gte;
+          var dropsEmpties = dropEmpties && !m.post.length && !pre;
+          for (var d = 0; dropsEmpties && d < acc.length; d++) {
+            if (acc[d]) {
+              dropsEmpties = false;
+            }
           }
-          var pad = n.some(isPadded);
-          N = [];
-          for (var i = x; test(i, y) && N.length < max; i += incr) {
-            var c;
-            if (isAlphaSequence) {
-              c = String.fromCharCode(i);
-              if (c === "\\")
-                c = "";
-            } else {
-              c = String(i);
-              if (pad) {
-                var need = width - c.length;
-                if (need > 0) {
-                  var z = new Array(need + 1).join("0");
-                  if (i < 0)
-                    c = "-" + z + c.slice(1);
-                  else
-                    c = z + c;
-                }
+          values = [];
+          var valuesLength = 0;
+          outer: for (var j = 0; j < n.length; j++) {
+            var expanded = expand2(n[j], max, maxLength, false);
+            for (var k = 0; k < expanded.length; k++) {
+              var v = expanded[k];
+              if (dropsEmpties && !v) continue;
+              if (values.length >= max || valuesLength + v.length > maxLength) {
+                break outer;
               }
+              values.push(v);
+              valuesLength += v.length;
             }
-            N.push(c);
-          }
-        } else {
-          N = [];
-          for (var j = 0; j < n.length; j++) {
-            N.push.apply(N, expand2(n[j], max, false));
           }
         }
-        for (var j = 0; j < N.length; j++) {
-          for (var k = 0; k < post.length && expansions.length < max; k++) {
-            var expansion = pre + N[j] + post[k];
-            if (!isTop || isSequence || expansion)
-              expansions.push(expansion);
-          }
-        }
-        return expansions;
+        acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m.post.length);
+        if (!m.post.length) break;
+        str = m.post;
       }
+      return acc;
     }
   }
 });
@@ -11736,7 +11802,7 @@ var require_form_data = __commonJS({
     var parseUrl = require("url").parse;
     var fs36 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto8 = require("crypto");
+    var crypto7 = require("crypto");
     var mime2 = require_mime_types();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -11942,7 +12008,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData2.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto8.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto7.randomBytes(12).toString("hex");
     };
     FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -14102,7 +14168,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve24, reject) {
+      return new Body.Promise(function(resolve25, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14136,7 +14202,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve24(Buffer.concat(accum, accumBytes));
+            resolve25(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -14811,7 +14877,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve24, reject) {
+      return new fetch2.Promise(function(resolve25, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -14944,7 +15010,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve24(fetch2(new Request(locationURL, requestOpts)));
+                resolve25(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -14965,7 +15031,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve24(response);
+            resolve25(response);
             return;
           }
           const zlibOptions = {
@@ -14975,7 +15041,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve24(response);
+            resolve25(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -14987,12 +15053,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve24(response);
+              resolve25(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve24(response);
+                resolve25(response);
               }
             });
             return;
@@ -15000,11 +15066,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve24(response);
+            resolve25(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve24(response);
+          resolve25(response);
         });
         writeToStream(req, request);
       });
@@ -20904,7 +20970,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve24) => {
+    return new Promise((resolve25) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -20923,12 +20989,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve24({ code: 127, output: `${output}
+        resolve25({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve24({ code: code ?? 1, output });
+        resolve25({ code: code ?? 1, output });
       });
     });
   }
@@ -24373,7 +24439,7 @@ minimatch.unescape = unescape;
 var import_ignore = __toESM(require_ignore());
 
 // src/overleaf/util.ts
-var crypto = __toESM(require("crypto"));
+var crypto2 = __toESM(require("crypto"));
 var import_child_process2 = require("child_process");
 var fs15 = __toESM(require("fs/promises"));
 var os3 = __toESM(require("os"));
@@ -24409,7 +24475,7 @@ function expandHome(input) {
   return input;
 }
 function sha1(content) {
-  return crypto.createHash("sha1").update(content).digest("hex");
+  return crypto2.createHash("sha1").update(content).digest("hex");
 }
 function isTextLike(filePath) {
   const ext2 = path19.extname(filePath).toLowerCase();
@@ -24481,8 +24547,8 @@ async function assertNoSymlinkPath(root, relativePath) {
 function assertPathWithin(root, candidate) {
   const absoluteRoot = path19.resolve(root);
   const absoluteCandidate = path19.resolve(candidate);
-  const relative9 = path19.relative(absoluteRoot, absoluteCandidate);
-  if (relative9 === ".." || relative9.startsWith(`..${path19.sep}`) || path19.isAbsolute(relative9)) {
+  const relative10 = path19.relative(absoluteRoot, absoluteCandidate);
+  if (relative10 === ".." || relative10.startsWith(`..${path19.sep}`) || path19.isAbsolute(relative10)) {
     throw new Error(`Path is outside the trusted root: ${candidate}`);
   }
   return absoluteCandidate;
@@ -24616,6 +24682,21 @@ function validateManifest(value) {
   }
   for (const field of ["rootDocId", "rootDocPath", "compiler", "lastFullAuditAt"]) {
     if (value[field] !== void 0 && typeof value[field] !== "string") return `$.${field} must be a string`;
+  }
+  if (value.lastRemoteCompile !== void 0) {
+    if (!isRecord4(value.lastRemoteCompile)) return "$.lastRemoteCompile must be an object";
+    if (typeof value.lastRemoteCompile.completedAt !== "string") return "$.lastRemoteCompile.completedAt must be a string";
+    for (const field of ["pdfPath", "logPath"]) {
+      const filePath = value.lastRemoteCompile[field];
+      if (filePath !== void 0) {
+        if (typeof filePath !== "string") return `$.lastRemoteCompile.${field} must be a string`;
+        try {
+          if (normalizeProjectRelativePath(filePath) !== filePath) return `$.lastRemoteCompile.${field} must be a safe relative project path`;
+        } catch {
+          return `$.lastRemoteCompile.${field} must be a safe relative project path`;
+        }
+      }
+    }
   }
   if (value.rootDocPath !== void 0) {
     try {
@@ -25033,7 +25114,7 @@ function getManifestEntityIndex(manifest) {
 }
 
 // src/overleaf/compileCore.ts
-var crypto2 = __toESM(require("crypto"));
+var crypto3 = __toESM(require("crypto"));
 var fs17 = __toESM(require("fs/promises"));
 var path21 = __toESM(require("path"));
 var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
@@ -25041,13 +25122,14 @@ var DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5e3;
 async function compileRemoteProject(root, client, rootDocOverride, options = {}) {
   const manifest = await readManifest(root);
   const rootDocPath = rootDocOverride ?? manifest.rootDocPath ?? await detectRootDoc(root);
-  const response = await client.compile(manifest.projectId, rootDocPath ?? null);
+  options.signal?.throwIfAborted();
+  const response = await client.compile(manifest.projectId, rootDocPath ?? null, false, false, options.signal);
   if (response.status !== "success") throw new Error(`Overleaf compile failed with status: ${response.status}`);
   const outputRoot = metadataPath(root, OUTPUT_DIR);
   const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
     await cleanupInterruptedCompileArtifacts(root);
-    const token = `${process.pid}-${Date.now()}-${crypto2.randomBytes(6).toString("hex")}`;
+    const token = `${process.pid}-${Date.now()}-${crypto3.randomBytes(6).toString("hex")}`;
     const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
     const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
     const stagedFiles = [];
@@ -25056,10 +25138,12 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
     await fs17.mkdir(stagingRoot, { recursive: true });
     try {
       for (const output of response.outputFiles ?? []) {
+        options.signal?.throwIfAborted();
         if (!output.url) continue;
         const name = uniqueCompileOutputName(output, usedNames);
         const target = path21.join(stagingRoot, name);
-        await client.downloadCompileOutputToPath(output.url, response, target);
+        options.onProgress?.(`Downloading ${name}`);
+        await client.downloadCompileOutputToPath(output.url, response, target, { signal: options.signal });
         stagedFiles.push(target);
       }
       await replaceOutputDirectory(outputRoot, stagingRoot, backupRoot);
@@ -25089,7 +25173,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
   for (; ; ) {
     try {
       await fs17.mkdir(lock, { recursive: false });
-      const nonce = crypto2.randomBytes(8).toString("hex");
+      const nonce = crypto3.randomBytes(8).toString("hex");
       await fs17.writeFile(owner, JSON.stringify({
         pid: process.pid,
         startedAt: Date.now(),
@@ -25124,7 +25208,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve24) => setTimeout(resolve24, 50));
+      await new Promise((resolve25) => setTimeout(resolve25, 50));
     }
   }
 }
@@ -25211,18 +25295,39 @@ var CompileService2 = class {
     this.diagnostics = diagnostics;
   }
   diagnostics;
-  async compile(root, client) {
+  async compile(root, client, options = {}) {
     await vscode8.workspace.saveAll();
-    const result = await compileRemoteProject(root, client);
+    const result = await compileRemoteProject(root, client, void 0, options);
     const logPath = result.logPath ?? path22.join(result.outputRoot, "output.log");
     const log = await fs18.readFile(logPath, "utf8").catch(() => "");
     this.diagnostics.publish(root, result.rootDocPath, log);
+    const manifest = await readManifest(root);
+    manifest.lastRemoteCompile = {
+      completedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      pdfPath: relativeOutputPath(root, result.pdfPath),
+      logPath: relativeOutputPath(root, result.logPath)
+    };
+    await writeManifest(root, manifest);
+    return result;
   }
   async showLog(root) {
-    const logUri = vscode8.Uri.file(path22.join(metadataPath(root, OUTPUT_DIR), "output.log"));
+    const manifest = await readManifest(root).catch(() => void 0);
+    const stored = manifest?.lastRemoteCompile?.logPath;
+    const candidate = stored ? path22.resolve(root, stored) : path22.join(metadataPath(root, OUTPUT_DIR), "output.log");
+    const logPath = stored && isWithin(root, candidate) ? candidate : path22.join(metadataPath(root, OUTPUT_DIR), "output.log");
+    const logUri = vscode8.Uri.file(logPath);
     await vscode8.window.showTextDocument(logUri, { preview: false, viewColumn: vscode8.ViewColumn.Beside });
   }
 };
+function relativeOutputPath(root, filePath) {
+  if (!filePath) return void 0;
+  const relative10 = path22.relative(root, filePath).replace(/\\/g, "/");
+  return relative10 && !relative10.startsWith("../") && relative10 !== ".." && !path22.isAbsolute(relative10) ? relative10 : void 0;
+}
+function isWithin(root, candidate) {
+  const relative10 = path22.relative(path22.resolve(root), path22.resolve(candidate));
+  return relative10 === "" || !relative10.startsWith("..") && !path22.isAbsolute(relative10);
+}
 
 // src/overleaf/mirrorManager.ts
 var fs21 = __toESM(require("fs/promises"));
@@ -25230,7 +25335,7 @@ var path26 = __toESM(require("path"));
 var vscode9 = __toESM(require("vscode"));
 
 // src/overleaf/sharedState.ts
-var crypto3 = __toESM(require("crypto"));
+var crypto4 = __toESM(require("crypto"));
 var fs19 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
@@ -25274,7 +25379,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve24) => resolve24());
+  const wake = () => waiters.splice(0).forEach((resolve25) => resolve25());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -25286,7 +25391,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve24) => waiters.push(resolve24));
+            await new Promise((resolve25) => waiters.push(resolve25));
           }
           reservedBytes += amount;
         }
@@ -25508,7 +25613,7 @@ async function acquireSharedStateLock() {
   while (true) {
     const metadata = {
       pid: process.pid,
-      nonce: crypto3.randomBytes(16).toString("hex"),
+      nonce: crypto4.randomBytes(16).toString("hex"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
       processStart: await processStartSignature(process.pid)
     };
@@ -25589,7 +25694,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve24) => setTimeout(resolve24, ms));
+  return new Promise((resolve25) => setTimeout(resolve25, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -26149,44 +26254,41 @@ var import_form_data = __toESM(require_form_data());
 var import_node_fetch = __toESM(require_lib2());
 var mime = __toESM(require_mime_types());
 
-// node_modules/uuid/dist/esm-node/rng.js
-var import_crypto2 = __toESM(require("crypto"));
-var rnds8Pool = new Uint8Array(256);
-var poolPtr = rnds8Pool.length;
-function rng() {
-  if (poolPtr > rnds8Pool.length - 16) {
-    import_crypto2.default.randomFillSync(rnds8Pool);
-    poolPtr = 0;
-  }
-  return rnds8Pool.slice(poolPtr, poolPtr += 16);
-}
-
-// node_modules/uuid/dist/esm-node/stringify.js
+// node_modules/uuid/dist-node/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
   byteToHex.push((i + 256).toString(16).slice(1));
 }
 function unsafeStringify(arr, offset = 0) {
-  return byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]];
+  return (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase();
 }
 
-// node_modules/uuid/dist/esm-node/native.js
-var import_crypto3 = __toESM(require("crypto"));
-var native_default = {
-  randomUUID: import_crypto3.default.randomUUID
-};
+// node_modules/uuid/dist-node/rng.js
+var rnds8 = new Uint8Array(16);
+function rng() {
+  return crypto.getRandomValues(rnds8);
+}
 
-// node_modules/uuid/dist/esm-node/v4.js
+// node_modules/uuid/dist-node/v4.js
 function v4(options, buf, offset) {
-  if (native_default.randomUUID && !buf && !options) {
-    return native_default.randomUUID();
+  if (!buf && !options && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
+  return _v4(options, buf, offset);
+}
+function _v4(options, buf, offset) {
   options = options || {};
-  const rnds = options.random || (options.rng || rng)();
+  const rnds = options.random ?? options.rng?.() ?? rng();
+  if (rnds.length < 16) {
+    throw new Error("Random bytes length must be >= 16");
+  }
   rnds[6] = rnds[6] & 15 | 64;
   rnds[8] = rnds[8] & 63 | 128;
   if (buf) {
     offset = offset || 0;
+    if (offset < 0 || offset + 16 > buf.length) {
+      throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+    }
     for (let i = 0; i < 16; ++i) {
       buf[offset + i] = rnds[i];
     }
@@ -26197,30 +26299,30 @@ function v4(options, buf, offset) {
 var v4_default = v4;
 
 // src/overleaf/binaryTransfer.ts
-var import_crypto4 = require("crypto");
+var import_crypto2 = require("crypto");
 var import_fs3 = require("fs");
 var fs22 = __toESM(require("fs/promises"));
 var path27 = __toESM(require("path"));
-var import_crypto5 = require("crypto");
+var import_crypto3 = require("crypto");
 async function hashFileDigests(filePath) {
   const stat10 = await fs22.stat(filePath);
   if (!stat10.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
-  const sha13 = (0, import_crypto4.createHash)("sha1");
-  const git = (0, import_crypto4.createHash)("sha1");
+  const sha13 = (0, import_crypto2.createHash)("sha1");
+  const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat10.size}\0`);
-  await new Promise((resolve24, reject) => {
+  await new Promise((resolve25, reject) => {
     const input = (0, import_fs3.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha13.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve24);
+    input.on("end", resolve25);
   });
   return { size: stat10.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
-  const token = `${process.pid}-${Date.now()}-${(0, import_crypto5.randomBytes)(4).toString("hex")}`;
+  const token = `${process.pid}-${Date.now()}-${(0, import_crypto3.randomBytes)(4).toString("hex")}`;
   const backupPath = path27.join(path27.dirname(targetPath), `.${path27.basename(targetPath)}.backup-${token}`);
   let backedUp = false;
   try {
@@ -26335,7 +26437,8 @@ var OverleafClient = class {
         body: {}
       });
       return normalizeProjects(result.projects);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof OverleafHttpError) || ![404, 405].includes(error.status)) throw error;
       const result = await this.requestJson("GET", "user/projects");
       return normalizeProjects(result.projects);
     }
@@ -26426,7 +26529,7 @@ var OverleafClient = class {
       includeCsrfHeader: true
     });
   }
-  async compile(projectId, rootResourcePath, draft = false, stopOnFirstError = false) {
+  async compile(projectId, rootResourcePath, draft = false, stopOnFirstError = false, signal) {
     return this.requestJson("POST", `project/${projectId}/compile?auto_compile=true`, {
       body: {
         check: "silent",
@@ -26435,7 +26538,8 @@ var OverleafClient = class {
         rootResourcePath,
         stopOnFirstError
       },
-      includeCsrfHeader: true
+      includeCsrfHeader: true,
+      signal
     });
   }
   async stopCompile(projectId) {
@@ -26886,7 +26990,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve25, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -26899,7 +27003,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve24();
+        error ? reject(error) : resolve25();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -26914,7 +27018,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve25, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -26922,7 +27026,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve24(project);
+        error ? reject(error) : resolve25(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
@@ -26933,7 +27037,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve25, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -26945,7 +27049,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve24(project);
+        error ? reject(error) : resolve25(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -26997,7 +27101,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve25, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -27007,7 +27111,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve24(values ?? []);
+        error ? reject(error) : resolve25(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -27188,6 +27292,10 @@ function patchSocketIoHandshake(socketIo, runtimeRoot2) {
       const query = socketIo.util.query(this.socket.options.query);
       this.websocket = new Ws(this.prepareUrl() + query, void 0, {
         origin: this.socket.options.overleafCodexOrigin,
+        // Bound legacy ws frame buffering. The Overleaf protocol sends small OT
+        // messages; rejecting oversized frames prevents memory exhaustion while
+        // keeping compatibility with the pinned Socket.IO 0.9 transport.
+        maxPayload: 64 * 1024 * 1024,
         headers: {
           Cookie: cookie,
           Origin: this.socket.options.overleafCodexOrigin
@@ -27261,7 +27369,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve24) => setTimeout(resolve24, 250 * 2 ** attempt));
+      await new Promise((resolve25) => setTimeout(resolve25, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -27293,7 +27401,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve24, reject) => {
+  return new Promise((resolve25, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -27321,7 +27429,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve24({
+            resolve25({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -27502,7 +27610,7 @@ var BinaryTransactionStore = class {
 // src/overleaf/syncStatus.ts
 var fs25 = __toESM(require("fs/promises"));
 var import_fs5 = require("fs");
-var import_crypto6 = require("crypto");
+var import_crypto4 = require("crypto");
 var path29 = __toESM(require("path"));
 function classifySyncStatus(input) {
   const entity = input.remoteFile ?? input.manifestFile;
@@ -27794,8 +27902,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve24, reject) => {
-      pending.push(() => task().then(resolve24, reject).finally(() => {
+    return new Promise((resolve25, reject) => {
+      pending.push(() => task().then(resolve25, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -27818,11 +27926,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash2 = (0, import_fs5.createReadStream)(filePath);
-    const digest = await new Promise((resolve24, reject) => {
-      const state = (0, import_crypto6.createHash)("sha1");
+    const digest = await new Promise((resolve25, reject) => {
+      const state = (0, import_crypto4.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
-      hash2.on("end", () => resolve24(state.digest("hex")));
+      hash2.on("end", () => resolve25(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -28317,13 +28425,13 @@ var SyncCheckScheduler = class {
       this.active = true;
       return this.runBatch(request).finally(() => this.pump());
     }
-    return new Promise((resolve24, reject) => {
+    return new Promise((resolve25, reject) => {
       if (!this.pending) {
         this.pending = { request: normalizeRequest(request), waiters: [] };
       } else {
         this.pending.request = mergeRequests(this.pending.request, request);
       }
-      this.pending.waiters.push({ resolve: resolve24, reject });
+      this.pending.waiters.push({ resolve: resolve25, reject });
     });
   }
   schedule(request, delayMs) {
@@ -28457,8 +28565,8 @@ function validateRelativePath(value) {
 function resolveWithinRoot(root, relPath) {
   const absoluteRoot = path31.resolve(root);
   const absolute = path31.resolve(absoluteRoot, relPath);
-  const relative9 = path31.relative(absoluteRoot, absolute);
-  if (!relative9 || relative9.startsWith("..") || path31.isAbsolute(relative9)) {
+  const relative10 = path31.relative(absoluteRoot, absolute);
+  if (!relative10 || relative10.startsWith("..") || path31.isAbsolute(relative10)) {
     throw new Error(`Path escapes the local mirror: ${relPath}`);
   }
   return absolute;
@@ -28665,10 +28773,10 @@ function valueForFolder(folder, relPath, value) {
 async function folderFingerprintFromLocal(root, relPath, manifest, concurrency = 4) {
   const parts = [];
   const files = [];
-  const walk = async (absolute, relative9) => {
+  const walk = async (absolute, relative10) => {
     const entries = await fs29.readdir(absolute, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      const child = toPosixPath2(path33.posix.join(relative9, entry.name));
+      const child = toPosixPath2(path33.posix.join(relative10, entry.name));
       const projectPath = toPosixPath2(path33.posix.join(relPath, child));
       if (shouldIgnore(manifest, projectPath) || shouldIgnoreUntrackedLocalPath(manifest, projectPath)) continue;
       if (entry.isDirectory()) {
@@ -28754,6 +28862,7 @@ var RealtimeSyncService = class {
   checkSequence = 0;
   manifestMutationEpoch = 0;
   activityLog = [];
+  activityLogWrite = Promise.resolve();
   get running() {
     return Boolean(this.session);
   }
@@ -28771,6 +28880,11 @@ var RealtimeSyncService = class {
   }
   getActivityLog() {
     return [...this.activityLog];
+  }
+  async clearActivityLog() {
+    this.activityLog.splice(0, this.activityLog.length);
+    if (this.root) await atomicWriteText(metadataPath(this.root, "activity-log.json"), "[]\n");
+    this.statusChanged.fire();
   }
   get onDidChangeStatus() {
     return this.statusChanged.event;
@@ -29257,6 +29371,13 @@ var RealtimeSyncService = class {
     this.root = root;
     this.client = client;
     this.manifest = await readManifest(root);
+    this.activityLog.splice(0, this.activityLog.length);
+    const storedActivity = await fs30.readFile(metadataPath(root, "activity-log.json"), "utf8").then((raw) => JSON.parse(raw), () => void 0);
+    if (Array.isArray(storedActivity)) {
+      for (const entry of storedActivity.slice(-100)) {
+        if (entry && typeof entry === "object" && typeof entry.at === "string" && typeof entry.message === "string") this.activityLog.push(entry);
+      }
+    }
     this.manifestStore = new ManifestStore(root);
     this.syncGate.setProject("checking");
     this.binaryTransactions = new BinaryTransactionStore(root);
@@ -29511,6 +29632,7 @@ var RealtimeSyncService = class {
   async acceptRemoteConflict(relPath) {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    await this.saveConflictSnapshot(normalized, state);
     await this.writeLocalFile(normalized, Buffer.from(state.remoteCache, "utf8"), true);
     state.localCache = state.remoteCache;
     state.paused = false;
@@ -29529,6 +29651,7 @@ var RealtimeSyncService = class {
   async useLocalConflict(relPath) {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    await this.saveConflictSnapshot(normalized, state);
     await this.saveOpenLocalDocument(normalized);
     const localContent = await fs30.readFile(await assertNoSymlinkPath(this.root, normalized), "utf8");
     state.paused = false;
@@ -29554,6 +29677,12 @@ var RealtimeSyncService = class {
     } else if (selection === "Accept Remote") {
       await this.acceptRemoteConflict(relPath);
     }
+  }
+  async saveConflictSnapshot(relPath, state) {
+    const snapshot = metadataPath(this.root, "conflicts", "snapshots", `${relPath.replace(/[\\/]/g, "__")}.${Date.now()}.local.tex`);
+    const local = await fs30.readFile(await assertNoSymlinkPath(this.root, relPath), "utf8").catch(() => state.localCache);
+    await atomicWriteText(snapshot, local);
+    this.log(`Saved conflict snapshot for ${relPath}.`);
   }
   async saveOpenLocalDocument(relPath) {
     const absPath = path34.normalize(this.abs(relPath));
@@ -31251,6 +31380,11 @@ var RealtimeSyncService = class {
     this.output.appendLine(`[${at}] ${message}`);
     this.activityLog.push({ at, message });
     if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
+    if (this.root) {
+      const root = this.root;
+      const snapshot = JSON.stringify(this.activityLog.slice(-100), null, 2) + "\n";
+      this.activityLogWrite = this.activityLogWrite.catch(() => void 0).then(() => atomicWriteText(metadataPath(root, "activity-log.json"), snapshot)).catch(() => void 0);
+    }
   }
   markLocalMutation(entityId) {
     const expirations = this.localMutationIds.get(entityId) ?? [];
@@ -31277,7 +31411,7 @@ function isAlwaysLocal(relPath) {
 }
 
 // src/overleaf/keychainStore.ts
-var crypto6 = __toESM(require("crypto"));
+var crypto5 = __toESM(require("crypto"));
 var fs31 = __toESM(require("fs/promises"));
 var path35 = __toESM(require("path"));
 var import_child_process4 = require("child_process");
@@ -31419,7 +31553,7 @@ var FileCredentialStore = class {
     };
   }
   filePath(account) {
-    const digest = crypto6.createHash("sha256").update(account).digest("hex");
+    const digest = crypto5.createHash("sha256").update(account).digest("hex");
     return path35.join(this.root, `${digest}.json`);
   }
 };
@@ -31532,7 +31666,7 @@ async function writePrivateJson(target, value) {
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve24, reject) => {
+  return new Promise((resolve25, reject) => {
     const child = (0, import_child_process4.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -31541,7 +31675,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve24(output);
+      if (code === 0) resolve25(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -31642,8 +31776,8 @@ var SecretStore = class {
 // src/overleaf/mirrorRoots.ts
 var path36 = __toESM(require("path"));
 function pathIsWithin(root, candidate) {
-  const relative9 = path36.relative(path36.resolve(root), path36.resolve(candidate));
-  return relative9 === "" || relative9 !== ".." && !relative9.startsWith(`..${path36.sep}`) && !path36.isAbsolute(relative9);
+  const relative10 = path36.relative(path36.resolve(root), path36.resolve(candidate));
+  return relative10 === "" || relative10 !== ".." && !relative10.startsWith(`..${path36.sep}`) && !path36.isAbsolute(relative10);
 }
 function firstWorkspaceMirrorRoot(workspaceRoots, hasManifest) {
   for (const workspaceRoot of workspaceRoots) {
@@ -31666,7 +31800,7 @@ function workspaceContainsPath(candidate, workspaceRoots) {
 }
 
 // src/overleaf/syncOwnerCoordinator.ts
-var crypto7 = __toESM(require("crypto"));
+var crypto6 = __toESM(require("crypto"));
 var fs32 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path37 = __toESM(require("path"));
@@ -31726,7 +31860,7 @@ var SyncOwnerCoordinator = class {
       pid: process.pid,
       root: this.root,
       socketPath: paths.socketPath,
-      nonce: crypto7.randomBytes(16).toString("hex"),
+      nonce: crypto6.randomBytes(16).toString("hex"),
       startedAt: (/* @__PURE__ */ new Date()).toISOString(),
       processStart: await processStartSignature(process.pid)
     };
@@ -31735,11 +31869,11 @@ var SyncOwnerCoordinator = class {
 `, { mode: 384 });
       await fs32.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve24, reject) => {
+      await new Promise((resolve25, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve24();
+          resolve25();
         });
       });
       await fs32.chmod(paths.socketPath, 384);
@@ -31751,7 +31885,7 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve24) => server.close(() => resolve24()));
+      if (server?.listening) await new Promise((resolve25) => server.close(() => resolve25()));
       await fs32.rm(paths.lockPath, { recursive: true, force: true });
       await fs32.rm(paths.socketPath, { force: true });
       throw error;
@@ -31765,7 +31899,7 @@ var SyncOwnerCoordinator = class {
     }
     const request = {
       version: 1,
-      id: crypto7.randomUUID(),
+      id: crypto6.randomUUID(),
       command,
       root: this.root,
       args
@@ -31807,7 +31941,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve24, reject) => {
+    const subscribed = new Promise((resolve25, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -31819,7 +31953,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve24();
+        error ? reject(error) : resolve25();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -31836,7 +31970,7 @@ var SyncOwnerCoordinator = class {
     try {
       await this.enqueueMessage(socket, {
         version: 1,
-        id: crypto7.randomUUID(),
+        id: crypto6.randomUUID(),
         command: "subscribe",
         root: this.root,
         args: {}
@@ -31861,7 +31995,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve24) => server.close(() => resolve24()));
+      await new Promise((resolve25) => server.close(() => resolve25()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
@@ -31948,7 +32082,7 @@ var SyncOwnerCoordinator = class {
   }
 };
 function runtimePaths(root) {
-  const hash2 = crypto7.createHash("sha256").update(path37.resolve(root)).digest("hex").slice(0, 32);
+  const hash2 = crypto6.createHash("sha256").update(path37.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path37.join(runtimeRoot(), `${hash2}.lock`);
   return {
     lockPath,
@@ -31960,7 +32094,7 @@ function runtimePaths(root) {
   };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve24, reject) => {
+  return new Promise((resolve25, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -31969,7 +32103,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve24(result);
+      error ? reject(error) : resolve25(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -32047,7 +32181,7 @@ function writeMessageBounded(socket, value) {
     return Promise.reject(new Error("Sync IPC message exceeded its limit."));
   }
   const candidateId = value?.id;
-  const id = typeof candidateId === "string" ? candidateId : crypto7.randomUUID();
+  const id = typeof candidateId === "string" ? candidateId : crypto6.randomUUID();
   const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
   return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES)).reduce(
     (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({
@@ -32067,7 +32201,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve24, reject) => {
+  return new Promise((resolve25, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -32075,7 +32209,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve24();
+      error ? reject(error) : resolve25();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -32103,7 +32237,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve24, reject) => {
+  return new Promise((resolve25, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -32112,7 +32246,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve24();
+      error ? reject(error) : resolve25();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -32121,7 +32255,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve24) => {
+  return new Promise((resolve25) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -32130,14 +32264,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve24(value);
+      resolve25(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve24) => setTimeout(resolve24, ms));
+  return new Promise((resolve25) => setTimeout(resolve25, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -32299,6 +32433,7 @@ var OverleafService = class {
         conflicts: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getConflicts() : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalConflicts : [],
         collaborators: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getCollaborators() : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalCollaborators : [],
         lastSyncAt: manifest.lastSyncAt,
+        lastRemoteCompile: manifest.lastRemoteCompile,
         compileMode: this.compileMode(),
         ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot ? this.ownerCoordinator.isOwner ? "owner" : "client" : "none",
         connectionState: this.connectionStateForRoot(mirrorRoot),
@@ -32431,6 +32566,12 @@ var OverleafService = class {
       case "overleaf-trash":
         await this.moveRemoteDeletedToTrash({ path: payload.path, workspacePath: payload.workspacePath });
         return this.state(payload.workspacePath);
+      case "overleaf-bulk-sync":
+        await this.bulkSync(payload.paths, payload.workspacePath);
+        return this.state(payload.workspacePath);
+      case "overleaf-clear-activity":
+        await this.clearActivityLog(payload.workspacePath);
+        return this.state(payload.workspacePath);
       case "overleaf-set-compile-mode":
         await vscode11.workspace.getConfiguration("latexEditingToolkit.overleaf").update("compileMode", payload.mode === "overleaf" ? "overleaf" : "local", vscode11.ConfigurationTarget.Global);
         return this.state(payload.workspacePath);
@@ -32456,8 +32597,9 @@ var OverleafService = class {
     void this.ownerCoordinator.release();
     while (this.disposables.length) this.disposables.pop()?.dispose();
   }
-  async loginWithCookie(_candidate) {
-    const serverUrl = await this.pickServerUrl("Login Server", true);
+  async loginWithCookie(candidate) {
+    const requestedServer = candidate && typeof candidate === "object" && typeof candidate.serverUrl === "string" ? candidate.serverUrl : void 0;
+    const serverUrl = requestedServer ? normalizeServerUrl(requestedServer) : await this.pickServerUrl("Login Server", true);
     if (!serverUrl) return;
     const cookie = await vscode11.window.showInputBox({
       title: "Overleaf Cookie",
@@ -32480,10 +32622,20 @@ var OverleafService = class {
     const serverUrl = await this.pickServerUrl("Project Server");
     if (!serverUrl) return;
     const client = await this.makeClient(serverUrl);
-    const projects = await vscode11.window.withProgress(
-      { location: vscode11.ProgressLocation.Notification, title: "Loading Overleaf projects", cancellable: false },
-      () => client.listProjects()
-    );
+    let projects;
+    try {
+      projects = await vscode11.window.withProgress(
+        { location: vscode11.ProgressLocation.Notification, title: "Loading Overleaf projects", cancellable: false },
+        () => client.listProjects()
+      );
+    } catch (error) {
+      if (error instanceof OverleafHttpError && [401, 403].includes(error.status)) {
+        await this.secrets.deleteIdentity(serverUrl);
+        const action = await vscode11.window.showErrorMessage("Overleaf login expired. Sign in again with a fresh Cookie.", "Login again");
+        if (action === "Login again") await this.loginWithCookie({ serverUrl });
+      }
+      throw error;
+    }
     const picked = await this.pickProject(projects);
     if (picked) vscode11.window.setStatusBarMessage(`${picked.name} \xB7 ${picked.id}`, 3e3);
   }
@@ -32582,6 +32734,11 @@ var OverleafService = class {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["error"]);
     if (!item) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("retry", { path: item.path });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.retrySyncPath(item.path);
     this.onChanged();
   }
@@ -32614,7 +32771,12 @@ var OverleafService = class {
   async openSyncDiff(candidate) {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus();
-    if (item) await this.realtimeSync.openSyncDiff(item.path);
+    if (!item) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("open-diff", { path: item.path });
+      return;
+    }
+    await this.realtimeSync.openSyncDiff(item.path);
   }
   async resolveConflictUseLocal(candidate) {
     await this.ensureRunning(candidate);
@@ -32641,16 +32803,99 @@ var OverleafService = class {
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["remote deleted"]);
     if (!item) return;
     await this.confirmDestructive(`Move ${item.path} to the local Overleaf trash?`);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("trash", { path: item.path });
+      this.onChanged();
+      return;
+    }
     await this.realtimeSync.moveRemoteDeletedToTrash(item.path);
+    this.onChanged();
+  }
+  async bulkSync(rawPaths, candidate) {
+    const paths = Array.isArray(rawPaths) ? rawPaths.filter((value) => typeof value === "string" && Boolean(value.trim())).slice(0, 500) : [];
+    if (!paths.length) throw new Error("Select at least one safe sync item first.");
+    const root = await this.requireMirrorRoot(candidate);
+    await this.ensureRunning(root);
+    const run = async (progress, token) => {
+      const items = this.realtimeSync.getSyncStatusItems().filter((item) => paths.includes(item.path) && item.entityType !== "folder" && ["remote ahead", "remote only", "local ahead", "local only"].includes(item.status));
+      if (!items.length) throw new Error("The selected paths are no longer safe to sync. Refresh status and try again.");
+      const total = items.length;
+      const failures = [];
+      for (let index = 0; index < items.length; index += 1) {
+        if (token.isCancellationRequested) {
+          this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Bulk sync cancelled after ${index}/${total} item(s).`);
+          break;
+        }
+        const item = items[index];
+        progress.report({ message: `${index + 1}/${total} ${item.status === "remote ahead" || item.status === "remote only" ? "Pulling" : "Pushing"} ${item.path}` });
+        try {
+          if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+            await this.ownerCoordinator.request(item.status === "remote ahead" || item.status === "remote only" ? "pull" : "push", { path: item.path, force: false });
+          } else if (item.status === "remote ahead" || item.status === "remote only") {
+            await this.realtimeSync.pullRemoteFile(item.path, false);
+          } else {
+            await this.realtimeSync.pushLocalFile(item.path, false);
+          }
+        } catch (error) {
+          failures.push(`${item.path}: ${formatUnknownError(error)}`);
+        }
+        progress.report({ increment: 100 / total });
+      }
+      await this.realtimeSync.checkSyncStatus(root, void 0, void 0, { mode: "incremental", reason: "bulk-sync" }).catch(() => void 0);
+      if (failures.length) vscode11.window.showWarningMessage(`Bulk sync finished with ${failures.length} failure(s). ${failures.slice(0, 3).join(" \xB7 ")}`);
+    };
+    await vscode11.window.withProgress({ location: vscode11.ProgressLocation.Notification, title: "Applying Overleaf sync", cancellable: true }, run);
+    this.onChanged();
+  }
+  async clearActivityLog(candidate) {
+    const root = await this.requireMirrorRoot(candidate);
+    if (this.realtimeSync.currentRoot === root) await this.realtimeSync.clearActivityLog();
+    else if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) await this.ownerCoordinator.request("clear-activity");
     this.onChanged();
   }
   async compileRemote(candidate) {
     const root = await this.requireMirrorRoot(candidate);
+    await this.ensureRunning(root);
+    const preflight = await this.remoteCompilePreflight(root);
+    if (preflight && (preflight.globalBlockReason || preflight.items.some((item) => item.status !== "synced"))) {
+      const pending = preflight.items.filter((item) => item.status !== "synced");
+      const choice = await vscode11.window.showWarningMessage(
+        `Overleaf has ${pending.length} path(s) that are not synced. Compile the latest local changes first?`,
+        { modal: true },
+        "Sync and Compile",
+        "Compile Remote Version",
+        "Cancel"
+      );
+      if (choice === "Cancel" || !choice) throw new Error("Operation cancelled.");
+      if (choice === "Sync and Compile") {
+        if (this.ownerCoordinator.isOwner) await this.realtimeSync.syncOnce();
+        else if (this.ownerCoordinator.currentRoot) await this.ownerCoordinator.request("sync-once");
+        const verified = await this.remoteCompilePreflight(root);
+        if (verified && (verified.globalBlockReason || verified.items.some((item) => item.status !== "synced"))) {
+          throw new Error("Sync completed with unresolved changes. Review Sync Status before compiling.");
+        }
+      }
+    }
     const manifest = await readManifest(root);
     const client = await this.makeClient(manifest.serverUrl);
-    await vscode11.window.withProgress({ location: vscode11.ProgressLocation.Notification, title: "Compiling on Overleaf", cancellable: false }, () => this.compileService.compile(root, client));
+    await vscode11.window.withProgress(
+      { location: vscode11.ProgressLocation.Notification, title: "Compiling on Overleaf", cancellable: true },
+      (progress, token) => this.compileService.compile(root, client, {
+        signal: abortSignalFromToken(token),
+        onProgress: (message) => progress.report({ message })
+      })
+    );
     this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Remote Overleaf compile completed for ${root}`);
     this.onChanged();
+  }
+  async remoteCompilePreflight(root) {
+    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+      const result = await this.ownerCoordinator.request("status", { refresh: true, reason: "compile-preflight" });
+      return isSyncStatusReport(result) ? result : void 0;
+    }
+    const manifest = await readManifest(root);
+    const client = await this.makeClient(manifest.serverUrl);
+    return this.realtimeSync.checkSyncStatus(root, client, void 0, { mode: "incremental", reason: "compile-preflight" });
   }
   async openRemotePdf(candidate) {
     const root = await this.requireMirrorRoot(candidate);
@@ -32691,11 +32936,20 @@ var OverleafService = class {
   async openConflictDiff(candidate) {
     await this.ensureRunning(candidate);
     const conflict = this.conflictFromArgument(candidate) ?? await this.pickConflict();
-    if (conflict) await this.realtimeSync.openConflictDiff(conflict.relPath);
+    if (!conflict) return;
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("conflict-diff", { path: conflict.relPath });
+      return;
+    }
+    await this.realtimeSync.openConflictDiff(conflict.relPath);
   }
   async showConflicts(candidate) {
     const root = this.resolveMirrorRoot(candidate);
     if (root && this.realtimeSync.currentRoot !== root) await this.ensureRunning(root);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("show-conflicts");
+      return;
+    }
     await this.realtimeSync.showConflicts();
   }
   async logout(candidate) {
@@ -32818,6 +33072,45 @@ var OverleafService = class {
   }
   async handleOwnerCommand(command, args) {
     if (command === "snapshot") return this.ownerSnapshot();
+    if (command === "retry") {
+      const relPath = ownerCommandPath(args);
+      return this.realtimeSync.retrySyncPath(relPath);
+    }
+    if (command === "open-diff") {
+      await this.realtimeSync.openSyncDiff(ownerCommandPath(args));
+      return void 0;
+    }
+    if (command === "conflict-diff") {
+      await this.realtimeSync.openConflictDiff(ownerCommandPath(args));
+      return void 0;
+    }
+    if (command === "show-conflicts") {
+      await this.realtimeSync.showConflicts();
+      return void 0;
+    }
+    if (command === "show-collaborators") {
+      await this.realtimeSync.showCollaborators();
+      return void 0;
+    }
+    if (command === "trash") {
+      await this.realtimeSync.moveRemoteDeletedToTrash(ownerCommandPath(args));
+      return this.realtimeSync.getSyncStatusReport();
+    }
+    if (command === "clear-activity") {
+      await this.realtimeSync.clearActivityLog();
+      return void 0;
+    }
+    if (command === "bulk-sync") {
+      const paths = Array.isArray(args.paths) ? args.paths : [];
+      for (const value of paths) {
+        if (typeof value !== "string") continue;
+        const status = this.realtimeSync.getSyncStatusItems().find((item) => item.path === value);
+        if (!status || !["remote ahead", "remote only", "local ahead", "local only"].includes(status.status)) continue;
+        if (status.status === "remote ahead" || status.status === "remote only") await this.realtimeSync.pullRemoteFile(value, false);
+        else await this.realtimeSync.pushLocalFile(value, false);
+      }
+      return this.realtimeSync.getSyncStatusReport();
+    }
     const backend = {
       status: (request) => request.refresh || request.full || request.paths ? this.realtimeSync.checkSyncStatus(
         this.realtimeSync.currentRoot,
@@ -33008,7 +33301,13 @@ var OverleafService = class {
     if (!picked) return void 0;
     if (picked.server) return picked.server;
     const input = await vscode11.window.showInputBox({ title: "Overleaf Server URL", value: configured, ignoreFocusOut: true });
-    return input ? normalizeServerUrl(input) : void 0;
+    if (!input) return void 0;
+    try {
+      return normalizeServerUrl(input);
+    } catch {
+      vscode11.window.showErrorMessage("Enter a valid http(s) Overleaf server URL.");
+      return void 0;
+    }
   }
   async pickProject(projects) {
     const picked = await vscode11.window.showQuickPick(projects.map((project) => ({ label: project.name, description: project.accessLevel, detail: project.id, project })), { title: "Overleaf Projects", placeHolder: "Select a project" });
@@ -33027,13 +33326,13 @@ var OverleafService = class {
     return picked?.mirror;
   }
   async pickStatus(statuses) {
-    const items = this.realtimeSync.getSyncStatusItems().filter((item) => item.status !== "synced").filter((item) => !statuses || statuses.includes(item.status));
+    const items = this.syncItemsForSelection().filter((item) => item.status !== "synced").filter((item) => !statuses || statuses.includes(item.status));
     if (!items.length) return void 0;
     const picked = await vscode11.window.showQuickPick(items.map((item) => ({ label: item.path, description: item.status, detail: item.message, item })), { title: "Overleaf Sync Status", placeHolder: "Select a file" });
     return picked?.item;
   }
   async pickConflict() {
-    const conflicts = this.realtimeSync.getConflicts();
+    const conflicts = this.conflictsForSelection();
     if (!conflicts.length) return void 0;
     const picked = await vscode11.window.showQuickPick(conflicts.map((conflict) => ({ label: conflict.relPath, description: conflict.reason, conflict })), { title: "Overleaf Conflicts", placeHolder: "Select a conflict" });
     return picked?.conflict;
@@ -33042,7 +33341,7 @@ var OverleafService = class {
     const candidate = value && typeof value === "object" && "syncItem" in value ? value.syncItem : value;
     if (candidate && typeof candidate === "object" && typeof candidate.path === "string") {
       const pathValue = candidate.path;
-      const current = this.realtimeSync.getSyncStatusItems().find((item) => item.path === pathValue);
+      const current = this.syncItemsForSelection().find((item) => item.path === pathValue);
       if (current) return current;
       return { path: pathValue, status: "error", blocking: true };
     }
@@ -33061,7 +33360,19 @@ var OverleafService = class {
     if (root && this.realtimeSync.currentRoot !== root) {
       await this.ensureRunning(root);
     }
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
+      await this.ownerCoordinator.request("show-collaborators");
+      return;
+    }
     await this.realtimeSync.showCollaborators();
+  }
+  syncItemsForSelection() {
+    const local = this.realtimeSync.getSyncStatusItems();
+    return local.length > 0 || this.ownerCoordinator.isOwner || !this.ownerCoordinator.currentRoot ? local : this.externalSyncStatus?.items ?? [];
+  }
+  conflictsForSelection() {
+    const local = this.realtimeSync.getConflicts();
+    return local.length > 0 || this.ownerCoordinator.isOwner || !this.ownerCoordinator.currentRoot ? local : this.externalConflicts;
   }
   isDestructive(item) {
     return item.status.includes("deleted") || item.status === "diverged";
@@ -33093,6 +33404,13 @@ function isOwnerStateSnapshot(value) {
   if (!value || typeof value !== "object") return false;
   const snapshot = value;
   return (snapshot.syncStatus === void 0 || isSyncStatusReport(snapshot.syncStatus)) && Array.isArray(snapshot.conflicts) && snapshot.conflicts.every((conflict) => Boolean(conflict) && typeof conflict === "object" && typeof conflict.relPath === "string") && Array.isArray(snapshot.collaborators) && (snapshot.connectionState === void 0 || ["ready", "checking", "reconnecting", "blocked-auth", "blocked-tree", "stopped"].includes(snapshot.connectionState)) && (snapshot.connectionReason === void 0 || typeof snapshot.connectionReason === "string") && (snapshot.reconnectAttempts === void 0 || Number.isSafeInteger(snapshot.reconnectAttempts) && snapshot.reconnectAttempts >= 0) && (snapshot.activityLog === void 0 || Array.isArray(snapshot.activityLog) && snapshot.activityLog.every((entry) => Boolean(entry) && typeof entry === "object" && typeof entry.at === "string" && typeof entry.message === "string"));
+}
+function ownerCommandPath(args) {
+  const value = args.path;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("A project-relative path is required.");
+  }
+  return value;
 }
 function abortSignalFromToken(token) {
   const controller = new AbortController();
@@ -33206,12 +33524,12 @@ async function isManagedLink(commandPath, supportRoot) {
   if (!stat10?.isSymbolicLink()) return false;
   const target = await fs34.realpath(commandPath).catch(() => void 0);
   const canonicalSupportRoot = await fs34.realpath(supportRoot).catch(() => path39.resolve(supportRoot));
-  if (!target || !isWithin(canonicalSupportRoot, target)) return false;
+  if (!target || !isWithin2(canonicalSupportRoot, target)) return false;
   return fs34.stat(path39.join(path39.dirname(target), MARKER)).then(() => true, () => false);
 }
-function isWithin(root, candidate) {
-  const relative9 = path39.relative(path39.resolve(root), path39.resolve(candidate));
-  return relative9 === "" || !relative9.startsWith("..") && !path39.isAbsolute(relative9);
+function isWithin2(root, candidate) {
+  const relative10 = path39.relative(path39.resolve(root), path39.resolve(candidate));
+  return relative10 === "" || !relative10.startsWith("..") && !path39.isAbsolute(relative10);
 }
 
 // src/overleaf/sharedConfigBridge.ts

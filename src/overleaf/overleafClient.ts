@@ -160,7 +160,11 @@ export class OverleafClient {
         body: {}
       });
       return normalizeProjects(result.projects);
-    } catch {
+    } catch (error) {
+      // Older Overleaf-compatible servers expose only GET /user/projects.
+      // Preserve authentication, network and server failures instead of
+      // masking them with a second request.
+      if (!(error instanceof OverleafHttpError) || ![404, 405].includes(error.status)) throw error;
       const result = await this.requestJson<{ projects: unknown[] }>('GET', 'user/projects');
       return normalizeProjects(result.projects);
     }
@@ -296,7 +300,8 @@ export class OverleafClient {
     projectId: string,
     rootResourcePath: string | null,
     draft = false,
-    stopOnFirstError = false
+    stopOnFirstError = false,
+    signal?: AbortSignal
   ): Promise<CompileResponse> {
     return this.requestJson<CompileResponse>('POST', `project/${projectId}/compile?auto_compile=true`, {
       body: {
@@ -306,7 +311,8 @@ export class OverleafClient {
         rootResourcePath,
         stopOnFirstError
       },
-      includeCsrfHeader: true
+      includeCsrfHeader: true,
+      signal
     });
   }
 
@@ -1174,6 +1180,10 @@ function patchSocketIoHandshake(socketIo: any, runtimeRoot: string): void {
       const query = socketIo.util.query(this.socket.options.query);
       this.websocket = new Ws(this.prepareUrl() + query, undefined, {
         origin: this.socket.options.overleafCodexOrigin,
+        // Bound legacy ws frame buffering. The Overleaf protocol sends small OT
+        // messages; rejecting oversized frames prevents memory exhaustion while
+        // keeping compatibility with the pinned Socket.IO 0.9 transport.
+        maxPayload: 64 * 1024 * 1024,
         headers: {
           Cookie: cookie,
           Origin: this.socket.options.overleafCodexOrigin

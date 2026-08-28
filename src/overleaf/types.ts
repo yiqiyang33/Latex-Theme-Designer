@@ -88,6 +88,11 @@ export interface OverleafCodexManifest {
   lastSyncAt: string;
   projectVersion?: number;
   lastFullAuditAt?: string;
+  lastRemoteCompile?: {
+    completedAt: string;
+    pdfPath?: string;
+    logPath?: string;
+  };
 }
 
 export interface JoinDocResult {

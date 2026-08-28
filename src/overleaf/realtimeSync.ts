@@ -191,6 +191,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private checkSequence = 0;
   private manifestMutationEpoch = 0;
   private readonly activityLog: SyncActivityEntry[] = [];
+  private activityLogWrite: Promise<void> = Promise.resolve();
 
   constructor(private readonly context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
     this.output = output ?? vscode.window.createOutputChannel('LaTeX Editing Toolkit');
@@ -234,6 +235,12 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   getActivityLog(): SyncActivityEntry[] {
     return [...this.activityLog];
+  }
+
+  async clearActivityLog(): Promise<void> {
+    this.activityLog.splice(0, this.activityLog.length);
+    if (this.root) await atomicWriteText(metadataPath(this.root, 'activity-log.json'), '[]\n');
+    this.statusChanged.fire();
   }
 
   get onDidChangeStatus(): vscode.Event<void> {
@@ -792,6 +799,15 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.root = root;
     this.client = client;
     this.manifest = await readManifest(root);
+    this.activityLog.splice(0, this.activityLog.length);
+    const storedActivity = await fs.readFile(metadataPath(root, 'activity-log.json'), 'utf8')
+      .then(raw => JSON.parse(raw) as unknown, () => undefined);
+    if (Array.isArray(storedActivity)) {
+      for (const entry of storedActivity.slice(-100)) {
+        if (entry && typeof entry === 'object' && typeof (entry as SyncActivityEntry).at === 'string'
+          && typeof (entry as SyncActivityEntry).message === 'string') this.activityLog.push(entry as SyncActivityEntry);
+      }
+    }
     this.manifestStore = new ManifestStore(root);
     this.syncGate.setProject('checking');
     this.binaryTransactions = new BinaryTransactionStore(root);
@@ -1061,6 +1077,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   async acceptRemoteConflict(relPath: string): Promise<void> {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    await this.saveConflictSnapshot(normalized, state);
     await this.writeLocalFile(normalized, Buffer.from(state.remoteCache, 'utf8'), true);
     state.localCache = state.remoteCache;
     state.paused = false;
@@ -1080,6 +1097,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   async useLocalConflict(relPath: string): Promise<void> {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    await this.saveConflictSnapshot(normalized, state);
     await this.saveOpenLocalDocument(normalized);
     const localContent = await fs.readFile(await assertNoSymlinkPath(this.root!, normalized), 'utf8');
     state.paused = false;
@@ -1106,6 +1124,13 @@ export class RealtimeSyncService implements vscode.Disposable {
     } else if (selection === 'Accept Remote') {
       await this.acceptRemoteConflict(relPath);
     }
+  }
+
+  private async saveConflictSnapshot(relPath: string, state: DocState): Promise<void> {
+    const snapshot = metadataPath(this.root!, 'conflicts', 'snapshots', `${relPath.replace(/[\\/]/g, '__')}.${Date.now()}.local.tex`);
+    const local = await fs.readFile(await assertNoSymlinkPath(this.root!, relPath), 'utf8').catch(() => state.localCache);
+    await atomicWriteText(snapshot, local);
+    this.log(`Saved conflict snapshot for ${relPath}.`);
   }
 
   private async saveOpenLocalDocument(relPath: string): Promise<void> {
@@ -2962,6 +2987,14 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.output.appendLine(`[${at}] ${message}`);
     this.activityLog.push({ at, message });
     if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
+    if (this.root) {
+      const root = this.root;
+      const snapshot = JSON.stringify(this.activityLog.slice(-100), null, 2) + '\n';
+      this.activityLogWrite = this.activityLogWrite
+        .catch(() => undefined)
+        .then(() => atomicWriteText(metadataPath(root, 'activity-log.json'), snapshot))
+        .catch(() => undefined);
+    }
   }
 
   private markLocalMutation(entityId: string): void {
