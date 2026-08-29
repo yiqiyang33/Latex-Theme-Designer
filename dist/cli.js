@@ -14557,7 +14557,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve8, reject) {
+      return new Body.Promise(function(resolve9, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14591,7 +14591,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve8(Buffer.concat(accum, accumBytes));
+            resolve9(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -15266,7 +15266,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve8, reject) {
+      return new fetch2.Promise(function(resolve9, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15399,7 +15399,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve8(fetch2(new Request(locationURL, requestOpts)));
+                resolve9(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15420,7 +15420,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve8(response);
+            resolve9(response);
             return;
           }
           const zlibOptions = {
@@ -15430,7 +15430,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve8(response);
+            resolve9(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15442,12 +15442,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve8(response);
+              resolve9(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve8(response);
+                resolve9(response);
               }
             });
             return;
@@ -15455,11 +15455,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve8(response);
+            resolve9(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve8(response);
+          resolve9(response);
         });
         writeToStream(req, request);
       });
@@ -16383,7 +16383,7 @@ var NodeFsHandler = class {
         this._addToNodeFs(path18, initialAdd, wh, depth + 1);
       }
     }).on(EV.ERROR, this._boundHandleError);
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       if (!stream)
         return reject();
       stream.once(STR_END, () => {
@@ -16392,7 +16392,7 @@ var NodeFsHandler = class {
           return;
         }
         const wasThrottled = throttler ? throttler.clear() : false;
-        resolve8(void 0);
+        resolve9(void 0);
         previous.getChildren().filter((item) => {
           return item !== directory && !current.has(item);
         }).forEach((item) => {
@@ -18846,8 +18846,11 @@ function normalizeProjectRelativePath(input, allowRoot = false) {
   return normalized;
 }
 function validateProjectPathSegment(input) {
-  if (typeof input !== "string" || !input || input === "." || input === ".." || /[\\/\0]/.test(input)) {
+  if (typeof input !== "string" || !input || input === "." || input === ".." || /[\\/\0\u0000-\u001f\u007f]/.test(input) || /[<>:"|?*]/.test(input) || /[ .]$/.test(input)) {
     throw new Error(`Invalid remote project path segment: ${String(input)}`);
+  }
+  if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(input)) {
+    throw new Error(`Invalid remote project path segment: ${input}`);
   }
   return input;
 }
@@ -18932,6 +18935,11 @@ function formatUnknownError(error) {
   }
   const json = safeJson(error);
   return json && json !== "{}" ? json : (0, import_util.inspect)(error, { depth: 4, breakLength: 140 });
+}
+function sanitizeDiagnosticText(value, maxLength = 2e3) {
+  let text = value.replace(/(cookie|set-cookie|authorization|csrf(?:-token)?|token|secret|password)\s*[:=]\s*[^,;\s]+/gi, "$1=[REDACTED]").replace(/(session(?:id)?|jwt)\s*[:=]\s*[^,;\s]+/gi, "$1=[REDACTED]");
+  if (text.length > maxLength) text = `${text.slice(0, Math.max(0, maxLength - 20))}\u2026[truncated]`;
+  return text;
 }
 function formatErrorDetail(value) {
   if (value instanceof Error) {
@@ -19284,16 +19292,16 @@ async function readManifest(root) {
 }
 async function ensureLocalIgnoreFile(root) {
   const target = path3.join(root, LOCAL_IGNORE_NAME);
-  const existing = await fs2.readFile(target, "utf8").catch(() => void 0);
+  const existing = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(() => void 0);
   if (existing !== void 0) {
     return existing;
   }
   await fs2.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: "utf8", flag: "wx" }).catch(() => void 0);
-  return fs2.readFile(target, "utf8").catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
+  return readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
 }
-async function writeManifest(root, manifest) {
+async function writeManifest(root, manifest, options = {}) {
   manifest.schemaVersion = 3;
-  manifest.lastSyncAt = (/* @__PURE__ */ new Date()).toISOString();
+  if (options.updateSyncTimestamp !== false) manifest.lastSyncAt = (/* @__PURE__ */ new Date()).toISOString();
   assertValidManifest(manifest);
   manifestEntityIndexes.delete(manifest);
   await atomicWriteText(manifestPath(root), `${JSON.stringify(manifest, null, 2)}
@@ -19316,7 +19324,7 @@ function baseDocPath(root, docId) {
   return metadataPath(root, BASE_DIR, "docs", `${docId}.tex`);
 }
 async function readBaseDoc(root, docId) {
-  return fs2.readFile(baseDocPath(root, docId), "utf8").catch(() => void 0);
+  return readTextFileBounded(baseDocPath(root, docId), MAX_METADATA_JSON_BYTES).catch(() => void 0);
 }
 async function writeBaseDoc(root, docId, content) {
   const target = baseDocPath(root, docId);
@@ -19370,14 +19378,27 @@ async function writeSyncStatus(root, report) {
 var metadataWriteQueues = /* @__PURE__ */ new Map();
 async function atomicWriteText(target, content) {
   return enqueueMetadataWrite(target, async () => {
-    await fs2.mkdir(path3.dirname(target), { recursive: true });
+    await assertMetadataTargetSafe(target);
+    await fs2.mkdir(path3.dirname(target), { recursive: true, mode: 448 });
+    await fs2.chmod(path3.dirname(target), 448).catch(() => void 0);
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      await fs2.writeFile(temporary, content, "utf8");
+      await fs2.writeFile(temporary, content, { encoding: "utf8", mode: 384 });
       await fs2.rename(temporary, target);
+      await fs2.chmod(target, 384).catch(() => void 0);
     } finally {
       await fs2.rm(temporary, { force: true }).catch(() => void 0);
     }
+  });
+}
+async function assertMetadataTargetSafe(target) {
+  const parts = path3.resolve(target).split(path3.sep);
+  const metadataIndex = parts.lastIndexOf(METADATA_DIR);
+  if (metadataIndex < 1) return;
+  const root = parts.slice(0, metadataIndex).join(path3.sep) || path3.sep;
+  const relative6 = [METADATA_DIR, ...parts.slice(metadataIndex + 1)].join("/");
+  await assertNoSymlinkPath(root, relative6).catch((error) => {
+    throw error;
   });
 }
 async function enqueueMetadataWrite(target, write) {
@@ -19468,6 +19489,7 @@ function removeProjectTreeEntity(project, entityId) {
 }
 function findProjectFolder(project, folderId) {
   const root = getRootFolder(project);
+  if (!root || !root._id) throw new Error("Overleaf project root folder is invalid.");
   if (root._id === folderId) return root;
   return findFolderBelow(root, folderId);
 }
@@ -19512,6 +19534,8 @@ function buildProjectTreeIndex(serverUrl, projectId, projectName, project) {
   const folders = [];
   const files = [];
   const root = getRootFolder(project);
+  if (!root._id) throw new Error("Overleaf project root folder is invalid.");
+  const canonicalPaths = /* @__PURE__ */ new Set();
   const manifest = {
     schemaVersion: 3,
     serverUrl,
@@ -19527,17 +19551,24 @@ function buildProjectTreeIndex(serverUrl, projectId, projectName, project) {
   };
   walkFolder(root, "", void 0, folders, files);
   for (const folder of folders) {
-    if (manifest.folders[folder.path]) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || "."}`);
+    const key = canonicalPathKey(folder.path);
+    if (manifest.folders[folder.path] || canonicalPaths.has(key)) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || "."}`);
     manifest.folders[folder.path] = folder;
+    canonicalPaths.add(key);
   }
   for (const file of files) {
-    if (manifest.files[file.path] || manifest.folders[file.path]) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
+    const key = canonicalPathKey(file.path);
+    if (manifest.files[file.path] || manifest.folders[file.path] || canonicalPaths.has(key)) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
     manifest.files[file.path] = file;
+    canonicalPaths.add(key);
     if (project.rootDoc_id && file.entityId === project.rootDoc_id) {
       manifest.rootDocPath = file.path;
     }
   }
   return { manifest, folders, files };
+}
+function canonicalPathKey(value) {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US");
 }
 function walkFolder(folder, folderPath, parentFolderId, folders, files) {
   folders.push({
@@ -19870,8 +19901,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve8, reject) => {
-      pending.push(() => task().then(resolve8, reject).finally(() => {
+    return new Promise((resolve9, reject) => {
+      pending.push(() => task().then(resolve9, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -19894,11 +19925,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash = (0, import_fs3.createReadStream)(filePath);
-    const digest = await new Promise((resolve8, reject) => {
+    const digest = await new Promise((resolve9, reject) => {
       const state = (0, import_crypto.createHash)("sha1");
       hash.on("data", (chunk) => state.update(chunk));
       hash.on("error", reject);
-      hash.on("end", () => resolve8(state.digest("hex")));
+      hash.on("end", () => resolve9(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -20290,7 +20321,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve8) => resolve8());
+  const wake = () => waiters.splice(0).forEach((resolve9) => resolve9());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -20302,7 +20333,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve8) => waiters.push(resolve8));
+            await new Promise((resolve9) => waiters.push(resolve9));
           }
           reservedBytes += amount;
         }
@@ -20411,14 +20442,14 @@ async function hashFileDigests(filePath) {
   const sha13 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat13.size}\0`);
-  await new Promise((resolve8, reject) => {
+  await new Promise((resolve9, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha13.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve8);
+    input.on("end", resolve9);
   });
   return { size: stat13.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
 }
@@ -20630,7 +20661,7 @@ var OverleafSyncEngine = class {
         this.scheduleSync(`local:${event}`);
       });
     }
-    await new Promise((resolve8) => this.events.once("stop", resolve8));
+    await new Promise((resolve9) => this.events.once("stop", resolve9));
   }
   requestStop() {
     this.events.emit("stop");
@@ -21409,7 +21440,7 @@ function defaultSharedState() {
 }
 async function readSharedState() {
   await migrateLegacyLinuxPaths();
-  const raw = await fs10.readFile(sharedStatePath(), "utf8").catch(() => void 0);
+  const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => void 0);
   if (!raw) return defaultSharedState();
   let parsed;
   try {
@@ -21663,7 +21694,7 @@ async function sharedStateLockIsStale(lockPath, metadataPath2) {
   return Boolean(stat13 && Date.now() - stat13.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
-  const raw = await fs10.readFile(target, "utf8").catch(() => void 0);
+  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
   if (!raw) return void 0;
   try {
     const parsed = JSON.parse(raw);
@@ -21673,7 +21704,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve8) => setTimeout(resolve8, ms));
+  return new Promise((resolve9) => setTimeout(resolve9, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -21936,7 +21967,7 @@ async function writePrivateJson(target, value) {
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     const child = (0, import_child_process2.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -21945,7 +21976,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve8(output);
+      if (code === 0) resolve9(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -22005,7 +22036,7 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
         options.signal?.throwIfAborted();
         if (!output.url) continue;
         const name = uniqueCompileOutputName(output, usedNames);
-        const target = path13.join(stagingRoot, name);
+        const target = assertPathWithin(stagingRoot, path13.join(stagingRoot, name));
         options.onProgress?.(`Downloading ${name}`);
         await client.downloadCompileOutputToPath(output.url, response, target, { signal: options.signal });
         stagedFiles.push(target);
@@ -22027,7 +22058,14 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
 async function cleanupInterruptedCompileArtifacts(root) {
   const dir = metadataPath(root);
   const entries = await fs12.readdir(dir, { withFileTypes: true }).catch(() => []);
-  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).map((entry) => fs12.rm(path13.join(dir, entry.name), { recursive: true, force: true })));
+  const backups = entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).sort((a, b) => b.name.localeCompare(a.name));
+  const outputRoot = path13.join(dir, OUTPUT_DIR);
+  let retainedBackup;
+  if (!await exists2(outputRoot) && backups.length) {
+    retainedBackup = backups[0].name;
+    await fs12.rename(path13.join(dir, retainedBackup), outputRoot).catch(() => void 0);
+  }
+  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).filter((entry) => entry.name !== retainedBackup).map((entry) => fs12.rm(path13.join(dir, entry.name), { recursive: true, force: true })));
 }
 async function acquireCompileLock(outputRoot, options = {}) {
   const lock = `${outputRoot}.lock`;
@@ -22045,12 +22083,12 @@ async function acquireCompileLock(outputRoot, options = {}) {
         nonce
       }));
       return async () => {
-        const current = await fs12.readFile(owner, "utf8").catch(() => void 0);
+        const current = await readTextFileBounded(owner, 64 * 1024).catch(() => void 0);
         if (current?.includes(nonce)) await fs12.rm(lock, { recursive: true, force: true });
       };
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const raw = await fs12.readFile(owner, "utf8").catch(() => void 0);
+      const raw = await readTextFileBounded(owner, 64 * 1024).catch(() => void 0);
       let stale = false;
       try {
         const value = JSON.parse(raw ?? "");
@@ -22072,7 +22110,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve8) => setTimeout(resolve8, 50));
+      await new Promise((resolve9) => setTimeout(resolve9, 50));
     }
   }
 }
@@ -22138,7 +22176,7 @@ async function detectRootDoc(root) {
   const manifest = await readManifest(root);
   for (const file of Object.values(manifest.files)) {
     if (!file.path.endsWith(".tex")) continue;
-    const content = await fs12.readFile(path13.join(root, file.path), "utf8").catch(() => "");
+    const content = await fs12.readFile(await assertNoSymlinkPath(root, file.path), "utf8").catch(() => "");
     if (/\\documentclass(?:\[[^\]]*\])?\{[^}]+\}/.test(content)) return file.path;
   }
   return void 0;
@@ -22146,8 +22184,12 @@ async function detectRootDoc(root) {
 function compileOutputName(output) {
   const raw = output.path || output.url || output.build || output.type || "output.bin";
   const clean = path13.posix.basename(raw.split("?")[0].replace(/\\/g, "/"));
-  if (clean) return clean;
-  return output.type ? `output.${output.type.replace(/^\./, "")}` : "output.bin";
+  const candidate = clean || (output.type ? `output.${output.type.replace(/^\./, "")}` : "output.bin");
+  if (candidate === "." || candidate === ".." || /[\u0000-\u001f\u007f]/.test(candidate)) {
+    throw new Error("Overleaf compile returned an unsafe output filename.");
+  }
+  validateProjectPathSegment(candidate);
+  return candidate;
 }
 async function exists2(target) {
   return fs12.stat(target).then(() => true, () => false);
@@ -22674,7 +22716,7 @@ var OverleafClient = class {
     });
   }
   async compile(projectId, rootResourcePath, draft = false, stopOnFirstError = false, signal) {
-    return this.requestJson("POST", `project/${projectId}/compile?auto_compile=true`, {
+    const result = await this.requestJson("POST", `project/${projectId}/compile?auto_compile=true`, {
       body: {
         check: "silent",
         draft,
@@ -22685,6 +22727,8 @@ var OverleafClient = class {
       includeCsrfHeader: true,
       signal
     });
+    if (!isCompileResponse(result)) throw new Error("Overleaf compile returned an invalid response.");
+    return result;
   }
   async stopCompile(projectId) {
     await this.requestText("POST", `project/${projectId}/compile/stop`, {
@@ -22715,12 +22759,21 @@ var OverleafClient = class {
   }
   async syncCode(projectId, file, line, column, buildId) {
     const route = `project/${projectId}/sync/code?file=${encodeURIComponent(file)}&line=${line}&column=${column}&editorId=${v4_default()}&buildId=${encodeURIComponent(buildId)}`;
-    return this.requestJson("GET", route);
+    const result = await this.requestJson("GET", route);
+    if (!result || typeof result !== "object") throw new Error("Overleaf sync/code returned an invalid response.");
+    return result;
   }
   async syncPdf(projectId, page, h, v, buildId) {
     const route = `project/${projectId}/sync/pdf?page=${page}&h=${h.toFixed(2)}&v=${v.toFixed(2)}&editorId=${v4_default()}&buildId=${encodeURIComponent(buildId)}`;
     const result = await this.requestJson("GET", route);
-    return result.code?.[0];
+    if (!result || typeof result !== "object") throw new Error("Overleaf sync/pdf returned an invalid response.");
+    const code = result.code;
+    if (code === void 0) return void 0;
+    if (!Array.isArray(code)) throw new Error("Overleaf sync/pdf returned invalid coordinates.");
+    const first = code[0];
+    if (first === void 0) return void 0;
+    if (!first || typeof first !== "object" || !isNonNegativeInteger(first.page) || typeof first.file !== "string" || !isNonNegativeInteger(first.line) || !isNonNegativeInteger(first.column)) throw new Error("Overleaf sync/pdf returned invalid coordinates.");
+    return first;
   }
   async connectSocket(projectId, signal) {
     this.requireIdentity();
@@ -22742,7 +22795,7 @@ var OverleafClient = class {
       } catch (fallbackError) {
         fallback.disconnect();
         throw new Error(
-          `Overleaf realtime connection failed. Project-query attempt: ${formatUnknownError(firstError)}. Fallback attempt: ${formatUnknownError(fallbackError)}.`
+          `Overleaf realtime connection failed. Project-query attempt: ${sanitizeDiagnosticText(formatUnknownError(firstError))}. Fallback attempt: ${sanitizeDiagnosticText(formatUnknownError(fallbackError))}.`
         );
       }
     }
@@ -23134,7 +23187,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23147,7 +23200,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve8();
+        error ? reject(error) : resolve9();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -23162,7 +23215,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -23170,18 +23223,18 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve8(project);
+        error ? reject(error) : resolve9(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
         const project = values[0];
-        finish(project ? void 0 : new Error("Overleaf did not return a project in joinProject acknowledgement."), project);
+        finish(isOverleafProject(project) ? void 0 : new Error("Overleaf returned an invalid project in joinProject acknowledgement."), project);
       }).catch((error) => finish(error instanceof Error ? error : new Error(formatUnknownError(error))));
     });
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23193,12 +23246,12 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve8(project);
+        error ? reject(error) : resolve9(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
-        if (!result.project) {
-          finish(new Error("Overleaf did not return a project in joinProjectResponse."));
+        if (!isOverleafProject(result.project)) {
+          finish(new Error("Overleaf returned an invalid project in joinProjectResponse."));
           return;
         }
         finish(void 0, result.project);
@@ -23216,6 +23269,12 @@ var OverleafSocketSession = class {
     const values = await this.emitAck("joinDoc", this.timeouts.joinDocMs, signal, docId, { encodeRanges: true });
     const lines = values[0];
     const version = values[1];
+    if (!Array.isArray(lines) || lines.length > 1e6 || lines.some((line) => typeof line !== "string" || line.length > MAX_OT_TEXT_LENGTH)) {
+      throw new Error("Overleaf returned invalid or oversized document content.");
+    }
+    if (!isNonNegativeInteger(version)) throw new Error("Overleaf returned an invalid document version.");
+    const totalBytes = lines.reduce((sum, line) => sum + Buffer.byteLength(line, "utf8") + 1, 0);
+    if (totalBytes > MAX_BUFFERED_DOWNLOAD_BYTES) throw new Error("Overleaf document content exceeded its size limit.");
     return {
       content: lines.map(decodePackedUtf8).join("\n"),
       version
@@ -23245,7 +23304,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve8, reject) => {
+    return new Promise((resolve9, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23255,7 +23314,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve8(values ?? []);
+        error ? reject(error) : resolve9(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -23296,6 +23355,41 @@ function isOverleafFolder(value, depth = 0) {
   if (!isEntityWithName(value)) return false;
   const folder = value;
   return (folder.docs === void 0 || Array.isArray(folder.docs) && folder.docs.every(isOverleafDoc)) && (folder.fileRefs === void 0 || Array.isArray(folder.fileRefs) && folder.fileRefs.every(isOverleafFileRef)) && (folder.folders === void 0 || Array.isArray(folder.folders) && folder.folders.every((child) => isOverleafFolder(child, depth + 1)));
+}
+function isOverleafProject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const project = value;
+  if (project._id !== void 0 && !isBoundedString(project._id)) return false;
+  if (project.id !== void 0 && !isBoundedString(project.id)) return false;
+  if (project.name !== void 0 && !isBoundedString(project.name)) return false;
+  if (project.compiler !== void 0 && !isBoundedString(project.compiler)) return false;
+  if (project.version !== void 0 && !isNonNegativeInteger(project.version)) return false;
+  const roots = Array.isArray(project.rootFolder) ? project.rootFolder : project.rootFolder ? [project.rootFolder] : [];
+  if (roots.length !== 1) return false;
+  const root = roots[0].name === "" ? { ...roots[0], name: "root" } : roots[0];
+  if (!isOverleafFolder(root)) return false;
+  let entities = 0;
+  let nameBytes = 0;
+  const visit = (folder) => {
+    entities += 1;
+    nameBytes += Buffer.byteLength(folder.name, "utf8");
+    for (const doc of folder.docs ?? []) {
+      entities += 1;
+      nameBytes += Buffer.byteLength(doc.name, "utf8");
+    }
+    for (const file of folder.fileRefs ?? []) {
+      entities += 1;
+      nameBytes += Buffer.byteLength(file.name, "utf8");
+    }
+    if (entities > 1e5 || nameBytes > 16 * 1024 * 1024) return false;
+    return (folder.folders ?? []).every(visit);
+  };
+  return visit(roots[0]);
+}
+function isCompileResponse(value) {
+  if (!value || typeof value !== "object") return false;
+  const item = value;
+  return (item.status === "success" || item.status === "failure" || item.status === "error") && isBoundedString(item.compileGroup) && Array.isArray(item.outputFiles) && item.outputFiles.length <= 1e4 && item.outputFiles.every((file) => Boolean(file) && typeof file === "object" && Object.values(file).every((field) => field === void 0 || typeof field === "string"));
 }
 function isEntityWithName(value) {
   if (!value || typeof value !== "object") return false;
@@ -23508,7 +23602,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve8) => setTimeout(resolve8, 250 * 2 ** attempt));
+      await new Promise((resolve9) => setTimeout(resolve9, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -23540,7 +23634,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -23568,7 +23662,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve8({
+            resolve9({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -23640,14 +23734,15 @@ function extractFirst(input, patterns) {
   return void 0;
 }
 function normalizeProjects(projects) {
-  return projects.map((project) => project).map((project) => ({
+  if (!Array.isArray(projects) || projects.length > 1e4) throw new Error("Overleaf returned an invalid project list.");
+  return projects.filter((project) => Boolean(project) && typeof project === "object" && !Array.isArray(project)).map((project) => project).map((project) => ({
     id: String(project.id ?? project._id ?? ""),
     name: String(project.name ?? "Untitled Project"),
     accessLevel: project.accessLevel ? String(project.accessLevel) : void 0,
     archived: Boolean(project.archived),
     trashed: Boolean(project.trashed),
     lastUpdated: project.lastUpdated ? String(project.lastUpdated) : void 0
-  })).filter((project) => project.id.length > 0);
+  })).filter((project) => project.id.length > 0 && project.id.length <= MAX_SOCKET_STRING_LENGTH && project.name.length <= MAX_SOCKET_STRING_LENGTH);
 }
 async function assertOk(res, route) {
   if (res.status >= 200 && res.status < 300) {
@@ -23696,6 +23791,7 @@ var import_events3 = require("events");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
+var MAX_ACTIVE_IPC_CHUNKS = 64;
 var IPC_CHUNK_BYTES = 512 * 1024;
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
@@ -23757,11 +23853,11 @@ var SyncOwnerCoordinator = class {
 `, { mode: 384 });
       await fs15.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve8, reject) => {
+      await new Promise((resolve9, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve8();
+          resolve9();
         });
       });
       await fs15.chmod(paths.socketPath, 384);
@@ -23773,7 +23869,7 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve8) => server.close(() => resolve8()));
+      if (server?.listening) await new Promise((resolve9) => server.close(() => resolve9()));
       await fs15.rm(paths.lockPath, { recursive: true, force: true });
       await fs15.rm(paths.socketPath, { force: true });
       throw error;
@@ -23829,7 +23925,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve8, reject) => {
+    const subscribed = new Promise((resolve9, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -23841,7 +23937,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve8();
+        error ? reject(error) : resolve9();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -23883,7 +23979,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve8) => server.close(() => resolve8()));
+      await new Promise((resolve9) => server.close(() => resolve9()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
@@ -23986,7 +24082,7 @@ async function inspectOwner(root) {
   return { reachable: await canConnect(paths.socketPath), metadata: await readMetadata(paths.metadataPath) };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -23995,7 +24091,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve8(result);
+      error ? reject(error) : resolve9(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -24010,6 +24106,7 @@ function sendRequest(socketPath, request, timeoutMs) {
 function parseJsonLines(socket, onValue) {
   let pending = "";
   const chunks = /* @__PURE__ */ new Map();
+  let chunkBytes = 0;
   const accept = (value) => {
     if (!isIpcChunk(value)) {
       onValue(value);
@@ -24026,6 +24123,10 @@ function parseJsonLines(socket, onValue) {
     }
     let entry = chunks.get(value.id);
     if (!entry) {
+      if (chunks.size >= MAX_ACTIVE_IPC_CHUNKS || chunkBytes + payload.length > MAX_IPC_MESSAGE_BYTES) {
+        socket.destroy(new Error("Sync IPC active chunk cache exceeded its limit."));
+        return;
+      }
       entry = { total: value.total, parts: Array.from({ length: value.total }), received: 0 };
       chunks.set(value.id, entry);
     }
@@ -24035,8 +24136,10 @@ function parseJsonLines(socket, onValue) {
     }
     entry.parts[value.index] = payload;
     entry.received += 1;
+    chunkBytes += payload.length;
     if (entry.received !== entry.total) return;
     chunks.delete(value.id);
+    chunkBytes = Math.max(0, chunkBytes - entry.parts.reduce((sum, part) => sum + (part?.length ?? 0), 0));
     try {
       onValue(JSON.parse(Buffer.concat(entry.parts).toString("utf8")));
     } catch {
@@ -24093,7 +24196,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -24101,7 +24204,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve8();
+      error ? reject(error) : resolve9();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -24129,7 +24232,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -24138,7 +24241,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve8();
+      error ? reject(error) : resolve9();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -24147,7 +24250,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve8) => {
+  return new Promise((resolve9) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -24156,14 +24259,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve8(value);
+      resolve9(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve8) => setTimeout(resolve8, ms));
+  return new Promise((resolve9) => setTimeout(resolve9, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -24184,7 +24287,7 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   }
 }
 async function readMetadata(target) {
-  const raw = await fs15.readFile(target, "utf8").catch(() => void 0);
+  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
   if (!raw) return void 0;
   try {
     return JSON.parse(raw);
@@ -24505,13 +24608,13 @@ async function watchWithTakeover(root, policy, credentials, output) {
         await owner.runWatchAsOwner();
       } else {
         activeSocket = await owner.subscribe((event) => output.event(event.event, event.root, event.data));
-        await new Promise((resolve8) => {
-          activeSocket.once("close", resolve8);
-          activeSocket.once("error", resolve8);
+        await new Promise((resolve9) => {
+          activeSocket.once("close", resolve9);
+          activeSocket.once("error", resolve9);
           const interval = setInterval(() => {
             if (stopping) {
               clearInterval(interval);
-              resolve8();
+              resolve9();
             }
           }, 250);
         });
@@ -24675,7 +24778,7 @@ async function readSecret(prompt) {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding("utf8");
-  return new Promise((resolve8, reject) => {
+  return new Promise((resolve9, reject) => {
     let value = "";
     const onData = (chunk) => {
       if (chunk === "\r" || chunk === "\n") {
@@ -24683,7 +24786,7 @@ async function readSecret(prompt) {
         process.stdin.setRawMode(false);
         process.stdin.pause();
         process.stderr.write("\n");
-        resolve8(value);
+        resolve9(value);
       } else if (chunk === "") {
         process.stdin.off("data", onData);
         process.stdin.setRawMode(false);
@@ -24714,9 +24817,9 @@ async function confirm(prompt) {
 }
 function question(prompt) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve8) => rl.question(prompt, (answer) => {
+  return new Promise((resolve9) => rl.question(prompt, (answer) => {
     rl.close();
-    resolve8(answer);
+    resolve9(answer);
   }));
 }
 function blockingExitCode(result) {
@@ -24747,7 +24850,7 @@ function toPosix(value) {
   return value.replace(/[\\/]+/g, "/").replace(/^\/+/, "");
 }
 function delay3(ms) {
-  return new Promise((resolve8) => setTimeout(resolve8, ms));
+  return new Promise((resolve9) => setTimeout(resolve9, ms));
 }
 function exists4(target) {
   return fs16.stat(target).then(() => true, () => false);

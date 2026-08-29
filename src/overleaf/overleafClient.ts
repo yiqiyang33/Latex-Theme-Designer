@@ -29,7 +29,7 @@ import {
   FileTransferResult
 } from './types';
 import { hashFileDigests } from './binaryTransfer';
-import { formatUnknownError, normalizeServerUrl } from './util';
+import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from './util';
 import {
   addProjectTreeEntity,
   moveProjectTreeEntity,
@@ -303,7 +303,7 @@ export class OverleafClient {
     stopOnFirstError = false,
     signal?: AbortSignal
   ): Promise<CompileResponse> {
-    return this.requestJson<CompileResponse>('POST', `project/${projectId}/compile?auto_compile=true`, {
+    const result = await this.requestJson<unknown>('POST', `project/${projectId}/compile?auto_compile=true`, {
       body: {
         check: 'silent',
         draft,
@@ -314,6 +314,8 @@ export class OverleafClient {
       includeCsrfHeader: true,
       signal
     });
+    if (!isCompileResponse(result)) throw new Error('Overleaf compile returned an invalid response.');
+    return result;
   }
 
   async stopCompile(projectId: string): Promise<void> {
@@ -362,14 +364,25 @@ export class OverleafClient {
   async syncCode(projectId: string, file: string, line: number, column: number, buildId: string): Promise<SyncCodeResponse> {
     const route = `project/${projectId}/sync/code?file=${encodeURIComponent(file)}`
       + `&line=${line}&column=${column}&editorId=${uuidv4()}&buildId=${encodeURIComponent(buildId)}`;
-    return this.requestJson<SyncCodeResponse>('GET', route);
+    const result = await this.requestJson<unknown>('GET', route);
+    if (!result || typeof result !== 'object') throw new Error('Overleaf sync/code returned an invalid response.');
+    return result as SyncCodeResponse;
   }
 
   async syncPdf(projectId: string, page: number, h: number, v: number, buildId: string): Promise<SyncPdfResponse | undefined> {
     const route = `project/${projectId}/sync/pdf?page=${page}&h=${h.toFixed(2)}&v=${v.toFixed(2)}`
       + `&editorId=${uuidv4()}&buildId=${encodeURIComponent(buildId)}`;
-    const result = await this.requestJson<{ code?: SyncPdfResponse[] }>('GET', route);
-    return result.code?.[0];
+    const result = await this.requestJson<unknown>('GET', route);
+    if (!result || typeof result !== 'object') throw new Error('Overleaf sync/pdf returned an invalid response.');
+    const code = (result as { code?: unknown }).code;
+    if (code === undefined) return undefined;
+    if (!Array.isArray(code)) throw new Error('Overleaf sync/pdf returned invalid coordinates.');
+    const first = code[0];
+    if (first === undefined) return undefined;
+    if (!first || typeof first !== 'object' || !isNonNegativeInteger((first as any).page)
+      || typeof (first as any).file !== 'string' || !isNonNegativeInteger((first as any).line)
+      || !isNonNegativeInteger((first as any).column)) throw new Error('Overleaf sync/pdf returned invalid coordinates.');
+    return first as SyncPdfResponse;
   }
 
   async connectSocket(projectId: string, signal?: AbortSignal): Promise<OverleafSocketSession> {
@@ -393,8 +406,8 @@ export class OverleafClient {
         fallback.disconnect();
         throw new Error(
           'Overleaf realtime connection failed. '
-          + `Project-query attempt: ${formatUnknownError(firstError)}. `
-          + `Fallback attempt: ${formatUnknownError(fallbackError)}.`
+          + `Project-query attempt: ${sanitizeDiagnosticText(formatUnknownError(firstError))}. `
+          + `Fallback attempt: ${sanitizeDiagnosticText(formatUnknownError(fallbackError))}.`
         );
       }
     }
@@ -855,8 +868,8 @@ export class OverleafSocketSession {
       this.socket.once('connectionRejected', onRejected);
       void this.emitAck('joinProject', this.timeouts.projectJoinMs, signal, { project_id: projectId })
         .then(values => {
-          const project = values[0] as OverleafProject | undefined;
-          finish(project ? undefined : new Error('Overleaf did not return a project in joinProject acknowledgement.'), project);
+          const project = values[0];
+          finish(isOverleafProject(project) ? undefined : new Error('Overleaf returned an invalid project in joinProject acknowledgement.'), project as OverleafProject);
         })
         .catch(error => finish(error instanceof Error ? error : new Error(formatUnknownError(error))));
     });
@@ -880,8 +893,8 @@ export class OverleafSocketSession {
       };
       const onResponse = (result: { publicId?: string; project?: OverleafProject }): void => {
         this.publicId = result.publicId;
-        if (!result.project) {
-          finish(new Error('Overleaf did not return a project in joinProjectResponse.'));
+        if (!isOverleafProject(result.project)) {
+          finish(new Error('Overleaf returned an invalid project in joinProjectResponse.'));
           return;
         }
         finish(undefined, result.project);
@@ -897,8 +910,14 @@ export class OverleafSocketSession {
 
   async joinDoc(docId: string, signal?: AbortSignal): Promise<JoinDocResult> {
     const values = await this.emitAck('joinDoc', this.timeouts.joinDocMs, signal, docId, { encodeRanges: true });
-    const lines = values[0] as string[];
-    const version = values[1] as number;
+    const lines = values[0];
+    const version = values[1];
+    if (!Array.isArray(lines) || lines.length > 1_000_000 || lines.some(line => typeof line !== 'string' || line.length > MAX_OT_TEXT_LENGTH)) {
+      throw new Error('Overleaf returned invalid or oversized document content.');
+    }
+    if (!isNonNegativeInteger(version)) throw new Error('Overleaf returned an invalid document version.');
+    const totalBytes = lines.reduce((sum, line) => sum + Buffer.byteLength(line, 'utf8') + 1, 0);
+    if (totalBytes > MAX_BUFFERED_DOWNLOAD_BYTES) throw new Error('Overleaf document content exceeded its size limit.');
     return {
       content: lines.map(decodePackedUtf8).join('\n'),
       version
@@ -994,6 +1013,42 @@ export function isOverleafFolder(value: unknown, depth = 0): value is OverleafFo
   return (folder.docs === undefined || Array.isArray(folder.docs) && folder.docs.every(isOverleafDoc))
     && (folder.fileRefs === undefined || Array.isArray(folder.fileRefs) && folder.fileRefs.every(isOverleafFileRef))
     && (folder.folders === undefined || Array.isArray(folder.folders) && folder.folders.every(child => isOverleafFolder(child, depth + 1)));
+}
+
+export function isOverleafProject(value: unknown): value is OverleafProject {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const project = value as Partial<OverleafProject>;
+  if (project._id !== undefined && !isBoundedString(project._id)) return false;
+  if (project.id !== undefined && !isBoundedString(project.id)) return false;
+  if (project.name !== undefined && !isBoundedString(project.name)) return false;
+  if (project.compiler !== undefined && !isBoundedString(project.compiler)) return false;
+  if (project.version !== undefined && !isNonNegativeInteger(project.version)) return false;
+  const roots = Array.isArray(project.rootFolder) ? project.rootFolder : project.rootFolder ? [project.rootFolder] : [];
+  if (roots.length !== 1) return false;
+  const root = roots[0].name === '' ? { ...roots[0], name: 'root' } : roots[0];
+  if (!isOverleafFolder(root)) return false;
+  let entities = 0;
+  let nameBytes = 0;
+  const visit = (folder: OverleafFolder): boolean => {
+    entities += 1;
+    nameBytes += Buffer.byteLength(folder.name, 'utf8');
+    for (const doc of folder.docs ?? []) { entities += 1; nameBytes += Buffer.byteLength(doc.name, 'utf8'); }
+    for (const file of folder.fileRefs ?? []) { entities += 1; nameBytes += Buffer.byteLength(file.name, 'utf8'); }
+    if (entities > 100_000 || nameBytes > 16 * 1024 * 1024) return false;
+    return (folder.folders ?? []).every(visit);
+  };
+  return visit(roots[0]);
+}
+
+function isCompileResponse(value: unknown): value is CompileResponse {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<CompileResponse>;
+  return (item.status === 'success' || item.status === 'failure' || item.status === 'error')
+    && isBoundedString(item.compileGroup)
+    && Array.isArray(item.outputFiles)
+    && item.outputFiles.length <= 10_000
+    && item.outputFiles.every(file => Boolean(file) && typeof file === 'object'
+      && Object.values(file as Record<string, unknown>).every(field => field === undefined || typeof field === 'string'));
 }
 
 function isEntityWithName(value: unknown): value is { _id: string; name: string } {
@@ -1439,7 +1494,9 @@ function extractFirst(input: string, patterns: RegExp[]): string | undefined {
 }
 
 function normalizeProjects(projects: unknown[]): ProjectSummary[] {
+  if (!Array.isArray(projects) || projects.length > 10000) throw new Error('Overleaf returned an invalid project list.');
   return projects
+    .filter(project => Boolean(project) && typeof project === 'object' && !Array.isArray(project))
     .map(project => project as Record<string, unknown>)
     .map(project => ({
       id: String(project.id ?? project._id ?? ''),
@@ -1449,7 +1506,7 @@ function normalizeProjects(projects: unknown[]): ProjectSummary[] {
       trashed: Boolean(project.trashed),
       lastUpdated: project.lastUpdated ? String(project.lastUpdated) : undefined
     }))
-    .filter(project => project.id.length > 0);
+    .filter(project => project.id.length > 0 && project.id.length <= MAX_SOCKET_STRING_LENGTH && project.name.length <= MAX_SOCKET_STRING_LENGTH);
 }
 
 async function assertOk(res: Response, route: string): Promise<void> {

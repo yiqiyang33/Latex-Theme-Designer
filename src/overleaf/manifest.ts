@@ -9,7 +9,7 @@ import {
   OverleafCodexManifest,
   SyncStatusReport
 } from './types';
-import { sha1, toPosixPath } from './util';
+import { assertNoSymlinkPath, sha1, toPosixPath } from './util';
 import { assertValidManifest, assertValidSyncStatus, validateManifest, validateSyncStatus } from './metadataValidation';
 
 export const METADATA_DIR = '.overleaf-codex';
@@ -170,17 +170,17 @@ export async function readManifest(root: string): Promise<OverleafCodexManifest>
 
 export async function ensureLocalIgnoreFile(root: string): Promise<string> {
   const target = path.join(root, LOCAL_IGNORE_NAME);
-  const existing = await fs.readFile(target, 'utf8').catch(() => undefined);
+  const existing = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(() => undefined);
   if (existing !== undefined) {
     return existing;
   }
   await fs.writeFile(target, DEFAULT_LOCAL_IGNORE_CONTENT, { encoding: 'utf8', flag: 'wx' }).catch(() => undefined);
-  return fs.readFile(target, 'utf8').catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
+  return readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(() => DEFAULT_LOCAL_IGNORE_CONTENT);
 }
 
-export async function writeManifest(root: string, manifest: OverleafCodexManifest): Promise<void> {
+export async function writeManifest(root: string, manifest: OverleafCodexManifest, options: { updateSyncTimestamp?: boolean } = {}): Promise<void> {
   manifest.schemaVersion = 3;
-  manifest.lastSyncAt = new Date().toISOString();
+  if (options.updateSyncTimestamp !== false) manifest.lastSyncAt = new Date().toISOString();
   assertValidManifest(manifest);
   manifestEntityIndexes.delete(manifest);
   await atomicWriteText(manifestPath(root), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -205,7 +205,7 @@ export function baseDocPath(root: string, docId: string): string {
 }
 
 export async function readBaseDoc(root: string, docId: string): Promise<string | undefined> {
-  return fs.readFile(baseDocPath(root, docId), 'utf8').catch(() => undefined);
+  return readTextFileBounded(baseDocPath(root, docId), MAX_METADATA_JSON_BYTES).catch(() => undefined);
 }
 
 export async function writeBaseDoc(root: string, docId: string, content: string): Promise<string> {
@@ -266,11 +266,14 @@ const metadataWriteQueues = new Map<string, Promise<void>>();
 
 export async function atomicWriteText(target: string, content: string): Promise<void> {
   return enqueueMetadataWrite(target, async () => {
-    await fs.mkdir(path.dirname(target), { recursive: true });
+    await assertMetadataTargetSafe(target);
+    await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+    await fs.chmod(path.dirname(target), 0o700).catch(() => undefined);
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      await fs.writeFile(temporary, content, 'utf8');
+      await fs.writeFile(temporary, content, { encoding: 'utf8', mode: 0o600 });
       await fs.rename(temporary, target);
+      await fs.chmod(target, 0o600).catch(() => undefined);
     } finally {
       await fs.rm(temporary, { force: true }).catch(() => undefined);
     }
@@ -279,15 +282,27 @@ export async function atomicWriteText(target: string, content: string): Promise<
 
 export async function atomicWriteBytes(target: string, content: Uint8Array): Promise<void> {
   return enqueueMetadataWrite(target, async () => {
-    await fs.mkdir(path.dirname(target), { recursive: true });
+    await assertMetadataTargetSafe(target);
+    await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+    await fs.chmod(path.dirname(target), 0o700).catch(() => undefined);
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      await fs.writeFile(temporary, content);
+      await fs.writeFile(temporary, content, { mode: 0o600 });
       await fs.rename(temporary, target);
+      await fs.chmod(target, 0o600).catch(() => undefined);
     } finally {
       await fs.rm(temporary, { force: true }).catch(() => undefined);
     }
   });
+}
+
+async function assertMetadataTargetSafe(target: string): Promise<void> {
+  const parts = path.resolve(target).split(path.sep);
+  const metadataIndex = parts.lastIndexOf(METADATA_DIR);
+  if (metadataIndex < 1) return;
+  const root = parts.slice(0, metadataIndex).join(path.sep) || path.sep;
+  const relative = [METADATA_DIR, ...parts.slice(metadataIndex + 1)].join('/');
+  await assertNoSymlinkPath(root, relative).catch(error => { throw error; });
 }
 
 async function enqueueMetadataWrite(target: string, write: () => Promise<void>): Promise<void> {

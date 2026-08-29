@@ -4,7 +4,7 @@ import type { Socket } from "node:net";
 import * as vscode from "vscode";
 import { CompileDiagnosticProvider } from "./diagnostics";
 import { CompileService } from "./compileService";
-import { manifestPath, readManifest, OUTPUT_DIR } from "./manifest";
+import { manifestPath, metadataPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord } from "./mirrorManager";
 import { OverleafClient, OverleafHttpError } from "./overleafClient";
@@ -13,7 +13,7 @@ import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
 import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
-import { formatUnknownError, normalizeServerUrl } from "./util";
+import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from "./util";
 import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
 import type { ProjectSyncGate } from "./syncGate";
@@ -192,7 +192,7 @@ export class OverleafService implements vscode.Disposable {
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
-        activityLog: this.activityLogForRoot(mirrorRoot)
+        activityLog: await this.activityLogForRootAsync(mirrorRoot)
       };
     } catch (error) {
       return {
@@ -203,7 +203,7 @@ export class OverleafService implements vscode.Disposable {
         syncItems: [],
         conflicts: [],
         collaborators: [],
-        error: formatUnknownError(error),
+        error: sanitizeDiagnosticText(formatUnknownError(error)),
         compileMode: this.compileMode(),
         ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
           ? this.ownerCoordinator.isOwner ? "owner" : "client"
@@ -211,7 +211,7 @@ export class OverleafService implements vscode.Disposable {
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
-        activityLog: this.activityLogForRoot(mirrorRoot)
+        activityLog: await this.activityLogForRootAsync(mirrorRoot)
       };
     }
   }
@@ -544,6 +544,11 @@ export class OverleafService implements vscode.Disposable {
     if (!paths.length) throw new Error('Select at least one safe sync item first.');
     const root = await this.requireMirrorRoot(candidate);
     await this.ensureRunning(root);
+    if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot === root) {
+      await this.ownerCoordinator.request("bulk-sync", { paths });
+      this.onChanged();
+      return;
+    }
     const run = async (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken): Promise<void> => {
       const items = (this.realtimeSync.getSyncStatusItems()).filter(item => paths.includes(item.path)
         && item.entityType !== 'folder'
@@ -551,9 +556,12 @@ export class OverleafService implements vscode.Disposable {
       if (!items.length) throw new Error('The selected paths are no longer safe to sync. Refresh status and try again.');
       const total = items.length;
       const failures: string[] = [];
+      const succeeded: string[] = [];
+      const cancelled: string[] = [];
       for (let index = 0; index < items.length; index += 1) {
         if (token.isCancellationRequested) {
           this.output.appendLine(`[${new Date().toISOString()}] Bulk sync cancelled after ${index}/${total} item(s).`);
+          cancelled.push(...items.slice(index).map(item => item.path));
           break;
         }
         const item = items[index];
@@ -566,6 +574,7 @@ export class OverleafService implements vscode.Disposable {
           } else {
             await this.realtimeSync.pushLocalFile(item.path, false);
           }
+          succeeded.push(item.path);
         } catch (error) {
           failures.push(`${item.path}: ${formatUnknownError(error)}`);
         }
@@ -573,6 +582,8 @@ export class OverleafService implements vscode.Disposable {
       }
       await this.realtimeSync.checkSyncStatus(root, undefined, undefined, { mode: 'incremental', reason: 'bulk-sync' }).catch(() => undefined);
       if (failures.length) vscode.window.showWarningMessage(`Bulk sync finished with ${failures.length} failure(s). ${failures.slice(0, 3).join(' · ')}`);
+      void succeeded;
+      void cancelled;
     };
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Applying Overleaf sync', cancellable: true }, run);
     this.onChanged();
@@ -587,7 +598,6 @@ export class OverleafService implements vscode.Disposable {
 
   private async compileRemote(candidate?: unknown): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
-    await this.ensureRunning(root);
     const preflight = await this.remoteCompilePreflight(root);
     if (preflight && (preflight.globalBlockReason || preflight.items.some(item => item.status !== "synced"))) {
       const pending = preflight.items.filter(item => item.status !== "synced");
@@ -608,6 +618,7 @@ export class OverleafService implements vscode.Disposable {
         }
       }
     }
+    await this.ensureRunning(root);
     const manifest = await readManifest(root);
     const client = await this.makeClient(manifest.serverUrl);
     await vscode.window.withProgress(
@@ -699,6 +710,9 @@ export class OverleafService implements vscode.Disposable {
   private async logout(candidate?: unknown): Promise<void> {
     const root = this.resolveMirrorRoot(candidate);
     const server = root ? (await readManifest(root).catch(() => undefined))?.serverUrl ?? this.getConfiguredServerUrl() : this.getConfiguredServerUrl();
+    if (root && (this.realtimeSync.currentRoot === root || this.ownerCoordinator.currentRoot === root)) {
+      await this.stopRealtimeSync(root).catch(() => undefined);
+    }
     await this.secrets.deleteIdentity(server);
     this.onChanged();
   }
@@ -954,6 +968,19 @@ export class OverleafService implements vscode.Disposable {
   private activityLogForRoot(root: string): SyncActivityEntry[] {
     if (this.realtimeSync.currentRoot === root) return this.realtimeSync.getActivityLog();
     return this.ownerCoordinator.currentRoot === root ? this.externalActivityLog : [];
+  }
+
+  private async activityLogForRootAsync(root: string): Promise<SyncActivityEntry[]> {
+    const live = this.activityLogForRoot(root);
+    if (live.length || this.realtimeSync.currentRoot === root || this.ownerCoordinator.currentRoot === root) return live;
+    const raw = await readTextFileBounded(metadataPath(root, 'activity-log.json'), MAX_METADATA_JSON_BYTES).catch(() => undefined);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed.filter(entry => Boolean(entry) && typeof entry === 'object'
+        && typeof (entry as SyncActivityEntry).at === 'string'
+        && typeof (entry as SyncActivityEntry).message === 'string').slice(-100) as SyncActivityEntry[] : [];
+    } catch { return []; }
   }
 
   private async pullForOwnerCommand(relPath: string, force: boolean): Promise<void> {

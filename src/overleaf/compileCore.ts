@@ -1,10 +1,10 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { metadataPath, OUTPUT_DIR, readManifest } from './manifest';
+import { metadataPath, OUTPUT_DIR, readManifest, readTextFileBounded } from './manifest';
 import type { CompileOutputFile } from './types';
 import { OverleafClient } from './overleafClient';
-import { processAlive, processStartSignature } from './util';
+import { assertNoSymlinkPath, assertPathWithin, processAlive, processStartSignature, validateProjectPathSegment } from './util';
 
 export interface RemoteCompileResult {
   rootDocPath?: string;
@@ -52,7 +52,7 @@ export async function compileRemoteProject(
       options.signal?.throwIfAborted();
       if (!output.url) continue;
       const name = uniqueCompileOutputName(output, usedNames);
-      const target = path.join(stagingRoot, name);
+      const target = assertPathWithin(stagingRoot, path.join(stagingRoot, name));
       options.onProgress?.(`Downloading ${name}`);
       await client.downloadCompileOutputToPath(output.url, response, target, { signal: options.signal });
       stagedFiles.push(target);
@@ -76,8 +76,16 @@ export async function compileRemoteProject(
 async function cleanupInterruptedCompileArtifacts(root: string): Promise<void> {
   const dir = metadataPath(root);
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const backups = entries.filter(entry => entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).sort((a, b) => b.name.localeCompare(a.name));
+  const outputRoot = path.join(dir, OUTPUT_DIR);
+  let retainedBackup: string | undefined;
+  if (!await exists(outputRoot) && backups.length) {
+    retainedBackup = backups[0].name;
+    await fs.rename(path.join(dir, retainedBackup), outputRoot).catch(() => undefined);
+  }
   await Promise.all(entries
     .filter(entry => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`))
+    .filter(entry => entry.name !== retainedBackup)
     .map(entry => fs.rm(path.join(dir, entry.name), { recursive: true, force: true })));
 }
 
@@ -97,12 +105,12 @@ async function acquireCompileLock(outputRoot: string, options: CompileOptions = 
         nonce
       }));
       return async () => {
-        const current = await fs.readFile(owner, 'utf8').catch(() => undefined);
+        const current = await readTextFileBounded(owner, 64 * 1024).catch(() => undefined);
         if (current?.includes(nonce)) await fs.rm(lock, { recursive: true, force: true });
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      const raw = await fs.readFile(owner, 'utf8').catch(() => undefined);
+      const raw = await readTextFileBounded(owner, 64 * 1024).catch(() => undefined);
       let stale = false;
       try {
         const value = JSON.parse(raw ?? '') as { pid?: number; startedAt?: number; processStart?: string };
@@ -196,7 +204,7 @@ async function detectRootDoc(root: string): Promise<string | undefined> {
   const manifest = await readManifest(root);
   for (const file of Object.values(manifest.files)) {
     if (!file.path.endsWith('.tex')) continue;
-    const content = await fs.readFile(path.join(root, file.path), 'utf8').catch(() => '');
+    const content = await fs.readFile(await assertNoSymlinkPath(root, file.path), 'utf8').catch(() => '');
     if (/\\documentclass(?:\[[^\]]*\])?\{[^}]+\}/.test(content)) return file.path;
   }
   return undefined;
@@ -205,8 +213,12 @@ async function detectRootDoc(root: string): Promise<string | undefined> {
 function compileOutputName(output: CompileOutputFile): string {
   const raw = output.path || output.url || output.build || output.type || 'output.bin';
   const clean = path.posix.basename(raw.split('?')[0].replace(/\\/g, '/'));
-  if (clean) return clean;
-  return output.type ? `output.${output.type.replace(/^\./, '')}` : 'output.bin';
+  const candidate = clean || (output.type ? `output.${output.type.replace(/^\./, '')}` : 'output.bin');
+  if (candidate === '.' || candidate === '..' || /[\u0000-\u001f\u007f]/.test(candidate)) {
+    throw new Error('Overleaf compile returned an unsafe output filename.');
+  }
+  validateProjectPathSegment(candidate);
+  return candidate;
 }
 
 async function exists(target: string): Promise<boolean> {

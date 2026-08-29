@@ -1,4 +1,4 @@
-const { copyFileSync, mkdirSync, rmSync } = require("node:fs");
+const { copyFileSync, mkdirSync, rmSync, readdirSync } = require("node:fs");
 const { dirname, join } = require("node:path");
 
 const targetRoot = join("dist", "vendor", "socket.io-client");
@@ -22,20 +22,15 @@ for (const file of ["websocket.js", "xhr-polling.js", "xhr.js"]) {
 const dependenciesRoot = join(targetRoot, "node_modules");
 copy("node_modules/ws/package.json", join(dependenciesRoot, "ws", "package.json"));
 copy("node_modules/ws/index.js", join(dependenciesRoot, "ws", "index.js"));
-for (const file of [
-  "BufferPool.js", "BufferUtil.fallback.js", "BufferUtil.js", "ErrorCodes.js", "Extensions.js",
-  "PerMessageDeflate.js", "Receiver.hixie.js", "Receiver.js", "Sender.hixie.js", "Sender.js",
-  "Validation.fallback.js", "Validation.js", "WebSocket.js", "WebSocketServer.js"
-]) copy(join("node_modules/ws/lib", file), join(dependenciesRoot, "ws", "lib", file));
+for (const file of readdirSync("node_modules/ws")) {
+  if (file.endsWith(".js")) copy(join("node_modules/ws", file), join(dependenciesRoot, "ws", file));
+}
+for (const file of readdirSync("node_modules/ws/lib")) {
+  if (file.endsWith(".js")) copy(join("node_modules/ws/lib", file), join(dependenciesRoot, "ws", "lib", file));
+}
 
 copy("node_modules/xmlhttprequest/package.json", join(dependenciesRoot, "xmlhttprequest", "package.json"));
 copy("node_modules/xmlhttprequest/lib/XMLHttpRequest.js", join(dependenciesRoot, "xmlhttprequest", "lib", "XMLHttpRequest.js"));
-
-copy("node_modules/options/package.json", join(dependenciesRoot, "options", "package.json"));
-copy("node_modules/options/lib/options.js", join(dependenciesRoot, "options", "lib", "options.js"));
-
-copy("node_modules/ultron/package.json", join(dependenciesRoot, "ultron", "package.json"));
-copy("node_modules/ultron/index.js", join(dependenciesRoot, "ultron", "index.js"));
 
 const runtime = require(`../${join(targetRoot, "lib", "io.js")}`);
 if (!runtime || runtime.version !== "0.9.17-overleaf-5" || typeof runtime.connect !== "function") {

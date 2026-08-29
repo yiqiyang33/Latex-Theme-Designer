@@ -69,6 +69,7 @@ export function removeProjectTreeEntity(project: OverleafProject, entityId: stri
 
 function findProjectFolder(project: OverleafProject, folderId: string): OverleafFolder | undefined {
   const root = getRootFolder(project);
+  if (!root || !root._id) throw new Error('Overleaf project root folder is invalid.');
   if (root._id === folderId) return root;
   return findFolderBelow(root, folderId);
 }
@@ -134,6 +135,8 @@ export function buildProjectTreeIndex(
   const folders: ManifestFolder[] = [];
   const files: ManifestFile[] = [];
   const root = getRootFolder(project);
+  if (!root._id) throw new Error('Overleaf project root folder is invalid.');
+  const canonicalPaths = new Set<string>();
 
   const manifest: OverleafCodexManifest = {
     schemaVersion: 3,
@@ -152,18 +155,26 @@ export function buildProjectTreeIndex(
   walkFolder(root, '', undefined, folders, files);
 
   for (const folder of folders) {
-    if (manifest.folders[folder.path]) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || '.'}`);
+    const key = canonicalPathKey(folder.path);
+    if (manifest.folders[folder.path] || canonicalPaths.has(key)) throw new Error(`Overleaf project contains duplicate folder path: ${folder.path || '.'}`);
     manifest.folders[folder.path] = folder;
+    canonicalPaths.add(key);
   }
   for (const file of files) {
-    if (manifest.files[file.path] || manifest.folders[file.path]) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
+    const key = canonicalPathKey(file.path);
+    if (manifest.files[file.path] || manifest.folders[file.path] || canonicalPaths.has(key)) throw new Error(`Overleaf project contains duplicate path: ${file.path}`);
     manifest.files[file.path] = file;
+    canonicalPaths.add(key);
     if (project.rootDoc_id && file.entityId === project.rootDoc_id) {
       manifest.rootDocPath = file.path;
     }
   }
 
   return { manifest, folders, files };
+}
+
+function canonicalPathKey(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('en-US');
 }
 
 function walkFolder(

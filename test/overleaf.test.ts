@@ -23,12 +23,13 @@ import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, hasLocalCha
 import { OtDocumentSession, type OtDocumentTransport } from "../src/overleaf/otDocumentSession";
 import { getWithLegacyFallback, hasExplicitConfigurationValue, needsGlobalConfigurationUpdate, type ConfigurationInspection, type InspectableConfiguration } from "../src/overleaf/config";
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
-import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectRelativePath, normalizeServerUrl } from "../src/overleaf/util";
+import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectRelativePath, normalizeServerUrl, sanitizeDiagnosticText, validateProjectPathSegment } from "../src/overleaf/util";
 import { validateManifest } from "../src/overleaf/metadataValidation";
 import {
   isCollaboratorPosition,
   isOverleafDoc,
   isOverleafFolder,
+  isOverleafProject,
   isOverleafOtUpdate,
   parseContentRange,
   mergeCookieHeader,
@@ -116,6 +117,17 @@ describe("Overleaf integration primitives", () => {
     expect(isOverleafOtUpdate({ doc: "doc", v: -1 })).toBe(false);
     expect(isCollaboratorPosition({ id: "client", row: 0, column: 3 })).toBe(true);
     expect(isCollaboratorPosition({ id: "client", row: -1 })).toBe(false);
+  });
+
+  it("rejects unsafe remote names and oversized or malformed project responses", () => {
+    expect(() => validateProjectPathSegment("CON")).toThrow();
+    expect(() => validateProjectPathSegment("figure. ")).toThrow();
+    expect(() => validateProjectPathSegment("bad:name")).toThrow();
+    const project = { rootFolder: { _id: "root", name: "", docs: [{ _id: "doc", name: "main.tex", version: 1 }] } };
+    expect(isOverleafProject(project)).toBe(true);
+    expect(isOverleafProject({ ...project, rootFolder: { ...project.rootFolder, docs: "bad" } })).toBe(false);
+    expect(sanitizeDiagnosticText("Authorization: Bearer abc123; token=secret")).toContain("[REDACTED]");
+    expect(sanitizeDiagnosticText("x".repeat(3000)).length).toBeLessThan(3000);
   });
 
   it("rejects symlinked mirror paths and traversal metadata", async () => {

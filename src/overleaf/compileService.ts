@@ -1,8 +1,7 @@
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { CompileDiagnosticProvider } from './diagnostics';
-import { metadataPath, OUTPUT_DIR, readManifest, writeManifest } from './manifest';
+import { metadataPath, OUTPUT_DIR, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES, writeManifest } from './manifest';
 import { OverleafClient } from './overleafClient';
 import { compileRemoteProject, type CompileOptions, type RemoteCompileResult } from './compileCore';
 
@@ -15,7 +14,7 @@ export class CompileService {
     await vscode.workspace.saveAll();
     const result = await compileRemoteProject(root, client, undefined, options);
     const logPath = result.logPath ?? path.join(result.outputRoot, 'output.log');
-    const log = await fs.readFile(logPath, 'utf8').catch(() => '');
+    const log = await readTextFileBounded(logPath, MAX_METADATA_JSON_BYTES).catch(() => '');
     this.diagnostics.publish(root, result.rootDocPath, log);
     const manifest = await readManifest(root);
     manifest.lastRemoteCompile = {
@@ -23,7 +22,7 @@ export class CompileService {
       pdfPath: relativeOutputPath(root, result.pdfPath),
       logPath: relativeOutputPath(root, result.logPath)
     };
-    await writeManifest(root, manifest);
+    await writeManifest(root, manifest, { updateSyncTimestamp: false });
     return result;
   }
 

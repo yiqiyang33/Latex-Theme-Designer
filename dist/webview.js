@@ -511,11 +511,16 @@
       setStatus("Select at least one safe sync item first.", "warning");
       return;
     }
-    await request("overleaf-bulk-sync", overleafPayload({ paths: items.map((item) => item.path) }));
-    selectedSyncPaths.clear();
-    syncSelectionMode = false;
+    const selected = new Set(items.map((item) => String(item.path)));
+    await request("overleaf-bulk-sync", overleafPayload({ paths: [...selected] }));
     await refreshOverleafState();
-    setStatus(`Applied ${items.length} selected sync item(s).`, "ok");
+    for (const path of selected) {
+      const current = (overleafState?.syncItems || []).find((item) => item.path === path);
+      if (!current || current.status === "synced") selectedSyncPaths.delete(path);
+    }
+    if (!selectedSyncPaths.size) syncSelectionMode = false;
+    const remaining = selectedSyncPaths.size;
+    setStatus(remaining ? `Applied ${items.length - remaining} item(s); ${remaining} remain selected for retry.` : `Applied ${items.length} selected sync item(s).`, remaining ? "warning" : "ok");
   }
   function formatSyncConnection(value) {
     switch (value) {

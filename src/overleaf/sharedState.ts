@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { NetworkTimeouts } from './types';
 import type { SyncPolicy } from './coreInterfaces';
-import { atomicWriteText, manifestPath, readManifest } from './manifest';
+import { atomicWriteText, manifestPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES } from './manifest';
 import { normalizeServerUrl, processAlive, processStartSignature } from './util';
 import { mapWithConcurrency } from './syncHealthService';
 
@@ -93,7 +93,7 @@ export function defaultSharedState(): SharedOverleafState {
 
 export async function readSharedState(): Promise<SharedOverleafState> {
   await migrateLegacyLinuxPaths();
-  const raw = await fs.readFile(sharedStatePath(), 'utf8').catch(() => undefined);
+  const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => undefined);
   if (!raw) return defaultSharedState();
   let parsed: Partial<SharedOverleafState>;
   try { parsed = JSON.parse(raw) as Partial<SharedOverleafState>; }
@@ -388,7 +388,7 @@ async function sharedStateLockIsStale(lockPath: string, metadataPath: string): P
 }
 
 async function readSharedStateLockMetadata(target: string): Promise<SharedStateLockMetadata | undefined> {
-  const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => undefined);
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw) as Partial<SharedStateLockMetadata>;

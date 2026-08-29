@@ -28,7 +28,9 @@ import {
   shouldIgnore,
   isToolkitOverridePath,
   shouldIgnoreUntrackedLocalPath,
-  writeBaseDoc
+  writeBaseDoc,
+  readTextFileBounded,
+  MAX_METADATA_JSON_BYTES
 } from './manifest';
 import { buildProjectTreeIndex } from './tree';
 import {
@@ -56,7 +58,7 @@ import {
   repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
-import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath, validateProjectPathSegment } from './util';
+import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
@@ -800,7 +802,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.client = client;
     this.manifest = await readManifest(root);
     this.activityLog.splice(0, this.activityLog.length);
-    const storedActivity = await fs.readFile(metadataPath(root, 'activity-log.json'), 'utf8')
+    const storedActivity = await readTextFileBounded(metadataPath(root, 'activity-log.json'), MAX_METADATA_JSON_BYTES)
       .then(raw => JSON.parse(raw) as unknown, () => undefined);
     if (Array.isArray(storedActivity)) {
       for (const entry of storedActivity.slice(-100)) {
@@ -1047,7 +1049,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     const remoteUri = vscode.Uri.file(state.conflictPath);
     const localUri = vscode.Uri.file(this.abs(normalized));
-    const basePath = baseDocPath(this.root!, state.docId);
+    const basePath = await assertNoSymlinkAbsolutePath(this.root!, baseDocPath(this.root!, state.docId));
     const baseExists = await fs.lstat(basePath).then(stat => stat.isFile(), () => false);
     if (baseExists) {
       const baseUri = vscode.Uri.file(basePath);
@@ -1077,6 +1079,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   async acceptRemoteConflict(relPath: string): Promise<void> {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    const acceptedRemotePath = state.conflictPath;
     await this.saveConflictSnapshot(normalized, state);
     await this.writeLocalFile(normalized, Buffer.from(state.remoteCache, 'utf8'), true);
     state.localCache = state.remoteCache;
@@ -1089,6 +1092,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.persistManifest();
     this.syncGate.clearPath(normalized);
     await this.conflictStore?.remove(normalized);
+    await this.cleanupConflictArtifacts(normalized, acceptedRemotePath);
     this.conflictsChanged.fire();
     await this.checkTargeted([normalized], 'conflict-accept-remote');
     vscode.window.showInformationMessage(`Accepted Overleaf remote version for ${normalized}.`);
@@ -1097,15 +1101,17 @@ export class RealtimeSyncService implements vscode.Disposable {
   async useLocalConflict(relPath: string): Promise<void> {
     const normalized = normalizeProjectRelativePath(relPath);
     const state = this.requireConflict(normalized);
+    const acceptedLocalRemotePath = state.conflictPath;
     await this.saveConflictSnapshot(normalized, state);
     await this.saveOpenLocalDocument(normalized);
-    const localContent = await fs.readFile(await assertNoSymlinkPath(this.root!, normalized), 'utf8');
+    const localContent = await readTextFileBounded(await assertNoSymlinkPath(this.root!, normalized), MAX_METADATA_JSON_BYTES);
     state.paused = false;
     state.conflictPath = undefined;
     state.conflictReason = undefined;
     state.localCache = state.remoteCache;
     this.syncGate.clearPath(normalized);
     await this.conflictStore?.remove(normalized);
+    await this.cleanupConflictArtifacts(normalized, acceptedLocalRemotePath);
     this.conflictsChanged.fire();
     await this.syncDocContent(normalized, localContent);
     await this.checkTargeted([normalized], 'conflict-use-local');
@@ -1128,9 +1134,17 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   private async saveConflictSnapshot(relPath: string, state: DocState): Promise<void> {
     const snapshot = metadataPath(this.root!, 'conflicts', 'snapshots', `${relPath.replace(/[\\/]/g, '__')}.${Date.now()}.local.tex`);
-    const local = await fs.readFile(await assertNoSymlinkPath(this.root!, relPath), 'utf8').catch(() => state.localCache);
+    const local = await readTextFileBounded(await assertNoSymlinkPath(this.root!, relPath), MAX_METADATA_JSON_BYTES).catch(() => state.localCache);
     await atomicWriteText(snapshot, local);
     this.log(`Saved conflict snapshot for ${relPath}.`);
+  }
+
+  private async cleanupConflictArtifacts(relPath: string, remotePath?: string): Promise<void> {
+    if (remotePath) await fs.rm(remotePath, { force: true }).catch(() => undefined);
+    const dir = metadataPath(this.root!, 'conflicts', 'snapshots');
+    const prefix = `${relPath.replace(/[\\/]/g, '__')}.`;
+    const entries = await fs.readdir(dir).catch(() => [] as string[]);
+    await Promise.all(entries.filter(name => name.startsWith(prefix)).map(name => fs.rm(path.join(dir, name), { force: true })));
   }
 
   private async saveOpenLocalDocument(relPath: string): Promise<void> {
@@ -1700,7 +1714,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         continue;
       }
       const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
-      const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => content) : content;
+      const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => content) : content;
       this.docStates.set(relPath, {
         relPath,
         docId: remoteFile.entityId,
@@ -2398,7 +2412,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
     const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
-    const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => state.localCache) : state.localCache;
+    const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => state.localCache) : state.localCache;
 
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
@@ -2650,7 +2664,7 @@ export class RealtimeSyncService implements vscode.Disposable {
         await this.conflictStore?.remove(normalized);
         continue;
       }
-      const remoteContent = await fs.readFile(snapshotPath, 'utf8');
+      const remoteContent = await readTextFileBounded(snapshotPath, MAX_METADATA_JSON_BYTES);
       state.version = Math.max(state.version, conflict.remoteVersion);
       state.remoteCache = remoteContent;
       state.paused = true;
@@ -2671,7 +2685,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     const state = await this.ensureDocState(relPath);
     const joined = await this.session!.joinDoc(state.docId);
     const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
-    const localContent = localPath ? await fs.readFile(localPath, 'utf8').catch(() => '') : '';
+    const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => '') : '';
     if (localContent === state.localCache) {
       state.version = joined.version;
       state.remoteCache = joined.content;
@@ -2846,7 +2860,7 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   private async moveLocalToTrash(relPath: string): Promise<void> {
     const source = await assertNoSymlinkPath(this.root!, relPath);
-    const target = trashPathFor(this.root!, relPath);
+    const target = await assertNoSymlinkAbsolutePath(this.root!, trashPathFor(this.root!, relPath));
     const exists = await fs.stat(source).catch(() => undefined);
     if (!exists) {
       return;
@@ -2870,7 +2884,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
     const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
-    const content = localPath ? await fs.readFile(localPath, 'utf8').catch(() => undefined) : undefined;
+    const content = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => undefined) : undefined;
     if (content === undefined) {
       return;
     }
@@ -2977,7 +2991,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private showError(error: unknown): void {
-    const message = formatUnknownError(error);
+    const message = sanitizeDiagnosticText(formatUnknownError(error));
     this.log(message);
     void vscode.window.showErrorMessage(`Overleaf Codex: ${message}`);
   }
@@ -2985,7 +2999,8 @@ export class RealtimeSyncService implements vscode.Disposable {
   private log(message: string): void {
     const at = new Date().toISOString();
     this.output.appendLine(`[${at}] ${message}`);
-    this.activityLog.push({ at, message });
+    const safeMessage = sanitizeDiagnosticText(message);
+    this.activityLog.push({ at, message: safeMessage });
     if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
     if (this.root) {
       const root = this.root;

@@ -4,12 +4,14 @@ import * as net from 'net';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { runtimeRoot } from './sharedState';
+import { readTextFileBounded } from './manifest';
 import { formatUnknownError, processAlive, processStartSignature } from './util';
 
 export const SYNC_IPC_VERSION = 1;
 const MAX_IPC_FRAME_BYTES = 1024 * 1024;
 const MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 const MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
+const MAX_ACTIVE_IPC_CHUNKS = 64;
 const IPC_CHUNK_BYTES = 512 * 1024;
 
 export interface OwnerRequest {
@@ -396,6 +398,7 @@ function sendRequest(socketPath: string, request: OwnerRequest, timeoutMs: numbe
 function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): void {
   let pending = '';
   const chunks = new Map<string, { total: number; parts: Array<Buffer | undefined>; received: number }>();
+  let chunkBytes = 0;
   const accept = (value: unknown): void => {
     if (!isIpcChunk(value)) {
       onValue(value);
@@ -413,6 +416,10 @@ function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): 
     }
     let entry = chunks.get(value.id);
     if (!entry) {
+      if (chunks.size >= MAX_ACTIVE_IPC_CHUNKS || chunkBytes + payload.length > MAX_IPC_MESSAGE_BYTES) {
+        socket.destroy(new Error('Sync IPC active chunk cache exceeded its limit.'));
+        return;
+      }
       entry = { total: value.total, parts: Array.from({ length: value.total }), received: 0 };
       chunks.set(value.id, entry);
     }
@@ -422,8 +429,10 @@ function parseJsonLines(socket: net.Socket, onValue: (value: unknown) => void): 
     }
     entry.parts[value.index] = payload;
     entry.received += 1;
+    chunkBytes += payload.length;
     if (entry.received !== entry.total) return;
     chunks.delete(value.id);
+    chunkBytes = Math.max(0, chunkBytes - entry.parts.reduce((sum, part) => sum + (part?.length ?? 0), 0));
     try { onValue(JSON.parse(Buffer.concat(entry.parts as Buffer[]).toString('utf8'))); }
     catch { socket.destroy(new Error('Invalid JSON received over sync IPC.')); }
   };
@@ -572,7 +581,7 @@ async function acquireReclaimGuard(guardPath: string, staleMs: number): Promise<
 }
 
 async function readMetadata(target: string): Promise<OwnerMetadata | undefined> {
-  const raw = await fs.readFile(target, 'utf8').catch(() => undefined);
+  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => undefined);
   if (!raw) return undefined;
   try { return JSON.parse(raw) as OwnerMetadata; } catch { return undefined; }
 }

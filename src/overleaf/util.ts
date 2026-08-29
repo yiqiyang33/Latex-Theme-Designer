@@ -92,8 +92,14 @@ export function normalizeProjectRelativePath(input: string, allowRoot = false): 
 
 /** Validate one remote entity name before it is joined into a project path. */
 export function validateProjectPathSegment(input: string): string {
-  if (typeof input !== 'string' || !input || input === '.' || input === '..' || /[\\/\0]/.test(input)) {
+  if (typeof input !== 'string' || !input || input === '.' || input === '..'
+    || /[\\/\0\u0000-\u001f\u007f]/.test(input)
+    || /[<>:"|?*]/.test(input)
+    || /[ .]$/.test(input)) {
     throw new Error(`Invalid remote project path segment: ${String(input)}`);
+  }
+  if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(input)) {
+    throw new Error(`Invalid remote project path segment: ${input}`);
   }
   return input;
 }
@@ -118,6 +124,23 @@ export async function assertNoSymlinkPath(root: string, relativePath: string): P
     }
   }
   return path.join(absoluteRoot, ...normalized.split('/'));
+}
+
+/** Reject symlink components for an already-resolved path below a trusted root. */
+export async function assertNoSymlinkAbsolutePath(root: string, candidate: string): Promise<string> {
+  const absoluteRoot = path.resolve(root);
+  const absoluteCandidate = assertPathWithin(absoluteRoot, candidate);
+  const relative = path.relative(absoluteRoot, absoluteCandidate);
+  let current = absoluteRoot;
+  for (const segment of relative ? relative.split(path.sep) : []) {
+    current = path.join(current, segment);
+    const stat = await fs.lstat(current).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (stat?.isSymbolicLink()) throw new Error(`Refusing to access symlinked path: ${candidate}`);
+  }
+  return absoluteCandidate;
 }
 
 /** Ensure an absolute path remains inside a trusted directory. */
@@ -198,6 +221,15 @@ export function formatUnknownError(error: unknown): string {
 
   const json = safeJson(error);
   return json && json !== '{}' ? json : inspect(error, { depth: 4, breakLength: 140 });
+}
+
+/** Keep credentials and oversized server text out of logs and diagnostics. */
+export function sanitizeDiagnosticText(value: string, maxLength = 2000): string {
+  let text = value
+    .replace(/(cookie|set-cookie|authorization|csrf(?:-token)?|token|secret|password)\s*[:=]\s*[^,;\s]+/gi, '$1=[REDACTED]')
+    .replace(/(session(?:id)?|jwt)\s*[:=]\s*[^,;\s]+/gi, '$1=[REDACTED]');
+  if (text.length > maxLength) text = `${text.slice(0, Math.max(0, maxLength - 20))}…[truncated]`;
+  return text;
 }
 
 function formatErrorDetail(value: unknown): string {
