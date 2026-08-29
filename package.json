@@ -64,6 +64,8 @@
     "onCommand:latexEditingToolkit.openLocalProject",
     "onCommand:latexEditingToolkit.relocateLocalProject",
     "onCommand:latexEditingToolkit.removeLocalProject",
+    "onCommand:latexEditingToolkit.clearMissingLocalProjects",
+    "onCommand:latexEditingToolkit.showLocalProjectPath",
     "onCommand:latexEditingToolkit.refreshTree",
     "onCommand:latexEditingToolkit.undoLastChange",
     "onCommand:latexEditingToolkit.redoLastChange",
@@ -161,6 +163,16 @@
         "command": "latexEditingToolkit.removeLocalProject",
         "title": "LaTeX Editing Toolkit: Remove Local Project",
         "icon": "$(close)"
+      },
+      {
+        "command": "latexEditingToolkit.clearMissingLocalProjects",
+        "title": "LaTeX Editing Toolkit: Clear Missing Local Projects",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "latexEditingToolkit.showLocalProjectPath",
+        "title": "LaTeX Editing Toolkit: Show Local Project Path",
+        "icon": "$(info)"
       },
       {
         "command": "latexEditingToolkit.refreshTree",
@@ -770,6 +782,13 @@
           "when": "false"
         },
         {
+          "command": "latexEditingToolkit.clearMissingLocalProjects"
+        },
+        {
+          "command": "latexEditingToolkit.showLocalProjectPath",
+          "when": "false"
+        },
+        {
           "command": "latexEditingToolkit.refreshTree",
           "when": "false"
         },
@@ -866,6 +885,11 @@
           "command": "latexEditingToolkit.removeLocalProject",
           "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
           "group": "1_modification@2"
+        },
+        {
+          "command": "latexEditingToolkit.showLocalProjectPath",
+          "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
+          "group": "1_modification@3"
         },
         {
           "command": "latexEditingToolkit.relocateLocalProject",

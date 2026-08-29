@@ -8,7 +8,7 @@ import { detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, 
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
-import { LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry } from "../src/projectRegistry";
+import { LOCAL_PROJECTS_MAX_ENTRIES, LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "../src/projectRegistry";
 import { PersonalStyleRegistry } from "../src/personalStyles";
 import { preflightCreateProject, runCreateProjectWorkflow } from "../src/projectWorkflow";
 import { SplitterService } from "../src/splitter";
@@ -239,6 +239,7 @@ describe("TypeScript Toolkit migration", () => {
     expect(duplicate.id).toBe(first.id);
     expect(projects.find((entry) => entry.id === first.id)?.templateId).toBe("article-minimal");
     expect(projects.every((entry) => entry.missing === false)).toBe(true);
+    expect(await registry.findById(first.id)).toMatchObject({ rootPath: path.normalize(firstRoot), missing: false });
   });
 
   it("serializes concurrent registry changes without losing unrelated projects", async () => {
@@ -337,6 +338,59 @@ describe("TypeScript Toolkit migration", () => {
   it("rejects non-local project paths", async () => {
     const registry = new LocalProjectRegistry(new MemoryProjectStateStore());
     await expect(registry.add("https://example.com/note", "book-minimal")).rejects.toThrow("absolute local path");
+  });
+
+  it("uses opaque, distinct state keys for separate authorities", () => {
+    const local = scopedLocalProjectsStateKey("local|machine-a|local");
+    const remoteA = scopedLocalProjectsStateKey("ssh-remote|machine-a|ssh-remote+host-a");
+    const remoteB = scopedLocalProjectsStateKey("ssh-remote|machine-a|ssh-remote+host-b");
+    expect(local).not.toContain("machine-a");
+    expect(remoteA).not.toBe(remoteB);
+    expect(remoteA).not.toBe(local);
+    expect(scopedStateKey("recent", "same")).toBe(scopedStateKey("recent", "same"));
+  });
+
+  it("sanitizes recent project parent history", () => {
+    const roots = Array.from({ length: 10 }, (_, index) => path.join(os.tmpdir(), `recent-${index}`));
+    expect(sanitizeRecentProjectParents(["relative", roots[0], roots[0], ...roots.slice(1), roots[0]]))
+      .toEqual(roots.slice(0, 8).map((root) => path.normalize(root)));
+    expect(sanitizeRecentProjectParents({ bad: true })).toEqual([]);
+  });
+
+  it("migrates legacy projects only into an explicitly opted-in scoped registry", async () => {
+    const store = new MemoryProjectStateStore();
+    const root = await tempWorkspace();
+    await store.update(LOCAL_PROJECTS_STATE_KEY, [{ rootPath: root, label: "legacy" }]);
+    const scopedKey = scopedLocalProjectsStateKey("local|machine|local");
+    const registry = new LocalProjectRegistry(store, scopedKey, { legacyKey: LOCAL_PROJECTS_STATE_KEY, migrateLegacy: true });
+    expect((await registry.list())[0]?.label).toBe("legacy");
+    expect(store.get<unknown>(scopedKey)).toBeDefined();
+
+    const remoteKey = scopedLocalProjectsStateKey("ssh-remote|machine|host");
+    const remoteRegistry = new LocalProjectRegistry(store, remoteKey, { legacyKey: LOCAL_PROJECTS_STATE_KEY, migrateLegacy: false });
+    expect(await remoteRegistry.list()).toEqual([]);
+    expect(store.get<unknown>(remoteKey)).toBeUndefined();
+  });
+
+  it("bounds registry entries and explicitly clears only missing projects", async () => {
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalProjectRegistry(store);
+    const existingRoot = await tempWorkspace();
+    const missingRoot = path.join(await tempWorkspace(), "gone");
+    await registry.add(existingRoot, "book-minimal");
+    await registry.add(missingRoot, "book-minimal");
+    expect(await registry.removeMissing()).toBe(1);
+    expect((await registry.list()).map((entry) => entry.rootPath)).toEqual([path.normalize(existingRoot)]);
+
+    const oversized = Array.from({ length: LOCAL_PROJECTS_MAX_ENTRIES + 20 }, (_, index) => ({
+      id: `id-${index}`,
+      rootPath: path.join(existingRoot, `project-${index}`),
+      label: `Project ${index}`,
+      templateId: "book-minimal",
+      createdAt: new Date(index).toISOString()
+    }));
+    await store.update(LOCAL_PROJECTS_STATE_KEY, oversized);
+    expect((await new LocalProjectRegistry(store).list()).length).toBe(LOCAL_PROJECTS_MAX_ENTRIES);
   });
 
   it("registers a created project only after assets and main.tex succeed", async () => {

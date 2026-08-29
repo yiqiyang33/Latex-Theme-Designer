@@ -4,14 +4,48 @@ import * as path from "node:path";
 import type { LocalNoteProject, LocalNoteProjectStatus, LocalProjectStateStore } from "./types";
 
 export const LOCAL_PROJECTS_STATE_KEY = "latexEditingToolkit.localProjects";
+export const LOCAL_PROJECTS_MAX_ENTRIES = 500;
+export const LOCAL_PROJECT_ID_MAX_LENGTH = 128;
+export const LOCAL_PROJECT_LABEL_MAX_LENGTH = 256;
+export const LOCAL_PROJECT_TEMPLATE_MAX_LENGTH = 128;
+export const LOCAL_PROJECT_PATH_MAX_LENGTH = 4096;
+
+/** Build a stable, opaque state key for a VS Code authority namespace. */
+export function scopedStateKey(baseKey: string, scope: string): string {
+  const digest = createHash("sha256").update(String(scope || "unknown")).digest("hex").slice(0, 24);
+  return `${baseKey}.scope.${digest}.v1`;
+}
+
+export function scopedLocalProjectsStateKey(scope: string): string {
+  return scopedStateKey(LOCAL_PROJECTS_STATE_KEY, scope);
+}
+
+export function sanitizeRecentProjectParents(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !path.isAbsolute(item) || item.length > LOCAL_PROJECT_PATH_MAX_LENGTH) continue;
+    const normalized = path.normalize(path.resolve(item));
+    if (!result.includes(normalized)) result.push(normalized);
+    if (result.length >= 8) break;
+  }
+  return result;
+}
 
 export class LocalProjectRegistry {
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly store: LocalProjectStateStore,
-    private readonly stateKey = LOCAL_PROJECTS_STATE_KEY
-  ) {}
+    private readonly stateKey = LOCAL_PROJECTS_STATE_KEY,
+    options: { legacyKey?: string; migrateLegacy?: boolean } = {}
+  ) {
+    this.ready = options.migrateLegacy
+      ? this.migrateLegacyState(options.legacyKey ?? LOCAL_PROJECTS_STATE_KEY)
+      : Promise.resolve();
+  }
+
+  private readonly ready: Promise<void>;
 
   list(): Promise<LocalNoteProjectStatus[]> {
     return this.runSerialized(async () => {
@@ -74,6 +108,29 @@ export class LocalProjectRegistry {
     });
   }
 
+  findById(id: string): Promise<LocalNoteProjectStatus | undefined> {
+    return this.runSerialized(async () => {
+      const normalizedId = String(id || "").trim();
+      if (!normalizedId || normalizedId.length > LOCAL_PROJECT_ID_MAX_LENGTH) return undefined;
+      const entry = (await this.readCleanEntries()).find((item) => item.id === normalizedId);
+      return entry ? { ...entry, missing: !(await this.isDirectory(entry.rootPath)) } : undefined;
+    });
+  }
+
+  removeMissing(): Promise<number> {
+    return this.runSerialized(async () => {
+      const entries = await this.readCleanEntries();
+      const existing: LocalNoteProject[] = [];
+      let removed = 0;
+      for (const entry of entries) {
+        if (await this.isDirectory(entry.rootPath)) existing.push(entry);
+        else removed += 1;
+      }
+      if (removed > 0) await this.writeEntries(existing);
+      return removed;
+    });
+  }
+
   relocate(oldRootPath: string, newRootPath: string): Promise<LocalNoteProject> {
     return this.runSerialized(async () => {
       const oldPath = normalizeProjectPath(oldRootPath);
@@ -102,6 +159,7 @@ export class LocalProjectRegistry {
   }
 
   private async readCleanEntries(): Promise<LocalNoteProject[]> {
+    await this.ready;
     const raw = this.store.get<unknown>(this.stateKey);
     if (!Array.isArray(raw)) {
       if (raw !== undefined) await this.writeEntries([]);
@@ -109,18 +167,22 @@ export class LocalProjectRegistry {
     }
 
     const parsed: LocalNoteProject[] = [];
-    for (const item of raw) {
+    for (const item of raw.slice(0, LOCAL_PROJECTS_MAX_ENTRIES * 4)) {
       if (!isRecord(item)) continue;
       const rawRootPath = typeof item.rootPath === "string" ? item.rootPath : item.root_path;
       const rootPath = typeof rawRootPath === "string" ? safeNormalizeProjectPath(rawRootPath) : undefined;
-      if (!rootPath) continue;
+      if (!rootPath || rootPath.length > LOCAL_PROJECT_PATH_MAX_LENGTH) continue;
+      const rawId = typeof item.id === "string" && item.id ? item.id : legacyProjectId(rootPath);
+      const rawLabel = typeof item.label === "string" && item.label ? item.label : path.basename(rootPath);
+      const rawTemplate = typeof item.templateId === "string" && item.templateId
+        ? item.templateId
+        : typeof item.template_id === "string" && item.template_id ? item.template_id : "unknown";
+      if (rawId.length > LOCAL_PROJECT_ID_MAX_LENGTH || rawLabel.length > LOCAL_PROJECT_LABEL_MAX_LENGTH || rawTemplate.length > LOCAL_PROJECT_TEMPLATE_MAX_LENGTH) continue;
       parsed.push({
-        id: typeof item.id === "string" && item.id ? item.id : legacyProjectId(rootPath),
+        id: rawId,
         rootPath,
-        label: typeof item.label === "string" && item.label ? item.label : path.basename(rootPath),
-        templateId: typeof item.templateId === "string" && item.templateId
-          ? item.templateId
-          : typeof item.template_id === "string" && item.template_id ? item.template_id : "unknown",
+        label: rawLabel,
+        templateId: rawTemplate,
         createdAt: validTimestamp(item.createdAt) ?? validTimestamp(item.created_at) ?? new Date(0).toISOString()
       });
     }
@@ -131,7 +193,9 @@ export class LocalProjectRegistry {
       const previous = byCanonicalPath.get(key);
       if (!previous || entry.createdAt >= previous.createdAt) byCanonicalPath.set(key, entry);
     }
-    const cleaned = [...byCanonicalPath.values()];
+    const cleaned = [...byCanonicalPath.values()]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, LOCAL_PROJECTS_MAX_ENTRIES);
     if (JSON.stringify(cleaned) !== JSON.stringify(raw)) await this.writeEntries(cleaned);
     return cleaned;
   }
@@ -174,9 +238,19 @@ export class LocalProjectRegistry {
   }
 
   private runSerialized<T>(task: () => Promise<T>): Promise<T> {
-    const next = this.queue.then(task, task);
+    const next = this.queue.then(() => this.ready).then(task, task);
     this.queue = next.catch(() => undefined);
     return next;
+  }
+
+  private async migrateLegacyState(legacyKey: string): Promise<void> {
+    const markerKey = `${this.stateKey}.legacyMigration.v1`;
+    if (this.store.get<boolean>(markerKey)) return;
+    if (this.stateKey !== legacyKey && this.store.get<unknown>(this.stateKey) === undefined) {
+      const legacy = this.store.get<unknown>(legacyKey);
+      if (Array.isArray(legacy)) await this.store.update(this.stateKey, legacy);
+    }
+    await this.store.update(markerKey, true);
   }
 }
 

@@ -14168,7 +14168,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve26, reject) {
+      return new Body.Promise(function(resolve27, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14202,7 +14202,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve26(Buffer.concat(accum, accumBytes));
+            resolve27(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -14877,7 +14877,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve26, reject) {
+      return new fetch2.Promise(function(resolve27, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15010,7 +15010,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve26(fetch2(new Request(locationURL, requestOpts)));
+                resolve27(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15031,7 +15031,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve26(response);
+            resolve27(response);
             return;
           }
           const zlibOptions = {
@@ -15041,7 +15041,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve26(response);
+            resolve27(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15053,12 +15053,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve26(response);
+              resolve27(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve26(response);
+                resolve27(response);
               }
             });
             return;
@@ -15066,11 +15066,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve26(response);
+            resolve27(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve26(response);
+          resolve27(response);
         });
         writeToStream(req, request);
       });
@@ -17101,14 +17101,39 @@ var import_node_crypto3 = require("node:crypto");
 var import_node_fs3 = require("node:fs");
 var path3 = __toESM(require("node:path"));
 var LOCAL_PROJECTS_STATE_KEY = "latexEditingToolkit.localProjects";
+var LOCAL_PROJECTS_MAX_ENTRIES = 500;
+var LOCAL_PROJECT_ID_MAX_LENGTH = 128;
+var LOCAL_PROJECT_LABEL_MAX_LENGTH = 256;
+var LOCAL_PROJECT_TEMPLATE_MAX_LENGTH = 128;
+var LOCAL_PROJECT_PATH_MAX_LENGTH = 4096;
+function scopedStateKey(baseKey, scope) {
+  const digest = (0, import_node_crypto3.createHash)("sha256").update(String(scope || "unknown")).digest("hex").slice(0, 24);
+  return `${baseKey}.scope.${digest}.v1`;
+}
+function scopedLocalProjectsStateKey(scope) {
+  return scopedStateKey(LOCAL_PROJECTS_STATE_KEY, scope);
+}
+function sanitizeRecentProjectParents(value) {
+  if (!Array.isArray(value)) return [];
+  const result = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !path3.isAbsolute(item) || item.length > LOCAL_PROJECT_PATH_MAX_LENGTH) continue;
+    const normalized = path3.normalize(path3.resolve(item));
+    if (!result.includes(normalized)) result.push(normalized);
+    if (result.length >= 8) break;
+  }
+  return result;
+}
 var LocalProjectRegistry = class {
-  constructor(store, stateKey = LOCAL_PROJECTS_STATE_KEY) {
+  constructor(store, stateKey = LOCAL_PROJECTS_STATE_KEY, options = {}) {
     this.store = store;
     this.stateKey = stateKey;
+    this.ready = options.migrateLegacy ? this.migrateLegacyState(options.legacyKey ?? LOCAL_PROJECTS_STATE_KEY) : Promise.resolve();
   }
   store;
   stateKey;
   queue = Promise.resolve();
+  ready;
   list() {
     return this.runSerialized(async () => {
       const entries = await this.readCleanEntries();
@@ -17162,6 +17187,27 @@ var LocalProjectRegistry = class {
       return true;
     });
   }
+  findById(id) {
+    return this.runSerialized(async () => {
+      const normalizedId = String(id || "").trim();
+      if (!normalizedId || normalizedId.length > LOCAL_PROJECT_ID_MAX_LENGTH) return void 0;
+      const entry = (await this.readCleanEntries()).find((item) => item.id === normalizedId);
+      return entry ? { ...entry, missing: !await this.isDirectory(entry.rootPath) } : void 0;
+    });
+  }
+  removeMissing() {
+    return this.runSerialized(async () => {
+      const entries = await this.readCleanEntries();
+      const existing = [];
+      let removed = 0;
+      for (const entry of entries) {
+        if (await this.isDirectory(entry.rootPath)) existing.push(entry);
+        else removed += 1;
+      }
+      if (removed > 0) await this.writeEntries(existing);
+      return removed;
+    });
+  }
   relocate(oldRootPath, newRootPath) {
     return this.runSerialized(async () => {
       const oldPath = normalizeProjectPath(oldRootPath);
@@ -17187,22 +17233,27 @@ var LocalProjectRegistry = class {
     });
   }
   async readCleanEntries() {
+    await this.ready;
     const raw = this.store.get(this.stateKey);
     if (!Array.isArray(raw)) {
       if (raw !== void 0) await this.writeEntries([]);
       return [];
     }
     const parsed = [];
-    for (const item of raw) {
+    for (const item of raw.slice(0, LOCAL_PROJECTS_MAX_ENTRIES * 4)) {
       if (!isRecord2(item)) continue;
       const rawRootPath = typeof item.rootPath === "string" ? item.rootPath : item.root_path;
       const rootPath = typeof rawRootPath === "string" ? safeNormalizeProjectPath(rawRootPath) : void 0;
-      if (!rootPath) continue;
+      if (!rootPath || rootPath.length > LOCAL_PROJECT_PATH_MAX_LENGTH) continue;
+      const rawId = typeof item.id === "string" && item.id ? item.id : legacyProjectId(rootPath);
+      const rawLabel = typeof item.label === "string" && item.label ? item.label : path3.basename(rootPath);
+      const rawTemplate = typeof item.templateId === "string" && item.templateId ? item.templateId : typeof item.template_id === "string" && item.template_id ? item.template_id : "unknown";
+      if (rawId.length > LOCAL_PROJECT_ID_MAX_LENGTH || rawLabel.length > LOCAL_PROJECT_LABEL_MAX_LENGTH || rawTemplate.length > LOCAL_PROJECT_TEMPLATE_MAX_LENGTH) continue;
       parsed.push({
-        id: typeof item.id === "string" && item.id ? item.id : legacyProjectId(rootPath),
+        id: rawId,
         rootPath,
-        label: typeof item.label === "string" && item.label ? item.label : path3.basename(rootPath),
-        templateId: typeof item.templateId === "string" && item.templateId ? item.templateId : typeof item.template_id === "string" && item.template_id ? item.template_id : "unknown",
+        label: rawLabel,
+        templateId: rawTemplate,
         createdAt: validTimestamp(item.createdAt) ?? validTimestamp(item.created_at) ?? (/* @__PURE__ */ new Date(0)).toISOString()
       });
     }
@@ -17212,7 +17263,7 @@ var LocalProjectRegistry = class {
       const previous = byCanonicalPath.get(key);
       if (!previous || entry.createdAt >= previous.createdAt) byCanonicalPath.set(key, entry);
     }
-    const cleaned = [...byCanonicalPath.values()];
+    const cleaned = [...byCanonicalPath.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, LOCAL_PROJECTS_MAX_ENTRIES);
     if (JSON.stringify(cleaned) !== JSON.stringify(raw)) await this.writeEntries(cleaned);
     return cleaned;
   }
@@ -17248,9 +17299,18 @@ var LocalProjectRegistry = class {
     }
   }
   runSerialized(task) {
-    const next = this.queue.then(task, task);
+    const next = this.queue.then(() => this.ready).then(task, task);
     this.queue = next.catch(() => void 0);
     return next;
+  }
+  async migrateLegacyState(legacyKey) {
+    const markerKey = `${this.stateKey}.legacyMigration.v1`;
+    if (this.store.get(markerKey)) return;
+    if (this.stateKey !== legacyKey && this.store.get(this.stateKey) === void 0) {
+      const legacy = this.store.get(legacyKey);
+      if (Array.isArray(legacy)) await this.store.update(this.stateKey, legacy);
+    }
+    await this.store.update(markerKey, true);
   }
 };
 function normalizeProjectPath(rawPath) {
@@ -20970,7 +21030,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve26) => {
+    return new Promise((resolve27) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -20989,12 +21049,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve26({ code: 127, output: `${output}
+        resolve27({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve26({ code: code ?? 1, output });
+        resolve27({ code: code ?? 1, output });
       });
     });
   }
@@ -25250,7 +25310,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve26) => setTimeout(resolve26, 50));
+      await new Promise((resolve27) => setTimeout(resolve27, 50));
     }
   }
 }
@@ -25425,7 +25485,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve26) => resolve26());
+  const wake = () => waiters.splice(0).forEach((resolve27) => resolve27());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -25437,7 +25497,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve26) => waiters.push(resolve26));
+            await new Promise((resolve27) => waiters.push(resolve27));
           }
           reservedBytes += amount;
         }
@@ -25740,7 +25800,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve26) => setTimeout(resolve26, ms));
+  return new Promise((resolve27) => setTimeout(resolve27, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -26366,14 +26426,14 @@ async function hashFileDigests(filePath) {
   const sha13 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat10.size}\0`);
-  await new Promise((resolve26, reject) => {
+  await new Promise((resolve27, reject) => {
     const input = (0, import_fs3.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha13.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve26);
+    input.on("end", resolve27);
   });
   return { size: stat10.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
 }
@@ -27057,7 +27117,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve26, reject) => {
+    return new Promise((resolve27, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -27070,7 +27130,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve26();
+        error ? reject(error) : resolve27();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -27085,7 +27145,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve26, reject) => {
+    return new Promise((resolve27, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -27093,7 +27153,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve26(project);
+        error ? reject(error) : resolve27(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
@@ -27104,7 +27164,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve26, reject) => {
+    return new Promise((resolve27, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -27116,7 +27176,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve26(project);
+        error ? reject(error) : resolve27(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -27174,7 +27234,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve26, reject) => {
+    return new Promise((resolve27, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -27184,7 +27244,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve26(values ?? []);
+        error ? reject(error) : resolve27(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -27477,7 +27537,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve26) => setTimeout(resolve26, 250 * 2 ** attempt));
+      await new Promise((resolve27) => setTimeout(resolve27, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -27509,7 +27569,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve26, reject) => {
+  return new Promise((resolve27, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -27537,7 +27597,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve26({
+            resolve27({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -28011,8 +28071,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve26, reject) => {
-      pending.push(() => task().then(resolve26, reject).finally(() => {
+    return new Promise((resolve27, reject) => {
+      pending.push(() => task().then(resolve27, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -28035,11 +28095,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash2 = (0, import_fs5.createReadStream)(filePath);
-    const digest = await new Promise((resolve26, reject) => {
+    const digest = await new Promise((resolve27, reject) => {
       const state = (0, import_crypto4.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
-      hash2.on("end", () => resolve26(state.digest("hex")));
+      hash2.on("end", () => resolve27(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -28534,13 +28594,13 @@ var SyncCheckScheduler = class {
       this.active = true;
       return this.runBatch(request).finally(() => this.pump());
     }
-    return new Promise((resolve26, reject) => {
+    return new Promise((resolve27, reject) => {
       if (!this.pending) {
         this.pending = { request: normalizeRequest(request), waiters: [] };
       } else {
         this.pending.request = mergeRequests(this.pending.request, request);
       }
-      this.pending.waiters.push({ resolve: resolve26, reject });
+      this.pending.waiters.push({ resolve: resolve27, reject });
     });
   }
   schedule(request, delayMs) {
@@ -31787,7 +31847,7 @@ async function writePrivateJson(target, value) {
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve26, reject) => {
+  return new Promise((resolve27, reject) => {
     const child = (0, import_child_process4.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -31796,7 +31856,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve26(output);
+      if (code === 0) resolve27(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -31991,11 +32051,11 @@ var SyncOwnerCoordinator = class {
 `, { mode: 384 });
       await fs31.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve26, reject) => {
+      await new Promise((resolve27, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve26();
+          resolve27();
         });
       });
       await fs31.chmod(paths.socketPath, 384);
@@ -32007,7 +32067,7 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve26) => server.close(() => resolve26()));
+      if (server?.listening) await new Promise((resolve27) => server.close(() => resolve27()));
       await fs31.rm(paths.lockPath, { recursive: true, force: true });
       await fs31.rm(paths.socketPath, { force: true });
       throw error;
@@ -32063,7 +32123,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve26, reject) => {
+    const subscribed = new Promise((resolve27, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -32075,7 +32135,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve26();
+        error ? reject(error) : resolve27();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -32117,7 +32177,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve26) => server.close(() => resolve26()));
+      await new Promise((resolve27) => server.close(() => resolve27()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
@@ -32216,7 +32276,7 @@ function runtimePaths(root) {
   };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve26, reject) => {
+  return new Promise((resolve27, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -32225,7 +32285,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve26(result);
+      error ? reject(error) : resolve27(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -32330,7 +32390,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve26, reject) => {
+  return new Promise((resolve27, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -32338,7 +32398,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve26();
+      error ? reject(error) : resolve27();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -32366,7 +32426,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve26, reject) => {
+  return new Promise((resolve27, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -32375,7 +32435,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve26();
+      error ? reject(error) : resolve27();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -32384,7 +32444,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve26) => {
+  return new Promise((resolve27) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -32393,14 +32453,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve26(value);
+      resolve27(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve26) => setTimeout(resolve26, ms));
+  return new Promise((resolve27) => setTimeout(resolve27, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -33787,9 +33847,22 @@ var activePanel;
 var toolkitServices = /* @__PURE__ */ new Map();
 var personalStyles;
 var overleafService;
+var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents";
+function authorityScope(context) {
+  return [
+    vscode13.env.remoteName || "local",
+    vscode13.env.machineId || "unknown-machine",
+    context.globalStorageUri.authority || "local"
+  ].join("|");
+}
 function activate(context) {
   const output = vscode13.window.createOutputChannel("LaTeX Editing Toolkit");
-  const projectRegistry = new LocalProjectRegistry(context.globalState);
+  const scope = authorityScope(context);
+  const projectRegistry = new LocalProjectRegistry(
+    context.globalState,
+    scopedLocalProjectsStateKey(scope)
+  );
+  const recentProjectParentsKey = scopedStateKey(RECENT_PROJECT_PARENTS_KEY, scope);
   personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = (id, handler) => registerToolkitCommand(output, id, handler);
@@ -33830,16 +33903,27 @@ function activate(context) {
       await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
-      await createProjectWizard(context, projectRegistry, treeProvider, output);
+      await createProjectWizard(context, projectRegistry, treeProvider, output, recentProjectParentsKey);
     }),
     command("latexEditingToolkit.openLocalProject", async (projectPath) => {
-      await openLocalProject(projectPath);
+      await openLocalProject(projectRegistry, projectPath);
     }),
     command("latexEditingToolkit.relocateLocalProject", async (projectPath) => {
       await relocateLocalProject(projectRegistry, treeProvider, projectPath);
     }),
     command("latexEditingToolkit.removeLocalProject", async (projectPath) => {
       await removeLocalProject(projectRegistry, treeProvider, projectPath);
+    }),
+    command("latexEditingToolkit.clearMissingLocalProjects", async () => {
+      await clearMissingLocalProjects(projectRegistry, treeProvider);
+    }),
+    command("latexEditingToolkit.showLocalProjectPath", async (projectArg) => {
+      const project = await localProjectFromArgument(projectRegistry, projectArg);
+      if (!project) {
+        vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
+        return;
+      }
+      vscode13.window.showInformationMessage(project.rootPath);
     }),
     command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
@@ -34034,9 +34118,8 @@ async function warnAboutLegacySnips(context, output) {
     await vscode13.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
   }
 }
-var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
-async function createProjectWizard(context, registry, treeProvider, output) {
-  const recent = context.globalState.get(RECENT_PROJECT_PARENTS_KEY) ?? [];
+async function createProjectWizard(context, registry, treeProvider, output, recentProjectParentsKey) {
+  const recent = sanitizeRecentProjectParents(context.globalState.get(recentProjectParentsKey));
   const suggested = /* @__PURE__ */ new Set();
   for (const folder of vscode13.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
@@ -34115,8 +34198,9 @@ async function createProjectWizard(context, registry, treeProvider, output) {
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const nextRecent = [parentPath, ...recent.filter((item) => path41.normalize(item) !== path41.normalize(parentPath))].slice(0, 8);
-  await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
+  const normalizedParent = path41.normalize(path41.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path41.normalize(item) !== normalizedParent)].slice(0, 8);
+  await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
@@ -34266,8 +34350,9 @@ function pdfForTarget(target) {
 function currentPdfPath(state) {
   return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
 }
-async function openLocalProject(projectPathArg) {
-  const projectPath = localProjectPathFromArgument(projectPathArg);
+async function openLocalProject(registry, projectPathArg) {
+  const project = await localProjectFromArgument(registry, projectPathArg);
+  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
   if (!projectPath) {
     vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
@@ -34275,13 +34360,14 @@ async function openLocalProject(projectPathArg) {
   try {
     if (!(await fs34.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
-    vscode13.window.showWarningMessage(`Local note project not found: ${projectPath}`);
+    vscode13.window.showWarningMessage("Local note project is not available in this environment. Relocate or forget it from Local Notes.");
     return;
   }
   await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(projectPath), { forceNewWindow: false });
 }
 async function relocateLocalProject(registry, treeProvider, projectPathArg) {
-  const oldPath = localProjectPathFromArgument(projectPathArg);
+  const oldProject = await localProjectFromArgument(registry, projectPathArg);
+  const oldPath = oldProject?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
   if (!oldPath) {
     vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
@@ -34302,12 +34388,12 @@ async function relocateLocalProject(registry, treeProvider, projectPathArg) {
   vscode13.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
 }
 async function removeLocalProject(registry, treeProvider, projectPathArg) {
-  const projectPath = localProjectPathFromArgument(projectPathArg);
+  const project = await localProjectFromArgument(registry, projectPathArg);
+  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
   if (!projectPath) {
     vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
-  const project = await registry.find(projectPath);
   const label = project?.label ?? path41.basename(path41.normalize(projectPath));
   const choice = await vscode13.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
@@ -34318,6 +34404,30 @@ async function removeLocalProject(registry, treeProvider, projectPathArg) {
   const removed = await registry.remove(projectPath);
   treeProvider.refresh();
   vscode13.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
+}
+async function clearMissingLocalProjects(registry, treeProvider) {
+  const projects = await registry.list();
+  const missingCount = projects.filter((project) => project.missing).length;
+  if (missingCount === 0) {
+    vscode13.window.showInformationMessage("No missing local note projects to clear.");
+    return;
+  }
+  const choice = await vscode13.window.showWarningMessage(
+    `Forget ${missingCount} missing local note project${missingCount === 1 ? "" : "s"}? This only removes registry metadata and does not delete files.`,
+    { modal: true },
+    "Clear Missing"
+  );
+  if (choice !== "Clear Missing") return;
+  const removed = await registry.removeMissing();
+  treeProvider.refresh();
+  vscode13.window.setStatusBarMessage(`Cleared ${removed} missing local note project${removed === 1 ? "" : "s"}.`, 2500);
+}
+async function localProjectFromArgument(registry, value) {
+  if (value && typeof value === "object" && typeof value.projectId === "string") {
+    return registry.findById(value.projectId);
+  }
+  const projectPath = localProjectPathFromArgument(value);
+  return projectPath ? registry.find(projectPath) : void 0;
 }
 function localProjectPathFromArgument(value) {
   if (typeof value === "string") return value;
@@ -34598,7 +34708,10 @@ var ToolkitTreeProvider = class {
     const openProjectIds = new Set((await Promise.all(
       (vscode13.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project) => Boolean(project)).map((project) => project.id));
-    const children = projects.length > 0 ? projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))) : [
+    const children = projects.length > 0 ? [
+      ...projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))),
+      ...projects.some((project) => project.missing) ? [this.actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects", [])] : []
+    ] : [
       this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
       this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
     ];
@@ -34618,12 +34731,11 @@ var ToolkitTreeProvider = class {
       id: `local-project:${project.id}`,
       label: project.label,
       description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open \xB7 ${parent}` : parent),
-      tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
+      tooltip: project.missing ? "Project folder not found in this environment" : "Local note project",
       iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
       commandId: "latexEditingToolkit.openLocalProject",
-      commandArgs: [project.rootPath],
-      contextValue: project.missing ? "localProjectMissing" : "localProject",
-      resourceUri: vscode13.Uri.file(project.rootPath)
+      commandArgs: [{ projectId: project.id }],
+      contextValue: project.missing ? "localProjectMissing" : "localProject"
     };
   }
   async workspaceNode(folder, isOnlyFolder) {

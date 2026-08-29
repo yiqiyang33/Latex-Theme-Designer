@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import { HistoryConflictError, workspaceHistoryStorageRoot } from "./changeHistory";
 import { confirmationSpec, isConfirmAction } from "./confirmations";
 import { PersonalStyleRegistry } from "./personalStyles";
-import { LocalProjectRegistry } from "./projectRegistry";
+import { LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "./projectRegistry";
 import { preflightCreateProject, runCreateProjectWorkflow } from "./projectWorkflow";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { registerSnippetHost } from "./snippets/engine/host";
@@ -23,9 +23,24 @@ const toolkitServices = new Map<string, ToolkitService>();
 let personalStyles: PersonalStyleRegistry | undefined;
 let overleafService: OverleafService | undefined;
 
+const RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents";
+
+function authorityScope(context: vscode.ExtensionContext): string {
+  return [
+    vscode.env.remoteName || "local",
+    vscode.env.machineId || "unknown-machine",
+    context.globalStorageUri.authority || "local"
+  ].join("|");
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("LaTeX Editing Toolkit");
-  const projectRegistry = new LocalProjectRegistry(context.globalState);
+  const scope = authorityScope(context);
+  const projectRegistry = new LocalProjectRegistry(
+    context.globalState,
+    scopedLocalProjectsStateKey(scope)
+  );
+  const recentProjectParentsKey = scopedStateKey(RECENT_PROJECT_PARENTS_KEY, scope);
   personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
@@ -77,16 +92,27 @@ export function activate(context: vscode.ExtensionContext): void {
       await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
-      await createProjectWizard(context, projectRegistry, treeProvider, output);
+      await createProjectWizard(context, projectRegistry, treeProvider, output, recentProjectParentsKey);
     }),
     command("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
-      await openLocalProject(projectPath);
+      await openLocalProject(projectRegistry, projectPath);
     }),
     command("latexEditingToolkit.relocateLocalProject", async (projectPath?: unknown) => {
       await relocateLocalProject(projectRegistry, treeProvider, projectPath);
     }),
     command("latexEditingToolkit.removeLocalProject", async (projectPath?: unknown) => {
       await removeLocalProject(projectRegistry, treeProvider, projectPath);
+    }),
+    command("latexEditingToolkit.clearMissingLocalProjects", async () => {
+      await clearMissingLocalProjects(projectRegistry, treeProvider);
+    }),
+    command("latexEditingToolkit.showLocalProjectPath", async (projectArg?: unknown) => {
+      const project = await localProjectFromArgument(projectRegistry, projectArg);
+      if (!project) {
+        vscode.window.showWarningMessage("The selected local note project could not be resolved.");
+        return;
+      }
+      vscode.window.showInformationMessage(project.rootPath);
     }),
     command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
@@ -286,15 +312,14 @@ async function warnAboutLegacySnips(context: vscode.ExtensionContext, output: vs
   }
 }
 
-const RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents.v1";
-
 async function createProjectWizard(
   context: vscode.ExtensionContext,
   registry: LocalProjectRegistry,
   treeProvider: ToolkitTreeProvider,
-  output: vscode.OutputChannel
+  output: vscode.OutputChannel,
+  recentProjectParentsKey: string
 ): Promise<void> {
-  const recent = context.globalState.get<string[]>(RECENT_PROJECT_PARENTS_KEY) ?? [];
+  const recent = sanitizeRecentProjectParents(context.globalState.get<unknown>(recentProjectParentsKey));
   const suggested = new Set<string>();
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
@@ -377,8 +402,9 @@ async function createProjectWizard(
     if (choice !== "Use Empty Folder") return;
   }
 
-  const nextRecent = [parentPath, ...recent.filter((item) => path.normalize(item) !== path.normalize(parentPath))].slice(0, 8);
-  await context.globalState.update(RECENT_PROJECT_PARENTS_KEY, nextRecent);
+  const normalizedParent = path.normalize(path.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path.normalize(item) !== normalizedParent)].slice(0, 8);
+  await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
@@ -552,8 +578,9 @@ function currentPdfPath(state: ToolkitState): string {
   return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
 }
 
-async function openLocalProject(projectPathArg: unknown): Promise<void> {
-  const projectPath = localProjectPathFromArgument(projectPathArg);
+async function openLocalProject(registry: LocalProjectRegistry, projectPathArg: unknown): Promise<void> {
+  const project = await localProjectFromArgument(registry, projectPathArg);
+  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
   if (!projectPath) {
     vscode.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
@@ -561,7 +588,7 @@ async function openLocalProject(projectPathArg: unknown): Promise<void> {
   try {
     if (!(await fs.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
   } catch {
-    vscode.window.showWarningMessage(`Local note project not found: ${projectPath}`);
+    vscode.window.showWarningMessage("Local note project is not available in this environment. Relocate or forget it from Local Notes.");
     return;
   }
   await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectPath), { forceNewWindow: false });
@@ -572,7 +599,8 @@ async function relocateLocalProject(
   treeProvider: ToolkitTreeProvider,
   projectPathArg: unknown
 ): Promise<void> {
-  const oldPath = localProjectPathFromArgument(projectPathArg);
+  const oldProject = await localProjectFromArgument(registry, projectPathArg);
+  const oldPath = oldProject?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
   if (!oldPath) {
     vscode.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
@@ -598,12 +626,12 @@ async function removeLocalProject(
   treeProvider: ToolkitTreeProvider,
   projectPathArg: unknown
 ): Promise<void> {
-  const projectPath = localProjectPathFromArgument(projectPathArg);
+  const project = await localProjectFromArgument(registry, projectPathArg);
+  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
   if (!projectPath) {
     vscode.window.showWarningMessage("The selected local note project could not be resolved.");
     return;
   }
-  const project = await registry.find(projectPath);
   const label = project?.label ?? path.basename(path.normalize(projectPath));
   const choice = await vscode.window.showWarningMessage(
     `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
@@ -614,6 +642,32 @@ async function removeLocalProject(
   const removed = await registry.remove(projectPath);
   treeProvider.refresh();
   vscode.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
+}
+
+async function clearMissingLocalProjects(registry: LocalProjectRegistry, treeProvider: ToolkitTreeProvider): Promise<void> {
+  const projects = await registry.list();
+  const missingCount = projects.filter((project) => project.missing).length;
+  if (missingCount === 0) {
+    vscode.window.showInformationMessage("No missing local note projects to clear.");
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Forget ${missingCount} missing local note project${missingCount === 1 ? "" : "s"}? This only removes registry metadata and does not delete files.`,
+    { modal: true },
+    "Clear Missing"
+  );
+  if (choice !== "Clear Missing") return;
+  const removed = await registry.removeMissing();
+  treeProvider.refresh();
+  vscode.window.setStatusBarMessage(`Cleared ${removed} missing local note project${removed === 1 ? "" : "s"}.`, 2500);
+}
+
+async function localProjectFromArgument(registry: LocalProjectRegistry, value: unknown): Promise<LocalNoteProjectStatus | undefined> {
+  if (value && typeof value === "object" && typeof (value as { projectId?: unknown }).projectId === "string") {
+    return registry.findById((value as { projectId: string }).projectId);
+  }
+  const projectPath = localProjectPathFromArgument(value);
+  return projectPath ? registry.find(projectPath) : undefined;
 }
 
 function localProjectPathFromArgument(value: unknown): string | undefined {
@@ -936,7 +990,12 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
         .map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project): project is NonNullable<typeof project> => Boolean(project)).map((project) => project.id));
     const children = projects.length > 0
-      ? projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id)))
+      ? [
+          ...projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))),
+          ...(projects.some((project) => project.missing)
+            ? [this.actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects", [])]
+            : [])
+        ]
       : [
           this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
           this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
@@ -962,12 +1021,11 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       id: `local-project:${project.id}`,
       label: project.label,
       description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open · ${parent}` : parent),
-      tooltip: project.missing ? `Project folder not found: ${project.rootPath}` : project.rootPath,
+      tooltip: project.missing ? "Project folder not found in this environment" : "Local note project",
       iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
       commandId: "latexEditingToolkit.openLocalProject",
-      commandArgs: [project.rootPath],
-      contextValue: project.missing ? "localProjectMissing" : "localProject",
-      resourceUri: vscode.Uri.file(project.rootPath)
+      commandArgs: [{ projectId: project.id }],
+      contextValue: project.missing ? "localProjectMissing" : "localProject"
     };
   }
 
