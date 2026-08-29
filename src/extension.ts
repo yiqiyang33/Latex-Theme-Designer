@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
   const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
 
-  overleafService = new OverleafService(context, output, () => treeProvider.refresh());
+  overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode.env.remoteName);
 
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
@@ -965,19 +965,37 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     const mirrors = await overleafService.listMirrors().catch(() => []);
     const currentRoot = overleafService.realtimeSync.currentRoot;
     const children = mirrors.length
-      ? await Promise.all(mirrors.map(async mirror => {
-        const state = await overleafService!.state(mirror.root);
-        const status = state.conflicts.length > 0 ? "Conflict" : state.syncStatus?.hasBlocking ? "Needs attention" : state.running ? "Syncing" : "Ready";
-        const icon = state.conflicts.length > 0 ? "warning" : state.syncStatus?.hasBlocking ? "git-compare" : state.running ? "cloud-upload" : "cloud";
-        return this.actionNode(
-          `overleaf-mirror:${mirror.root}`,
-          mirror.name,
-          `${status} · ${path.basename(path.dirname(mirror.root))}`,
-          icon,
-          "overleafCodex.openLocalMirror",
-          [{ mirror }]
-        );
-      }))
+      ? [
+          ...await Promise.all(mirrors.map(async mirror => {
+            if (mirror.missing) {
+              return this.localResourceNode({
+                id: `overleaf-mirror:${mirror.id}`,
+                label: mirror.name,
+                description: "Missing",
+                tooltip: "Overleaf mirror is not available in this environment",
+                iconId: "warning",
+                commandId: "overleafCodex.openLocalMirror",
+                commandArgs: [{ mirrorId: mirror.id }],
+                contextValue: "overleafMirrorMissing"
+              });
+            }
+            const state = await overleafService!.state(mirror.root).catch(() => undefined);
+            const status = !state ? "Needs attention" : state.conflicts.length > 0 ? "Conflict" : state.syncStatus?.hasBlocking ? "Needs attention" : state.running ? "Syncing" : "Ready";
+            const icon = !state ? "warning" : state.conflicts.length > 0 ? "warning" : state.syncStatus?.hasBlocking ? "git-compare" : state.running ? "cloud-upload" : "cloud";
+            return this.localResourceNode({
+              id: `overleaf-mirror:${mirror.id}`,
+              label: mirror.name,
+              description: `${status} · ${path.basename(path.dirname(mirror.root))}`,
+              iconId: icon,
+              commandId: "overleafCodex.openLocalMirror",
+              commandArgs: [{ mirrorId: mirror.id }],
+              contextValue: "overleafMirror"
+            });
+          })),
+          ...(mirrors.some(mirror => mirror.missing)
+            ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])]
+            : [])
+        ]
       : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud")];
     return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : undefined);
   }
@@ -1017,7 +1035,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       : template?.kind === "beamer"
         ? `Beamer · ${template.label} · main.tex`
         : undefined;
-    return {
+    return this.localResourceNode({
       id: `local-project:${project.id}`,
       label: project.label,
       description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open · ${parent}` : parent),
@@ -1026,6 +1044,28 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       commandId: "latexEditingToolkit.openLocalProject",
       commandArgs: [{ projectId: project.id }],
       contextValue: project.missing ? "localProjectMissing" : "localProject"
+    });
+  }
+
+  private localResourceNode(options: {
+    id: string;
+    label: string;
+    description?: string;
+    tooltip?: string;
+    iconId: string;
+    commandId: string;
+    commandArgs: unknown[];
+    contextValue: string;
+  }): ToolkitTreeNode {
+    return {
+      id: options.id,
+      label: options.label,
+      description: options.description,
+      tooltip: options.tooltip ?? options.label,
+      iconId: options.iconId,
+      commandId: options.commandId,
+      commandArgs: options.commandArgs,
+      contextValue: options.contextValue
     };
   }
 

@@ -6,7 +6,7 @@ import { CompileDiagnosticProvider } from "./diagnostics";
 import { CompileService } from "./compileService";
 import { manifestPath, metadataPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
-import { MirrorManager, type LocalMirrorRecord } from "./mirrorManager";
+import { MirrorManager, type LocalMirrorRecord, type LocalMirrorStatus } from "./mirrorManager";
 import { OverleafClient, OverleafHttpError } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
@@ -83,10 +83,12 @@ export class OverleafService implements vscode.Disposable {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly output: vscode.OutputChannel,
-    private readonly onChanged: () => void = () => undefined
+    private readonly onChanged: () => void = () => undefined,
+    scope = "local",
+    migrateLegacyMirrors = false
   ) {
     this.secrets = new SecretStore(context);
-    this.mirrorManager = new MirrorManager(context);
+    this.mirrorManager = new MirrorManager(context, scope, migrateLegacyMirrors);
     this.realtimeSync = new RealtimeSyncService(context, output);
     this.diagnostics = new CompileDiagnosticProvider("LaTeX Editing Toolkit");
     this.compileService = new CompileService(this.diagnostics);
@@ -131,6 +133,8 @@ export class OverleafService implements vscode.Disposable {
       ["overleafCodex.openLocalMirror", (candidate?: unknown) => this.openLocalMirror(candidate)],
       ["overleafCodex.deleteLocalMirror", (candidate?: unknown) => this.deleteLocalMirror(candidate)],
       ["overleafCodex.forgetLocalMirror", (candidate?: unknown) => this.forgetLocalMirror(candidate)],
+      ["overleafCodex.clearMissingMirrors", () => this.clearMissingMirrors()],
+      ["overleafCodex.showMirrorPath", (candidate?: unknown) => this.showMirrorPath(candidate)],
       ["overleafCodex.initializeMirrorGit", (candidate?: unknown) => this.initializeMirrorGit(candidate)],
       ["overleafCodex.showCollaborators", (candidate?: unknown) => this.showCollaborators(candidate)],
       ["overleafCodex.showConflicts", (candidate?: unknown) => this.showConflicts(candidate)],
@@ -236,7 +240,7 @@ export class OverleafService implements vscode.Disposable {
     if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
   }
 
-  async listMirrors(): Promise<LocalMirrorRecord[]> {
+  async listMirrors(): Promise<LocalMirrorStatus[]> {
     return this.mirrorManager.listLocalMirrors();
   }
 
@@ -654,13 +658,22 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async openLocalMirror(candidate?: unknown): Promise<void> {
-    const mirror = this.mirrorFromArgument(candidate) ?? await this.pickMirror();
-    if (mirror) await this.mirrorManager.openFolder(mirror.root);
+    const mirror = await this.mirrorFromArgument(candidate) ?? await this.pickMirror();
+    if (!mirror) return;
+    if (mirror.missing) {
+      vscode.window.showWarningMessage("This Overleaf mirror is not available in the current environment. Show its path or forget it from the Activity Bar.");
+      return;
+    }
+    await this.mirrorManager.openFolder(mirror.root);
   }
 
   private async deleteLocalMirror(candidate?: unknown): Promise<void> {
-    const mirror = this.mirrorFromArgument(candidate) ?? await this.pickMirror();
+    const mirror = await this.mirrorFromArgument(candidate) ?? await this.pickMirror();
     if (!mirror) return;
+    if (mirror.missing) {
+      vscode.window.showWarningMessage("This Overleaf mirror is not available. Use Forget or Clear Missing Mirrors instead.");
+      return;
+    }
     const choice = await vscode.window.showWarningMessage(`Delete only the local mirror "${mirror.name}"? The Overleaf cloud project will not be deleted.`, { modal: true }, "Delete Local Mirror");
     if (choice !== "Delete Local Mirror") return;
     if (this.realtimeSync.currentRoot === mirror.root) await this.realtimeSync.stop();
@@ -670,7 +683,7 @@ export class OverleafService implements vscode.Disposable {
   }
 
   private async forgetLocalMirror(candidate?: unknown): Promise<void> {
-    const mirror = this.mirrorFromArgument(candidate) ?? await this.pickMirror();
+    const mirror = await this.mirrorFromArgument(candidate) ?? await this.pickMirror();
     if (!mirror) return;
     await this.mirrorManager.forgetLocalMirror(mirror.root);
     this.onChanged();
@@ -678,12 +691,39 @@ export class OverleafService implements vscode.Disposable {
 
   private async initializeMirrorGit(candidate?: unknown): Promise<void> {
     const root = this.resolveMirrorRoot(candidate);
-    const mirror = this.mirrorFromArgument(candidate)
-      ?? (root ? { root } as LocalMirrorRecord : undefined)
+    const mirror = await this.mirrorFromArgument(candidate)
+      ?? (root ? await this.mirrorManager.findLocalMirrorByRoot(root) : undefined)
       ?? await this.pickMirror();
     if (!mirror) return;
+    if (mirror.missing) {
+      vscode.window.showWarningMessage("This Overleaf mirror is not available in the current environment.");
+      return;
+    }
     await this.mirrorManager.initializeGitRepository(mirror.root);
     this.onChanged();
+  }
+
+  private async clearMissingMirrors(): Promise<void> {
+    const mirrors = await this.listMirrors();
+    const missing = mirrors.filter(mirror => mirror.missing).length;
+    if (missing === 0) {
+      vscode.window.showInformationMessage("No missing Overleaf mirrors to clear.");
+      return;
+    }
+    const choice = await vscode.window.showWarningMessage(
+      `Forget ${missing} missing Overleaf mirror${missing === 1 ? "" : "s"}? This removes registry metadata only.`,
+      { modal: true },
+      "Clear Missing"
+    );
+    if (choice !== "Clear Missing") return;
+    const removed = await this.mirrorManager.clearMissingLocalMirrors();
+    this.onChanged();
+    vscode.window.setStatusBarMessage(`Cleared ${removed} missing Overleaf mirror${removed === 1 ? "" : "s"}.`, 2500);
+  }
+
+  private async showMirrorPath(candidate?: unknown): Promise<void> {
+    const mirror = await this.mirrorFromArgument(candidate) ?? await this.pickMirror();
+    if (mirror) vscode.window.showInformationMessage(mirror.root);
   }
 
   private async openConflictDiff(candidate?: unknown): Promise<void> {
@@ -1136,7 +1176,7 @@ export class OverleafService implements vscode.Disposable {
     return picked?.[0]?.scheme === "file" ? picked[0].fsPath : undefined;
   }
 
-  private async pickMirror(): Promise<LocalMirrorRecord | undefined> {
+  private async pickMirror(): Promise<LocalMirrorStatus | undefined> {
     const mirrors = await this.listMirrors();
     if (!mirrors.length) return undefined;
     const picked = await vscode.window.showQuickPick(mirrors.map(mirror => ({ label: mirror.name, description: path.basename(mirror.root), detail: `${mirror.serverUrl} · ${mirror.projectId}`, mirror })), { title: "Overleaf Mirrors", placeHolder: "Select a mirror" });
@@ -1175,9 +1215,18 @@ export class OverleafService implements vscode.Disposable {
     return candidate && typeof candidate === "object" && typeof (candidate as ConflictInfo).relPath === "string" ? candidate as ConflictInfo : undefined;
   }
 
-  private mirrorFromArgument(value: unknown): LocalMirrorRecord | undefined {
+  private async mirrorFromArgument(value: unknown): Promise<LocalMirrorStatus | undefined> {
     const candidate = (value && typeof value === "object" && "mirror" in value) ? (value as { mirror?: unknown }).mirror : value;
-    return candidate && typeof candidate === "object" && typeof (candidate as LocalMirrorRecord).root === "string" ? candidate as LocalMirrorRecord : undefined;
+    if (candidate && typeof candidate === "object" && typeof (candidate as { mirrorId?: unknown }).mirrorId === "string") {
+      return (await this.mirrorManager.findLocalMirrorById((candidate as { mirrorId: string }).mirrorId)) ?? undefined;
+    }
+    if (candidate && typeof candidate === "object" && typeof (candidate as LocalMirrorRecord).root === "string") {
+      return (await this.mirrorManager.findLocalMirrorByRoot((candidate as LocalMirrorRecord).root)) ?? undefined;
+    }
+    if (typeof candidate === "string" && candidate.trim()) {
+      return (await this.mirrorManager.findLocalMirrorByRoot(candidate)) ?? undefined;
+    }
+    return undefined;
   }
 
   private async showCollaborators(candidate?: unknown): Promise<void> {

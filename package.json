@@ -111,6 +111,8 @@
     "onCommand:overleafCodex.openLocalMirror",
     "onCommand:overleafCodex.deleteLocalMirror",
     "onCommand:overleafCodex.forgetLocalMirror",
+    "onCommand:overleafCodex.clearMissingMirrors",
+    "onCommand:overleafCodex.showMirrorPath",
     "onCommand:overleafCodex.initializeMirrorGit",
     "onCommand:overleafCodex.showCollaborators",
     "onCommand:overleafCodex.showConflicts",
@@ -476,6 +478,18 @@
         "command": "overleafCodex.forgetLocalMirror",
         "title": "LaTeX Editing Toolkit: Overleaf: Forget Local Mirror",
         "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "overleafCodex.clearMissingMirrors",
+        "title": "LaTeX Editing Toolkit: Overleaf: Clear Missing Mirrors",
+        "category": "LaTeX Editing Toolkit: Overleaf",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "overleafCodex.showMirrorPath",
+        "title": "LaTeX Editing Toolkit: Overleaf: Show Mirror Path",
+        "category": "LaTeX Editing Toolkit: Overleaf",
+        "icon": "$(info)"
       },
       {
         "command": "overleafCodex.initializeMirrorGit",
@@ -881,6 +895,26 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "overleafCodex.forgetLocalMirror",
+          "when": "view == latexEditingToolkit.actions && (viewItem == overleafMirror || viewItem == overleafMirrorMissing)",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "overleafCodex.deleteLocalMirror",
+          "when": "view == latexEditingToolkit.actions && viewItem == overleafMirror",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "overleafCodex.showMirrorPath",
+          "when": "view == latexEditingToolkit.actions && (viewItem == overleafMirror || viewItem == overleafMirrorMissing)",
+          "group": "1_modification@3"
+        },
+        {
+          "command": "overleafCodex.clearMissingMirrors",
+          "when": "view == latexEditingToolkit.actions && viewItem == overleafMirrorMissing",
+          "group": "1_modification@4"
+        },
         {
           "command": "latexEditingToolkit.removeLocalProject",
           "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",

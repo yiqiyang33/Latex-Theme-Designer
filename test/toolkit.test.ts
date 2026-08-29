@@ -9,6 +9,7 @@ import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confi
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
 import { LOCAL_PROJECTS_MAX_ENTRIES, LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "../src/projectRegistry";
+import { LocalResourceRegistry, scopedStateKey as genericScopedStateKey, stableResourceId, type LocalResourceAdapter } from "../src/localResourceRegistry";
 import { PersonalStyleRegistry } from "../src/personalStyles";
 import { preflightCreateProject, runCreateProjectWorkflow } from "../src/projectWorkflow";
 import { SplitterService } from "../src/splitter";
@@ -391,6 +392,35 @@ describe("TypeScript Toolkit migration", () => {
     }));
     await store.update(LOCAL_PROJECTS_STATE_KEY, oversized);
     expect((await new LocalProjectRegistry(store).list()).length).toBe(LOCAL_PROJECTS_MAX_ENTRIES);
+  });
+
+  it("reuses the generic registry for mirror-shaped records and custom presence checks", async () => {
+    type MirrorShape = { id: string; root: string; name: string; createdAt: string; manifestValid: boolean };
+    const adapter: LocalResourceAdapter<MirrorShape> = {
+      parse(raw) {
+        if (!raw || typeof raw !== "object") return undefined;
+        const item = raw as Partial<MirrorShape>;
+        if (typeof item.root !== "string" || typeof item.name !== "string" || typeof item.createdAt !== "string") return undefined;
+        return {
+          id: typeof item.id === "string" && item.id ? item.id : stableResourceId("mirror", item.root),
+          root: item.root,
+          name: item.name,
+          createdAt: item.createdAt,
+          manifestValid: item.manifestValid === true
+        };
+      },
+      serialize(record) { return record; },
+      base(record) { return { id: record.id, rootPath: record.root, label: record.name, createdAt: record.createdAt }; },
+      async isPresent(record) { return record.manifestValid; }
+    };
+    const store = new MemoryProjectStateStore();
+    const registry = new LocalResourceRegistry(store, { stateKey: "mirrors", adapter });
+    const root = await tempWorkspace();
+    const record = await registry.upsert({ id: "mirror-1", root, name: "Mirror", createdAt: new Date().toISOString(), manifestValid: false });
+    expect((await registry.findById(record.id))?.missing).toBe(true);
+    expect(await registry.removeMissing()).toBe(1);
+    expect(await registry.records()).toEqual([]);
+    expect(genericScopedStateKey("mirrors", "remote-a")).not.toBe(genericScopedStateKey("mirrors", "remote-b"));
   });
 
   it("registers a created project only after assets and main.tex succeed", async () => {
