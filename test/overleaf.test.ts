@@ -27,6 +27,7 @@ import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectR
 import { validateManifest } from "../src/overleaf/metadataValidation";
 import {
   isCollaboratorPosition,
+  isOverleafAuthenticationError,
   isOverleafDoc,
   isOverleafFolder,
   isOverleafProject,
@@ -73,6 +74,11 @@ function fakeConfig(values: Record<string, unknown>, inspections: Record<string,
 }
 
 describe("Overleaf integration primitives", () => {
+  it("recognizes expired authentication without treating network failures as auth errors", () => {
+    expect(isOverleafAuthenticationError(new Error("invalid session"))).toBe(true);
+    expect(isOverleafAuthenticationError(new Error("Overleaf socket handshake timed out"))).toBe(false);
+  });
+
   it("rejects unsafe and non-canonical project paths", () => {
     expect(normalizeProjectRelativePath("figures\\plot.png")).toBe("figures/plot.png");
     expect(() => normalizeProjectRelativePath("../outside.tex")).toThrow();

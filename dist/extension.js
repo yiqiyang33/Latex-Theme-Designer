@@ -26657,6 +26657,11 @@ var OverleafHttpError = class extends Error {
   code;
   responseBody;
 };
+function isOverleafAuthenticationError(error) {
+  if (error instanceof OverleafHttpError && [401, 403].includes(error.status)) return true;
+  const message = formatUnknownError(error);
+  return /\binvalid session\b|log in again with a fresh cookie|cookie login was redirected/i.test(message);
+}
 var OverleafClient = class {
   constructor(serverUrl, identity, timeoutSeconds, timeouts = {}) {
     this.serverUrl = serverUrl;
@@ -33060,6 +33065,22 @@ var OverleafService = class {
       );
     } catch (error) {
       await this.ownerCoordinator.release().catch(() => void 0);
+      if (isOverleafAuthenticationError(error)) {
+        const manifest = await readManifest(root).catch(() => void 0);
+        const serverUrl = manifest?.serverUrl;
+        if (serverUrl) {
+          await this.secrets.deleteIdentity(serverUrl).catch(() => void 0);
+          const action = await vscode11.window.showErrorMessage(
+            "Overleaf login expired. Sign in again with a fresh Cookie.",
+            "Login again"
+          );
+          if (action === "Login again") {
+            await this.loginWithCookie({ serverUrl });
+            await this.startRealtimeSync(root);
+            return;
+          }
+        }
+      }
       throw error;
     }
     this.onChanged();

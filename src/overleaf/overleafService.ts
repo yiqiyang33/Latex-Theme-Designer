@@ -7,7 +7,7 @@ import { CompileService } from "./compileService";
 import { manifestPath, metadataPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord, type LocalMirrorStatus } from "./mirrorManager";
-import { OverleafClient, OverleafHttpError } from "./overleafClient";
+import { isOverleafAuthenticationError, OverleafClient, OverleafHttpError } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
@@ -417,6 +417,22 @@ export class OverleafService implements vscode.Disposable {
       );
     } catch (error) {
       await this.ownerCoordinator.release().catch(() => undefined);
+      if (isOverleafAuthenticationError(error)) {
+        const manifest = await readManifest(root).catch(() => undefined);
+        const serverUrl = manifest?.serverUrl;
+        if (serverUrl) {
+          await this.secrets.deleteIdentity(serverUrl).catch(() => undefined);
+          const action = await vscode.window.showErrorMessage(
+            "Overleaf login expired. Sign in again with a fresh Cookie.",
+            "Login again"
+          );
+          if (action === "Login again") {
+            await this.loginWithCookie({ serverUrl });
+            await this.startRealtimeSync(root);
+            return;
+          }
+        }
+      }
       throw error;
     }
     this.onChanged();

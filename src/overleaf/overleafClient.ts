@@ -77,6 +77,13 @@ export class OverleafHttpError extends Error {
   }
 }
 
+/** Returns true when an Overleaf response or realtime error requires login again. */
+export function isOverleafAuthenticationError(error: unknown): boolean {
+  if (error instanceof OverleafHttpError && [401, 403].includes(error.status)) return true;
+  const message = formatUnknownError(error);
+  return /\binvalid session\b|log in again with a fresh cookie|cookie login was redirected/i.test(message);
+}
+
 export class OverleafClient {
   private readonly agent: http.Agent | https.Agent;
   private identity?: Identity;
