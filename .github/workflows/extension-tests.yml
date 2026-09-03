@@ -51,3 +51,10 @@ jobs:
 
       - name: Verify macOS VSIX
         run: npm run verify:vsix:darwin-${{ matrix.arch }}
+
+      - name: Upload macOS VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-editing-toolkit-darwin-${{ matrix.arch }}
+          path: latex-editing-toolkit-*-darwin-${{ matrix.arch }}.vsix
+          if-no-files-found: error

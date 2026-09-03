@@ -187,8 +187,9 @@ describe('Overleaf CLI shared infrastructure', () => {
       await registerSharedMirror(firstRoot);
       const refreshing = listSharedMirrors();
       await registerSharedMirror(secondRoot);
-      const mirrors = await refreshing;
-      expect(mirrors.map(item => item.projectId).sort()).toEqual(['project', 'second']);
+      await refreshing;
+      const persisted = await readSharedState();
+      expect(persisted.mirrors.map(item => item.projectId).sort()).toEqual(['project', 'second']);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -274,7 +275,7 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
-  it('uses XDG config, data and cache roots on Linux', async () => {
+  it.runIf(process.platform === 'linux')('uses XDG config, data and cache roots on Linux', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-xdg-'));
     delete process.env.LATEX_TOOLKIT_SUPPORT_HOME;
     delete process.env.LATEX_TOOLKIT_DATA_HOME;
@@ -315,6 +316,29 @@ describe('Overleaf CLI shared infrastructure', () => {
       expect(store.describe().kind).toBe('restricted-file');
       await store.deleteIdentity('https://example.test');
       expect(await fs.readdir(credentialsRoot)).toEqual([]);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a private credential file when the macOS Keychain runtime is missing', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-macos-keychain-fallback-'));
+    const credentialsRoot = path.join(temporary, 'credentials');
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN = '1';
+    const store = new FallbackCredentialStore(
+      new MacKeychainCredentialStore(undefined, path.join(temporary, 'missing-keytar-runtime')),
+      new FileCredentialStore(credentialsRoot)
+    );
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await store.saveIdentity('https://example.test', identity);
+      expect(await store.getIdentity('https://example.test/')).toEqual(identity);
+      expect(store.describe().kind).toBe('restricted-file');
+      expect((await fs.stat(credentialsRoot)).mode & 0o777).toBe(0o700);
+      const entries = await fs.readdir(credentialsRoot);
+      expect(entries).toHaveLength(1);
+      expect((await fs.stat(path.join(credentialsRoot, entries[0]))).mode & 0o777).toBe(0o600);
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }

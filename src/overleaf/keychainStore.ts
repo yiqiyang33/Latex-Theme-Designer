@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'child_process';
@@ -25,7 +26,10 @@ export interface KeychainApi {
 const systemSecretTool: SecretToolRunner = { run: (args, stdin) => runCommand('secret-tool', args, stdin) };
 
 export class MacKeychainCredentialStore implements CredentialStore {
-  constructor(private keychain?: KeychainApi) {}
+  constructor(
+    private keychain?: KeychainApi,
+    private readonly runtimeRoot = path.join(__dirname, 'vendor', 'keytar', `${process.platform}-${process.arch}`)
+  ) {}
 
   async saveIdentity(serverUrl: string, identity: Identity): Promise<void> {
     this.assertMacOS();
@@ -55,11 +59,14 @@ export class MacKeychainCredentialStore implements CredentialStore {
   }
 
   describe(): CredentialBackendInfo {
+    const available = process.platform === 'darwin'
+      && (Boolean(this.keychain) || hasKeytarRuntime(this.runtimeRoot));
     return {
       kind: 'macos-keychain',
-      available: process.platform === 'darwin',
-      location: process.platform === 'darwin'
-        ? path.join(__dirname, 'vendor', 'keytar', `${process.platform}-${process.arch}`)
+      available,
+      location: process.platform === 'darwin' ? this.runtimeRoot : undefined,
+      warning: process.platform === 'darwin' && !available
+        ? 'The bundled macOS Keychain runtime is unavailable; the restricted file credential store will be used.'
         : undefined
     };
   }
@@ -71,7 +78,7 @@ export class MacKeychainCredentialStore implements CredentialStore {
   }
 
   private backend(): KeychainApi {
-    if (!this.keychain) this.keychain = loadMacKeychainApi();
+    if (!this.keychain) this.keychain = loadMacKeychainApi(this.runtimeRoot);
     return this.keychain;
   }
 }
@@ -243,7 +250,7 @@ export class FallbackCredentialStore implements CredentialStore {
 }
 
 export function createCredentialStore(platform: NodeJS.Platform = process.platform): CredentialStore {
-  if (platform === 'darwin') return new MacKeychainCredentialStore();
+  if (platform === 'darwin') return new FallbackCredentialStore(new MacKeychainCredentialStore(), new FileCredentialStore());
   if (platform === 'linux') return new FallbackCredentialStore(new SecretToolCredentialStore(), new FileCredentialStore());
   return new FileCredentialStore();
 }
@@ -315,9 +322,14 @@ function runCommand(command: string, args: string[], stdin?: string): Promise<st
   });
 }
 
-function loadMacKeychainApi(): KeychainApi {
+function hasKeytarRuntime(root: string): boolean {
+  return existsSync(path.join(root, 'lib', 'keytar.js'))
+    && existsSync(path.join(root, 'build', 'Release', 'keytar.node'));
+}
+
+function loadMacKeychainApi(root: string): KeychainApi {
   const target = `${process.platform}-${process.arch}`;
-  const entry = path.join(__dirname, 'vendor', 'keytar', target, 'lib', 'keytar.js');
+  const entry = path.join(root, 'lib', 'keytar.js');
   try {
     const loaded = createRequire(entry)(entry) as Partial<KeychainApi>;
     if (!loaded || typeof loaded.getPassword !== 'function'
@@ -338,7 +350,7 @@ function isMissingCredential(error: unknown): boolean {
 
 function isBackendUnavailable(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|command not found|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
+  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
 }
 
 function findExecutable(command: string): string | undefined {

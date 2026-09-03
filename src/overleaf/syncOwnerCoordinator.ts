@@ -93,9 +93,11 @@ export class SyncOwnerCoordinator {
     await this.release();
     this.root = await fs.realpath(path.resolve(root)).catch(() => path.resolve(root));
     this.handler = handler;
-    await fs.mkdir(runtimeRoot(), { recursive: true, mode: 0o700 });
-    await fs.chmod(runtimeRoot(), 0o700).catch(() => undefined);
     const paths = runtimePaths(this.root);
+    for (const directory of new Set([runtimeRoot(), path.dirname(paths.socketPath)])) {
+      await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+      await fs.chmod(directory, 0o700).catch(() => undefined);
+    }
     const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3_000);
     while (true) {
       if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return 'client';
@@ -357,13 +359,18 @@ export class SyncOwnerCoordinator {
 export function runtimePaths(root: string): { lockPath: string; metadataPath: string; socketPath: string } {
   const hash = crypto.createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 32);
   const lockPath = path.join(runtimeRoot(), `${hash}.lock`);
+  const normalSocketPath = path.join(runtimeRoot(), hash);
+  const macSocketPathLimit = 104;
+  const socketPath = process.platform === 'darwin' && Buffer.byteLength(normalSocketPath) >= macSocketPathLimit
+    ? path.join('/tmp', `latex-toolkit-${process.getuid?.() ?? 'user'}`, hash)
+    : normalSocketPath;
   return {
     lockPath,
     metadataPath: path.join(lockPath, 'owner.json'),
-    // macOS limits AF_UNIX paths to roughly 104 bytes. The lock retains the
-    // full 128-bit hash; the socket uses 64 bits and no suffix to leave room
-    // for the user's absolute cache directory.
-    socketPath: path.join(runtimeRoot(), hash.slice(0, 16))
+    // macOS limits AF_UNIX paths to roughly 104 bytes. Keep metadata under the
+    // configured cache root, but move only an overlong socket into a private,
+    // per-user directory under /tmp.
+    socketPath
   };
 }
 

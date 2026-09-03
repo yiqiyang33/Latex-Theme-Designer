@@ -16258,9 +16258,9 @@ var NodeFsHandler = class {
     if (this.fsw.closed) {
       return;
     }
-    const dirname12 = sysPath.dirname(file);
+    const dirname13 = sysPath.dirname(file);
     const basename7 = sysPath.basename(file);
-    const parent = this.fsw._getWatchedDir(dirname12);
+    const parent = this.fsw._getWatchedDir(dirname13);
     let prevStats = stats;
     if (parent.has(basename7))
       return;
@@ -16287,7 +16287,7 @@ var NodeFsHandler = class {
             prevStats = newStats2;
           }
         } catch (error) {
-          this.fsw._remove(dirname12, basename7);
+          this.fsw._remove(dirname13, basename7);
         }
       } else if (parent.has(basename7)) {
         const at = newStats.atimeMs;
@@ -21386,6 +21386,7 @@ async function mapWithConcurrencyResult(items, concurrency, handler) {
 
 // src/overleaf/keychainStore.ts
 var crypto4 = __toESM(require("crypto"));
+var import_fs6 = require("fs");
 var fs11 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
@@ -21748,10 +21749,12 @@ async function exists(target) {
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
 var systemSecretTool = { run: (args, stdin) => runCommand("secret-tool", args, stdin) };
 var MacKeychainCredentialStore = class {
-  constructor(keychain) {
+  constructor(keychain, runtimeRoot2 = path12.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`)) {
     this.keychain = keychain;
+    this.runtimeRoot = runtimeRoot2;
   }
   keychain;
+  runtimeRoot;
   async saveIdentity(serverUrl, identity) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
@@ -21776,10 +21779,12 @@ var MacKeychainCredentialStore = class {
     return (await readSharedState()).servers;
   }
   describe() {
+    const available = process.platform === "darwin" && (Boolean(this.keychain) || hasKeytarRuntime(this.runtimeRoot));
     return {
       kind: "macos-keychain",
-      available: process.platform === "darwin",
-      location: process.platform === "darwin" ? path12.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`) : void 0
+      available,
+      location: process.platform === "darwin" ? this.runtimeRoot : void 0,
+      warning: process.platform === "darwin" && !available ? "The bundled macOS Keychain runtime is unavailable; the restricted file credential store will be used." : void 0
     };
   }
   assertMacOS() {
@@ -21788,7 +21793,7 @@ var MacKeychainCredentialStore = class {
     }
   }
   backend() {
-    if (!this.keychain) this.keychain = loadMacKeychainApi();
+    if (!this.keychain) this.keychain = loadMacKeychainApi(this.runtimeRoot);
     return this.keychain;
   }
 };
@@ -21945,7 +21950,7 @@ var FallbackCredentialStore = class {
   }
 };
 function createCredentialStore(platform = process.platform) {
-  if (platform === "darwin") return new MacKeychainCredentialStore();
+  if (platform === "darwin") return new FallbackCredentialStore(new MacKeychainCredentialStore(), new FileCredentialStore());
   if (platform === "linux") return new FallbackCredentialStore(new SecretToolCredentialStore(), new FileCredentialStore());
   return new FileCredentialStore();
 }
@@ -22013,9 +22018,12 @@ function runCommand(command, args, stdin) {
 `);
   });
 }
-function loadMacKeychainApi() {
+function hasKeytarRuntime(root) {
+  return (0, import_fs6.existsSync)(path12.join(root, "lib", "keytar.js")) && (0, import_fs6.existsSync)(path12.join(root, "build", "Release", "keytar.node"));
+}
+function loadMacKeychainApi(root) {
   const target = `${process.platform}-${process.arch}`;
-  const entry = path12.join(__dirname, "vendor", "keytar", target, "lib", "keytar.js");
+  const entry = path12.join(root, "lib", "keytar.js");
   try {
     const loaded = (0, import_module.createRequire)(entry)(entry);
     if (!loaded || typeof loaded.getPassword !== "function" || typeof loaded.setPassword !== "function" || typeof loaded.deletePassword !== "function") {
@@ -22033,7 +22041,7 @@ function isMissingCredential(error) {
 }
 function isBackendUnavailable(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|command not found|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
+  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
 }
 function findExecutable(command) {
   const entries = (process.env.PATH ?? "").split(path12.delimiter).filter(Boolean);
@@ -22520,7 +22528,7 @@ var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path15 = __toESM(require("path"));
 var fs14 = __toESM(require("fs/promises"));
-var import_fs6 = require("fs");
+var import_fs7 = require("fs");
 var import_module2 = require("module");
 var import_stream = require("stream");
 var import_promises4 = require("stream/promises");
@@ -22704,7 +22712,7 @@ var OverleafClient = class {
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs6.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
+    form.append("qqfile", (0, import_fs7.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -23097,7 +23105,7 @@ var OverleafClient = class {
             }
           }
         });
-        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs6.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs7.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
         const actualSize = (await fs14.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
@@ -23859,9 +23867,11 @@ var SyncOwnerCoordinator = class {
     await this.release();
     this.root = await fs15.realpath(path16.resolve(root)).catch(() => path16.resolve(root));
     this.handler = handler;
-    await fs15.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
-    await fs15.chmod(runtimeRoot(), 448).catch(() => void 0);
     const paths = runtimePaths(this.root);
+    for (const directory of /* @__PURE__ */ new Set([runtimeRoot(), path16.dirname(paths.socketPath)])) {
+      await fs15.mkdir(directory, { recursive: true, mode: 448 });
+      await fs15.chmod(directory, 448).catch(() => void 0);
+    }
     const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3e3);
     while (true) {
       if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return "client";
@@ -24108,13 +24118,16 @@ var SyncOwnerCoordinator = class {
 function runtimePaths(root) {
   const hash = crypto6.createHash("sha256").update(path16.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path16.join(runtimeRoot(), `${hash}.lock`);
+  const normalSocketPath = path16.join(runtimeRoot(), hash);
+  const macSocketPathLimit = 104;
+  const socketPath = process.platform === "darwin" && Buffer.byteLength(normalSocketPath) >= macSocketPathLimit ? path16.join("/tmp", `latex-toolkit-${process.getuid?.() ?? "user"}`, hash) : normalSocketPath;
   return {
     lockPath,
     metadataPath: path16.join(lockPath, "owner.json"),
-    // macOS limits AF_UNIX paths to roughly 104 bytes. The lock retains the
-    // full 128-bit hash; the socket uses 64 bits and no suffix to leave room
-    // for the user's absolute cache directory.
-    socketPath: path16.join(runtimeRoot(), hash.slice(0, 16))
+    // macOS limits AF_UNIX paths to roughly 104 bytes. Keep metadata under the
+    // configured cache root, but move only an overlong socket into a private,
+    // per-user directory under /tmp.
+    socketPath
   };
 }
 async function inspectOwner(root) {
