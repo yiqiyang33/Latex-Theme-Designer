@@ -10,6 +10,7 @@ import {
   FallbackCredentialStore,
   FileCredentialStore,
   KEYCHAIN_SERVICE,
+  type KeychainApi,
   MacKeychainCredentialStore,
   SecretToolCredentialStore,
   type SecurityRunner
@@ -18,9 +19,11 @@ import { SecretStore } from '../src/overleaf/secretStore';
 import {
   applicationDataRoot,
   applicationSupportRoot,
+  defaultLocalProjectsRoot,
   defaultSharedState,
   listSharedMirrors,
   mergeRefreshedMirrorRecords,
+  normalizeLocalProjectsRoot,
   readSharedState,
   registerSharedMirror,
   runtimeRoot,
@@ -118,6 +121,31 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
+  it('migrates foreign platform project roots while preserving custom roots', async () => {
+    const home = path.join(os.tmpdir(), 'latex-toolkit-test-home');
+    expect(normalizeLocalProjectsRoot('/home/yangyike/Documents/OverleafCodex/projects', 'darwin', home))
+      .toBe(defaultLocalProjectsRoot('darwin', home));
+    expect(normalizeLocalProjectsRoot('/Users/yangyike/Documents/OverleafCodex/projects', 'linux', home))
+      .toBe(defaultLocalProjectsRoot('linux', home));
+    const custom = path.join(home, 'Research', 'overleaf-projects');
+    expect(normalizeLocalProjectsRoot(custom, 'darwin', home)).toBe(custom);
+  });
+
+  it('persists a migrated foreign project root from shared state', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-root-migration-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+    try {
+      await fs.mkdir(path.dirname(sharedStatePath()), { recursive: true });
+      await fs.writeFile(sharedStatePath(), JSON.stringify({ localProjectsRoot: '/Users/old/Documents/OverleafCodex/projects' }));
+      const state = await readSharedState();
+      expect(state.localProjectsRoot).toBe(defaultLocalProjectsRoot());
+      const persisted = JSON.parse(await fs.readFile(sharedStatePath(), 'utf8'));
+      expect(persisted.localProjectsRoot).toBe(defaultLocalProjectsRoot());
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('serializes concurrent shared configuration updates without losing fields', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-shared-lock-'));
     process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
@@ -193,22 +221,19 @@ describe('Overleaf CLI shared infrastructure', () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-keychain-'));
     process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
     process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN = '1';
-    const runner = new MemorySecurityRunner();
-    const store = new MacKeychainCredentialStore(runner);
+    const keychain = new MemoryKeychainApi();
+    const store = new MacKeychainCredentialStore(keychain);
     const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf', userEmail: 'test@example.com' };
     try {
       await store.saveIdentity('https://example.test', identity);
-      expect(runner.items.get(`https://example.test/`)?.cookies).toBe('session=private');
-      expect(runner.lastAddArgs).not.toContain(JSON.stringify(identity));
-      expect(runner.lastAddArgs?.at(-1)).toBe('-w');
-      expect(runner.lastStdin).toBe(JSON.stringify(identity));
+      expect(keychain.items.get(`https://example.test/`)).toBe(JSON.stringify(identity));
       expect(await store.getIdentity('https://example.test/')).toEqual(identity);
       await store.deleteIdentity('https://example.test');
       expect(await store.getIdentity('https://example.test')).toBeUndefined();
       const shared = await readSharedState();
       expect(shared.credentialTombstones).toContain('https://example.test/');
       expect(shared.credentialMigrations).toContain('https://example.test/');
-      expect(runner.serviceNames).toEqual(new Set([KEYCHAIN_SERVICE]));
+      expect(keychain.serviceNames).toEqual(new Set([KEYCHAIN_SERVICE]));
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -230,20 +255,20 @@ describe('Overleaf CLI shared infrastructure', () => {
       delete: async (key: string) => { values.delete(key); },
       onDidChange: (() => ({ dispose: () => undefined })) as never
     };
-    const runner = new MemorySecurityRunner();
-    const keychain = new MacKeychainCredentialStore(runner);
+    const keychainApi = new MemoryKeychainApi();
+    const keychain = new MacKeychainCredentialStore(keychainApi);
     const store = new SecretStore({ secrets } as never, keychain);
     try {
       expect(await store.listServers()).toEqual([legacyServer]);
       expect(await store.getIdentity(legacyServer)).toEqual(identity);
       expect(values.has('overleafCodex.servers')).toBe(false);
       expect(values.has(`overleafCodex.identity.${legacyServer}`)).toBe(false);
-      expect(runner.items.get(legacyServer)).toEqual(identity);
+      expect(keychainApi.items.get(legacyServer)).toBe(JSON.stringify(identity));
 
       const current: Identity = { cookies: 'current=private', csrfToken: 'current-csrf' };
       await store.saveIdentity('https://current.example', current);
       expect([...values.keys()].filter(key => key.startsWith('overleafCodex.identity.'))).toEqual([]);
-      expect(runner.items.get('https://current.example/')).toEqual(current);
+      expect(keychainApi.items.get('https://current.example/')).toBe(JSON.stringify(current));
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -1750,32 +1775,20 @@ async function binaryRecoveryFixture(
   };
 }
 
-class MemorySecurityRunner implements SecurityRunner {
-  readonly items = new Map<string, Identity>();
+class MemoryKeychainApi implements KeychainApi {
+  readonly items = new Map<string, string>();
   readonly serviceNames = new Set<string>();
-  lastAddArgs?: string[];
-  lastStdin?: string;
-
-  async run(args: string[], stdin?: string): Promise<string> {
-    const service = args[args.indexOf('-s') + 1];
-    const account = args[args.indexOf('-a') + 1];
+  async getPassword(service: string, account: string): Promise<string | null> {
     this.serviceNames.add(service);
-    if (args[0] === 'add-generic-password') {
-      this.lastAddArgs = [...args];
-      this.lastStdin = stdin;
-      this.items.set(account, JSON.parse(stdin ?? '') as Identity);
-      return '';
-    }
-    if (args[0] === 'find-generic-password') {
-      const found = this.items.get(account);
-      if (!found) throw new Error('The specified item could not be found in the keychain.');
-      return JSON.stringify(found);
-    }
-    if (args[0] === 'delete-generic-password') {
-      if (!this.items.delete(account)) throw new Error('The specified item could not be found in the keychain.');
-      return '';
-    }
-    throw new Error(`Unexpected security operation: ${args[0]}`);
+    return this.items.get(account) ?? null;
+  }
+  async setPassword(service: string, account: string, password: string): Promise<void> {
+    this.serviceNames.add(service);
+    this.items.set(account, password);
+  }
+  async deletePassword(service: string, account: string): Promise<boolean> {
+    this.serviceNames.add(service);
+    return this.items.delete(account);
   }
 }
 

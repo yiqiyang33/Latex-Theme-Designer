@@ -5,7 +5,7 @@ import { OverleafClient } from './overleafClient';
 import { manifestPath, readManifest } from './manifest';
 import type { ProjectSummary } from './types';
 import { expandHome } from './util';
-import { registerSharedMirror } from './sharedState';
+import { defaultLocalProjectsRoot, normalizeLocalProjectsRoot, registerSharedMirror } from './sharedState';
 import {
   LOCAL_RESOURCE_MAX_ENTRIES,
   LocalResourceRegistry,
@@ -91,8 +91,8 @@ export class MirrorManager {
   getConfiguredProjectsRoot(): string {
     const configured = vscode.workspace
       .getConfiguration('overleafCodex')
-      .get<string>('localProjectsRoot', '~/Documents/OverleafCodex/projects');
-    return expandHome(configured);
+      .get<string>('localProjectsRoot', defaultLocalProjectsRoot());
+    return normalizeLocalProjectsRoot(configured);
   }
 
   getProjectMirrorRoot(parentRoot: string, project: ProjectSummary): string {

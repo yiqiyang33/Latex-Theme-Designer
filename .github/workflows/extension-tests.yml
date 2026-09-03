@@ -22,3 +22,32 @@ jobs:
 
       - name: Run extension test suite
         run: npm run package
+
+  package-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            arch: x64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install extension dependencies
+        run: npm ci
+
+      - name: Build macOS VSIX
+        run: npm run package:darwin-${{ matrix.arch }}
+
+      - name: Verify macOS VSIX
+        run: npm run verify:vsix:darwin-${{ matrix.arch }}

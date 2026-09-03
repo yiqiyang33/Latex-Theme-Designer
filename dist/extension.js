@@ -25532,6 +25532,7 @@ var crypto4 = __toESM(require("crypto"));
 var fs19 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
 var path24 = __toESM(require("path"));
+var import_fs3 = require("fs");
 
 // src/overleaf/syncHealthService.ts
 var SyncHealthService = class {
@@ -25655,10 +25656,24 @@ function defaultSharedState() {
     credentialTombstones: [],
     policy: structuredClone(DEFAULT_SYNC_POLICY),
     serverUrl: "https://www.overleaf.com/",
-    localProjectsRoot: path24.join(os4.homedir(), "Documents", "OverleafCodex", "projects")
+    localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
-async function readSharedState() {
+function defaultLocalProjectsRoot(platform3 = process.platform, home = os4.homedir()) {
+  return path24.join(home, "Documents", "OverleafCodex", "projects");
+}
+function normalizeLocalProjectsRoot(value, platform3 = process.platform, home = os4.homedir()) {
+  const fallback = defaultLocalProjectsRoot(platform3, home);
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const expanded = value.trim() === "~" ? home : value.trim().startsWith("~/") ? path24.join(home, value.trim().slice(2)) : value.trim();
+  const resolved = path24.resolve(expanded);
+  const foreignPrefix = platform3 === "darwin" ? [/^\/home(?:\/|$)/, /^\/root(?:\/|$)/, /^\/mnt(?:\/|$)/, /^\/media(?:\/|$)/] : platform3 === "linux" ? [/^\/Users(?:\/|$)/, /^\/Volumes(?:\/|$)/] : [];
+  if (foreignPrefix.some((pattern) => pattern.test(resolved))) return fallback;
+  const suffix = `${path24.sep}Documents${path24.sep}OverleafCodex${path24.sep}projects`;
+  if (resolved.endsWith(suffix) && resolved !== path24.resolve(fallback) && !(0, import_fs3.existsSync)(resolved)) return fallback;
+  return resolved;
+}
+async function readSharedState(persistMigration = true) {
   await migrateLegacyLinuxPaths();
   const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => void 0);
   if (!raw) return defaultSharedState();
@@ -25672,7 +25687,7 @@ async function readSharedState() {
   const defaults2 = defaultSharedState();
   const parsedPolicy = isRecord5(parsed.policy) ? parsed.policy : {};
   const parsedTimeouts = isRecord5(parsedPolicy.networkTimeouts) ? parsedPolicy.networkTimeouts : {};
-  return {
+  const normalized = {
     ...defaults2,
     ...parsed,
     schemaVersion: 1,
@@ -25694,8 +25709,12 @@ async function readSharedState() {
       }
     },
     serverUrl: safeNormalizeServerUrl(parsed.serverUrl, defaults2.serverUrl),
-    localProjectsRoot: typeof parsed.localProjectsRoot === "string" && parsed.localProjectsRoot.trim() ? path24.resolve(parsed.localProjectsRoot) : defaults2.localProjectsRoot
+    localProjectsRoot: normalizeLocalProjectsRoot(parsed.localProjectsRoot)
   };
+  if (persistMigration && typeof parsed.localProjectsRoot === "string" && path24.resolve(parsed.localProjectsRoot) !== normalized.localProjectsRoot) {
+    await writeSharedState(normalized);
+  }
+  return normalized;
 }
 async function migrateLegacyLinuxPaths() {
   if (process.platform !== "linux") return;
@@ -25723,10 +25742,18 @@ async function copyDirectoryIfMissing(source, target) {
   await fs19.mkdir(path24.dirname(target), { recursive: true, mode: 448 });
   await fs19.cp(source, target, { recursive: true });
 }
+async function writeSharedState(state) {
+  const release = await acquireSharedStateLock();
+  try {
+    await writeSharedStateUnlocked(normalizeSharedState(state));
+  } finally {
+    await release();
+  }
+}
 async function updateSharedState(mutate) {
   const release = await acquireSharedStateLock();
   try {
-    const state = await readSharedState();
+    const state = await readSharedState(false);
     await mutate(state);
     const normalized = normalizeSharedState(state);
     await writeSharedStateUnlocked(normalized);
@@ -25765,7 +25792,8 @@ function normalizeSharedState(state) {
     servers: normalizeServerList(state.servers),
     credentialMigrations: normalizeServerList(state.credentialMigrations),
     credentialTombstones: normalizeServerList(state.credentialTombstones),
-    mirrors: dedupeMirrors(state.mirrors)
+    mirrors: dedupeMirrors(state.mirrors),
+    localProjectsRoot: normalizeLocalProjectsRoot(state.localProjectsRoot)
   };
 }
 function normalizeServerList(value) {
@@ -26389,8 +26417,8 @@ var MirrorManager = class {
   stateKey;
   ignoredKey;
   getConfiguredProjectsRoot() {
-    const configured = vscode9.workspace.getConfiguration("overleafCodex").get("localProjectsRoot", "~/Documents/OverleafCodex/projects");
-    return expandHome(configured);
+    const configured = vscode9.workspace.getConfiguration("overleafCodex").get("localProjectsRoot", defaultLocalProjectsRoot());
+    return normalizeLocalProjectsRoot(configured);
   }
   getProjectMirrorRoot(parentRoot, project) {
     return projectMirrorRoot(parentRoot, project);
@@ -26534,7 +26562,7 @@ var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path29 = __toESM(require("path"));
 var fs23 = __toESM(require("fs/promises"));
-var import_fs4 = require("fs");
+var import_fs5 = require("fs");
 var import_module = require("module");
 var import_stream = require("stream");
 var import_promises = require("stream/promises");
@@ -26588,7 +26616,7 @@ var v4_default = v4;
 
 // src/overleaf/binaryTransfer.ts
 var import_crypto2 = require("crypto");
-var import_fs3 = require("fs");
+var import_fs4 = require("fs");
 var fs22 = __toESM(require("fs/promises"));
 var path28 = __toESM(require("path"));
 var import_crypto3 = require("crypto");
@@ -26599,7 +26627,7 @@ async function hashFileDigests(filePath) {
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat11.size}\0`);
   await new Promise((resolve26, reject) => {
-    const input = (0, import_fs3.createReadStream)(filePath);
+    const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha13.update(chunk);
       git.update(chunk);
@@ -26771,7 +26799,7 @@ var OverleafClient = class {
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs4.createReadStream)(sourcePath), { filename, knownLength: stat11.size });
+    form.append("qqfile", (0, import_fs5.createReadStream)(sourcePath), { filename, knownLength: stat11.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -27164,7 +27192,7 @@ var OverleafClient = class {
             }
           }
         });
-        await (0, import_promises.pipeline)(res.body, limiter, (0, import_fs4.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        await (0, import_promises.pipeline)(res.body, limiter, (0, import_fs5.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
         const actualSize = (await fs23.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
@@ -27955,7 +27983,7 @@ var BinaryTransactionStore = class {
 
 // src/overleaf/syncStatus.ts
 var fs25 = __toESM(require("fs/promises"));
-var import_fs5 = require("fs");
+var import_fs6 = require("fs");
 var import_crypto4 = require("crypto");
 var path30 = __toESM(require("path"));
 function classifySyncStatus(input) {
@@ -28271,7 +28299,7 @@ function buildTrackedOrParentPathIndex(manifest) {
 }
 async function fileHash(filePath) {
   try {
-    const hash2 = (0, import_fs5.createReadStream)(filePath);
+    const hash2 = (0, import_fs6.createReadStream)(filePath);
     const digest = await new Promise((resolve26, reject) => {
       const state = (0, import_crypto4.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
@@ -31773,21 +31801,18 @@ var crypto5 = __toESM(require("crypto"));
 var fs31 = __toESM(require("fs/promises"));
 var path36 = __toESM(require("path"));
 var import_child_process4 = require("child_process");
+var import_module2 = require("module");
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
-var systemSecurity = { run: (args, stdin) => runCommand("/usr/bin/security", args, stdin) };
 var systemSecretTool = { run: (args, stdin) => runCommand("secret-tool", args, stdin) };
 var MacKeychainCredentialStore = class {
-  constructor(security = systemSecurity) {
-    this.security = security;
+  constructor(keychain) {
+    this.keychain = keychain;
   }
-  security;
+  keychain;
   async saveIdentity(serverUrl, identity) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(
-      ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
-      JSON.stringify(identity)
-    );
+    await this.backend().setPassword(KEYCHAIN_SERVICE, account, JSON.stringify(identity));
     await markCredentialSaved(account);
   }
   async getIdentity(serverUrl) {
@@ -31795,32 +31820,33 @@ var MacKeychainCredentialStore = class {
     const account = normalizeServerUrl(serverUrl);
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
-    try {
-      const raw = await this.security.run(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"]);
-      return raw ? parseIdentity(raw) : void 0;
-    } catch (error) {
-      if (isMissingCredential(error)) return void 0;
-      throw error;
-    }
+    const raw = await this.backend().getPassword(KEYCHAIN_SERVICE, account);
+    return raw ? parseIdentity(raw) : void 0;
   }
   async deleteIdentity(serverUrl) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account]).catch((error) => {
-      if (!isMissingCredential(error)) throw error;
-    });
+    await this.backend().deletePassword(KEYCHAIN_SERVICE, account);
     await markCredentialDeleted(account);
   }
   async listServers() {
     return (await readSharedState()).servers;
   }
   describe() {
-    return { kind: "macos-keychain", available: process.platform === "darwin", location: "/usr/bin/security" };
+    return {
+      kind: "macos-keychain",
+      available: process.platform === "darwin",
+      location: process.platform === "darwin" ? path36.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`) : void 0
+    };
   }
   assertMacOS() {
     if (process.platform !== "darwin" && !process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN) {
       throw new Error("The macOS Keychain credential store is only available on macOS.");
     }
+  }
+  backend() {
+    if (!this.keychain) this.keychain = loadMacKeychainApi();
+    return this.keychain;
   }
 };
 var SecretToolCredentialStore = class {
@@ -32043,6 +32069,20 @@ function runCommand(command, args, stdin) {
     child.stdin.end(stdin === void 0 ? void 0 : `${stdin}
 `);
   });
+}
+function loadMacKeychainApi() {
+  const target = `${process.platform}-${process.arch}`;
+  const entry = path36.join(__dirname, "vendor", "keytar", target, "lib", "keytar.js");
+  try {
+    const loaded = (0, import_module2.createRequire)(entry)(entry);
+    if (!loaded || typeof loaded.getPassword !== "function" || typeof loaded.setPassword !== "function" || typeof loaded.deletePassword !== "function") {
+      throw new Error("keytar runtime exports are incomplete");
+    }
+    return loaded;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load the macOS Keychain runtime for ${target}: ${message}. Install the matching macOS VSIX.`);
+  }
 }
 function isMissingCredential(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -33417,7 +33457,7 @@ var OverleafService = class {
     return root;
   }
   findWorkspaceMirrorRootSync() {
-    return firstWorkspaceMirrorRoot(this.workspaceFileRoots(), (root) => existsSync4(manifestPath(root)));
+    return firstWorkspaceMirrorRoot(this.workspaceFileRoots(), (root) => existsSync5(manifestPath(root)));
   }
   resolveMirrorRoot(value) {
     const candidate = value && typeof value === "object" && "workspacePath" in value ? value.workspacePath : value;
@@ -33428,13 +33468,13 @@ var OverleafService = class {
     return this.mirrorRootForPath(candidate);
   }
   mirrorRootForPath(candidate) {
-    return resolveMirrorRootForPath(candidate, this.workspaceFileRoots(), (root) => existsSync4(manifestPath(root)));
+    return resolveMirrorRootForPath(candidate, this.workspaceFileRoots(), (root) => existsSync5(manifestPath(root)));
   }
   workspaceFileRoots() {
     return (vscode11.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => folder.uri.fsPath);
   }
   isMirrorRootOpen(root) {
-    return Boolean(root && existsSync4(manifestPath(root)) && workspaceContainsPath(root, this.workspaceFileRoots()));
+    return Boolean(root && existsSync5(manifestPath(root)) && workspaceContainsPath(root, this.workspaceFileRoots()));
   }
   async ensureRunning(candidate) {
     const root = await this.requireMirrorRoot(candidate);
@@ -33839,7 +33879,7 @@ var OverleafService = class {
     return latestRemotePdf(root);
   }
 };
-function existsSync4(filePath) {
+function existsSync5(filePath) {
   try {
     require("node:fs").accessSync(filePath);
     return true;
@@ -34048,7 +34088,7 @@ async function syncExplicitSettings() {
     const server = explicitValue(legacy, "serverUrl");
     if (server) state.serverUrl = normalizeServerUrl(server);
     const localRoot = explicitValue(legacy, "localProjectsRoot");
-    if (localRoot) state.localProjectsRoot = expandHome2(localRoot);
+    if (localRoot) state.localProjectsRoot = normalizeLocalProjectsRoot(expandHome2(localRoot));
     const autoPush = explicitValue(modern, "autoPushLocalAhead") ?? explicitValue(legacy, "autoPushLocalAhead");
     if (autoPush !== void 0) state.policy.autoPushLocalAhead = autoPush;
     const binary = explicitValue(modern, "syncBinaryFiles") ?? explicitValue(legacy, "syncBinaryFiles");

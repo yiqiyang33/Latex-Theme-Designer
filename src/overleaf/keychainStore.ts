@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
 import type { CredentialBackendInfo, CredentialStore } from './coreInterfaces';
 import type { Identity } from './types';
 import { credentialRoot, readSharedState, updateSharedState } from './sharedState';
@@ -15,19 +16,21 @@ export interface SecurityRunner {
 
 export type SecretToolRunner = SecurityRunner;
 
-const systemSecurity: SecurityRunner = { run: (args, stdin) => runCommand('/usr/bin/security', args, stdin) };
+export interface KeychainApi {
+  getPassword(service: string, account: string): Promise<string | null>;
+  setPassword(service: string, account: string, password: string): Promise<void>;
+  deletePassword(service: string, account: string): Promise<boolean>;
+}
+
 const systemSecretTool: SecretToolRunner = { run: (args, stdin) => runCommand('secret-tool', args, stdin) };
 
 export class MacKeychainCredentialStore implements CredentialStore {
-  constructor(private readonly security: SecurityRunner = systemSecurity) {}
+  constructor(private keychain?: KeychainApi) {}
 
   async saveIdentity(serverUrl: string, identity: Identity): Promise<void> {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(
-      ['add-generic-password', '-U', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'],
-      JSON.stringify(identity)
-    );
+    await this.backend().setPassword(KEYCHAIN_SERVICE, account, JSON.stringify(identity));
     await markCredentialSaved(account);
   }
 
@@ -36,21 +39,14 @@ export class MacKeychainCredentialStore implements CredentialStore {
     const account = normalizeServerUrl(serverUrl);
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return undefined;
-    try {
-      const raw = await this.security.run(['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account, '-w']);
-      return raw ? parseIdentity(raw) : undefined;
-    } catch (error) {
-      if (isMissingCredential(error)) return undefined;
-      throw error;
-    }
+    const raw = await this.backend().getPassword(KEYCHAIN_SERVICE, account);
+    return raw ? parseIdentity(raw) : undefined;
   }
 
   async deleteIdentity(serverUrl: string): Promise<void> {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(['delete-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account]).catch(error => {
-      if (!isMissingCredential(error)) throw error;
-    });
+    await this.backend().deletePassword(KEYCHAIN_SERVICE, account);
     await markCredentialDeleted(account);
   }
 
@@ -59,13 +55,24 @@ export class MacKeychainCredentialStore implements CredentialStore {
   }
 
   describe(): CredentialBackendInfo {
-    return { kind: 'macos-keychain', available: process.platform === 'darwin', location: '/usr/bin/security' };
+    return {
+      kind: 'macos-keychain',
+      available: process.platform === 'darwin',
+      location: process.platform === 'darwin'
+        ? path.join(__dirname, 'vendor', 'keytar', `${process.platform}-${process.arch}`)
+        : undefined
+    };
   }
 
   private assertMacOS(): void {
     if (process.platform !== 'darwin' && !process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN) {
       throw new Error('The macOS Keychain credential store is only available on macOS.');
     }
+  }
+
+  private backend(): KeychainApi {
+    if (!this.keychain) this.keychain = loadMacKeychainApi();
+    return this.keychain;
   }
 }
 
@@ -306,6 +313,22 @@ function runCommand(command: string, args: string[], stdin?: string): Promise<st
     });
     child.stdin.end(stdin === undefined ? undefined : `${stdin}\n`);
   });
+}
+
+function loadMacKeychainApi(): KeychainApi {
+  const target = `${process.platform}-${process.arch}`;
+  const entry = path.join(__dirname, 'vendor', 'keytar', target, 'lib', 'keytar.js');
+  try {
+    const loaded = createRequire(entry)(entry) as Partial<KeychainApi>;
+    if (!loaded || typeof loaded.getPassword !== 'function'
+      || typeof loaded.setPassword !== 'function' || typeof loaded.deletePassword !== 'function') {
+      throw new Error('keytar runtime exports are incomplete');
+    }
+    return loaded as KeychainApi;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load the macOS Keychain runtime for ${target}: ${message}. Install the matching macOS VSIX.`);
+  }
 }
 
 function isMissingCredential(error: unknown): boolean {

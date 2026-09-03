@@ -2,7 +2,12 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import type { MirrorManager } from './mirrorManager';
-import { readSharedState, registerSharedMirror, updateSharedState } from './sharedState';
+import {
+  normalizeLocalProjectsRoot,
+  readSharedState,
+  registerSharedMirror,
+  updateSharedState
+} from './sharedState';
 import { normalizeServerUrl } from './util';
 import { needsGlobalConfigurationUpdate } from './config';
 
@@ -77,7 +82,7 @@ async function syncExplicitSettings(): Promise<void> {
     const server = explicitValue<string>(legacy, 'serverUrl');
     if (server) state.serverUrl = normalizeServerUrl(server);
     const localRoot = explicitValue<string>(legacy, 'localProjectsRoot');
-    if (localRoot) state.localProjectsRoot = expandHome(localRoot);
+    if (localRoot) state.localProjectsRoot = normalizeLocalProjectsRoot(expandHome(localRoot));
 
     const autoPush = explicitValue<boolean>(modern, 'autoPushLocalAhead')
       ?? explicitValue<boolean>(legacy, 'autoPushLocalAhead');

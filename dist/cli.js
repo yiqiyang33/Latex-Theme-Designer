@@ -21389,12 +21389,14 @@ var crypto4 = __toESM(require("crypto"));
 var fs11 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
+var import_module = require("module");
 
 // src/overleaf/sharedState.ts
 var crypto3 = __toESM(require("crypto"));
 var fs10 = __toESM(require("fs/promises"));
 var os3 = __toESM(require("os"));
 var path11 = __toESM(require("path"));
+var import_fs5 = require("fs");
 var DEFAULT_NETWORK_TIMEOUTS = {
   connectMs: 2e4,
   projectJoinMs: 3e4,
@@ -21435,10 +21437,24 @@ function defaultSharedState() {
     credentialTombstones: [],
     policy: structuredClone(DEFAULT_SYNC_POLICY),
     serverUrl: "https://www.overleaf.com/",
-    localProjectsRoot: path11.join(os3.homedir(), "Documents", "OverleafCodex", "projects")
+    localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
-async function readSharedState() {
+function defaultLocalProjectsRoot(platform = process.platform, home = os3.homedir()) {
+  return path11.join(home, "Documents", "OverleafCodex", "projects");
+}
+function normalizeLocalProjectsRoot(value, platform = process.platform, home = os3.homedir()) {
+  const fallback = defaultLocalProjectsRoot(platform, home);
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  const expanded = value.trim() === "~" ? home : value.trim().startsWith("~/") ? path11.join(home, value.trim().slice(2)) : value.trim();
+  const resolved = path11.resolve(expanded);
+  const foreignPrefix = platform === "darwin" ? [/^\/home(?:\/|$)/, /^\/root(?:\/|$)/, /^\/mnt(?:\/|$)/, /^\/media(?:\/|$)/] : platform === "linux" ? [/^\/Users(?:\/|$)/, /^\/Volumes(?:\/|$)/] : [];
+  if (foreignPrefix.some((pattern) => pattern.test(resolved))) return fallback;
+  const suffix = `${path11.sep}Documents${path11.sep}OverleafCodex${path11.sep}projects`;
+  if (resolved.endsWith(suffix) && resolved !== path11.resolve(fallback) && !(0, import_fs5.existsSync)(resolved)) return fallback;
+  return resolved;
+}
+async function readSharedState(persistMigration = true) {
   await migrateLegacyLinuxPaths();
   const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => void 0);
   if (!raw) return defaultSharedState();
@@ -21452,7 +21468,7 @@ async function readSharedState() {
   const defaults2 = defaultSharedState();
   const parsedPolicy = isRecord2(parsed.policy) ? parsed.policy : {};
   const parsedTimeouts = isRecord2(parsedPolicy.networkTimeouts) ? parsedPolicy.networkTimeouts : {};
-  return {
+  const normalized = {
     ...defaults2,
     ...parsed,
     schemaVersion: 1,
@@ -21474,8 +21490,12 @@ async function readSharedState() {
       }
     },
     serverUrl: safeNormalizeServerUrl(parsed.serverUrl, defaults2.serverUrl),
-    localProjectsRoot: typeof parsed.localProjectsRoot === "string" && parsed.localProjectsRoot.trim() ? path11.resolve(parsed.localProjectsRoot) : defaults2.localProjectsRoot
+    localProjectsRoot: normalizeLocalProjectsRoot(parsed.localProjectsRoot)
   };
+  if (persistMigration && typeof parsed.localProjectsRoot === "string" && path11.resolve(parsed.localProjectsRoot) !== normalized.localProjectsRoot) {
+    await writeSharedState(normalized);
+  }
+  return normalized;
 }
 async function migrateLegacyLinuxPaths() {
   if (process.platform !== "linux") return;
@@ -21503,10 +21523,18 @@ async function copyDirectoryIfMissing(source, target) {
   await fs10.mkdir(path11.dirname(target), { recursive: true, mode: 448 });
   await fs10.cp(source, target, { recursive: true });
 }
+async function writeSharedState(state) {
+  const release = await acquireSharedStateLock();
+  try {
+    await writeSharedStateUnlocked(normalizeSharedState(state));
+  } finally {
+    await release();
+  }
+}
 async function updateSharedState(mutate) {
   const release = await acquireSharedStateLock();
   try {
-    const state = await readSharedState();
+    const state = await readSharedState(false);
     await mutate(state);
     const normalized = normalizeSharedState(state);
     await writeSharedStateUnlocked(normalized);
@@ -21551,7 +21579,7 @@ async function listSharedMirrors() {
   });
   const release = await acquireSharedStateLock();
   try {
-    const latest = await readSharedState();
+    const latest = await readSharedState(false);
     const records = mergeRefreshedMirrorRecords(latest.mirrors, refreshed);
     const normalized = normalizeSharedState({ ...latest, mirrors: records });
     if (JSON.stringify(normalized.mirrors) !== JSON.stringify(latest.mirrors)) {
@@ -21582,7 +21610,8 @@ function normalizeSharedState(state) {
     servers: normalizeServerList(state.servers),
     credentialMigrations: normalizeServerList(state.credentialMigrations),
     credentialTombstones: normalizeServerList(state.credentialTombstones),
-    mirrors: dedupeMirrors(state.mirrors)
+    mirrors: dedupeMirrors(state.mirrors),
+    localProjectsRoot: normalizeLocalProjectsRoot(state.localProjectsRoot)
   };
 }
 function normalizeServerList(value) {
@@ -21717,20 +21746,16 @@ async function exists(target) {
 
 // src/overleaf/keychainStore.ts
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
-var systemSecurity = { run: (args, stdin) => runCommand("/usr/bin/security", args, stdin) };
 var systemSecretTool = { run: (args, stdin) => runCommand("secret-tool", args, stdin) };
 var MacKeychainCredentialStore = class {
-  constructor(security = systemSecurity) {
-    this.security = security;
+  constructor(keychain) {
+    this.keychain = keychain;
   }
-  security;
+  keychain;
   async saveIdentity(serverUrl, identity) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(
-      ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
-      JSON.stringify(identity)
-    );
+    await this.backend().setPassword(KEYCHAIN_SERVICE, account, JSON.stringify(identity));
     await markCredentialSaved(account);
   }
   async getIdentity(serverUrl) {
@@ -21738,32 +21763,33 @@ var MacKeychainCredentialStore = class {
     const account = normalizeServerUrl(serverUrl);
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
-    try {
-      const raw = await this.security.run(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"]);
-      return raw ? parseIdentity(raw) : void 0;
-    } catch (error) {
-      if (isMissingCredential(error)) return void 0;
-      throw error;
-    }
+    const raw = await this.backend().getPassword(KEYCHAIN_SERVICE, account);
+    return raw ? parseIdentity(raw) : void 0;
   }
   async deleteIdentity(serverUrl) {
     this.assertMacOS();
     const account = normalizeServerUrl(serverUrl);
-    await this.security.run(["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account]).catch((error) => {
-      if (!isMissingCredential(error)) throw error;
-    });
+    await this.backend().deletePassword(KEYCHAIN_SERVICE, account);
     await markCredentialDeleted(account);
   }
   async listServers() {
     return (await readSharedState()).servers;
   }
   describe() {
-    return { kind: "macos-keychain", available: process.platform === "darwin", location: "/usr/bin/security" };
+    return {
+      kind: "macos-keychain",
+      available: process.platform === "darwin",
+      location: process.platform === "darwin" ? path12.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`) : void 0
+    };
   }
   assertMacOS() {
     if (process.platform !== "darwin" && !process.env.LATEX_TOOLKIT_ALLOW_MOCK_KEYCHAIN) {
       throw new Error("The macOS Keychain credential store is only available on macOS.");
     }
+  }
+  backend() {
+    if (!this.keychain) this.keychain = loadMacKeychainApi();
+    return this.keychain;
   }
 };
 var SecretToolCredentialStore = class {
@@ -21986,6 +22012,20 @@ function runCommand(command, args, stdin) {
     child.stdin.end(stdin === void 0 ? void 0 : `${stdin}
 `);
   });
+}
+function loadMacKeychainApi() {
+  const target = `${process.platform}-${process.arch}`;
+  const entry = path12.join(__dirname, "vendor", "keytar", target, "lib", "keytar.js");
+  try {
+    const loaded = (0, import_module.createRequire)(entry)(entry);
+    if (!loaded || typeof loaded.getPassword !== "function" || typeof loaded.setPassword !== "function" || typeof loaded.deletePassword !== "function") {
+      throw new Error("keytar runtime exports are incomplete");
+    }
+    return loaded;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not load the macOS Keychain runtime for ${target}: ${message}. Install the matching macOS VSIX.`);
+  }
 }
 function isMissingCredential(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -22480,8 +22520,8 @@ var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path15 = __toESM(require("path"));
 var fs14 = __toESM(require("fs/promises"));
-var import_fs5 = require("fs");
-var import_module = require("module");
+var import_fs6 = require("fs");
+var import_module2 = require("module");
 var import_stream = require("stream");
 var import_promises4 = require("stream/promises");
 var import_form_data = __toESM(require_form_data());
@@ -22664,7 +22704,7 @@ var OverleafClient = class {
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs5.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
+    form.append("qqfile", (0, import_fs6.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -23057,7 +23097,7 @@ var OverleafClient = class {
             }
           }
         });
-        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs5.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs6.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
         const actualSize = (await fs14.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
@@ -23463,7 +23503,7 @@ function abortError(signal) {
   return signal?.reason instanceof Error ? signal.reason : new Error("Operation cancelled.");
 }
 function loadSocketIoClient(runtimeRoot2 = path15.join(__dirname, "vendor", "socket.io-client")) {
-  const requireFromExtension = (0, import_module.createRequire)(__filename);
+  const requireFromExtension = (0, import_module2.createRequire)(__filename);
   const entry = path15.join(runtimeRoot2, "lib", "io.js");
   let loaded;
   try {
@@ -23493,7 +23533,7 @@ function loadSocketIoClient(runtimeRoot2 = path15.join(__dirname, "vendor", "soc
 }
 function loadSocketIoWebSocket(runtimeRoot2) {
   const entry = path15.join(runtimeRoot2, "lib", "io.js");
-  const requireFromRuntime = (0, import_module.createRequire)(entry);
+  const requireFromRuntime = (0, import_module2.createRequire)(entry);
   let loaded;
   try {
     loaded = requireFromRuntime("ws");

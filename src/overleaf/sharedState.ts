@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { existsSync } from 'fs';
 import type { NetworkTimeouts } from './types';
 import type { SyncPolicy } from './coreInterfaces';
 import { atomicWriteText, manifestPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES } from './manifest';
@@ -87,11 +88,38 @@ export function defaultSharedState(): SharedOverleafState {
     credentialTombstones: [],
     policy: structuredClone(DEFAULT_SYNC_POLICY),
     serverUrl: 'https://www.overleaf.com/',
-    localProjectsRoot: path.join(os.homedir(), 'Documents', 'OverleafCodex', 'projects')
+    localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
 
-export async function readSharedState(): Promise<SharedOverleafState> {
+export function defaultLocalProjectsRoot(platform: NodeJS.Platform = process.platform, home = os.homedir()): string {
+  return path.join(home, 'Documents', 'OverleafCodex', 'projects');
+}
+
+export function normalizeLocalProjectsRoot(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+  home = os.homedir()
+): string {
+  const fallback = defaultLocalProjectsRoot(platform, home);
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const expanded = value.trim() === '~'
+    ? home
+    : value.trim().startsWith('~/') ? path.join(home, value.trim().slice(2)) : value.trim();
+  const resolved = path.resolve(expanded);
+  const foreignPrefix = platform === 'darwin'
+    ? [/^\/home(?:\/|$)/, /^\/root(?:\/|$)/, /^\/mnt(?:\/|$)/, /^\/media(?:\/|$)/]
+    : platform === 'linux'
+      ? [/^\/Users(?:\/|$)/, /^\/Volumes(?:\/|$)/]
+      : [];
+  if (foreignPrefix.some(pattern => pattern.test(resolved))) return fallback;
+
+  const suffix = `${path.sep}Documents${path.sep}OverleafCodex${path.sep}projects`;
+  if (resolved.endsWith(suffix) && resolved !== path.resolve(fallback) && !existsSync(resolved)) return fallback;
+  return resolved;
+}
+
+export async function readSharedState(persistMigration = true): Promise<SharedOverleafState> {
   await migrateLegacyLinuxPaths();
   const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => undefined);
   if (!raw) return defaultSharedState();
@@ -104,7 +132,7 @@ export async function readSharedState(): Promise<SharedOverleafState> {
   const defaults = defaultSharedState();
   const parsedPolicy: Record<string, any> = isRecord(parsed.policy) ? parsed.policy : {};
   const parsedTimeouts: Record<string, any> = isRecord(parsedPolicy.networkTimeouts) ? parsedPolicy.networkTimeouts : {};
-  return {
+  const normalized: SharedOverleafState = {
     ...defaults,
     ...parsed,
     schemaVersion: 1,
@@ -133,9 +161,13 @@ export async function readSharedState(): Promise<SharedOverleafState> {
       }
     },
     serverUrl: safeNormalizeServerUrl(parsed.serverUrl, defaults.serverUrl),
-    localProjectsRoot: typeof parsed.localProjectsRoot === 'string' && parsed.localProjectsRoot.trim()
-      ? path.resolve(parsed.localProjectsRoot) : defaults.localProjectsRoot
+    localProjectsRoot: normalizeLocalProjectsRoot(parsed.localProjectsRoot)
   };
+  if (persistMigration && typeof parsed.localProjectsRoot === 'string'
+    && path.resolve(parsed.localProjectsRoot) !== normalized.localProjectsRoot) {
+    await writeSharedState(normalized);
+  }
+  return normalized;
 }
 
 export async function migrateLegacyLinuxPaths(): Promise<void> {
@@ -180,7 +212,7 @@ export async function updateSharedState(
 ): Promise<SharedOverleafState> {
   const release = await acquireSharedStateLock();
   try {
-    const state = await readSharedState();
+    const state = await readSharedState(false);
     await mutate(state);
     const normalized = normalizeSharedState(state);
     await writeSharedStateUnlocked(normalized);
@@ -228,7 +260,7 @@ export async function listSharedMirrors(): Promise<SharedMirrorRecord[]> {
 
   const release = await acquireSharedStateLock();
   try {
-    const latest = await readSharedState();
+    const latest = await readSharedState(false);
     const records = mergeRefreshedMirrorRecords(latest.mirrors, refreshed);
     const normalized = normalizeSharedState({ ...latest, mirrors: records });
     if (JSON.stringify(normalized.mirrors) !== JSON.stringify(latest.mirrors)) {
@@ -273,7 +305,8 @@ function normalizeSharedState(state: SharedOverleafState): SharedOverleafState {
     servers: normalizeServerList(state.servers),
     credentialMigrations: normalizeServerList(state.credentialMigrations),
     credentialTombstones: normalizeServerList(state.credentialTombstones),
-    mirrors: dedupeMirrors(state.mirrors)
+    mirrors: dedupeMirrors(state.mirrors),
+    localProjectsRoot: normalizeLocalProjectsRoot(state.localProjectsRoot)
   };
 }
 
