@@ -19180,6 +19180,10 @@ var DEFAULT_IGNORE_PATTERNS = [
   "AGENTS.md",
   "**/.DS_Store"
 ];
+function isAlwaysLocal(relPath) {
+  const normalized = toPosixPath(relPath);
+  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || /(^|\/)\.DS_Store$/.test(normalized);
+}
 var TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   ".overleaf-codex/**",
   ".vscode/**",
@@ -20348,6 +20352,86 @@ async function fetchRemoteSnapshot(deps) {
   }
   return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
 }
+async function classifyProjectPaths(deps) {
+  const { root, manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? "incremental";
+  const isExcluded = deps.isExcluded ?? (() => false);
+  const candidates = /* @__PURE__ */ new Set([
+    ...Object.keys(manifest.files),
+    ...Object.keys(remote.manifest.files),
+    ...localScan.files,
+    ...requestedPaths ?? []
+  ]);
+  const ordered = [...candidates].sort();
+  const items = [];
+  let manifestChanged = false;
+  let localCacheReuseCount = 0;
+  let completed = 0;
+  for (const relPath of ordered) {
+    if (requestedPaths && !requestedPaths.has(relPath)) continue;
+    if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath) || isExcluded(relPath)) continue;
+    const manifestFile = manifest.files[relPath];
+    const remoteFile = remote.manifest.files[relPath];
+    const metadata = localScan.fileMetadata.get(relPath);
+    const localResult = await cachedLocalFileHash(path6.join(root, relPath), manifestFile, mode === "full", metadata);
+    const localHash = localResult.hash;
+    if (localResult.reused) localCacheReuseCount += 1;
+    if (localResult.cacheChanged) manifestChanged = true;
+    const remoteContent = remote.contents.get(relPath);
+    const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === void 0 ? remote.reused.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent));
+    const remoteReadError = remote.failures.get(relPath);
+    if (!manifestFile && !remoteFile && localHash === void 0 && !remoteReadError) continue;
+    let baseHash = manifestFile?.baseHash;
+    if (remoteFile?.entityType === "doc" && !baseHash) {
+      const baseContent = await readBaseDoc(root, remoteFile.entityId);
+      baseHash = baseContent === void 0 ? void 0 : sha1(baseContent);
+      const canInitializeBase = remoteContent !== void 0 && (manifestFile?.sha1 === remoteHash || localHash === remoteHash);
+      if (!baseHash && canInitializeBase && typeof remoteContent === "string") {
+        baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+        if (manifestFile) {
+          manifestFile.baseHash = baseHash;
+          manifestChanged = true;
+        }
+      }
+    }
+    const item = classifySyncStatus({
+      path: relPath,
+      manifestFile,
+      remoteFile,
+      localHash,
+      remoteHash,
+      baseHash,
+      localExists: localHash !== void 0,
+      remoteReadError,
+      localSize: metadata?.size,
+      localMtimeMs: metadata?.mtimeMs
+    });
+    if (item.status === "diverged" && remoteFile) {
+      await deps.onDiverged?.({ relPath, remoteFile, remoteContent });
+    }
+    if (item.status === "synced" && manifestFile && remoteFile) {
+      const stale = manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision || manifestFile.remoteSize !== remoteFile.remoteSize || remoteHash !== void 0 && manifestFile.sha1 !== remoteHash;
+      if (stale) {
+        manifestFile.version = remoteFile.version;
+        manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
+        manifestFile.remoteRevision = remoteFile.remoteRevision;
+        manifestFile.remoteSize = remoteFile.remoteSize;
+        if (remoteHash !== void 0) manifestFile.sha1 = remoteHash;
+        manifestChanged = true;
+      }
+    }
+    if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {
+      addOrUpdateFile(manifest, remoteFile, remoteContent);
+      manifest.files[relPath].sha1 = remoteHash;
+      manifest.files[relPath].baseHash = baseHash;
+      manifestChanged = true;
+    }
+    items.push(item);
+    completed += 1;
+    deps.onProgress?.({ path: relPath, completed, total: ordered.length });
+  }
+  return { items, manifestChanged, localCacheReuseCount };
+}
 
 // src/overleaf/remoteMutationCore.ts
 var path7 = __toESM(require("path"));
@@ -20801,12 +20885,6 @@ var OverleafSyncEngine = class {
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : void 0;
     repairFolderManifestFromRemote(this.manifest, remote, localFolders);
     const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths, localFolders);
-    const paths = /* @__PURE__ */ new Set([
-      ...Object.keys(this.manifest.files),
-      ...Object.keys(remote.files),
-      ...localFiles,
-      ...requestedPaths ?? []
-    ]);
     const items = [...folderStatus.items];
     const conflictStore = new ConflictStore(this.root);
     const existingConflicts = await conflictStore.list();
@@ -20826,36 +20904,23 @@ var OverleafSyncEngine = class {
       })
     });
     remote = snapshot.manifest;
-    const remoteContents = snapshot.contents;
-    const remoteHashes = snapshot.hashes;
     const remoteFailures = snapshot.failures;
-    const reusedRemotePaths = snapshot.reused;
-    let completed = 0;
-    for (const relPath of [...paths].sort()) {
-      if (requestedPaths && !requestedPaths.has(relPath)) continue;
-      if (shouldIgnore(this.manifest, relPath)) continue;
-      const manifestFile = this.manifest.files[relPath];
-      const remoteFile = remote.files[relPath];
-      const localResult = await cachedLocalFileHash(path11.join(this.root, relPath), manifestFile, mode === "full", localScan.fileMetadata.get(relPath));
-      const remoteContent = remoteContents.get(relPath);
-      const remoteReadError = remoteFailures.get(relPath);
-      const remoteHash = remoteHashes.get(relPath) ?? (remoteContent === void 0 ? reusedRemotePaths.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent));
-      let baseHash = manifestFile?.baseHash;
-      if (!baseHash && remoteFile?.entityType === "doc") {
-        const base = await readBaseDoc(this.root, remoteFile.entityId);
-        baseHash = base === void 0 ? void 0 : sha1(base);
-      }
-      const item = classifySyncStatus({
+    const classified = await classifyProjectPaths({
+      root: this.root,
+      manifest: this.manifest,
+      remote: snapshot,
+      localScan,
+      mode,
+      requestedPaths,
+      onProgress: ({ path: relPath, completed, total }) => this.host.progress({
+        phase: "check",
+        message: `Checked ${relPath}`,
         path: relPath,
-        manifestFile,
-        remoteFile,
-        localHash: localResult.hash,
-        remoteHash,
-        baseHash,
-        localExists: localResult.hash !== void 0,
-        remoteReadError
-      });
-      if (item.status === "diverged" && remoteFile && !existingConflicts.some((conflict) => conflict.relPath === relPath)) {
+        completed,
+        total
+      }),
+      onDiverged: async ({ relPath, remoteFile, remoteContent }) => {
+        if (existingConflicts.some((conflict) => conflict.relPath === relPath)) return;
         const suffix = path11.extname(relPath) || (remoteFile.entityType === "doc" ? ".tex" : ".remote");
         const conflictPath = metadataPath(
           this.root,
@@ -20868,7 +20933,7 @@ var OverleafSyncEngine = class {
         } else if (remoteFile.entityType === "file") {
           await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, conflictPath);
         } else {
-          continue;
+          return;
         }
         await conflictStore.upsert({
           relPath,
@@ -20880,22 +20945,8 @@ var OverleafSyncEngine = class {
         });
         this.host.conflict(relPath, "Local and remote content both changed since the trusted base.");
       }
-      if (!manifestFile && remoteFile && localResult.hash === remoteHash && remoteHash !== void 0) {
-        addOrUpdateFile(this.manifest, remoteFile, remoteContent);
-        this.manifest.files[relPath].sha1 = remoteHash;
-        this.manifest.files[relPath].baseHash = remoteFile.entityType === "doc" ? remoteHash : void 0;
-      }
-      if (item.status === "synced" && manifestFile && remoteFile) {
-        manifestFile.version = remoteFile.version;
-        manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
-        manifestFile.remoteRevision = remoteFile.remoteRevision;
-        manifestFile.remoteSize = remoteFile.remoteSize;
-        if (remoteHash) manifestFile.sha1 = remoteHash;
-      }
-      items.push(item);
-      completed += 1;
-      this.host.progress({ phase: "check", message: `Checked ${relPath}`, path: relPath, completed, total: paths.size });
-    }
+    });
+    items.push(...classified.items);
     const targetedReport = makeSyncStatusReport(this.manifest, items, {
       mode,
       completeness: folderStatus.globalBlockReason ? "failed" : remoteFailures.size > 0 ? "partial" : "complete",

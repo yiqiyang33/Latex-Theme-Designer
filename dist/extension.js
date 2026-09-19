@@ -25028,6 +25028,10 @@ var TOOLKIT_OVERRIDE_PATHS = /* @__PURE__ */ new Set([
 function isToolkitOverridePath(relPath) {
   return TOOLKIT_OVERRIDE_PATHS.has(toPosixPath2(relPath));
 }
+function isAlwaysLocal(relPath) {
+  const normalized = toPosixPath2(relPath);
+  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || /(^|\/)\.DS_Store$/.test(normalized);
+}
 var TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   ".overleaf-codex/**",
   ".vscode/**",
@@ -28515,6 +28519,86 @@ async function fetchRemoteSnapshot(deps) {
   }
   return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
 }
+async function classifyProjectPaths(deps) {
+  const { root, manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? "incremental";
+  const isExcluded = deps.isExcluded ?? (() => false);
+  const candidates = /* @__PURE__ */ new Set([
+    ...Object.keys(manifest.files),
+    ...Object.keys(remote.manifest.files),
+    ...localScan.files,
+    ...requestedPaths ?? []
+  ]);
+  const ordered = [...candidates].sort();
+  const items = [];
+  let manifestChanged = false;
+  let localCacheReuseCount = 0;
+  let completed = 0;
+  for (const relPath of ordered) {
+    if (requestedPaths && !requestedPaths.has(relPath)) continue;
+    if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath) || isExcluded(relPath)) continue;
+    const manifestFile = manifest.files[relPath];
+    const remoteFile = remote.manifest.files[relPath];
+    const metadata = localScan.fileMetadata.get(relPath);
+    const localResult = await cachedLocalFileHash(path31.join(root, relPath), manifestFile, mode === "full", metadata);
+    const localHash = localResult.hash;
+    if (localResult.reused) localCacheReuseCount += 1;
+    if (localResult.cacheChanged) manifestChanged = true;
+    const remoteContent = remote.contents.get(relPath);
+    const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === void 0 ? remote.reused.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent));
+    const remoteReadError = remote.failures.get(relPath);
+    if (!manifestFile && !remoteFile && localHash === void 0 && !remoteReadError) continue;
+    let baseHash = manifestFile?.baseHash;
+    if (remoteFile?.entityType === "doc" && !baseHash) {
+      const baseContent = await readBaseDoc(root, remoteFile.entityId);
+      baseHash = baseContent === void 0 ? void 0 : sha1(baseContent);
+      const canInitializeBase = remoteContent !== void 0 && (manifestFile?.sha1 === remoteHash || localHash === remoteHash);
+      if (!baseHash && canInitializeBase && typeof remoteContent === "string") {
+        baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+        if (manifestFile) {
+          manifestFile.baseHash = baseHash;
+          manifestChanged = true;
+        }
+      }
+    }
+    const item = classifySyncStatus({
+      path: relPath,
+      manifestFile,
+      remoteFile,
+      localHash,
+      remoteHash,
+      baseHash,
+      localExists: localHash !== void 0,
+      remoteReadError,
+      localSize: metadata?.size,
+      localMtimeMs: metadata?.mtimeMs
+    });
+    if (item.status === "diverged" && remoteFile) {
+      await deps.onDiverged?.({ relPath, remoteFile, remoteContent });
+    }
+    if (item.status === "synced" && manifestFile && remoteFile) {
+      const stale = manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision || manifestFile.remoteSize !== remoteFile.remoteSize || remoteHash !== void 0 && manifestFile.sha1 !== remoteHash;
+      if (stale) {
+        manifestFile.version = remoteFile.version;
+        manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
+        manifestFile.remoteRevision = remoteFile.remoteRevision;
+        manifestFile.remoteSize = remoteFile.remoteSize;
+        if (remoteHash !== void 0) manifestFile.sha1 = remoteHash;
+        manifestChanged = true;
+      }
+    }
+    if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {
+      addOrUpdateFile(manifest, remoteFile, remoteContent);
+      manifest.files[relPath].sha1 = remoteHash;
+      manifest.files[relPath].baseHash = baseHash;
+      manifestChanged = true;
+    }
+    items.push(item);
+    completed += 1;
+    deps.onProgress?.({ path: relPath, completed, total: ordered.length });
+  }
+  return { items, manifestChanged, localCacheReuseCount };
+}
 
 // src/overleaf/conflictStore.ts
 var fs27 = __toESM(require("fs/promises"));
@@ -29495,7 +29579,6 @@ var RealtimeSyncService = class {
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
     progress?.report({ message: "Comparing local and remote files" });
     const localScan = await scanLocalProject(root, manifest);
-    const localPaths = localScan.files;
     const localFolderPaths = localScan.folders;
     const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localFolderPaths);
     let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
@@ -29504,85 +29587,20 @@ var RealtimeSyncService = class {
         `Repaired folder metadata from matching local/remote layout: ${folderRepair.adopted.length} adopted, ${folderRepair.remapped.length} remapped.`
       );
     }
-    const allPaths = /* @__PURE__ */ new Set([
-      ...Object.keys(manifest.files),
-      ...Object.keys(remote.manifest.files),
-      ...localPaths
-    ]);
-    if (!this.canSyncToolkitOverrides()) {
-      for (const relPath of allPaths) {
-        if (isToolkitOverridePath(relPath)) allPaths.delete(relPath);
-      }
-    }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath2)) : void 0;
     const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localFolderPaths);
-    const items = [...folderStructure.items];
-    let localCacheReuseCount = 0;
-    for (const requestedPath of requestedPaths ?? []) {
-      allPaths.add(requestedPath);
-    }
-    for (const relPath of allPaths) {
-      if (requestedPaths && !requestedPaths.has(relPath)) {
-        continue;
-      }
-      if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath) || !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)) {
-        continue;
-      }
-      const manifestFile = manifest.files[relPath];
-      const remoteFile = remote.manifest.files[relPath];
-      const localAbs = path36.join(root, relPath);
-      const localResult = await cachedLocalFileHash(localAbs, manifestFile, mode === "full", localScan.fileMetadata.get(relPath));
-      const localHash = localResult.hash;
-      if (localResult.reused) localCacheReuseCount += 1;
-      if (localResult.cacheChanged) manifestChanged = true;
-      const remoteContent = remote.contents.get(relPath);
-      const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === void 0 ? remote.reused.has(relPath) ? manifestFile?.sha1 : void 0 : sha1(remoteContent));
-      const remoteReadError = remote.failures.get(relPath);
-      if (!manifestFile && !remoteFile && localHash === void 0 && !remoteReadError) {
-        continue;
-      }
-      let baseHash = manifestFile?.baseHash;
-      if (remoteFile?.entityType === "doc" && !baseHash) {
-        const baseContent = await readBaseDoc(root, remoteFile.entityId);
-        baseHash = baseContent === void 0 ? void 0 : sha1(baseContent);
-        const canInitializeBase = remoteContent !== void 0 && (manifestFile?.sha1 === remoteHash || localHash === remoteHash);
-        if (!baseHash && canInitializeBase && typeof remoteContent === "string") {
-          baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
-          if (manifestFile) {
-            manifestFile.baseHash = baseHash;
-            manifestChanged = true;
-          }
-        }
-      }
-      const item = classifySyncStatus({
-        path: relPath,
-        manifestFile,
-        remoteFile,
-        localHash,
-        remoteHash,
-        baseHash,
-        localExists: localHash !== void 0,
-        remoteReadError,
-        localSize: localScan.fileMetadata.get(relPath)?.size,
-        localMtimeMs: localScan.fileMetadata.get(relPath)?.mtimeMs
-      });
-      if (item.status === "synced" && manifestFile && remoteFile) {
-        if (manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision || manifestFile.remoteSize !== remoteFile.remoteSize) {
-          manifestFile.version = remoteFile.version;
-          manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
-          manifestFile.remoteRevision = remoteFile.remoteRevision;
-          manifestFile.remoteSize = remoteFile.remoteSize;
-          manifestChanged = true;
-        }
-      }
-      if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {
-        addOrUpdateFile(manifest, remoteFile, remoteContent);
-        manifest.files[relPath].sha1 = remoteHash;
-        manifest.files[relPath].baseHash = baseHash;
-        manifestChanged = true;
-      }
-      items.push(item);
-    }
+    const classified = await classifyProjectPaths({
+      root,
+      manifest,
+      remote,
+      localScan,
+      mode,
+      requestedPaths,
+      isExcluded: (relPath) => !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)
+    });
+    if (classified.manifestChanged) manifestChanged = true;
+    const localCacheReuseCount = classified.localCacheReuseCount;
+    const items = [...folderStructure.items, ...classified.items];
     const targetedReport = makeSyncStatusReport(manifest, items, {
       mode,
       completeness: folderStructure.globalBlockReason ? "failed" : remote.failures.size > 0 ? "partial" : "complete",
@@ -31889,12 +31907,6 @@ var RealtimeSyncService = class {
     return true;
   }
 };
-function isAlwaysLocal(relPath) {
-  return [
-    ".overleaf-codex/",
-    ".vscode/"
-  ].some((prefix) => relPath === prefix.slice(0, -1) || relPath.startsWith(prefix)) || relPath === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(relPath) || /(^|\/)\.gitignore$/.test(relPath) || /(^|\/)\.latexmkrc$/.test(relPath) || /(^|\/)\.DS_Store$/.test(relPath);
-}
 
 // src/overleaf/keychainStore.ts
 var crypto5 = __toESM(require("crypto"));

@@ -10,7 +10,6 @@ import {
   addOrUpdateFolder,
   folderPathById,
   metadataPath,
-  readBaseDoc,
   readManifest,
   readSyncStatus,
   shouldIgnore,
@@ -32,7 +31,6 @@ import type {
 import {
   cachedLocalFileHash,
   classifyFolderStructure,
-  classifySyncStatus,
   scanLocalProject,
   makeSyncStatusReport,
   mergeTargetedSyncStatusReport,
@@ -44,7 +42,7 @@ import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
 import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
-import { fetchRemoteSnapshot } from './syncReconciler';
+import { classifyProjectPaths, fetchRemoteSnapshot } from './syncReconciler';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
@@ -249,12 +247,6 @@ export class OverleafSyncEngine {
       const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
       repairFolderManifestFromRemote(this.manifest, remote, localFolders);
       const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths, localFolders);
-      const paths = new Set([
-        ...Object.keys(this.manifest.files),
-        ...Object.keys(remote.files),
-        ...localFiles,
-        ...(requestedPaths ?? [])
-      ]);
       const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
@@ -276,39 +268,23 @@ export class OverleafSyncEngine {
       // The snapshot re-indexes the same project tree and carries the doc versions the joins
       // returned, so the classifier below sees the same remote view the extension does.
       remote = snapshot.manifest;
-      const remoteContents = snapshot.contents;
-      const remoteHashes = snapshot.hashes;
       const remoteFailures = snapshot.failures;
-      const reusedRemotePaths = snapshot.reused;
-      let completed = 0;
-      for (const relPath of [...paths].sort()) {
-        if (requestedPaths && !requestedPaths.has(relPath)) continue;
-        if (shouldIgnore(this.manifest, relPath)) continue;
-        const manifestFile = this.manifest.files[relPath];
-        const remoteFile = remote.files[relPath];
-        const localResult = await cachedLocalFileHash(path.join(this.root, relPath), manifestFile, mode === 'full', localScan.fileMetadata.get(relPath));
-        const remoteContent = remoteContents.get(relPath);
-        const remoteReadError = remoteFailures.get(relPath);
-        const remoteHash = remoteHashes.get(relPath) ?? (remoteContent === undefined
-          ? reusedRemotePaths.has(relPath) ? manifestFile?.sha1 : undefined
-          : sha1(remoteContent));
-        let baseHash = manifestFile?.baseHash;
-        if (!baseHash && remoteFile?.entityType === 'doc') {
-          const base = await readBaseDoc(this.root, remoteFile.entityId);
-          baseHash = base === undefined ? undefined : sha1(base);
-        }
-        const item = classifySyncStatus({
+      const classified = await classifyProjectPaths({
+        root: this.root,
+        manifest: this.manifest,
+        remote: snapshot,
+        localScan,
+        mode,
+        requestedPaths,
+        onProgress: ({ path: relPath, completed, total }) => this.host.progress({
+          phase: 'check',
+          message: `Checked ${relPath}`,
           path: relPath,
-          manifestFile,
-          remoteFile,
-          localHash: localResult.hash,
-          remoteHash,
-          baseHash,
-          localExists: localResult.hash !== undefined,
-          remoteReadError
-        });
-        if (item.status === 'diverged' && remoteFile
-          && !existingConflicts.some(conflict => conflict.relPath === relPath)) {
+          completed,
+          total
+        }),
+        onDiverged: async ({ relPath, remoteFile, remoteContent }) => {
+          if (existingConflicts.some(conflict => conflict.relPath === relPath)) return;
           const suffix = path.extname(relPath) || (remoteFile.entityType === 'doc' ? '.tex' : '.remote');
           const conflictPath = metadataPath(
             this.root,
@@ -319,9 +295,9 @@ export class OverleafSyncEngine {
           if (remoteFile.entityType === 'doc' && remoteContent !== undefined) {
             await fs.writeFile(conflictPath, remoteContent);
           } else if (remoteFile.entityType === 'file') {
-            await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, conflictPath);
+            await this.client.downloadProjectFileToPath(this.manifest!.projectId, remoteFile.entityId, conflictPath);
           } else {
-            continue;
+            return;
           }
           await conflictStore.upsert({
             relPath,
@@ -333,22 +309,8 @@ export class OverleafSyncEngine {
           });
           this.host.conflict(relPath, 'Local and remote content both changed since the trusted base.');
         }
-        if (!manifestFile && remoteFile && localResult.hash === remoteHash && remoteHash !== undefined) {
-          addOrUpdateFile(this.manifest, remoteFile, remoteContent);
-          this.manifest.files[relPath].sha1 = remoteHash;
-          this.manifest.files[relPath].baseHash = remoteFile.entityType === 'doc' ? remoteHash : undefined;
-        }
-        if (item.status === 'synced' && manifestFile && remoteFile) {
-          manifestFile.version = remoteFile.version;
-          manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
-          manifestFile.remoteRevision = remoteFile.remoteRevision;
-          manifestFile.remoteSize = remoteFile.remoteSize;
-          if (remoteHash) manifestFile.sha1 = remoteHash;
-        }
-        items.push(item);
-        completed += 1;
-        this.host.progress({ phase: 'check', message: `Checked ${relPath}`, path: relPath, completed, total: paths.size });
-      }
+      });
+      items.push(...classified.items);
       const targetedReport = makeSyncStatusReport(this.manifest, items, {
         mode,
         completeness: folderStatus.globalBlockReason ? 'failed' : remoteFailures.size > 0 ? 'partial' : 'complete',

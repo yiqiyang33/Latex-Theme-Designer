@@ -58,6 +58,23 @@ export function isToolkitOverridePath(relPath: string): boolean {
   return TOOLKIT_OVERRIDE_PATHS.has(toPosixPath(relPath));
 }
 
+/**
+ * Paths that belong to the local checkout only and must never reach Overleaf: this extension's own
+ * metadata, editor and VCS config, and OS noise. Shared by both sync engines so their status
+ * reports agree on what is even a candidate for syncing.
+ */
+export function isAlwaysLocal(relPath: string): boolean {
+  const normalized = toPosixPath(relPath);
+  return ['.overleaf-codex/', '.vscode/', '.git/']
+    .some(prefix => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix))
+    || normalized === LOCAL_IGNORE_NAME
+    || /(^|\/)\.vscode(\/|$)/.test(normalized)
+    || /(^|\/)\.git(\/|$)/.test(normalized)
+    || /(^|\/)\.gitignore$/.test(normalized)
+    || /(^|\/)\.latexmkrc$/.test(normalized)
+    || /(^|\/)\.DS_Store$/.test(normalized);
+}
+
 export const TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   '.overleaf-codex/**', '.vscode/**', '**/.vscode/**', '.git', '.git/**', '**/.git', '**/.git/**',
   '.latexmkrc', '**/.latexmkrc',

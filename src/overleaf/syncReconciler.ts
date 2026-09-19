@@ -1,11 +1,13 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { addOrUpdateFile, isAlwaysLocal, readBaseDoc, shouldIgnore, writeBaseDoc } from './manifest';
 import type { OverleafClient, OverleafSocketSession } from './overleafClient';
+import { cachedLocalFileHash, classifySyncStatus, type LocalProjectScan } from './syncStatus';
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { buildProjectTreeIndex } from './tree';
-import type { OverleafCodexManifest } from './types';
-import { formatUnknownError } from './util';
+import type { ManifestFile, OverleafCodexManifest, SyncStatusItem } from './types';
+import { formatUnknownError, sha1 } from './util';
 
 /**
  * Sync logic shared by the two engines that drive it: the VS Code realtime service
@@ -148,4 +150,139 @@ export async function fetchRemoteSnapshot(deps: RemoteSnapshotDeps): Promise<Rem
   }
 
   return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
+}
+
+export interface DivergedContext {
+  relPath: string;
+  remoteFile: ManifestFile;
+  remoteContent?: string;
+}
+
+export interface ClassifyPathsDeps {
+  root: string;
+  manifest: OverleafCodexManifest;
+  remote: RemoteSnapshot;
+  localScan: LocalProjectScan;
+  mode?: 'incremental' | 'full';
+  requestedPaths?: Set<string>;
+  /** Caller-specific exclusions on top of the shared ones (e.g. toolkit override files). */
+  isExcluded?(relPath: string): boolean;
+  onProgress?(progress: RemoteReadProgress): void;
+  /** Lets a caller capture a copy of the remote side before the divergence is reported. */
+  onDiverged?(context: DivergedContext): Promise<void>;
+}
+
+export interface ClassifyPathsResult {
+  items: SyncStatusItem[];
+  /** True when the pass mutated `manifest`; the caller owns persisting it. */
+  manifestChanged: boolean;
+  localCacheReuseCount: number;
+}
+
+/**
+ * Classifies every path that either side knows about into a sync status. Mutates `manifest` in
+ * place to adopt newly matched remote files, refresh remote metadata on synced entries, and
+ * initialise the trusted base for documents that do not have one yet - that base is what makes
+ * three-way divergence detection work at all.
+ */
+export async function classifyProjectPaths(deps: ClassifyPathsDeps): Promise<ClassifyPathsResult> {
+  const { root, manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? 'incremental';
+  const isExcluded = deps.isExcluded ?? (() => false);
+
+  const candidates = new Set([
+    ...Object.keys(manifest.files),
+    ...Object.keys(remote.manifest.files),
+    ...localScan.files,
+    ...(requestedPaths ?? [])
+  ]);
+  const ordered = [...candidates].sort();
+
+  const items: SyncStatusItem[] = [];
+  let manifestChanged = false;
+  let localCacheReuseCount = 0;
+  let completed = 0;
+
+  for (const relPath of ordered) {
+    if (requestedPaths && !requestedPaths.has(relPath)) continue;
+    if (shouldIgnore(manifest, relPath) || isAlwaysLocal(relPath) || isExcluded(relPath)) continue;
+
+    const manifestFile = manifest.files[relPath];
+    const remoteFile = remote.manifest.files[relPath];
+    const metadata = localScan.fileMetadata.get(relPath);
+    const localResult = await cachedLocalFileHash(path.join(root, relPath), manifestFile, mode === 'full', metadata);
+    const localHash = localResult.hash;
+    if (localResult.reused) localCacheReuseCount += 1;
+    if (localResult.cacheChanged) manifestChanged = true;
+
+    const remoteContent = remote.contents.get(relPath);
+    const remoteHash = remote.hashes.get(relPath) ?? (remoteContent === undefined
+      ? remote.reused.has(relPath) ? manifestFile?.sha1 : undefined
+      : sha1(remoteContent));
+    const remoteReadError = remote.failures.get(relPath);
+
+    // Nothing anywhere knows about this path, so there is nothing to report on.
+    if (!manifestFile && !remoteFile && localHash === undefined && !remoteReadError) continue;
+
+    let baseHash = manifestFile?.baseHash;
+    if (remoteFile?.entityType === 'doc' && !baseHash) {
+      const baseContent = await readBaseDoc(root, remoteFile.entityId);
+      baseHash = baseContent === undefined ? undefined : sha1(baseContent);
+      const canInitializeBase = remoteContent !== undefined
+        && (manifestFile?.sha1 === remoteHash || localHash === remoteHash);
+      if (!baseHash && canInitializeBase && typeof remoteContent === 'string') {
+        baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+        if (manifestFile) {
+          manifestFile.baseHash = baseHash;
+          manifestChanged = true;
+        }
+      }
+    }
+
+    const item = classifySyncStatus({
+      path: relPath,
+      manifestFile,
+      remoteFile,
+      localHash,
+      remoteHash,
+      baseHash,
+      localExists: localHash !== undefined,
+      remoteReadError,
+      localSize: metadata?.size,
+      localMtimeMs: metadata?.mtimeMs
+    });
+
+    if (item.status === 'diverged' && remoteFile) {
+      await deps.onDiverged?.({ relPath, remoteFile, remoteContent });
+    }
+
+    if (item.status === 'synced' && manifestFile && remoteFile) {
+      const stale = manifestFile.version !== remoteFile.version
+        || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash
+        || manifestFile.remoteRevision !== remoteFile.remoteRevision
+        || manifestFile.remoteSize !== remoteFile.remoteSize
+        || (remoteHash !== undefined && manifestFile.sha1 !== remoteHash);
+      if (stale) {
+        manifestFile.version = remoteFile.version;
+        manifestFile.remoteBlobHash = remoteFile.remoteBlobHash;
+        manifestFile.remoteRevision = remoteFile.remoteRevision;
+        manifestFile.remoteSize = remoteFile.remoteSize;
+        if (remoteHash !== undefined) manifestFile.sha1 = remoteHash;
+        manifestChanged = true;
+      }
+    }
+
+    if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== undefined) {
+      addOrUpdateFile(manifest, remoteFile, remoteContent);
+      manifest.files[relPath].sha1 = remoteHash;
+      manifest.files[relPath].baseHash = baseHash;
+      manifestChanged = true;
+    }
+
+    items.push(item);
+    completed += 1;
+    deps.onProgress?.({ path: relPath, completed, total: ordered.length });
+  }
+
+  return { items, manifestChanged, localCacheReuseCount };
 }
