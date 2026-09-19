@@ -25,16 +25,11 @@ import type {
   OverleafCodexManifest,
   OverleafDoc,
   OverleafFileRef,
-  SyncStatusItem,
   SyncStatusReport
 } from './types';
 import {
   cachedLocalFileHash,
-  classifyFolderStructure,
   scanLocalProject,
-  makeSyncStatusReport,
-  mergeTargetedSyncStatusReport,
-  repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
 import { buildOtOperations } from './ot';
@@ -42,7 +37,7 @@ import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
 import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
-import { classifyProjectPaths, fetchRemoteSnapshot } from './syncReconciler';
+import { fetchRemoteSnapshot, reconcileProject } from './syncReconciler';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
@@ -245,9 +240,6 @@ export class OverleafSyncEngine {
         }
       }
       const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
-      repairFolderManifestFromRemote(this.manifest, remote, localFolders);
-      const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths, localFolders);
-      const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
       const snapshot = await fetchRemoteSnapshot({
@@ -257,25 +249,22 @@ export class OverleafSyncEngine {
         syncHealth: this.syncHealth,
         mode,
         paths: requestedPaths,
-        onProgress: ({ path: relPath, completed: done, total }) => this.host.progress({
+        onProgress: ({ path: relPath, completed, total }) => this.host.progress({
           phase: 'check',
           message: `Read remote metadata ${relPath}`,
           path: relPath,
-          completed: done,
+          completed,
           total
         })
       });
-      // The snapshot re-indexes the same project tree and carries the doc versions the joins
-      // returned, so the classifier below sees the same remote view the extension does.
-      remote = snapshot.manifest;
-      const remoteFailures = snapshot.failures;
-      const classified = await classifyProjectPaths({
+      const { report } = await reconcileProject({
         root: this.root,
         manifest: this.manifest,
         remote: snapshot,
         localScan,
         mode,
         requestedPaths,
+        previousReport: requestedPaths ? await readSyncStatus(this.root) : undefined,
         onProgress: ({ path: relPath, completed, total }) => this.host.progress({
           phase: 'check',
           message: `Checked ${relPath}`,
@@ -310,15 +299,6 @@ export class OverleafSyncEngine {
           this.host.conflict(relPath, 'Local and remote content both changed since the trusted base.');
         }
       });
-      items.push(...classified.items);
-      const targetedReport = makeSyncStatusReport(this.manifest, items, {
-        mode,
-        completeness: folderStatus.globalBlockReason ? 'failed' : remoteFailures.size > 0 ? 'partial' : 'complete',
-        globalBlockReason: folderStatus.globalBlockReason
-      });
-      const report = requestedPaths
-        ? mergeTargetedSyncStatusReport(await readSyncStatus(this.root), targetedReport, requestedPaths)
-        : targetedReport;
       await writeManifest(this.root, this.manifest);
       await writeSyncStatus(this.root, report);
       this.host.status(report);

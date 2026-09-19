@@ -28599,6 +28599,27 @@ async function classifyProjectPaths(deps) {
   }
   return { items, manifestChanged, localCacheReuseCount };
 }
+async function reconcileProject(deps) {
+  const { manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? "incremental";
+  const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localScan.folders);
+  let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
+  const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localScan.folders);
+  const classified = await classifyProjectPaths(deps);
+  if (classified.manifestChanged) manifestChanged = true;
+  const targetedReport = makeSyncStatusReport(manifest, [...folderStructure.items, ...classified.items], {
+    mode,
+    completeness: folderStructure.globalBlockReason ? "failed" : remote.failures.size > 0 ? "partial" : "complete",
+    globalBlockReason: folderStructure.globalBlockReason
+  });
+  const report = requestedPaths ? mergeTargetedSyncStatusReport(deps.previousReport, targetedReport, requestedPaths) : targetedReport;
+  const settled = !requestedPaths && remote.failures.size === 0 && report.items.every((item) => item.status === "synced" || item.status === "local ahead" || item.status === "local only" || item.status === "local deleted");
+  if (settled && manifest.projectVersion !== remote.manifest.projectVersion) {
+    manifest.projectVersion = remote.manifest.projectVersion;
+    manifestChanged = true;
+  }
+  return { report, manifestChanged, localCacheReuseCount: classified.localCacheReuseCount, folderRepair };
+}
 
 // src/overleaf/conflictStore.ts
 var fs27 = __toESM(require("fs/promises"));
@@ -29579,42 +29600,25 @@ var RealtimeSyncService = class {
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
     progress?.report({ message: "Comparing local and remote files" });
     const localScan = await scanLocalProject(root, manifest);
-    const localFolderPaths = localScan.folders;
-    const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localFolderPaths);
-    let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
-    if (manifestChanged) {
-      this.log(
-        `Repaired folder metadata from matching local/remote layout: ${folderRepair.adopted.length} adopted, ${folderRepair.remapped.length} remapped.`
-      );
-    }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath2)) : void 0;
-    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localFolderPaths);
-    const classified = await classifyProjectPaths({
+    const reconciled = await reconcileProject({
       root,
       manifest,
       remote,
       localScan,
       mode,
       requestedPaths,
+      previousReport: requestedPaths ? await readSyncStatus(root) : void 0,
       isExcluded: (relPath) => !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)
     });
-    if (classified.manifestChanged) manifestChanged = true;
-    const localCacheReuseCount = classified.localCacheReuseCount;
-    const items = [...folderStructure.items, ...classified.items];
-    const targetedReport = makeSyncStatusReport(manifest, items, {
-      mode,
-      completeness: folderStructure.globalBlockReason ? "failed" : remote.failures.size > 0 ? "partial" : "complete",
-      globalBlockReason: folderStructure.globalBlockReason
-    });
-    const report = requestedPaths ? mergeTargetedSyncStatusReport(await readSyncStatus(root), targetedReport, requestedPaths) : targetedReport;
-    if (!requestedPaths && remote.failures.size === 0 && report.items.every(
-      (item) => item.status === "synced" || item.status === "local ahead" || item.status === "local only" || item.status === "local deleted"
-    )) {
-      if (manifest.projectVersion !== remote.manifest.projectVersion) {
-        manifest.projectVersion = remote.manifest.projectVersion;
-        manifestChanged = true;
-      }
+    const { report, folderRepair } = reconciled;
+    let manifestChanged = reconciled.manifestChanged;
+    if (folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0) {
+      this.log(
+        `Repaired folder metadata from matching local/remote layout: ${folderRepair.adopted.length} adopted, ${folderRepair.remapped.length} remapped.`
+      );
     }
+    const localCacheReuseCount = reconciled.localCacheReuseCount;
     if (options.expectedGeneration !== void 0) {
       this.assertGeneration(options.expectedGeneration, options.signal);
     }

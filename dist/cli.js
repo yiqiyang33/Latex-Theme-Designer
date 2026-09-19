@@ -20432,6 +20432,27 @@ async function classifyProjectPaths(deps) {
   }
   return { items, manifestChanged, localCacheReuseCount };
 }
+async function reconcileProject(deps) {
+  const { manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? "incremental";
+  const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localScan.folders);
+  let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
+  const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localScan.folders);
+  const classified = await classifyProjectPaths(deps);
+  if (classified.manifestChanged) manifestChanged = true;
+  const targetedReport = makeSyncStatusReport(manifest, [...folderStructure.items, ...classified.items], {
+    mode,
+    completeness: folderStructure.globalBlockReason ? "failed" : remote.failures.size > 0 ? "partial" : "complete",
+    globalBlockReason: folderStructure.globalBlockReason
+  });
+  const report = requestedPaths ? mergeTargetedSyncStatusReport(deps.previousReport, targetedReport, requestedPaths) : targetedReport;
+  const settled = !requestedPaths && remote.failures.size === 0 && report.items.every((item) => item.status === "synced" || item.status === "local ahead" || item.status === "local only" || item.status === "local deleted");
+  if (settled && manifest.projectVersion !== remote.manifest.projectVersion) {
+    manifest.projectVersion = remote.manifest.projectVersion;
+    manifestChanged = true;
+  }
+  return { report, manifestChanged, localCacheReuseCount: classified.localCacheReuseCount, folderRepair };
+}
 
 // src/overleaf/remoteMutationCore.ts
 var path7 = __toESM(require("path"));
@@ -20883,9 +20904,6 @@ var OverleafSyncEngine = class {
       }
     }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : void 0;
-    repairFolderManifestFromRemote(this.manifest, remote, localFolders);
-    const folderStatus = classifyFolderStructure(this.manifest, remote, requestedPaths, localFolders);
-    const items = [...folderStatus.items];
     const conflictStore = new ConflictStore(this.root);
     const existingConflicts = await conflictStore.list();
     const snapshot = await fetchRemoteSnapshot({
@@ -20895,23 +20913,22 @@ var OverleafSyncEngine = class {
       syncHealth: this.syncHealth,
       mode,
       paths: requestedPaths,
-      onProgress: ({ path: relPath, completed: done, total }) => this.host.progress({
+      onProgress: ({ path: relPath, completed, total }) => this.host.progress({
         phase: "check",
         message: `Read remote metadata ${relPath}`,
         path: relPath,
-        completed: done,
+        completed,
         total
       })
     });
-    remote = snapshot.manifest;
-    const remoteFailures = snapshot.failures;
-    const classified = await classifyProjectPaths({
+    const { report } = await reconcileProject({
       root: this.root,
       manifest: this.manifest,
       remote: snapshot,
       localScan,
       mode,
       requestedPaths,
+      previousReport: requestedPaths ? await readSyncStatus(this.root) : void 0,
       onProgress: ({ path: relPath, completed, total }) => this.host.progress({
         phase: "check",
         message: `Checked ${relPath}`,
@@ -20946,13 +20963,6 @@ var OverleafSyncEngine = class {
         this.host.conflict(relPath, "Local and remote content both changed since the trusted base.");
       }
     });
-    items.push(...classified.items);
-    const targetedReport = makeSyncStatusReport(this.manifest, items, {
-      mode,
-      completeness: folderStatus.globalBlockReason ? "failed" : remoteFailures.size > 0 ? "partial" : "complete",
-      globalBlockReason: folderStatus.globalBlockReason
-    });
-    const report = requestedPaths ? mergeTargetedSyncStatusReport(await readSyncStatus(this.root), targetedReport, requestedPaths) : targetedReport;
     await writeManifest(this.root, this.manifest);
     await writeSyncStatus(this.root, report);
     this.host.status(report);

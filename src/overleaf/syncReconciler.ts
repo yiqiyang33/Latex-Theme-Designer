@@ -3,10 +3,19 @@ import * as os from 'os';
 import * as path from 'path';
 import { addOrUpdateFile, isAlwaysLocal, readBaseDoc, shouldIgnore, writeBaseDoc } from './manifest';
 import type { OverleafClient, OverleafSocketSession } from './overleafClient';
-import { cachedLocalFileHash, classifySyncStatus, type LocalProjectScan } from './syncStatus';
+import {
+  cachedLocalFileHash,
+  classifyFolderStructure,
+  classifySyncStatus,
+  type FolderManifestRepair,
+  type LocalProjectScan,
+  makeSyncStatusReport,
+  mergeTargetedSyncStatusReport,
+  repairFolderManifestFromRemote
+} from './syncStatus';
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { buildProjectTreeIndex } from './tree';
-import type { ManifestFile, OverleafCodexManifest, SyncStatusItem } from './types';
+import type { ManifestFile, OverleafCodexManifest, SyncStatusItem, SyncStatusReport } from './types';
 import { formatUnknownError, sha1 } from './util';
 
 /**
@@ -285,4 +294,57 @@ export async function classifyProjectPaths(deps: ClassifyPathsDeps): Promise<Cla
   }
 
   return { items, manifestChanged, localCacheReuseCount };
+}
+
+export interface ReconcileDeps extends ClassifyPathsDeps {
+  /** Previous report, needed to merge a path-targeted check back into the full picture. */
+  previousReport?: SyncStatusReport;
+}
+
+export interface ReconcileResult {
+  report: SyncStatusReport;
+  manifestChanged: boolean;
+  localCacheReuseCount: number;
+  /** Folder moves the repair adopted, so a caller can remap any runtime state keyed by path. */
+  folderRepair: FolderManifestRepair;
+}
+
+/**
+ * The whole comparison pass: repair folder metadata against the remote layout, classify folders
+ * and files, and assemble the status report. Both sync engines go through here so their reports
+ * are built the same way rather than by two implementations that drift.
+ */
+export async function reconcileProject(deps: ReconcileDeps): Promise<ReconcileResult> {
+  const { manifest, remote, localScan, requestedPaths } = deps;
+  const mode = deps.mode ?? 'incremental';
+
+  const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localScan.folders);
+  let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
+
+  const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localScan.folders);
+  const classified = await classifyProjectPaths(deps);
+  if (classified.manifestChanged) manifestChanged = true;
+
+  const targetedReport = makeSyncStatusReport(manifest, [...folderStructure.items, ...classified.items], {
+    mode,
+    completeness: folderStructure.globalBlockReason
+      ? 'failed'
+      : remote.failures.size > 0 ? 'partial' : 'complete',
+    globalBlockReason: folderStructure.globalBlockReason
+  });
+  const report = requestedPaths
+    ? mergeTargetedSyncStatusReport(deps.previousReport, targetedReport, requestedPaths)
+    : targetedReport;
+
+  // Only adopt the remote project version once nothing remote is outstanding, otherwise the
+  // manifest would claim to be current while a remote change is still unmerged.
+  const settled = !requestedPaths && remote.failures.size === 0 && report.items.every(item =>
+    item.status === 'synced' || item.status === 'local ahead'
+    || item.status === 'local only' || item.status === 'local deleted');
+  if (settled && manifest.projectVersion !== remote.manifest.projectVersion) {
+    manifest.projectVersion = remote.manifest.projectVersion;
+    manifestChanged = true;
+  }
+
+  return { report, manifestChanged, localCacheReuseCount: classified.localCacheReuseCount, folderRepair };
 }

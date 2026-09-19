@@ -48,17 +48,13 @@ import {
   SyncStatusReport
 } from './types';
 import {
-  classifyFolderStructure,
   scanLocalProject,
-  makeSyncStatusReport,
-  mergeTargetedSyncStatusReport,
   isBlockingStatus,
-  repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
 import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, sleep, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
-import { classifyProjectPaths, fetchRemoteSnapshot, type RemoteSnapshot } from './syncReconciler';
+import { fetchRemoteSnapshot, reconcileProject, type RemoteSnapshot } from './syncReconciler';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
@@ -410,46 +406,26 @@ export class RealtimeSyncService implements vscode.Disposable {
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
     progress?.report({ message: 'Comparing local and remote files' });
     const localScan = await scanLocalProject(root, manifest);
-    const localFolderPaths = localScan.folders;
-    const folderRepair = repairFolderManifestFromRemote(manifest, remote.manifest, localFolderPaths);
-    let manifestChanged = folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0;
-    if (manifestChanged) {
-      this.log(
-        `Repaired folder metadata from matching local/remote layout: `
-        + `${folderRepair.adopted.length} adopted, ${folderRepair.remapped.length} remapped.`
-      );
-    }
     const requestedPaths = options.paths ? new Set([...options.paths].map(toPosixPath)) : undefined;
-    const folderStructure = classifyFolderStructure(manifest, remote.manifest, requestedPaths, localFolderPaths);
-    const classified = await classifyProjectPaths({
+    const reconciled = await reconcileProject({
       root,
       manifest,
       remote,
       localScan,
       mode,
       requestedPaths,
+      previousReport: requestedPaths ? await readSyncStatus(root) : undefined,
       isExcluded: relPath => !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)
     });
-    if (classified.manifestChanged) manifestChanged = true;
-    const localCacheReuseCount = classified.localCacheReuseCount;
-    const items: SyncStatusItem[] = [...folderStructure.items, ...classified.items];
-
-    const targetedReport = makeSyncStatusReport(manifest, items, {
-      mode,
-      completeness: folderStructure.globalBlockReason ? 'failed' : remote.failures.size > 0 ? 'partial' : 'complete',
-      globalBlockReason: folderStructure.globalBlockReason
-    });
-    const report = requestedPaths
-      ? mergeTargetedSyncStatusReport(await readSyncStatus(root), targetedReport, requestedPaths)
-      : targetedReport;
-    if (!requestedPaths && remote.failures.size === 0 && report.items.every(item =>
-      item.status === 'synced' || item.status === 'local ahead' || item.status === 'local only' || item.status === 'local deleted'
-    )) {
-      if (manifest.projectVersion !== remote.manifest.projectVersion) {
-        manifest.projectVersion = remote.manifest.projectVersion;
-        manifestChanged = true;
-      }
+    const { report, folderRepair } = reconciled;
+    let manifestChanged = reconciled.manifestChanged;
+    if (folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0) {
+      this.log(
+        `Repaired folder metadata from matching local/remote layout: `
+        + `${folderRepair.adopted.length} adopted, ${folderRepair.remapped.length} remapped.`
+      );
     }
+    const localCacheReuseCount = reconciled.localCacheReuseCount;
     if (options.expectedGeneration !== undefined) {
       this.assertGeneration(options.expectedGeneration, options.signal);
     }

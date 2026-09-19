@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { classifyProjectPaths, fetchRemoteSnapshot, type RemoteSnapshot } from '../src/overleaf/syncReconciler';
+import { classifyProjectPaths, fetchRemoteSnapshot, reconcileProject, type RemoteSnapshot } from '../src/overleaf/syncReconciler';
 import { scanLocalProject } from '../src/overleaf/syncStatus';
 import { SyncHealthService } from '../src/overleaf/syncHealthService';
 import type { OverleafCodexManifest } from '../src/overleaf/types';
@@ -229,6 +229,76 @@ describe('classifyProjectPaths', () => {
       // The base doc is what a later divergence check compares against.
       await expect(fs.readFile(path.join(root, '.overleaf-codex', 'base', 'docs', 'doc-main.tex'), 'utf8'))
         .resolves.toBe('shared');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+
+describe('reconcileProject', () => {
+  async function fixture(files: Record<string, string>) {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'reconcile-project-'));
+    for (const [rel, content] of Object.entries(files)) {
+      await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
+      await fs.writeFile(path.join(root, rel), content);
+    }
+    return root;
+  }
+
+  function remoteSnapshot(projectVersion?: number): RemoteSnapshot {
+    const remoteManifest = manifest();
+    remoteManifest.projectVersion = projectVersion;
+    return {
+      manifest: remoteManifest,
+      contents: new Map(),
+      hashes: new Map(),
+      blobHashes: new Map(),
+      failures: new Map(),
+      reused: new Set(),
+      metrics: { treeCount: 1, joinDocCount: 0, binaryGetCount: 0, remoteCacheReuseCount: 0 }
+    };
+  }
+
+  it('adopts the remote project version once nothing is outstanding', async () => {
+    const root = await fixture({ 'main.tex': 'hello' });
+    try {
+      const local = await scanLocalProject(root, manifest());
+      const target = manifest();
+      const result = await reconcileProject({
+        root, manifest: target, remote: remoteSnapshot(42), localScan: local, mode: 'full'
+      });
+      expect(target.projectVersion).toBe(42);
+      expect(result.manifestChanged).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not adopt the remote project version while a read failed', async () => {
+    const root = await fixture({ 'main.tex': 'hello' });
+    try {
+      const local = await scanLocalProject(root, manifest());
+      const target = manifest();
+      const remote = remoteSnapshot(42);
+      remote.failures.set('other.tex', 'boom');
+      await reconcileProject({ root, manifest: target, remote, localScan: local, mode: 'full' });
+      expect(target.projectVersion).toBeUndefined();
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('marks the report partial when a remote read failed', async () => {
+    const root = await fixture({ 'main.tex': 'hello' });
+    try {
+      const local = await scanLocalProject(root, manifest());
+      const remote = remoteSnapshot();
+      remote.failures.set('main.tex', 'boom');
+      const result = await reconcileProject({
+        root, manifest: manifest(), remote, localScan: local, mode: 'full'
+      });
+      expect(result.report.completeness).toBe('partial');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
