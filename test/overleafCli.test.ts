@@ -937,6 +937,45 @@ describe('Overleaf CLI parser and managed installation', () => {
       await expect(installCli(extensionRoot, '1.0.1')).rejects.toThrow(/non-managed/);
       expect(await fs.readFile(installed.commandPath, 'utf8')).toBe('user-owned');
     } finally {
+      delete process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME;
+      delete process.env.LATEX_TOOLKIT_BIN_HOME;
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('prunes superseded installs but leaves unmanaged directories alone', async () => {
+    if (Number(process.versions.node.split('.')[0]) < 20) return;
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-prune-'));
+    const extensionRoot = path.join(temporary, 'extension');
+    const supportRoot = path.join(temporary, 'support', 'cli');
+    process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME = supportRoot;
+    process.env.LATEX_TOOLKIT_BIN_HOME = path.join(temporary, 'bin');
+    await fs.mkdir(path.join(extensionRoot, 'dist', 'vendor'), { recursive: true });
+    await fs.writeFile(path.join(extensionRoot, 'dist', 'cli.js'), '#!/usr/bin/env node\n');
+    try {
+      await installCli(extensionRoot, '1.0.0');
+      // Each install prunes what it supersedes, so versions never pile up in the first place.
+      expect((await installCli(extensionRoot, '1.0.1')).removedVersions).toEqual(['1.0.0']);
+
+      // Leftovers from an interrupted install, and a directory this installer does not own.
+      await fs.mkdir(path.join(supportRoot, '.staging-1.0.1-123-456'), { recursive: true });
+      await fs.mkdir(path.join(supportRoot, '.backup-1.0.1-123-456'), { recursive: true });
+      await fs.mkdir(path.join(supportRoot, 'not-ours'), { recursive: true });
+      await fs.writeFile(path.join(supportRoot, 'not-ours', 'keep.txt'), 'keep me');
+
+      const result = await installCli(extensionRoot, '1.0.2');
+
+      const remaining = (await fs.readdir(supportRoot)).sort();
+      expect(remaining).toEqual(['1.0.2', 'not-ours']);
+      expect(result.removedVersions.sort()).toEqual(
+        ['.backup-1.0.1-123-456', '.staging-1.0.1-123-456', '1.0.1']
+      );
+      // The live command still resolves after the prune.
+      expect(await fs.realpath(result.commandPath)).toBe(
+        await fs.realpath(path.join(supportRoot, '1.0.2', 'cli.js'))
+      );
+      expect(await fs.readFile(path.join(supportRoot, 'not-ours', 'keep.txt'), 'utf8')).toBe('keep me');
+    } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
   });

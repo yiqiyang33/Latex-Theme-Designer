@@ -24745,6 +24745,9 @@ function processAlive(pid) {
     return false;
   }
 }
+function sleep(ms) {
+  return new Promise((resolve26) => setTimeout(resolve26, ms));
+}
 function formatUnknownError(error) {
   if (error instanceof Error) {
     return error.message;
@@ -28354,6 +28357,8 @@ function shouldSkip(relPath) {
 }
 
 // src/overleaf/syncGate.ts
+var UPLOADABLE_BLOCKING_STATUSES = /* @__PURE__ */ new Set(["local ahead", "local only"]);
+var TRANSIENT_PROJECT_GATES = /* @__PURE__ */ new Set(["checking", "reconnecting"]);
 var SyncGate = class {
   projectState = "stopped";
   projectReason;
@@ -28393,6 +28398,13 @@ var SyncGate = class {
     if (this.projectState !== "ready") return false;
     return this.findBlocking(path43) === void 0;
   }
+  /**
+   * True when `path` is held up only by a reconnect or an in-flight check, with nothing
+   * path-specific against it. Such work is worth retrying once the gate reopens.
+   */
+  isTransientlyBlocked(path43) {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path43) === void 0;
+  }
   findBlocking(path43) {
     const normalized = toPosixPath2(path43);
     const exact = this.paths.get(normalized);
@@ -28405,7 +28417,7 @@ var SyncGate = class {
   applyReport(report) {
     this.paths.clear();
     for (const item of report.items) {
-      if (!item.blocking) continue;
+      if (!item.blocking || UPLOADABLE_BLOCKING_STATUSES.has(item.status)) continue;
       const state = item.status === "error" ? "error" : item.status === "diverged" ? "conflict" : "pending";
       this.setPath(item.path, state, item.message, item.blockingScope === "subtree");
     }
@@ -29170,6 +29182,12 @@ async function folderFingerprintFromLocal(root, relPath, manifest, concurrency =
 }
 
 // src/overleaf/realtimeSync.ts
+var DEFERRED_LOCAL_CHANGE_BASE_DELAY_MS = 500;
+var DEFERRED_LOCAL_CHANGE_MAX_DELAY_MS = 15e3;
+var DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS = 12;
+var ACTIVITY_LOG_LIMIT = 2e3;
+var STALE_CHECK_MAX_RETRIES = 3;
+var STALE_CHECK_RETRY_BASE_DELAY_MS = 250;
 var RealtimeSyncService = class {
   constructor(context, output) {
     this.context = context;
@@ -29202,6 +29220,7 @@ var RealtimeSyncService = class {
   documentSessions = /* @__PURE__ */ new Map();
   bypassHashes = /* @__PURE__ */ new Map();
   timers = /* @__PURE__ */ new Map();
+  deferredChangeAttempts = /* @__PURE__ */ new Map();
   inFlight = /* @__PURE__ */ new Map();
   healthChecks = /* @__PURE__ */ new Set();
   localMutationIds = /* @__PURE__ */ new Map();
@@ -29217,6 +29236,7 @@ var RealtimeSyncService = class {
   collaboratorsChanged = new vscode10.EventEmitter();
   conflictsChanged = new vscode10.EventEmitter();
   presenceDisposables = [];
+  watcherDisposables = [];
   syncStatusReport;
   syncGate = new SyncGate();
   shouldReconnect = false;
@@ -29237,6 +29257,8 @@ var RealtimeSyncService = class {
   manifestMutationEpoch = 0;
   activityLog = [];
   activityLogWrite = Promise.resolve();
+  lastLogMessage;
+  lastLogRepeat = 0;
   get running() {
     return Boolean(this.session);
   }
@@ -29257,6 +29279,8 @@ var RealtimeSyncService = class {
   }
   async clearActivityLog() {
     this.activityLog.splice(0, this.activityLog.length);
+    this.lastLogMessage = void 0;
+    this.lastLogRepeat = 0;
     if (this.root) await atomicWriteText(metadataPath(this.root, "activity-log.json"), "[]\n");
     this.statusChanged.fire();
   }
@@ -29374,7 +29398,7 @@ var RealtimeSyncService = class {
   }
   async checkSyncStatusWithSession(root, manifest, activeClient, session, progress, options = {}) {
     const startedAt = Date.now();
-    const operationId = `check-${++this.checkSequence}`;
+    const operationId = options.operationId ?? `check-${++this.checkSequence}`;
     const mode = options.mode ?? "incremental";
     const startingManifestEpoch = this.root === root ? this.manifestMutationEpoch : void 0;
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
@@ -29530,18 +29554,21 @@ var RealtimeSyncService = class {
   }
   async retryStaleSyncCheck(root, activeClient, session, progress, options, operationId) {
     const retries = options.staleRetries ?? 0;
-    if (retries >= 3) {
+    if (retries >= STALE_CHECK_MAX_RETRIES) {
       this.scheduleSyncStatusCheck(500);
       throw new Error("Local sync state kept changing during the health check; the stale result was discarded and a retry was scheduled.");
     }
-    this.log(`[${operationId}] Discarding stale health check after a concurrent local/remote mutation; retrying.`);
+    this.log(`[${operationId}] Discarding stale health check after a concurrent local/remote mutation; retrying (${retries + 1}/${STALE_CHECK_MAX_RETRIES}).`);
+    await sleep(STALE_CHECK_RETRY_BASE_DELAY_MS * 2 ** retries);
     return this.checkSyncStatusWithSession(
       root,
       await readManifest(root),
       activeClient,
       session,
       progress,
-      { ...options, staleRetries: retries + 1 }
+      // Keep the original id so one logical check reads as one entry with its retries, instead of
+      // burning a fresh check-N per attempt and making the log look like a storm.
+      { ...options, staleRetries: retries + 1, operationId }
     );
   }
   async retrySyncPath(relPath, signal) {
@@ -29746,9 +29773,11 @@ var RealtimeSyncService = class {
     this.client = client;
     this.manifest = await readManifest(root);
     this.activityLog.splice(0, this.activityLog.length);
+    this.lastLogMessage = void 0;
+    this.lastLogRepeat = 0;
     const storedActivity = await readTextFileBounded(metadataPath(root, "activity-log.json"), MAX_METADATA_JSON_BYTES).then((raw) => JSON.parse(raw), () => void 0);
     if (Array.isArray(storedActivity)) {
-      for (const entry of storedActivity.slice(-100)) {
+      for (const entry of storedActivity.slice(-ACTIVITY_LOG_LIMIT)) {
         if (entry && typeof entry === "object" && typeof entry.at === "string" && typeof entry.message === "string") this.activityLog.push(entry);
       }
     }
@@ -29768,9 +29797,9 @@ var RealtimeSyncService = class {
     await this.reconcileOnStart(progress, signal);
     this.assertGeneration(generation, signal);
     this.watcher = vscode10.workspace.createFileSystemWatcher(new vscode10.RelativePattern(root, "**/*"));
-    this.watcher.onDidCreate((uri) => this.queueLocal(uri, "create"), this, this.context.subscriptions);
-    this.watcher.onDidChange((uri) => this.queueLocal(uri, "change"), this, this.context.subscriptions);
-    this.watcher.onDidDelete((uri) => this.queueLocal(uri, "delete"), this, this.context.subscriptions);
+    this.watcher.onDidCreate((uri) => this.queueLocal(uri, "create"), this, this.watcherDisposables);
+    this.watcher.onDidChange((uri) => this.queueLocal(uri, "change"), this, this.watcherDisposables);
+    this.watcher.onDidDelete((uri) => this.queueLocal(uri, "delete"), this, this.watcherDisposables);
     this.renameDisposable = vscode10.workspace.onDidRenameFiles((event) => {
       void this.handleVsCodeRenames(event).catch((error) => this.showError(error));
     });
@@ -29792,6 +29821,7 @@ var RealtimeSyncService = class {
       clearTimeout(timer);
     }
     this.timers.clear();
+    this.deferredChangeAttempts.clear();
     await Promise.all([...this.inFlight.values()].map((operation) => operation.catch(() => void 0)));
     await Promise.all([...this.healthChecks].map((operation) => operation.catch(() => void 0)));
     this.docStates.clear();
@@ -29810,6 +29840,9 @@ var RealtimeSyncService = class {
     if (this.positionTimer) {
       clearTimeout(this.positionTimer);
       this.positionTimer = void 0;
+    }
+    while (this.watcherDisposables.length) {
+      this.watcherDisposables.pop()?.dispose();
     }
     while (this.presenceDisposables.length) {
       this.presenceDisposables.pop()?.dispose();
@@ -30252,6 +30285,7 @@ var RealtimeSyncService = class {
     if (!relPath || relPath.startsWith("..") || isAlwaysLocal(relPath) || shouldIgnore(this.manifest, relPath) || !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath) || !tracked && shouldIgnoreUntrackedLocalPath(this.manifest, relPath)) {
       return;
     }
+    this.deferredChangeAttempts.delete(relPath);
     const trackedFile = this.manifest.files[relPath];
     const trackedFolder = this.manifest.folders[relPath];
     if (this.hasPendingFolderRenameAncestor(relPath)) {
@@ -30308,13 +30342,41 @@ var RealtimeSyncService = class {
         this.pendingFolderRenameRoots.delete(relPath);
       }
       if (!this.canApplyLocalChange(relPath, kind)) {
+        if (this.deferLocalChange(relPath, kind)) {
+          return;
+        }
         this.log(`Sync is paused for ${relPath}; recorded local ${kind} without uploading.`);
         this.scheduleSyncStatusCheck(void 0, [relPath]);
         return;
       }
+      this.deferredChangeAttempts.delete(relPath);
       this.runPathOperation(relPath, () => this.handleLocalChange(relPath, kind));
     }, delayMs);
     this.timers.set(relPath, timer);
+  }
+  /**
+   * Re-queues a local change that lost the gate only to a reconnect or an in-flight check.
+   * Returns false when the path is blocked for a reason that will not clear on its own, or when
+   * the gate has stayed shut past DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS, so the caller falls back to
+   * recording the change for the next sync-status review.
+   */
+  deferLocalChange(relPath, kind) {
+    if (this.stopping || !this.syncGate.isTransientlyBlocked(relPath)) {
+      this.deferredChangeAttempts.delete(relPath);
+      return false;
+    }
+    const attempt = (this.deferredChangeAttempts.get(relPath) ?? 0) + 1;
+    if (attempt > DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS) {
+      this.deferredChangeAttempts.delete(relPath);
+      return false;
+    }
+    this.deferredChangeAttempts.set(relPath, attempt);
+    const delay3 = Math.min(
+      DEFERRED_LOCAL_CHANGE_MAX_DELAY_MS,
+      DEFERRED_LOCAL_CHANGE_BASE_DELAY_MS * 2 ** (attempt - 1)
+    );
+    this.scheduleLocalChange(relPath, kind, delay3);
+    return true;
   }
   async registerPotentialRenameCreate(relPath) {
     const safePath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
@@ -30382,11 +30444,15 @@ var RealtimeSyncService = class {
     this.timers.delete(relPath);
   }
   cancelPathTimers(relPath, subtree) {
+    this.deferredChangeAttempts.delete(relPath);
     this.cancelPathTimer(relPath);
     if (!subtree) return;
     const prefix = `${relPath}/`;
     for (const candidate of [...this.timers.keys()]) {
       if (candidate.startsWith(prefix)) this.cancelPathTimer(candidate);
+    }
+    for (const candidate of [...this.deferredChangeAttempts.keys()]) {
+      if (candidate.startsWith(prefix)) this.deferredChangeAttempts.delete(candidate);
     }
   }
   hasPendingFolderRenameAncestor(relPath) {
@@ -30841,13 +30907,19 @@ var RealtimeSyncService = class {
     }
     if (created.length > 0) await this.persistManifest();
   }
+  /** Whether `relPath` still resolves to a real entry inside the project root. */
+  async localPathExists(relPath) {
+    const absPath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
+    if (!absPath) return false;
+    return fs30.stat(absPath).then(() => true, () => false);
+  }
   async handleLocalChange(relPath, kind) {
     this.requireReady();
     if (!this.canApplyLocalChange(relPath, kind)) {
       this.scheduleSyncStatusCheck(void 0, [relPath]);
       return;
     }
-    if (kind === "delete") {
+    if (kind === "delete" && !await this.localPathExists(relPath)) {
       await this.handleLocalDelete(relPath);
       return;
     }
@@ -30998,6 +31070,9 @@ var RealtimeSyncService = class {
     }
   }
   async handleLocalDelete(relPath) {
+    if (!this.manifest?.files[relPath] && !this.manifest?.folders[relPath]) {
+      return;
+    }
     if (!this.canSyncDestructiveChanges()) {
       this.log(`Skipped remote delete for ${relPath}. Enable overleafCodex.syncDestructiveChanges to delete Overleaf entities from local deletes.`);
       this.syncGate.setPath(relPath, "pending", "Local deletion is waiting for explicit confirmation.");
@@ -31764,11 +31839,22 @@ var RealtimeSyncService = class {
     const at = (/* @__PURE__ */ new Date()).toISOString();
     this.output.appendLine(`[${at}] ${message}`);
     const safeMessage = sanitizeDiagnosticText(message);
-    this.activityLog.push({ at, message: safeMessage });
-    if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
+    const previous = this.activityLog[this.activityLog.length - 1];
+    if (previous && safeMessage === this.lastLogMessage) {
+      this.lastLogRepeat += 1;
+      previous.at = at;
+      previous.message = `${safeMessage} (x${this.lastLogRepeat + 1})`;
+    } else {
+      this.lastLogMessage = safeMessage;
+      this.lastLogRepeat = 0;
+      this.activityLog.push({ at, message: safeMessage });
+    }
+    if (this.activityLog.length > ACTIVITY_LOG_LIMIT) {
+      this.activityLog.splice(0, this.activityLog.length - ACTIVITY_LOG_LIMIT);
+    }
     if (this.root) {
       const root = this.root;
-      const snapshot = JSON.stringify(this.activityLog.slice(-100), null, 2) + "\n";
+      const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + "\n";
       this.activityLogWrite = this.activityLogWrite.catch(() => void 0).then(() => atomicWriteText(metadataPath(root, "activity-log.json"), snapshot)).catch(() => void 0);
     }
   }
@@ -33977,11 +34063,30 @@ async function installCli(extensionRoot, version) {
   await fs34.rm(temporary, { force: true });
   await fs34.symlink(path40.join(installRoot, "cli.js"), temporary);
   await fs34.rename(temporary, commandPath);
+  const removedVersions = await pruneSupersededInstalls(supportRoot, version);
   return {
     installRoot,
     commandPath,
-    pathConfigured: (process.env.PATH ?? "").split(path40.delimiter).includes(commandDir)
+    pathConfigured: (process.env.PATH ?? "").split(path40.delimiter).includes(commandDir),
+    removedVersions
   };
+}
+async function pruneSupersededInstalls(supportRoot, keepVersion) {
+  const entries = await fs34.readdir(supportRoot, { withFileTypes: true }).catch(() => []);
+  const removed = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === keepVersion) continue;
+    const candidate = path40.join(supportRoot, entry.name);
+    const leftover = entry.name.startsWith(".staging-") || entry.name.startsWith(".backup-");
+    if (!leftover && !await hasManagedMarker(candidate)) continue;
+    if (await fs34.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
+      removed.push(entry.name);
+    }
+  }
+  return removed;
+}
+async function hasManagedMarker(installRoot) {
+  return fs34.stat(path40.join(installRoot, MARKER)).then(() => true, () => false);
 }
 async function uninstallCli() {
   await migrateLegacyLinuxPaths();
@@ -34031,7 +34136,7 @@ async function isManagedLink(commandPath, supportRoot) {
   const target = await fs34.realpath(commandPath).catch(() => void 0);
   const canonicalSupportRoot = await fs34.realpath(supportRoot).catch(() => path40.resolve(supportRoot));
   if (!target || !isWithin2(canonicalSupportRoot, target)) return false;
-  return fs34.stat(path40.join(path40.dirname(target), MARKER)).then(() => true, () => false);
+  return hasManagedMarker(path40.dirname(target));
 }
 function isWithin2(root, candidate) {
   const relative10 = path40.relative(path40.resolve(root), path40.resolve(candidate));
@@ -34176,7 +34281,8 @@ function activate(context) {
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
       const suffix = result.pathConfigured ? "" : ` Add ${path42.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
-      vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}`);
+      const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
+      vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();

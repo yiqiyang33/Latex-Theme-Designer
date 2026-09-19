@@ -58,7 +58,7 @@ import {
   repairFolderManifestFromRemote,
   trashPathFor
 } from './syncStatus';
-import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, toPosixPath, validateProjectPathSegment } from './util';
+import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, sleep, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
@@ -144,9 +144,35 @@ export interface SyncCheckOptions {
 interface InternalSyncCheckOptions extends SyncCheckOptions {
   expectedGeneration?: number;
   staleRetries?: number;
+  /** Carried across stale retries so one logical check keeps one id in the activity log. */
+  operationId?: string;
 }
 
 type SyncProgress = vscode.Progress<{ message?: string; increment?: number }>;
+
+/**
+ * A reconnect closes the project gate for a second or two. Local edits that land in that window
+ * are retried on this backoff instead of being dropped, so a routine socket blip no longer defers
+ * the user's work to the next full sync check.
+ */
+const DEFERRED_LOCAL_CHANGE_BASE_DELAY_MS = 500;
+const DEFERRED_LOCAL_CHANGE_MAX_DELAY_MS = 15_000;
+/** Roughly two minutes of retries, after which the change is recorded for review as before. */
+const DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS = 12;
+
+/**
+ * Entries kept in .overleaf-codex/activity-log.json. At 100 a reconnect loop overwrote the whole
+ * history within minutes, which left nothing to diagnose from after the fact.
+ */
+const ACTIVITY_LOG_LIMIT = 2000;
+
+/**
+ * A health check is discarded when the manifest changes under it - including when the extension's
+ * own push is what changed it. Retrying instantly just races the same writes, so attempts are
+ * spaced out: 250ms, 500ms, 1000ms.
+ */
+const STALE_CHECK_MAX_RETRIES = 3;
+const STALE_CHECK_RETRY_BASE_DELAY_MS = 250;
 
 export class RealtimeSyncService implements vscode.Disposable {
   private root?: string;
@@ -159,6 +185,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private readonly documentSessions = new Map<string, OtDocumentSession>();
   private readonly bypassHashes = new Map<string, string>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
+  private readonly deferredChangeAttempts = new Map<string, number>();
   private readonly inFlight = new Map<string, Promise<void>>();
   private readonly healthChecks = new Set<Promise<unknown>>();
   private readonly localMutationIds = new Map<string, number[]>();
@@ -174,6 +201,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private readonly collaboratorsChanged = new vscode.EventEmitter<void>();
   private readonly conflictsChanged = new vscode.EventEmitter<void>();
   private readonly presenceDisposables: vscode.Disposable[] = [];
+  private readonly watcherDisposables: vscode.Disposable[] = [];
   private syncStatusReport?: SyncStatusReport;
   private readonly syncGate = new SyncGate();
   private shouldReconnect = false;
@@ -194,6 +222,8 @@ export class RealtimeSyncService implements vscode.Disposable {
   private manifestMutationEpoch = 0;
   private readonly activityLog: SyncActivityEntry[] = [];
   private activityLogWrite: Promise<void> = Promise.resolve();
+  private lastLogMessage?: string;
+  private lastLogRepeat = 0;
 
   constructor(private readonly context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
     this.output = output ?? vscode.window.createOutputChannel('LaTeX Editing Toolkit');
@@ -241,6 +271,8 @@ export class RealtimeSyncService implements vscode.Disposable {
 
   async clearActivityLog(): Promise<void> {
     this.activityLog.splice(0, this.activityLog.length);
+    this.lastLogMessage = undefined;
+    this.lastLogRepeat = 0;
     if (this.root) await atomicWriteText(metadataPath(this.root, 'activity-log.json'), '[]\n');
     this.statusChanged.fire();
   }
@@ -388,7 +420,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     options: InternalSyncCheckOptions = {}
   ): Promise<SyncCheckResult> {
     const startedAt = Date.now();
-    const operationId = `check-${++this.checkSequence}`;
+    const operationId = options.operationId ?? `check-${++this.checkSequence}`;
     const mode = options.mode ?? 'incremental';
     const startingManifestEpoch = this.root === root ? this.manifestMutationEpoch : undefined;
     const remote = await this.fetchRemoteSnapshot(manifest, session, activeClient, progress, options);
@@ -572,18 +604,23 @@ export class RealtimeSyncService implements vscode.Disposable {
     operationId: string
   ): Promise<SyncCheckResult> {
     const retries = options.staleRetries ?? 0;
-    if (retries >= 3) {
+    if (retries >= STALE_CHECK_MAX_RETRIES) {
       this.scheduleSyncStatusCheck(500);
       throw new Error('Local sync state kept changing during the health check; the stale result was discarded and a retry was scheduled.');
     }
-    this.log(`[${operationId}] Discarding stale health check after a concurrent local/remote mutation; retrying.`);
+    this.log(`[${operationId}] Discarding stale health check after a concurrent local/remote mutation; retrying (${retries + 1}/${STALE_CHECK_MAX_RETRIES}).`);
+    // The extension's own pushes bump manifestMutationEpoch, so an immediate retry can be
+    // invalidated by the very writes that triggered it. Backing off lets those settle first.
+    await sleep(STALE_CHECK_RETRY_BASE_DELAY_MS * 2 ** retries);
     return this.checkSyncStatusWithSession(
       root,
       await readManifest(root),
       activeClient,
       session,
       progress,
-      { ...options, staleRetries: retries + 1 }
+      // Keep the original id so one logical check reads as one entry with its retries, instead of
+      // burning a fresh check-N per attempt and making the log look like a storm.
+      { ...options, staleRetries: retries + 1, operationId }
     );
   }
 
@@ -802,10 +839,12 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.client = client;
     this.manifest = await readManifest(root);
     this.activityLog.splice(0, this.activityLog.length);
+    this.lastLogMessage = undefined;
+    this.lastLogRepeat = 0;
     const storedActivity = await readTextFileBounded(metadataPath(root, 'activity-log.json'), MAX_METADATA_JSON_BYTES)
       .then(raw => JSON.parse(raw) as unknown, () => undefined);
     if (Array.isArray(storedActivity)) {
-      for (const entry of storedActivity.slice(-100)) {
+      for (const entry of storedActivity.slice(-ACTIVITY_LOG_LIMIT)) {
         if (entry && typeof entry === 'object' && typeof (entry as SyncActivityEntry).at === 'string'
           && typeof (entry as SyncActivityEntry).message === 'string') this.activityLog.push(entry as SyncActivityEntry);
       }
@@ -826,9 +865,12 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.reconcileOnStart(progress, signal);
     this.assertGeneration(generation, signal);
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, '**/*'));
-    this.watcher.onDidCreate(uri => this.queueLocal(uri, 'create'), this, this.context.subscriptions);
-    this.watcher.onDidChange(uri => this.queueLocal(uri, 'change'), this, this.context.subscriptions);
-    this.watcher.onDidDelete(uri => this.queueLocal(uri, 'delete'), this, this.context.subscriptions);
+    // These listeners are re-registered on every start(), including each reconnect, so they are
+    // tracked per run and disposed in stop(). Handing them to context.subscriptions would leave a
+    // dead entry per reconnect for the lifetime of the extension host.
+    this.watcher.onDidCreate(uri => this.queueLocal(uri, 'create'), this, this.watcherDisposables);
+    this.watcher.onDidChange(uri => this.queueLocal(uri, 'change'), this, this.watcherDisposables);
+    this.watcher.onDidDelete(uri => this.queueLocal(uri, 'delete'), this, this.watcherDisposables);
     this.renameDisposable = vscode.workspace.onDidRenameFiles(event => {
       void this.handleVsCodeRenames(event).catch(error => this.showError(error));
     });
@@ -851,6 +893,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       clearTimeout(timer);
     }
     this.timers.clear();
+    this.deferredChangeAttempts.clear();
     await Promise.all([...this.inFlight.values()].map(operation => operation.catch(() => undefined)));
     await Promise.all([...this.healthChecks].map(operation => operation.catch(() => undefined)));
     this.docStates.clear();
@@ -869,6 +912,9 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (this.positionTimer) {
       clearTimeout(this.positionTimer);
       this.positionTimer = undefined;
+    }
+    while (this.watcherDisposables.length) {
+      this.watcherDisposables.pop()?.dispose();
     }
     while (this.presenceDisposables.length) {
       this.presenceDisposables.pop()?.dispose();
@@ -1341,6 +1387,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     ) {
       return;
     }
+    // A fresh filesystem event is new work, so it gets a full retry budget of its own.
+    this.deferredChangeAttempts.delete(relPath);
     const trackedFile = this.manifest.files[relPath];
     const trackedFolder = this.manifest.folders[relPath];
     if (this.hasPendingFolderRenameAncestor(relPath)) {
@@ -1398,13 +1446,42 @@ export class RealtimeSyncService implements vscode.Disposable {
         this.pendingFolderRenameRoots.delete(relPath);
       }
       if (!this.canApplyLocalChange(relPath, kind)) {
+        if (this.deferLocalChange(relPath, kind)) {
+          return;
+        }
         this.log(`Sync is paused for ${relPath}; recorded local ${kind} without uploading.`);
         this.scheduleSyncStatusCheck(undefined, [relPath]);
         return;
       }
+      this.deferredChangeAttempts.delete(relPath);
       this.runPathOperation(relPath, () => this.handleLocalChange(relPath, kind));
     }, delayMs);
     this.timers.set(relPath, timer);
+  }
+
+  /**
+   * Re-queues a local change that lost the gate only to a reconnect or an in-flight check.
+   * Returns false when the path is blocked for a reason that will not clear on its own, or when
+   * the gate has stayed shut past DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS, so the caller falls back to
+   * recording the change for the next sync-status review.
+   */
+  private deferLocalChange(relPath: string, kind: LocalChangeKind): boolean {
+    if (this.stopping || !this.syncGate.isTransientlyBlocked(relPath)) {
+      this.deferredChangeAttempts.delete(relPath);
+      return false;
+    }
+    const attempt = (this.deferredChangeAttempts.get(relPath) ?? 0) + 1;
+    if (attempt > DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS) {
+      this.deferredChangeAttempts.delete(relPath);
+      return false;
+    }
+    this.deferredChangeAttempts.set(relPath, attempt);
+    const delay = Math.min(
+      DEFERRED_LOCAL_CHANGE_MAX_DELAY_MS,
+      DEFERRED_LOCAL_CHANGE_BASE_DELAY_MS * 2 ** (attempt - 1)
+    );
+    this.scheduleLocalChange(relPath, kind, delay);
+    return true;
   }
 
   private async registerPotentialRenameCreate(relPath: string): Promise<void> {
@@ -1476,11 +1553,15 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private cancelPathTimers(relPath: string, subtree: boolean): void {
+    this.deferredChangeAttempts.delete(relPath);
     this.cancelPathTimer(relPath);
     if (!subtree) return;
     const prefix = `${relPath}/`;
     for (const candidate of [...this.timers.keys()]) {
       if (candidate.startsWith(prefix)) this.cancelPathTimer(candidate);
+    }
+    for (const candidate of [...this.deferredChangeAttempts.keys()]) {
+      if (candidate.startsWith(prefix)) this.deferredChangeAttempts.delete(candidate);
     }
   }
 
@@ -1985,13 +2066,24 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (created.length > 0) await this.persistManifest();
   }
 
+  /** Whether `relPath` still resolves to a real entry inside the project root. */
+  private async localPathExists(relPath: string): Promise<boolean> {
+    const absPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
+    if (!absPath) return false;
+    return fs.stat(absPath).then(() => true, () => false);
+  }
+
   private async handleLocalChange(relPath: string, kind: LocalChangeKind): Promise<void> {
     this.requireReady();
     if (!this.canApplyLocalChange(relPath, kind)) {
       this.scheduleSyncStatusCheck(undefined, [relPath]);
       return;
     }
-    if (kind === 'delete') {
+    // Only act on a delete once the path is confirmed gone. Watchers do emit delete events for
+    // paths that still exist, and this branch is what reaches client.deleteEntity once
+    // syncDestructiveChanges is enabled, so a stale event must never be enough on its own. If the
+    // file is still there we fall through and re-upload it instead.
+    if (kind === 'delete' && !await this.localPathExists(relPath)) {
       await this.handleLocalDelete(relPath);
       return;
     }
@@ -2157,6 +2249,12 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async handleLocalDelete(relPath: string): Promise<void> {
+    // Nothing is tracked at this path, so there is no Overleaf entity to remove. Returning before
+    // the destructive-changes branch keeps spurious delete events for untracked paths from logging
+    // a skipped delete and latching a gate entry that then blocks the path until the next check.
+    if (!this.manifest?.files[relPath] && !this.manifest?.folders[relPath]) {
+      return;
+    }
     if (!this.canSyncDestructiveChanges()) {
       this.log(`Skipped remote delete for ${relPath}. Enable overleafCodex.syncDestructiveChanges to delete Overleaf entities from local deletes.`);
       this.syncGate.setPath(relPath, 'pending', 'Local deletion is waiting for explicit confirmation.');
@@ -3000,11 +3098,24 @@ export class RealtimeSyncService implements vscode.Disposable {
     const at = new Date().toISOString();
     this.output.appendLine(`[${at}] ${message}`);
     const safeMessage = sanitizeDiagnosticText(message);
-    this.activityLog.push({ at, message: safeMessage });
-    if (this.activityLog.length > 100) this.activityLog.splice(0, this.activityLog.length - 100);
+    const previous = this.activityLog[this.activityLog.length - 1];
+    if (previous && safeMessage === this.lastLogMessage) {
+      // Collapse a repeating message onto one entry so a chatty loop cannot evict the history
+      // that explains how the loop started.
+      this.lastLogRepeat += 1;
+      previous.at = at;
+      previous.message = `${safeMessage} (x${this.lastLogRepeat + 1})`;
+    } else {
+      this.lastLogMessage = safeMessage;
+      this.lastLogRepeat = 0;
+      this.activityLog.push({ at, message: safeMessage });
+    }
+    if (this.activityLog.length > ACTIVITY_LOG_LIMIT) {
+      this.activityLog.splice(0, this.activityLog.length - ACTIVITY_LOG_LIMIT);
+    }
     if (this.root) {
       const root = this.root;
-      const snapshot = JSON.stringify(this.activityLog.slice(-100), null, 2) + '\n';
+      const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + '\n';
       this.activityLogWrite = this.activityLogWrite
         .catch(() => undefined)
         .then(() => atomicWriteText(metadataPath(root, 'activity-log.json'), snapshot))

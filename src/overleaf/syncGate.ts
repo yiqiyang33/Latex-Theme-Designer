@@ -1,8 +1,21 @@
-import { SyncStatusReport } from './types';
+import { SyncStatusKind, SyncStatusReport } from './types';
 import { toPosixPath } from './util';
+
+/**
+ * Statuses that are worth flagging for review but must not stop an upload, because uploading is
+ * exactly what resolves them. Gating these deadlocks the file: the write that would clear the
+ * status is the write the gate refuses.
+ */
+const UPLOADABLE_BLOCKING_STATUSES: ReadonlySet<SyncStatusKind> = new Set<SyncStatusKind>(['local ahead', 'local only']);
 
 export type ProjectSyncGate = 'ready' | 'checking' | 'reconnecting' | 'blocked-auth' | 'blocked-tree' | 'stopped';
 export type PathSyncState = 'active' | 'pending' | 'conflict' | 'error' | 'busy';
+
+/**
+ * Project states that close the gate only while sync catches up with itself. They clear on their
+ * own, so work blocked by them should be retried rather than recorded as needing review.
+ */
+const TRANSIENT_PROJECT_GATES: ReadonlySet<ProjectSyncGate> = new Set<ProjectSyncGate>(['checking', 'reconnecting']);
 
 export interface PathGateEntry {
   path: string;
@@ -61,6 +74,14 @@ export class SyncGate {
     return this.findBlocking(path) === undefined;
   }
 
+  /**
+   * True when `path` is held up only by a reconnect or an in-flight check, with nothing
+   * path-specific against it. Such work is worth retrying once the gate reopens.
+   */
+  isTransientlyBlocked(path: string): boolean {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path) === undefined;
+  }
+
   findBlocking(path: string): PathGateEntry | undefined {
     const normalized = toPosixPath(path);
     const exact = this.paths.get(normalized);
@@ -75,7 +96,7 @@ export class SyncGate {
   applyReport(report: SyncStatusReport): void {
     this.paths.clear();
     for (const item of report.items) {
-      if (!item.blocking) continue;
+      if (!item.blocking || UPLOADABLE_BLOCKING_STATUSES.has(item.status)) continue;
       const state = item.status === 'error' ? 'error' : item.status === 'diverged' ? 'conflict' : 'pending';
       this.setPath(item.path, state, item.message, item.blockingScope === 'subtree');
     }

@@ -12,6 +12,8 @@ export interface CliInstallResult {
   installRoot: string;
   commandPath: string;
   pathConfigured: boolean;
+  /** Superseded version directories removed after this install, for reporting. */
+  removedVersions: string[];
 }
 
 export async function installCli(extensionRoot: string, version: string): Promise<CliInstallResult> {
@@ -49,11 +51,40 @@ export async function installCli(extensionRoot: string, version: string): Promis
   await fs.rm(temporary, { force: true });
   await fs.symlink(path.join(installRoot, 'cli.js'), temporary);
   await fs.rename(temporary, commandPath);
+  // Only after the command points at the new install, so a prune can never orphan the live link.
+  const removedVersions = await pruneSupersededInstalls(supportRoot, version);
   return {
     installRoot,
     commandPath,
-    pathConfigured: (process.env.PATH ?? '').split(path.delimiter).includes(commandDir)
+    pathConfigured: (process.env.PATH ?? '').split(path.delimiter).includes(commandDir),
+    removedVersions
   };
+}
+
+/**
+ * Drops superseded installs from the support root, which otherwise accumulate one directory per
+ * released version forever. Only directories carrying the managed marker are removed, plus staging
+ * and backup leftovers from an interrupted install, so anything else that ends up here is left
+ * alone. Best-effort: the new CLI is already live by this point, so a failure to prune must not
+ * fail the install.
+ */
+async function pruneSupersededInstalls(supportRoot: string, keepVersion: string): Promise<string[]> {
+  const entries = await fs.readdir(supportRoot, { withFileTypes: true }).catch(() => []);
+  const removed: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === keepVersion) continue;
+    const candidate = path.join(supportRoot, entry.name);
+    const leftover = entry.name.startsWith('.staging-') || entry.name.startsWith('.backup-');
+    if (!leftover && !await hasManagedMarker(candidate)) continue;
+    if (await fs.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
+      removed.push(entry.name);
+    }
+  }
+  return removed;
+}
+
+async function hasManagedMarker(installRoot: string): Promise<boolean> {
+  return fs.stat(path.join(installRoot, MARKER)).then(() => true, () => false);
 }
 
 export async function uninstallCli(): Promise<{ removed: boolean; commandPath: string }> {
@@ -117,7 +148,7 @@ async function isManagedLink(commandPath: string, supportRoot: string): Promise<
   const target = await fs.realpath(commandPath).catch(() => undefined);
   const canonicalSupportRoot = await fs.realpath(supportRoot).catch(() => path.resolve(supportRoot));
   if (!target || !isWithin(canonicalSupportRoot, target)) return false;
-  return fs.stat(path.join(path.dirname(target), MARKER)).then(() => true, () => false);
+  return hasManagedMarker(path.dirname(target));
 }
 
 function isWithin(root: string, candidate: string): boolean {

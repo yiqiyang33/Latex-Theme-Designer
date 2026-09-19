@@ -68,7 +68,10 @@ export function activate(context: vscode.ExtensionContext): void {
       const suffix = result.pathConfigured
         ? ""
         : ` Add ${path.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
-      vscode.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}`);
+      const pruned = result.removedVersions.length > 0
+        ? ` Removed ${result.removedVersions.length} superseded install(s).`
+        : "";
+      vscode.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();

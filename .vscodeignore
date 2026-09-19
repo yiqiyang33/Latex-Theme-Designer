@@ -59,6 +59,9 @@ templates/**/*.xdv
 coverage/**
 *.vsix
 tsconfig.json
+vitest.config.ts
+.claude/**
+TODO.md
 theme.ui.json
 theme.colors.tex
 theme.overrides.tex
