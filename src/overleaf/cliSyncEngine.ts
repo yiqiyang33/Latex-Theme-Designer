@@ -44,8 +44,9 @@ import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
 import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath } from './util';
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
+import { fetchRemoteSnapshot } from './syncReconciler';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
-import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
+import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
@@ -257,57 +258,28 @@ export class OverleafSyncEngine {
       const items: SyncStatusItem[] = [...folderStatus.items];
       const conflictStore = new ConflictStore(this.root);
       const existingConflicts = await conflictStore.list();
-      const remoteContents = new Map<string, string>();
-      const remoteHashes = new Map<string, string>();
-      const remoteFailures = new Map<string, string>();
-      const remotePlan = this.syncHealth.planRemoteReads(this.manifest, remote, {
+      const snapshot = await fetchRemoteSnapshot({
+        manifest: this.manifest,
+        session: this.session!,
+        client: this.client,
+        syncHealth: this.syncHealth,
         mode,
-        paths: requestedPaths
-      });
-      let remoteReadsCompleted = 0;
-      const remoteReadsTotal = remotePlan.docsToJoin.length
-        + remotePlan.binariesToGet.length
-        + remotePlan.reusedPaths.size;
-      const reportRemoteRead = (relPath: string): void => {
-        remoteReadsCompleted += 1;
-        this.host.progress({
+        paths: requestedPaths,
+        onProgress: ({ path: relPath, completed: done, total }) => this.host.progress({
           phase: 'check',
           message: `Read remote metadata ${relPath}`,
           path: relPath,
-          completed: remoteReadsCompleted,
-          total: remoteReadsTotal
-        });
-      };
-      for (const relPath of remotePlan.reusedPaths) reportRemoteRead(relPath);
-      await mapWithConcurrency(remotePlan.docsToJoin, 4, async file => {
-        try {
-          remoteContents.set(file.path, (await this.session!.joinDoc(file.entityId)).content);
-        } catch (error) {
-          remoteFailures.set(file.path, formatUnknownError(error));
-        } finally {
-          reportRemoteRead(file.path);
-        }
+          completed: done,
+          total
+        })
       });
-      const remoteTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-health-'));
-      try {
-        await mapWithDynamicByteConcurrency(remotePlan.binariesToGet, 4, 64 * 1024 * 1024, async (file, reservation) => {
-          const target = path.join(remoteTempRoot, file.entityId);
-          try {
-            const result = await this.client.downloadProjectFileToPath(this.manifest!.projectId, file.entityId, target, {
-              onSize: bytes => reservation.reserve(bytes)
-            });
-            file.remoteSize = result.size;
-            remoteHashes.set(file.path, result.sha1);
-          } catch (error) {
-            remoteFailures.set(file.path, formatUnknownError(error));
-          } finally {
-            await fs.rm(target, { force: true }).catch(() => undefined);
-            reportRemoteRead(file.path);
-          }
-        });
-      } finally {
-        await fs.rm(remoteTempRoot, { recursive: true, force: true });
-      }
+      // The snapshot re-indexes the same project tree and carries the doc versions the joins
+      // returned, so the classifier below sees the same remote view the extension does.
+      remote = snapshot.manifest;
+      const remoteContents = snapshot.contents;
+      const remoteHashes = snapshot.hashes;
+      const remoteFailures = snapshot.failures;
+      const reusedRemotePaths = snapshot.reused;
       let completed = 0;
       for (const relPath of [...paths].sort()) {
         if (requestedPaths && !requestedPaths.has(relPath)) continue;
@@ -318,7 +290,7 @@ export class OverleafSyncEngine {
         const remoteContent = remoteContents.get(relPath);
         const remoteReadError = remoteFailures.get(relPath);
         const remoteHash = remoteHashes.get(relPath) ?? (remoteContent === undefined
-          ? remotePlan.reusedPaths.has(relPath) ? manifestFile?.sha1 : undefined
+          ? reusedRemotePaths.has(relPath) ? manifestFile?.sha1 : undefined
           : sha1(remoteContent));
         let baseHash = manifestFile?.baseHash;
         if (!baseHash && remoteFile?.entityType === 'doc') {

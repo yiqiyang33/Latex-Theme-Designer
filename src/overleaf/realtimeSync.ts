@@ -60,6 +60,7 @@ import {
 } from './syncStatus';
 import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, sleep, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
+import { fetchRemoteSnapshot, type RemoteSnapshot } from './syncReconciler';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
@@ -113,21 +114,6 @@ export interface SyncActivityEntry {
 }
 
 type LocalChangeKind = 'create' | 'change' | 'delete';
-
-interface RemoteSnapshot {
-  manifest: OverleafCodexManifest;
-  contents: Map<string, string>;
-  hashes: Map<string, string>;
-  blobHashes: Map<string, string>;
-  failures: Map<string, string>;
-  reused: Set<string>;
-  metrics: {
-    treeCount: number;
-    joinDocCount: number;
-    binaryGetCount: number;
-    remoteCacheReuseCount: number;
-  };
-}
 
 interface SyncCheckResult {
   report: SyncStatusReport;
@@ -1671,98 +1657,18 @@ export class RealtimeSyncService implements vscode.Disposable {
     progress?: SyncProgress,
     options: SyncCheckOptions = {}
   ): Promise<RemoteSnapshot> {
-    const signal = options.signal;
-    const project = session.getProject();
-    if (!project) {
-      throw new Error('Overleaf realtime session does not have a project tree.');
-    }
-    const indexed = buildProjectTreeIndex(
-      manifest.serverUrl,
-      manifest.projectId,
-      manifest.projectName,
-      project
-    );
-    const contents = new Map<string, string>();
-    const hashes = new Map<string, string>();
-    const blobHashes = new Map<string, string>();
-    const failures = new Map<string, string>();
-    const reused = new Set<string>();
-    const metrics = {
-      treeCount: 1,
-      joinDocCount: 0,
-      binaryGetCount: 0,
-      remoteCacheReuseCount: 0
-    };
-    const plan = this.syncHealth.planRemoteReads(manifest, indexed.manifest, {
-      mode: options.mode ?? 'incremental',
-      paths: options.paths
+    return fetchRemoteSnapshot({
+      manifest,
+      session,
+      client,
+      syncHealth: this.syncHealth,
+      mode: options.mode,
+      paths: options.paths,
+      signal: options.signal,
+      onProgress: ({ path: relPath, completed, total }) =>
+        progress?.report({ message: `Reading remote files ${completed}/${total}: ${relPath}` }),
+      onFailure: (relPath, message) => this.log(`Could not read remote ${relPath}: ${message}`)
     });
-    const docs = plan.docsToJoin;
-    const binaries = plan.binariesToGet;
-    for (const reusedPath of plan.reusedPaths) reused.add(reusedPath);
-    metrics.remoteCacheReuseCount = reused.size;
-    const selectedCount = docs.length + binaries.length + reused.size;
-    let completed = 0;
-
-    const reportProgress = (filePath: string): void => {
-      completed += 1;
-      progress?.report({ message: `Reading remote files ${completed}/${selectedCount}: ${filePath}` });
-    };
-
-    for (const reusedPath of reused) reportProgress(reusedPath);
-    await mapWithConcurrency(docs, 4, async file => {
-      try {
-        metrics.joinDocCount += 1;
-        const joined = await session.joinDoc(file.entityId, signal);
-        file.version = joined.version;
-        contents.set(file.path, joined.content);
-      } catch (error) {
-        const message = formatUnknownError(error);
-        failures.set(file.path, message);
-        this.log(`Could not read remote ${file.path}: ${message}`);
-      } finally {
-        reportProgress(file.path);
-      }
-    });
-
-    if (!client && binaries.length > 0) {
-      throw new Error('Overleaf client is not available for binary download.');
-    }
-    const remoteTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-health-'));
-    try {
-      await mapWithDynamicByteConcurrency(binaries, 4, 64 * 1024 * 1024, async (file, reservation) => {
-        const target = path.join(remoteTempRoot, file.entityId);
-        try {
-          metrics.binaryGetCount += 1;
-          const result = await client!.downloadProjectFileToPath(manifest.projectId, file.entityId, target, {
-            signal,
-            onSize: bytes => reservation.reserve(bytes)
-          });
-          file.remoteSize = result.size;
-          hashes.set(file.path, result.sha1);
-          blobHashes.set(file.path, result.gitBlobHash);
-        } catch (error) {
-          const message = formatUnknownError(error);
-          failures.set(file.path, message);
-          this.log(`Could not read remote ${file.path}: ${message}`);
-        } finally {
-          await fs.rm(target, { force: true }).catch(() => undefined);
-          reportProgress(file.path);
-        }
-      });
-    } finally {
-      await fs.rm(remoteTempRoot, { recursive: true, force: true });
-    }
-
-    return {
-      manifest: indexed.manifest,
-      contents,
-      hashes,
-      blobHashes,
-      failures,
-      reused,
-      metrics
-    };
   }
 
   private async fetchFreshRemoteSnapshot(paths?: Iterable<string>, progress?: SyncProgress): Promise<RemoteSnapshot> {
