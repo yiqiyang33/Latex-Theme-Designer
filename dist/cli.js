@@ -19417,9 +19417,19 @@ async function enqueueMetadataWrite(target, write) {
     }
   }
 }
+var compiledGlobs = /* @__PURE__ */ new Map();
+function matchesGlob(pattern, normalized) {
+  if (pattern.charAt(0) === "#") return false;
+  let compiled = compiledGlobs.get(pattern);
+  if (!compiled) {
+    compiled = new Minimatch(pattern, { dot: true });
+    compiledGlobs.set(pattern, compiled);
+  }
+  return compiled.match(normalized);
+}
 function shouldIgnore(manifest, relPath) {
   const normalized = toPosixPath(relPath);
-  return manifest.ignore.some((pattern) => minimatch(normalized, pattern, { dot: true })) || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some((pattern) => minimatch(normalized, pattern, { dot: true }));
+  return manifest.ignore.some((pattern) => matchesGlob(pattern, normalized)) || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some((pattern) => matchesGlob(pattern, normalized));
 }
 function shouldIgnoreUntrackedLocalPath(manifest, relPath) {
   const normalized = toPosixPath(relPath);
@@ -20268,14 +20278,17 @@ function canReuseRemoteMetadata(previous, remote) {
 // src/overleaf/syncReconciler.ts
 var BINARY_READ_CONCURRENCY = 4;
 var BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
-var DOC_JOIN_CONCURRENCY = 4;
+var DOC_JOIN_CONCURRENCY = 8;
 async function fetchRemoteSnapshot(deps) {
   const { manifest, session, client, syncHealth, signal } = deps;
-  const project = session.getProject();
-  if (!project) {
-    throw new Error("Overleaf realtime session does not have a project tree.");
+  let indexedRemote = deps.indexedRemote;
+  if (!indexedRemote) {
+    const project = session.getProject();
+    if (!project) {
+      throw new Error("Overleaf realtime session does not have a project tree.");
+    }
+    indexedRemote = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project).manifest;
   }
-  const indexed = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project);
   const contents = /* @__PURE__ */ new Map();
   const hashes = /* @__PURE__ */ new Map();
   const blobHashes = /* @__PURE__ */ new Map();
@@ -20287,7 +20300,7 @@ async function fetchRemoteSnapshot(deps) {
     binaryGetCount: 0,
     remoteCacheReuseCount: 0
   };
-  const plan = syncHealth.planRemoteReads(manifest, indexed.manifest, {
+  const plan = syncHealth.planRemoteReads(manifest, indexedRemote, {
     mode: deps.mode ?? "incremental",
     paths: deps.paths
   });
@@ -20350,7 +20363,7 @@ async function fetchRemoteSnapshot(deps) {
   } finally {
     await fs6.rm(remoteTempRoot, { recursive: true, force: true });
   }
-  return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
+  return { manifest: indexedRemote, contents, hashes, blobHashes, failures, reused, metrics };
 }
 async function classifyProjectPaths(deps) {
   const { root, manifest, remote, localScan, requestedPaths } = deps;
@@ -20637,19 +20650,19 @@ var import_crypto3 = require("crypto");
 async function hashFileDigests(filePath) {
   const stat13 = await fs8.stat(filePath);
   if (!stat13.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
-  const sha13 = (0, import_crypto2.createHash)("sha1");
+  const sha12 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat13.size}\0`);
   await new Promise((resolve9, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
-      sha13.update(chunk);
+      sha12.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
     input.on("end", resolve9);
   });
-  return { size: stat13.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
+  return { size: stat13.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
   const token = `${process.pid}-${Date.now()}-${(0, import_crypto3.randomBytes)(4).toString("hex")}`;
@@ -20702,14 +20715,14 @@ function buildManifestFolderFingerprints(manifest) {
   }
   return new Map([...parts].map(([folder, values]) => [
     folder,
-    sha1(`folder\0${values.map((value) => value.replace(`${folder}/`, "")).sort().join("\n")}`)
+    sha1(`folder\0${values.sort().join("\n")}`)
   ]));
 }
 function valueForFolder(folder, relPath, value) {
   const prefix = folder ? `${folder}/` : "";
   if (!relPath.startsWith(prefix)) return value;
   const marker = value.indexOf("\0");
-  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1)}`;
+  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1 + relPath.length)}`;
 }
 async function folderFingerprintFromLocal(root, relPath, manifest, concurrency = 4) {
   const parts = [];
@@ -20913,6 +20926,10 @@ var OverleafSyncEngine = class {
       syncHealth: this.syncHealth,
       mode,
       paths: requestedPaths,
+      // The rename pre-pass above already reasoned about this exact tree. Re-indexing inside the
+      // snapshot would classify against a later view, since the session keeps applying remote
+      // events to the project as they arrive.
+      indexedRemote: remote,
       onProgress: ({ path: relPath, completed, total }) => this.host.progress({
         phase: "check",
         message: `Read remote metadata ${relPath}`,
@@ -21456,9 +21473,6 @@ var OverleafSyncEngine = class {
     if (this.manifest.rootDocPath === oldPath || this.manifest.rootDocPath?.startsWith(prefix)) {
       this.manifest.rootDocPath = this.manifest.rootDocPath === oldPath ? newPath : `${newPath}/${this.manifest.rootDocPath.slice(prefix.length)}`;
     }
-  }
-  async folderFingerprintFromLocal(relPath) {
-    return folderFingerprintFromLocal(this.root, relPath, this.manifest);
   }
   scheduleSync(reason) {
     if (!this.running || this.stopping) return;
@@ -22747,9 +22761,6 @@ var OverleafClient = class {
   identity;
   timeoutMs;
   timeouts;
-  setIdentity(identity) {
-    this.identity = identity;
-  }
   getServerUrl() {
     return this.serverUrl;
   }
@@ -22855,9 +22866,6 @@ var OverleafClient = class {
       entityType: result.entity_type === "doc" ? "doc" : "file"
     };
   }
-  async downloadProjectFile(projectId, fileId, signal) {
-    return this.downloadRelative(`project/${projectId}/file/${fileId}`, true, signal);
-  }
   async downloadProjectFileToPath(projectId, fileId, targetPath, options = {}) {
     return this.downloadAbsoluteToPath(
       this.urlFor(`project/${projectId}/file/${fileId}`),
@@ -22907,17 +22915,6 @@ var OverleafClient = class {
     await this.requestText("POST", `project/${projectId}/compile/stop`, {
       includeCsrfHeader: true
     });
-  }
-  async downloadCompileOutput(outputUrl, compile) {
-    if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false);
-    }
-    if (compile.pdfDownloadDomain && compile.clsiServerId) {
-      const cleanOutput = outputUrl.replace(/^\/+/, "");
-      const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, "")}/${cleanOutput}?compileGroup=${encodeURIComponent(compile.compileGroup)}&clsiserverid=${encodeURIComponent(compile.clsiServerId)}&enable_pdf_caching=true`;
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false);
-    }
-    return this.downloadRelative(outputUrl.replace(/^\/+/, ""), true);
   }
   async downloadCompileOutputToPath(outputUrl, compile, targetPath, options = {}) {
     if (/^https?:\/\//i.test(outputUrl)) {
@@ -23074,89 +23071,6 @@ var OverleafClient = class {
     await assertOk(res, route);
     return res.status === 204 ? "" : readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
   }
-  async downloadRelative(route, includeCookies, signal) {
-    return this.downloadAbsolute(this.urlFor(route), includeCookies, signal);
-  }
-  async downloadAbsolute(url, includeCookies, signal) {
-    const identity = includeCookies ? this.requireIdentity() : void 0;
-    let sendCookies = Boolean(identity);
-    const chunks = [];
-    let currentUrl = url;
-    let offset = 0;
-    let expectedTotal;
-    let redirects = 0;
-    let ranges = 0;
-    while (true) {
-      const res = await this.fetchWithTimeout(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        agent: this.agent,
-        headers: {
-          Connection: "keep-alive",
-          ...offset > 0 ? { Range: `bytes=${offset}-` } : {},
-          ...sendCookies && identity ? { Cookie: identity.cookies } : {}
-        }
-      }, this.timeouts.httpMs, signal);
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get("location");
-        res.body?.resume();
-        if (!location || redirects >= 5) {
-          throw new OverleafHttpError(`Overleaf download redirect failed for ${path16.basename(currentUrl)}.`, res.status);
-        }
-        const nextUrl = new URL(location, currentUrl);
-        sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
-        currentUrl = nextUrl.toString();
-        redirects += 1;
-        continue;
-      }
-      if (res.status !== 200 && res.status !== 206) {
-        await assertOk(res, currentUrl);
-      }
-      const chunk = await readResponseBufferLimited(res, MAX_BUFFERED_DOWNLOAD_BYTES);
-      if (res.status === 200) {
-        if (offset > 0) {
-          throw new Error("Overleaf ignored a Range request after returning partial content.");
-        }
-        if (chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-          throw new Error("Overleaf download exceeded its size limit.");
-        }
-        chunks.push(chunk);
-        break;
-      }
-      if (ranges >= 128) {
-        throw new Error("Overleaf download returned too many partial responses.");
-      }
-      const range = parseContentRange(res.headers.get("content-range"));
-      if (range.start !== offset || range.end < range.start || chunk.length !== range.end - range.start + 1) {
-        throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get("content-range") ?? "missing"}.`);
-      }
-      if (offset + chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-        throw new Error("Overleaf download exceeded its size limit.");
-      }
-      if (expectedTotal !== void 0 && range.total !== expectedTotal) {
-        throw new Error("Overleaf changed the total download size between partial responses.");
-      }
-      expectedTotal = range.total;
-      chunks.push(chunk);
-      const nextOffset = range.end + 1;
-      if (nextOffset <= offset) {
-        throw new Error("Overleaf repeated a partial download range.");
-      }
-      offset = nextOffset;
-      ranges += 1;
-      if (offset === expectedTotal) {
-        break;
-      }
-      if (offset > expectedTotal) {
-        throw new Error("Overleaf partial download exceeded its declared size.");
-      }
-    }
-    const result = Buffer.concat(chunks);
-    if (expectedTotal !== void 0 && result.length !== expectedTotal) {
-      throw new Error(`Overleaf partial download was incomplete (${result.length}/${expectedTotal} bytes).`);
-    }
-    return new Uint8Array(result);
-  }
   async downloadAbsoluteToPath(url, includeCookies, targetPath, options) {
     const identity = includeCookies ? this.requireIdentity() : void 0;
     let sendCookies = Boolean(identity);
@@ -23287,8 +23201,11 @@ var OverleafClient = class {
   }
 };
 var OverleafSocketSession = class {
+  socket;
+  project;
+  publicId;
+  timeouts;
   constructor(serverUrl, identity, timeouts, query) {
-    this.identity = identity;
     this.timeouts = timeouts;
     const runtimeRoot2 = path16.join(__dirname, "vendor", "socket.io-client");
     const socketIo = loadSocketIoClient(runtimeRoot2);
@@ -23347,11 +23264,6 @@ var OverleafSocketSession = class {
       }
     });
   }
-  identity;
-  socket;
-  project;
-  publicId;
-  timeouts;
   setProject(project) {
     this.project = project;
   }
@@ -23960,7 +23872,6 @@ var crypto6 = __toESM(require("crypto"));
 var fs16 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path17 = __toESM(require("path"));
-var import_events3 = require("events");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
@@ -23978,7 +23889,6 @@ var SyncOwnerCoordinator = class {
   clientSockets = /* @__PURE__ */ new Set();
   subscriberSockets = /* @__PURE__ */ new Set();
   eventSockets = /* @__PURE__ */ new Set();
-  events = new import_events3.EventEmitter();
   writeQueues = /* @__PURE__ */ new WeakMap();
   commandQueue = Promise.resolve();
   releasing = false;
@@ -23990,6 +23900,15 @@ var SyncOwnerCoordinator = class {
   }
   async claim(root, handler) {
     await this.release();
+    try {
+      return await this.claimInner(root, handler);
+    } catch (error) {
+      this.handler = void 0;
+      this.root = void 0;
+      throw error;
+    }
+  }
+  async claimInner(root, handler) {
     this.root = await fs16.realpath(path17.resolve(root)).catch(() => path17.resolve(root));
     this.handler = handler;
     const paths = runtimePaths(this.root);
@@ -24082,11 +24001,6 @@ var SyncOwnerCoordinator = class {
         });
       }
     }
-    this.events.emit("event", message);
-  }
-  onEvent(listener) {
-    this.events.on("event", listener);
-    return () => this.events.off("event", listener);
   }
   async subscribe(onEvent, timeoutMs = this.options.subscriptionTimeoutMs ?? 5e3) {
     if (!this.root) throw new Error("No sync root is selected.");

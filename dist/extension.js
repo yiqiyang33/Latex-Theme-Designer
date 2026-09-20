@@ -25265,9 +25265,19 @@ async function enqueueMetadataWrite(target, write) {
     }
   }
 }
+var compiledGlobs = /* @__PURE__ */ new Map();
+function matchesGlob2(pattern, normalized) {
+  if (pattern.charAt(0) === "#") return false;
+  let compiled = compiledGlobs.get(pattern);
+  if (!compiled) {
+    compiled = new Minimatch(pattern, { dot: true });
+    compiledGlobs.set(pattern, compiled);
+  }
+  return compiled.match(normalized);
+}
 function shouldIgnore(manifest, relPath) {
   const normalized = toPosixPath2(relPath);
-  return manifest.ignore.some((pattern) => minimatch(normalized, pattern, { dot: true })) || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some((pattern) => minimatch(normalized, pattern, { dot: true }));
+  return manifest.ignore.some((pattern) => matchesGlob2(pattern, normalized)) || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some((pattern) => matchesGlob2(pattern, normalized));
 }
 function shouldIgnoreUntrackedLocalPath(manifest, relPath) {
   const normalized = toPosixPath2(relPath);
@@ -26630,19 +26640,19 @@ var import_crypto3 = require("crypto");
 async function hashFileDigests(filePath) {
   const stat11 = await fs22.stat(filePath);
   if (!stat11.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
-  const sha13 = (0, import_crypto2.createHash)("sha1");
+  const sha12 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat11.size}\0`);
   await new Promise((resolve26, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
-      sha13.update(chunk);
+      sha12.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
     input.on("end", resolve26);
   });
-  return { size: stat11.size, sha1: sha13.digest("hex"), gitBlobHash: git.digest("hex") };
+  return { size: stat11.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
   const token = `${process.pid}-${Date.now()}-${(0, import_crypto3.randomBytes)(4).toString("hex")}`;
@@ -26716,9 +26726,6 @@ var OverleafClient = class {
   identity;
   timeoutMs;
   timeouts;
-  setIdentity(identity) {
-    this.identity = identity;
-  }
   getServerUrl() {
     return this.serverUrl;
   }
@@ -26824,9 +26831,6 @@ var OverleafClient = class {
       entityType: result.entity_type === "doc" ? "doc" : "file"
     };
   }
-  async downloadProjectFile(projectId, fileId, signal) {
-    return this.downloadRelative(`project/${projectId}/file/${fileId}`, true, signal);
-  }
   async downloadProjectFileToPath(projectId, fileId, targetPath, options = {}) {
     return this.downloadAbsoluteToPath(
       this.urlFor(`project/${projectId}/file/${fileId}`),
@@ -26876,17 +26880,6 @@ var OverleafClient = class {
     await this.requestText("POST", `project/${projectId}/compile/stop`, {
       includeCsrfHeader: true
     });
-  }
-  async downloadCompileOutput(outputUrl, compile) {
-    if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false);
-    }
-    if (compile.pdfDownloadDomain && compile.clsiServerId) {
-      const cleanOutput = outputUrl.replace(/^\/+/, "");
-      const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, "")}/${cleanOutput}?compileGroup=${encodeURIComponent(compile.compileGroup)}&clsiserverid=${encodeURIComponent(compile.clsiServerId)}&enable_pdf_caching=true`;
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false);
-    }
-    return this.downloadRelative(outputUrl.replace(/^\/+/, ""), true);
   }
   async downloadCompileOutputToPath(outputUrl, compile, targetPath, options = {}) {
     if (/^https?:\/\//i.test(outputUrl)) {
@@ -27043,89 +27036,6 @@ var OverleafClient = class {
     await assertOk(res, route);
     return res.status === 204 ? "" : readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
   }
-  async downloadRelative(route, includeCookies, signal) {
-    return this.downloadAbsolute(this.urlFor(route), includeCookies, signal);
-  }
-  async downloadAbsolute(url, includeCookies, signal) {
-    const identity = includeCookies ? this.requireIdentity() : void 0;
-    let sendCookies = Boolean(identity);
-    const chunks = [];
-    let currentUrl = url;
-    let offset = 0;
-    let expectedTotal;
-    let redirects = 0;
-    let ranges = 0;
-    while (true) {
-      const res = await this.fetchWithTimeout(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        agent: this.agent,
-        headers: {
-          Connection: "keep-alive",
-          ...offset > 0 ? { Range: `bytes=${offset}-` } : {},
-          ...sendCookies && identity ? { Cookie: identity.cookies } : {}
-        }
-      }, this.timeouts.httpMs, signal);
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get("location");
-        res.body?.resume();
-        if (!location || redirects >= 5) {
-          throw new OverleafHttpError(`Overleaf download redirect failed for ${path29.basename(currentUrl)}.`, res.status);
-        }
-        const nextUrl = new URL(location, currentUrl);
-        sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
-        currentUrl = nextUrl.toString();
-        redirects += 1;
-        continue;
-      }
-      if (res.status !== 200 && res.status !== 206) {
-        await assertOk(res, currentUrl);
-      }
-      const chunk = await readResponseBufferLimited(res, MAX_BUFFERED_DOWNLOAD_BYTES);
-      if (res.status === 200) {
-        if (offset > 0) {
-          throw new Error("Overleaf ignored a Range request after returning partial content.");
-        }
-        if (chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-          throw new Error("Overleaf download exceeded its size limit.");
-        }
-        chunks.push(chunk);
-        break;
-      }
-      if (ranges >= 128) {
-        throw new Error("Overleaf download returned too many partial responses.");
-      }
-      const range = parseContentRange(res.headers.get("content-range"));
-      if (range.start !== offset || range.end < range.start || chunk.length !== range.end - range.start + 1) {
-        throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get("content-range") ?? "missing"}.`);
-      }
-      if (offset + chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-        throw new Error("Overleaf download exceeded its size limit.");
-      }
-      if (expectedTotal !== void 0 && range.total !== expectedTotal) {
-        throw new Error("Overleaf changed the total download size between partial responses.");
-      }
-      expectedTotal = range.total;
-      chunks.push(chunk);
-      const nextOffset = range.end + 1;
-      if (nextOffset <= offset) {
-        throw new Error("Overleaf repeated a partial download range.");
-      }
-      offset = nextOffset;
-      ranges += 1;
-      if (offset === expectedTotal) {
-        break;
-      }
-      if (offset > expectedTotal) {
-        throw new Error("Overleaf partial download exceeded its declared size.");
-      }
-    }
-    const result = Buffer.concat(chunks);
-    if (expectedTotal !== void 0 && result.length !== expectedTotal) {
-      throw new Error(`Overleaf partial download was incomplete (${result.length}/${expectedTotal} bytes).`);
-    }
-    return new Uint8Array(result);
-  }
   async downloadAbsoluteToPath(url, includeCookies, targetPath, options) {
     const identity = includeCookies ? this.requireIdentity() : void 0;
     let sendCookies = Boolean(identity);
@@ -27256,8 +27166,11 @@ var OverleafClient = class {
   }
 };
 var OverleafSocketSession = class {
+  socket;
+  project;
+  publicId;
+  timeouts;
   constructor(serverUrl, identity, timeouts, query) {
-    this.identity = identity;
     this.timeouts = timeouts;
     const runtimeRoot2 = path29.join(__dirname, "vendor", "socket.io-client");
     const socketIo = loadSocketIoClient(runtimeRoot2);
@@ -27316,11 +27229,6 @@ var OverleafSocketSession = class {
       }
     });
   }
-  identity;
-  socket;
-  project;
-  publicId;
-  timeouts;
   setProject(project) {
     this.project = project;
   }
@@ -28435,14 +28343,17 @@ var os6 = __toESM(require("os"));
 var path31 = __toESM(require("path"));
 var BINARY_READ_CONCURRENCY = 4;
 var BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
-var DOC_JOIN_CONCURRENCY = 4;
+var DOC_JOIN_CONCURRENCY = 8;
 async function fetchRemoteSnapshot(deps) {
   const { manifest, session, client, syncHealth, signal } = deps;
-  const project = session.getProject();
-  if (!project) {
-    throw new Error("Overleaf realtime session does not have a project tree.");
+  let indexedRemote = deps.indexedRemote;
+  if (!indexedRemote) {
+    const project = session.getProject();
+    if (!project) {
+      throw new Error("Overleaf realtime session does not have a project tree.");
+    }
+    indexedRemote = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project).manifest;
   }
-  const indexed = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project);
   const contents = /* @__PURE__ */ new Map();
   const hashes = /* @__PURE__ */ new Map();
   const blobHashes = /* @__PURE__ */ new Map();
@@ -28454,7 +28365,7 @@ async function fetchRemoteSnapshot(deps) {
     binaryGetCount: 0,
     remoteCacheReuseCount: 0
   };
-  const plan = syncHealth.planRemoteReads(manifest, indexed.manifest, {
+  const plan = syncHealth.planRemoteReads(manifest, indexedRemote, {
     mode: deps.mode ?? "incremental",
     paths: deps.paths
   });
@@ -28517,7 +28428,7 @@ async function fetchRemoteSnapshot(deps) {
   } finally {
     await fs26.rm(remoteTempRoot, { recursive: true, force: true });
   }
-  return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
+  return { manifest: indexedRemote, contents, hashes, blobHashes, failures, reused, metrics };
 }
 async function classifyProjectPaths(deps) {
   const { root, manifest, remote, localScan, requestedPaths } = deps;
@@ -29343,14 +29254,14 @@ function buildManifestFolderFingerprints(manifest) {
   }
   return new Map([...parts].map(([folder, values]) => [
     folder,
-    sha1(`folder\0${values.map((value) => value.replace(`${folder}/`, "")).sort().join("\n")}`)
+    sha1(`folder\0${values.sort().join("\n")}`)
   ]));
 }
 function valueForFolder(folder, relPath, value) {
   const prefix = folder ? `${folder}/` : "";
   if (!relPath.startsWith(prefix)) return value;
   const marker = value.indexOf("\0");
-  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1)}`;
+  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1 + relPath.length)}`;
 }
 async function folderFingerprintFromLocal(root, relPath, manifest, concurrency = 4) {
   const parts = [];
@@ -29382,30 +29293,10 @@ var DEFERRED_LOCAL_CHANGE_BASE_DELAY_MS = 500;
 var DEFERRED_LOCAL_CHANGE_MAX_DELAY_MS = 15e3;
 var DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS = 12;
 var ACTIVITY_LOG_LIMIT = 2e3;
+var ACTIVITY_LOG_FLUSH_DELAY_MS = 1e3;
 var STALE_CHECK_MAX_RETRIES = 3;
 var STALE_CHECK_RETRY_BASE_DELAY_MS = 250;
 var RealtimeSyncService = class {
-  constructor(context, output) {
-    this.context = context;
-    this.output = output ?? vscode10.window.createOutputChannel("LaTeX Editing Toolkit");
-    this.checkScheduler = new SyncCheckScheduler(
-      (request) => {
-        if (!this.session || this.stopping) throw new Error("Realtime sync stopped before the scheduled check started.");
-        return this.checkSyncStatus(this.root, this.client, void 0, request);
-      },
-      void 0,
-      (error) => this.log(`Could not refresh sync status: ${formatUnknownError(error)}`)
-    );
-    this.status.command = "overleafCodex.startRealtimeSync";
-    this.status.text = "$(cloud) Overleaf";
-    this.status.tooltip = "Overleaf Codex realtime sync";
-    this.collaboratorStatus.command = "overleafCodex.showCollaborators";
-    this.collaboratorStatus.text = "$(organization) 0";
-    this.collaboratorStatus.tooltip = "Overleaf collaborators";
-    context.subscriptions.push(this.status, this.collaboratorStatus);
-    if (!output) context.subscriptions.push(this.output);
-  }
-  context;
   root;
   client;
   manifest;
@@ -29413,6 +29304,7 @@ var RealtimeSyncService = class {
   watcher;
   renameDisposable;
   docStates = /* @__PURE__ */ new Map();
+  pendingDocJoins = /* @__PURE__ */ new Map();
   documentSessions = /* @__PURE__ */ new Map();
   bypassHashes = /* @__PURE__ */ new Map();
   timers = /* @__PURE__ */ new Map();
@@ -29455,6 +29347,26 @@ var RealtimeSyncService = class {
   activityLogWrite = Promise.resolve();
   lastLogMessage;
   lastLogRepeat = 0;
+  activityLogFlushTimer;
+  constructor(context, output) {
+    this.output = output ?? vscode10.window.createOutputChannel("LaTeX Editing Toolkit");
+    this.checkScheduler = new SyncCheckScheduler(
+      (request) => {
+        if (!this.session || this.stopping) throw new Error("Realtime sync stopped before the scheduled check started.");
+        return this.checkSyncStatus(this.root, this.client, void 0, request);
+      },
+      void 0,
+      (error) => this.log(`Could not refresh sync status: ${formatUnknownError(error)}`)
+    );
+    this.status.command = "overleafCodex.startRealtimeSync";
+    this.status.text = "$(cloud) Overleaf";
+    this.status.tooltip = "Overleaf Codex realtime sync";
+    this.collaboratorStatus.command = "overleafCodex.showCollaborators";
+    this.collaboratorStatus.text = "$(organization) 0";
+    this.collaboratorStatus.tooltip = "Overleaf collaborators";
+    context.subscriptions.push(this.status, this.collaboratorStatus);
+    if (!output) context.subscriptions.push(this.output);
+  }
   get running() {
     return Boolean(this.session);
   }
@@ -29780,7 +29692,7 @@ var RealtimeSyncService = class {
     }
     if (refreshStatus) {
       await this.checkTargeted([normalized], "post-push");
-    } else {
+    } else if (!this.docStates.get(normalized)?.paused) {
       this.syncGate.clearPath(normalized);
     }
   }
@@ -29801,10 +29713,7 @@ var RealtimeSyncService = class {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
     if (remoteFile.entityType === "file") {
-      const target = await assertNoSymlinkPath(this.root, normalized);
-      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
-      const result = await this.client.downloadProjectFileToPath(this.manifest.projectId, remoteFile.entityId, staging);
-      await installStagedFile(staging, target);
+      const result = await this.downloadVerifiedBinary(remoteFile.entityId, normalized, remoteFile.remoteBlobHash);
       addOrUpdateFile(this.manifest, { ...remoteFile, remoteSize: result.size });
       this.manifest.files[normalized].sha1 = result.sha1;
       this.manifest.files[normalized].baseHash = result.sha1;
@@ -29881,7 +29790,6 @@ var RealtimeSyncService = class {
     const generation = ++this.generation;
     this.stopping = false;
     this.shouldReconnect = true;
-    this.reconnectAttempt = 0;
     this.root = root;
     this.client = client;
     this.manifest = await readManifest(root);
@@ -29899,8 +29807,15 @@ var RealtimeSyncService = class {
     this.binaryTransactions = new BinaryTransactionStore(root);
     this.conflictStore = new ConflictStore(root);
     progress?.report({ message: "Connecting to Overleaf realtime server" });
-    this.session = await client.connectSocket(this.manifest.projectId, signal);
-    this.assertGeneration(generation, signal);
+    const session = await client.connectSocket(this.manifest.projectId, signal);
+    try {
+      this.assertGeneration(generation, signal);
+    } catch (error) {
+      session.disconnect();
+      throw error;
+    }
+    this.session = session;
+    this.reconnectAttempt = 0;
     await this.recoverBinaryTransactions();
     this.registerRemoteHandlers();
     this.registerPresenceHandlers();
@@ -29935,9 +29850,11 @@ var RealtimeSyncService = class {
     }
     this.timers.clear();
     this.deferredChangeAttempts.clear();
+    this.flushActivityLog();
     await Promise.all([...this.inFlight.values()].map((operation) => operation.catch(() => void 0)));
     await Promise.all([...this.healthChecks].map((operation) => operation.catch(() => void 0)));
     this.docStates.clear();
+    this.pendingDocJoins.clear();
     this.documentSessions.clear();
     this.bypassHashes.clear();
     this.inFlight.clear();
@@ -30790,7 +30707,7 @@ var RealtimeSyncService = class {
       }
       void this.start(root, client).catch((error) => {
         this.log(`Reconnect failed: ${formatUnknownError(error)}`);
-        this.scheduleReconnect();
+        if (!this.session) this.scheduleReconnect();
       });
     }, delay3);
   }
@@ -30942,6 +30859,33 @@ var RealtimeSyncService = class {
       delete this.manifest.folders[folder.path];
     }
     if (created.length > 0) await this.persistManifest();
+  }
+  /**
+   * Downloads a remote binary, verifies it against the hash Overleaf advertised, and only then
+   * installs it over the working copy.
+   *
+   * Both guards matter. The download follows redirects and accepts any 200, so an expired session
+   * can answer with a login page; without the hash check that HTML would replace the user's file
+   * and its digest would then be recorded as the manifest's truth, leaving the path reported as
+   * synced. Staging inside the metadata tree (which isAlwaysLocal excludes) also keeps the partial
+   * file out of the workspace, where the watcher would otherwise see it as a new file to upload.
+   */
+  async downloadVerifiedBinary(entityId, relPath, expectedBlobHash) {
+    const target = await assertNoSymlinkPath(this.root, relPath);
+    const staging = metadataPath(this.root, "cache", `download-${entityId}-${process.pid}-${Date.now()}`);
+    await fs31.mkdir(path36.dirname(staging), { recursive: true });
+    try {
+      const result = await this.client.downloadProjectFileToPath(this.manifest.projectId, entityId, staging);
+      if (expectedBlobHash && result.gitBlobHash !== expectedBlobHash) {
+        throw new Error(
+          `Overleaf returned unexpected content for ${relPath}; refusing to overwrite the local file.`
+        );
+      }
+      await installStagedFile(staging, target);
+      return result;
+    } finally {
+      await fs31.rm(staging, { force: true }).catch(() => void 0);
+    }
   }
   /** Whether `relPath` still resolves to a real entry inside the project root. */
   async localPathExists(relPath) {
@@ -31339,6 +31283,10 @@ var RealtimeSyncService = class {
     }
     const localPath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
     const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => state.localCache) : state.localCache;
+    if (this.manifest.files[relPath]?.entityId !== state.docId) {
+      this.scheduleSyncStatusCheck(void 0, [relPath]);
+      return;
+    }
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
       await this.writeLocalFile(relPath, Buffer.from(remoteNext, "utf8"), true);
@@ -31391,10 +31339,8 @@ var RealtimeSyncService = class {
       await this.writeLocalFile(relPath, Buffer.from(doc.content, "utf8"), true);
       await this.session.leaveDoc(entity._id).catch(() => void 0);
     } else {
-      const target = await assertNoSymlinkPath(this.root, relPath);
-      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
-      const result = await this.client.downloadProjectFileToPath(this.manifest.projectId, entity._id, staging);
-      await installStagedFile(staging, target);
+      const expectedBlobHash = "hash" in entity ? entity.hash : void 0;
+      const result = await this.downloadVerifiedBinary(entity._id, relPath, expectedBlobHash);
       addOrUpdateFile(this.manifest, {
         path: relPath,
         entityId: entity._id,
@@ -31480,7 +31426,6 @@ var RealtimeSyncService = class {
         this.scheduleSyncStatusCheck(5e3, [oldPath]);
         return;
       }
-      const file = this.manifest.files[oldPath];
       const newPath = path36.posix.join(parentPath, path36.posix.basename(oldPath));
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, newParentFolderId);
@@ -31532,21 +31477,33 @@ var RealtimeSyncService = class {
     if (existing) {
       return existing;
     }
+    const pending = this.pendingDocJoins.get(relPath);
+    if (pending) {
+      return pending;
+    }
     const file = this.manifest.files[relPath];
     if (!file || file.entityType !== "doc") {
       throw new Error(`${relPath} is not an Overleaf document.`);
     }
-    const joined = await this.session.joinDoc(file.entityId);
-    const state = {
-      relPath,
-      docId: file.entityId,
-      version: joined.version,
-      localCache: joined.content,
-      remoteCache: joined.content
-    };
-    this.docStates.set(relPath, state);
-    this.manifest.files[relPath].version = joined.version;
-    return state;
+    const join37 = (async () => {
+      const joined = await this.session.joinDoc(file.entityId);
+      const state = {
+        relPath,
+        docId: file.entityId,
+        version: joined.version,
+        localCache: joined.content,
+        remoteCache: joined.content
+      };
+      this.docStates.set(relPath, state);
+      this.manifest.files[relPath].version = joined.version;
+      return state;
+    })();
+    this.pendingDocJoins.set(relPath, join37);
+    try {
+      return await join37;
+    } finally {
+      this.pendingDocJoins.delete(relPath);
+    }
   }
   documentSessionFor(state) {
     const existing = this.documentSessions.get(state.docId);
@@ -31888,11 +31845,31 @@ var RealtimeSyncService = class {
     if (this.activityLog.length > ACTIVITY_LOG_LIMIT) {
       this.activityLog.splice(0, this.activityLog.length - ACTIVITY_LOG_LIMIT);
     }
-    if (this.root) {
-      const root = this.root;
-      const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + "\n";
-      this.activityLogWrite = this.activityLogWrite.catch(() => void 0).then(() => atomicWriteText(metadataPath(root, "activity-log.json"), snapshot)).catch(() => void 0);
+    this.scheduleActivityLogFlush();
+  }
+  /**
+   * Serialising and rewriting the whole log on every line made each message cost the size of the
+   * entire buffer - and logging is heaviest exactly when sync is busiest. A trailing flush
+   * collapses a burst into one write. The trade-off is that a crash can lose the last
+   * ACTIVITY_LOG_FLUSH_DELAY_MS of entries, which is acceptable for a diagnostic log; stop()
+   * flushes so an orderly shutdown loses nothing.
+   */
+  scheduleActivityLogFlush() {
+    if (!this.root || this.activityLogFlushTimer) return;
+    this.activityLogFlushTimer = setTimeout(() => {
+      this.activityLogFlushTimer = void 0;
+      this.flushActivityLog();
+    }, ACTIVITY_LOG_FLUSH_DELAY_MS);
+  }
+  flushActivityLog() {
+    const root = this.root;
+    if (!root) return;
+    if (this.activityLogFlushTimer) {
+      clearTimeout(this.activityLogFlushTimer);
+      this.activityLogFlushTimer = void 0;
     }
+    const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + "\n";
+    this.activityLogWrite = this.activityLogWrite.catch(() => void 0).then(() => atomicWriteText(metadataPath(root, "activity-log.json"), snapshot)).catch(() => void 0);
   }
   markLocalMutation(entityId) {
     const expirations = this.localMutationIds.get(entityId) ?? [];
@@ -32326,7 +32303,6 @@ var crypto6 = __toESM(require("crypto"));
 var fs33 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path39 = __toESM(require("path"));
-var import_events = require("events");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
@@ -32344,7 +32320,6 @@ var SyncOwnerCoordinator = class {
   clientSockets = /* @__PURE__ */ new Set();
   subscriberSockets = /* @__PURE__ */ new Set();
   eventSockets = /* @__PURE__ */ new Set();
-  events = new import_events.EventEmitter();
   writeQueues = /* @__PURE__ */ new WeakMap();
   commandQueue = Promise.resolve();
   releasing = false;
@@ -32356,6 +32331,15 @@ var SyncOwnerCoordinator = class {
   }
   async claim(root, handler) {
     await this.release();
+    try {
+      return await this.claimInner(root, handler);
+    } catch (error) {
+      this.handler = void 0;
+      this.root = void 0;
+      throw error;
+    }
+  }
+  async claimInner(root, handler) {
     this.root = await fs33.realpath(path39.resolve(root)).catch(() => path39.resolve(root));
     this.handler = handler;
     const paths = runtimePaths(this.root);
@@ -32448,11 +32432,6 @@ var SyncOwnerCoordinator = class {
         });
       }
     }
-    this.events.emit("event", message);
-  }
-  onEvent(listener) {
-    this.events.on("event", listener);
-    return () => this.events.off("event", listener);
   }
   async subscribe(onEvent, timeoutMs = this.options.subscriptionTimeoutMs ?? 5e3) {
     if (!this.root) throw new Error("No sync root is selected.");
@@ -32852,7 +32831,6 @@ function errorResponse(id, code, message) {
 // src/overleaf/overleafService.ts
 var OverleafService = class {
   constructor(context, output, onChanged = () => void 0, scope = "local", migrateLegacyMirrors = false) {
-    this.context = context;
     this.output = output;
     this.onChanged = onChanged;
     this.secrets = new SecretStore(context);
@@ -32878,7 +32856,6 @@ var OverleafService = class {
       this.realtimeSync.onDidChangeCollaborators(() => this.broadcastOwnerSnapshot())
     );
   }
-  context;
   output;
   onChanged;
   secrets;
@@ -33006,6 +32983,8 @@ var OverleafService = class {
       }
       await this.realtimeSync.stop();
       this.takeoverEnabled = false;
+      if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+      this.takeoverTimer = void 0;
       this.ownerSubscription = void 0;
       this.clearExternalSnapshot();
       await this.ownerCoordinator.release();
@@ -34107,8 +34086,9 @@ async function pruneSupersededInstalls(supportRoot, keepVersion) {
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === keepVersion) continue;
     const candidate = path41.join(supportRoot, entry.name);
-    const leftover = entry.name.startsWith(".staging-") || entry.name.startsWith(".backup-");
-    if (!leftover && !await hasManagedMarker(candidate)) continue;
+    const scratch = entry.name.startsWith(".staging-") || entry.name.startsWith(".backup-");
+    if (scratch && !entry.name.includes(`-${process.pid}-`)) continue;
+    if (!scratch && !await hasManagedMarker(candidate)) continue;
     if (await fs35.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
       removed.push(entry.name);
     }
