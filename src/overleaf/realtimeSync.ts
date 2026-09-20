@@ -130,6 +130,9 @@ const DEFERRED_LOCAL_CHANGE_MAX_ATTEMPTS = 12;
  */
 const ACTIVITY_LOG_LIMIT = 2000;
 
+/** Trailing window used to collapse a burst of log lines into a single file write. */
+const ACTIVITY_LOG_FLUSH_DELAY_MS = 1000;
+
 /**
  * A health check is discarded when the manifest changes under it - including when the extension's
  * own push is what changed it. Retrying instantly just races the same writes, so attempts are
@@ -189,6 +192,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private activityLogWrite: Promise<void> = Promise.resolve();
   private lastLogMessage?: string;
   private lastLogRepeat = 0;
+  private activityLogFlushTimer?: NodeJS.Timeout;
 
   constructor(context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
     this.output = output ?? vscode.window.createOutputChannel('LaTeX Editing Toolkit');
@@ -769,6 +773,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
     this.timers.clear();
     this.deferredChangeAttempts.clear();
+    this.flushActivityLog();
     await Promise.all([...this.inFlight.values()].map(operation => operation.catch(() => undefined)));
     await Promise.all([...this.healthChecks].map(operation => operation.catch(() => undefined)));
     this.docStates.clear();
@@ -2964,14 +2969,36 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (this.activityLog.length > ACTIVITY_LOG_LIMIT) {
       this.activityLog.splice(0, this.activityLog.length - ACTIVITY_LOG_LIMIT);
     }
-    if (this.root) {
-      const root = this.root;
-      const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + '\n';
-      this.activityLogWrite = this.activityLogWrite
-        .catch(() => undefined)
-        .then(() => atomicWriteText(metadataPath(root, 'activity-log.json'), snapshot))
-        .catch(() => undefined);
+    this.scheduleActivityLogFlush();
+  }
+
+  /**
+   * Serialising and rewriting the whole log on every line made each message cost the size of the
+   * entire buffer - and logging is heaviest exactly when sync is busiest. A trailing flush
+   * collapses a burst into one write. The trade-off is that a crash can lose the last
+   * ACTIVITY_LOG_FLUSH_DELAY_MS of entries, which is acceptable for a diagnostic log; stop()
+   * flushes so an orderly shutdown loses nothing.
+   */
+  private scheduleActivityLogFlush(): void {
+    if (!this.root || this.activityLogFlushTimer) return;
+    this.activityLogFlushTimer = setTimeout(() => {
+      this.activityLogFlushTimer = undefined;
+      this.flushActivityLog();
+    }, ACTIVITY_LOG_FLUSH_DELAY_MS);
+  }
+
+  private flushActivityLog(): void {
+    const root = this.root;
+    if (!root) return;
+    if (this.activityLogFlushTimer) {
+      clearTimeout(this.activityLogFlushTimer);
+      this.activityLogFlushTimer = undefined;
     }
+    const snapshot = JSON.stringify(this.activityLog.slice(-ACTIVITY_LOG_LIMIT), null, 2) + '\n';
+    this.activityLogWrite = this.activityLogWrite
+      .catch(() => undefined)
+      .then(() => atomicWriteText(metadataPath(root, 'activity-log.json'), snapshot))
+      .catch(() => undefined);
   }
 
   private markLocalMutation(entityId: string): void {

@@ -19,8 +19,9 @@ function makeService() {
   return { service, context, output, internals: service as unknown as Record<string, any> };
 }
 
-/** The activity log is written fire-and-forget; wait for it before touching the temp dir. */
+/** Writes are debounced and fire-and-forget; force one and wait before touching the temp dir. */
 async function flushActivityLog(internals: Record<string, any>): Promise<void> {
+  internals.flushActivityLog();
   await internals.activityLogWrite.catch(() => undefined);
 }
 
@@ -269,5 +270,25 @@ describe('reconnect backoff', () => {
     expect(first).toBe(1);
     expect(second).toBe(2);
     for (const timer of [internals.reconnectTimer]) if (timer) clearTimeout(timer);
+  });
+});
+
+describe('activity log write coalescing', () => {
+  it('writes once for a burst instead of once per line', async () => {
+    const { internals } = makeService();
+    internals.root = tmpRoot;
+    let writes = 0;
+    const original = internals.flushActivityLog.bind(internals);
+    internals.flushActivityLog = () => { writes += 1; return original(); };
+
+    for (let index = 0; index < 50; index += 1) internals.log(`message ${index}`);
+    expect(writes).toBe(0); // nothing written yet; the flush is on a trailing timer
+
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    expect(writes).toBe(1);
+
+    await internals.activityLogWrite.catch(() => undefined);
+    const written = JSON.parse(await fs.readFile(path.join(tmpRoot, '.overleaf-codex', 'activity-log.json'), 'utf8'));
+    expect(written).toHaveLength(50);
   });
 });

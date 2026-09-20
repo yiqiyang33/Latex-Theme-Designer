@@ -70,7 +70,9 @@ export interface RemoteSnapshotDeps {
 
 const BINARY_READ_CONCURRENCY = 4;
 const BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
-const DOC_JOIN_CONCURRENCY = 4;
+// Joins are small JSON round trips over one multiplexed socket, so depth here is latency, not load.
+// At 4, a 29-document project spent ~7 sequential waves (about 1.1-1.6s) on every startup check.
+const DOC_JOIN_CONCURRENCY = 8;
 
 /**
  * Reads the remote project tree, joins the documents and downloads the binaries that

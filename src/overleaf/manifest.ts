@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import { Buffer } from 'buffer';
 import * as path from 'path';
-import { minimatch } from 'minimatch';
+import { Minimatch } from 'minimatch';
 import createIgnore, { Ignore } from 'ignore';
 import {
   ManifestFile,
@@ -327,10 +327,28 @@ async function enqueueMetadataWrite(target: string, write: () => Promise<void>):
   }
 }
 
+/**
+ * minimatch() compiles its pattern on every call. shouldIgnore runs once per candidate path and
+ * tests ~38 patterns, so a sync check pays for thousands of recompilations of a pattern set that
+ * never changes. Compiled matchers are cached by pattern instead.
+ */
+const compiledGlobs = new Map<string, Minimatch>();
+
+function matchesGlob(pattern: string, normalized: string): boolean {
+  // minimatch() treats a leading '#' as a comment and returns false before compiling; keep that.
+  if (pattern.charAt(0) === '#') return false;
+  let compiled = compiledGlobs.get(pattern);
+  if (!compiled) {
+    compiled = new Minimatch(pattern, { dot: true });
+    compiledGlobs.set(pattern, compiled);
+  }
+  return compiled.match(normalized);
+}
+
 export function shouldIgnore(manifest: OverleafCodexManifest, relPath: string): boolean {
   const normalized = toPosixPath(relPath);
-  return manifest.ignore.some(pattern => minimatch(normalized, pattern, { dot: true }))
-    || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some(pattern => minimatch(normalized, pattern, { dot: true }));
+  return manifest.ignore.some(pattern => matchesGlob(pattern, normalized))
+    || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some(pattern => matchesGlob(pattern, normalized));
 }
 
 
