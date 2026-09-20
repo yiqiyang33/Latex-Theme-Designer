@@ -1576,7 +1576,7 @@ describe('P1 resource and persistence regressions', () => {
   it('rejects compile output URLs outside the configured server or declared CDN', async () => {
     const client = new OverleafClient('https://trusted.example/', { csrfToken: 'csrf', cookies: 'sid=secret' });
     const compile = { status: 'success' as const, compileGroup: 'group', outputFiles: [] };
-    await expect(client.downloadCompileOutput('https://attacker.example/output.pdf', compile)).rejects.toThrow(/untrusted host/);
+    await expect(client.downloadCompileOutputToPath('https://attacker.example/output.pdf', compile, path.join(os.tmpdir(), 'unused-output.pdf'))).rejects.toThrow(/untrusted host/);
   });
 
   it('streams file uploads and downloads through path-based client APIs', async () => {

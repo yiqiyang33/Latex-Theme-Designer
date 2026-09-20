@@ -23,8 +23,6 @@ import type {
   ManifestFile,
   ManifestFolder,
   OverleafCodexManifest,
-  OverleafDoc,
-  OverleafFileRef,
   SyncStatusReport
 } from './types';
 import {
@@ -39,7 +37,7 @@ import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash,
 import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
 import { fetchRemoteSnapshot, reconcileProject } from './syncReconciler';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
-import { mapWithConcurrency, SyncHealthService } from './syncHealthService';
+import { SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
@@ -822,9 +820,6 @@ export class OverleafSyncEngine {
     }
   }
 
-  private async folderFingerprintFromLocal(relPath: string): Promise<string> {
-    return folderFingerprintFromLocal(this.root, relPath, this.manifest!);
-  }
 
   private scheduleSync(reason: string): void {
     if (!this.running || this.stopping) return;

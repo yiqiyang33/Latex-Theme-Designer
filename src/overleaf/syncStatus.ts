@@ -10,7 +10,7 @@ import {
   SyncStatusReport
 } from './types';
 import { shouldIgnore, shouldIgnoreUntrackedLocalPath } from './manifest';
-import { sha1, toPosixPath } from './util';
+import { toPosixPath } from './util';
 
 export interface SyncStatusDecisionInput {
   path: string;

@@ -1,6 +1,6 @@
 import type { BinaryTransaction } from './binaryTransactions';
 import type { PersistedConflict } from './conflictStore';
-import type { OverleafCodexManifest, SyncStatusItem, SyncStatusReport } from './types';
+import type { OverleafCodexManifest, SyncStatusReport } from './types';
 import { normalizeProjectRelativePath } from './util';
 
 type ValidationResult = string | undefined;

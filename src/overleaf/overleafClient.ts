@@ -110,10 +110,6 @@ export class OverleafClient {
       : new https.Agent({ keepAlive: true });
   }
 
-  setIdentity(identity: Identity): void {
-    this.identity = identity;
-  }
-
   getServerUrl(): string {
     return this.serverUrl;
   }
@@ -259,10 +255,6 @@ export class OverleafClient {
     };
   }
 
-  async downloadProjectFile(projectId: string, fileId: string, signal?: AbortSignal): Promise<Uint8Array> {
-    return this.downloadRelative(`project/${projectId}/file/${fileId}`, true, signal);
-  }
-
   async downloadProjectFileToPath(
     projectId: string,
     fileId: string,
@@ -329,23 +321,6 @@ export class OverleafClient {
     await this.requestText('POST', `project/${projectId}/compile/stop`, {
       includeCsrfHeader: true
     });
-  }
-
-  async downloadCompileOutput(outputUrl: string, compile: CompileResponse): Promise<Uint8Array> {
-    if (/^https?:\/\//i.test(outputUrl)) {
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(outputUrl, compile), false);
-    }
-
-    if (compile.pdfDownloadDomain && compile.clsiServerId) {
-      const cleanOutput = outputUrl.replace(/^\/+/, '');
-      const cdnUrl = `${compile.pdfDownloadDomain.replace(/\/+$/, '')}/${cleanOutput}`
-        + `?compileGroup=${encodeURIComponent(compile.compileGroup)}`
-        + `&clsiserverid=${encodeURIComponent(compile.clsiServerId)}`
-        + '&enable_pdf_caching=true';
-      return this.downloadAbsolute(this.assertAllowedCompileDownloadUrl(cdnUrl, compile), false);
-    }
-
-    return this.downloadRelative(outputUrl.replace(/^\/+/, ''), true);
   }
 
   async downloadCompileOutputToPath(
@@ -530,97 +505,6 @@ export class OverleafClient {
     return res.status === 204 ? '' : readResponseTextLimited(res, MAX_RESPONSE_TEXT_BYTES);
   }
 
-  private async downloadRelative(route: string, includeCookies: boolean, signal?: AbortSignal): Promise<Uint8Array> {
-    return this.downloadAbsolute(this.urlFor(route), includeCookies, signal);
-  }
-
-  private async downloadAbsolute(url: string, includeCookies: boolean, signal?: AbortSignal): Promise<Uint8Array> {
-    const identity = includeCookies ? this.requireIdentity() : undefined;
-    let sendCookies = Boolean(identity);
-    const chunks: Buffer[] = [];
-    let currentUrl = url;
-    let offset = 0;
-    let expectedTotal: number | undefined;
-    let redirects = 0;
-    let ranges = 0;
-
-    while (true) {
-      const res = await this.fetchWithTimeout(currentUrl, {
-        method: 'GET',
-        redirect: 'manual',
-        agent: this.agent,
-        headers: {
-          Connection: 'keep-alive',
-          ...(offset > 0 ? { Range: `bytes=${offset}-` } : {}),
-          ...(sendCookies && identity ? { Cookie: identity.cookies } : {})
-        }
-      }, this.timeouts.httpMs, signal);
-
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location');
-        res.body?.resume();
-        if (!location || redirects >= 5) {
-          throw new OverleafHttpError(`Overleaf download redirect failed for ${path.basename(currentUrl)}.`, res.status);
-        }
-        const nextUrl = new URL(location, currentUrl);
-        sendCookies = sendCookies && new URL(currentUrl).origin === nextUrl.origin;
-        currentUrl = nextUrl.toString();
-        redirects += 1;
-        continue;
-      }
-
-      if (res.status !== 200 && res.status !== 206) {
-        await assertOk(res, currentUrl);
-      }
-
-      const chunk = await readResponseBufferLimited(res, MAX_BUFFERED_DOWNLOAD_BYTES);
-      if (res.status === 200) {
-        if (offset > 0) {
-          throw new Error('Overleaf ignored a Range request after returning partial content.');
-        }
-        if (chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-          throw new Error('Overleaf download exceeded its size limit.');
-        }
-        chunks.push(chunk);
-        break;
-      }
-
-      if (ranges >= 128) {
-        throw new Error('Overleaf download returned too many partial responses.');
-      }
-      const range = parseContentRange(res.headers.get('content-range'));
-      if (range.start !== offset || range.end < range.start || chunk.length !== range.end - range.start + 1) {
-        throw new Error(`Invalid Overleaf Content-Range response: ${res.headers.get('content-range') ?? 'missing'}.`);
-      }
-      if (offset + chunk.length > MAX_BUFFERED_DOWNLOAD_BYTES) {
-        throw new Error('Overleaf download exceeded its size limit.');
-      }
-      if (expectedTotal !== undefined && range.total !== expectedTotal) {
-        throw new Error('Overleaf changed the total download size between partial responses.');
-      }
-      expectedTotal = range.total;
-      chunks.push(chunk);
-      const nextOffset = range.end + 1;
-      if (nextOffset <= offset) {
-        throw new Error('Overleaf repeated a partial download range.');
-      }
-      offset = nextOffset;
-      ranges += 1;
-      if (offset === expectedTotal) {
-        break;
-      }
-      if (offset > expectedTotal) {
-        throw new Error('Overleaf partial download exceeded its declared size.');
-      }
-    }
-
-    const result = Buffer.concat(chunks);
-    if (expectedTotal !== undefined && result.length !== expectedTotal) {
-      throw new Error(`Overleaf partial download was incomplete (${result.length}/${expectedTotal} bytes).`);
-    }
-    return new Uint8Array(result);
-  }
-
   private async downloadAbsoluteToPath(
     url: string,
     includeCookies: boolean,
@@ -764,7 +648,7 @@ export class OverleafSocketSession {
   public publicId?: string;
   private readonly timeouts: NetworkTimeouts;
 
-  constructor(serverUrl: string, private readonly identity: Identity, timeouts: NetworkTimeouts, query?: string) {
+  constructor(serverUrl: string, identity: Identity, timeouts: NetworkTimeouts, query?: string) {
     this.timeouts = timeouts;
     const runtimeRoot = path.join(__dirname, 'vendor', 'socket.io-client');
     const socketIo = loadSocketIoClient(runtimeRoot);
@@ -1472,10 +1356,11 @@ function isRetryableSocketHandshakeError(error: unknown): boolean {
   return !/HTTP [34]\d\d|Log in again/i.test(message);
 }
 
-export function encodePackedUtf8(text: string): string {
-  return Buffer.from(text, 'utf8').toString('latin1');
-}
-
+/**
+ * The pinned Socket.IO 0.9 transport hands us document text as latin1-packed bytes, so joinDoc has
+ * to unpack it. Nothing re-packs on the way out: outbound ops travel as ordinary JSON over the
+ * same socket, which encodes them itself.
+ */
 export function decodePackedUtf8(text: string): string {
   return Buffer.from(text, 'latin1').toString('utf8');
 }

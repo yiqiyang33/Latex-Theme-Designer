@@ -15,13 +15,10 @@ import { assertValidManifest, assertValidSyncStatus, validateManifest, validateS
 export const METADATA_DIR = '.overleaf-codex';
 export const MANIFEST_NAME = 'manifest.json';
 export const OUTPUT_DIR = 'output';
-export const CONFLICT_DIR = 'conflicts';
 export const BASE_DIR = 'base';
-export const TRASH_DIR = 'trash';
 export const SYNC_STATUS_NAME = 'sync-status.json';
 export const TRANSACTIONS_NAME = 'transactions.json';
 export const CONFLICT_INDEX_NAME = 'conflicts.json';
-export const ACTIVITY_LOG_NAME = 'activity-log.json';
 export const LOCAL_IGNORE_NAME = '.overleaf-codexignore';
 export const MAX_MANIFEST_JSON_BYTES = 32 * 1024 * 1024;
 export const MAX_METADATA_JSON_BYTES = 8 * 1024 * 1024;
@@ -43,11 +40,6 @@ export const DEFAULT_IGNORE_PATTERNS = [
   '**/.DS_Store'
 ];
 
-export const TOOLKIT_CONFIG_ALLOWLIST = [
-  '**/*.tex', '**/*.bib', '**/*.sty', '**/*.cls', '**/*.bst',
-  'commands.tex', 'theorems.tex', 'theme.sty', 'theme.colors.tex',
-  'theme.ui.json', 'theme.overrides.tex'
-];
 
 export const TOOLKIT_OVERRIDE_PATHS = new Set([
   'commands.tex', 'theorems.tex', 'theme.sty', 'theme.colors.tex',
@@ -341,16 +333,6 @@ export function shouldIgnore(manifest: OverleafCodexManifest, relPath: string): 
     || TOOLKIT_SYNC_EXCLUDE_PATTERNS.some(pattern => minimatch(normalized, pattern, { dot: true }));
 }
 
-export function shouldSyncToolkitPath(relPath: string): boolean {
-  const normalized = toPosixPath(relPath);
-  if (TOOLKIT_SYNC_EXCLUDE_PATTERNS.some(pattern => minimatch(normalized, pattern, { dot: true }))) return false;
-  return TOOLKIT_CONFIG_ALLOWLIST.some(pattern => minimatch(normalized, pattern, { dot: true }))
-    || isSourceLikePath(normalized);
-}
-
-function isSourceLikePath(relPath: string): boolean {
-  return /\.(?:tex|bib|sty|cls|bst)$/i.test(relPath);
-}
 
 export function shouldIgnoreUntrackedLocalPath(manifest: OverleafCodexManifest, relPath: string): boolean {
   const normalized = toPosixPath(relPath);
@@ -427,9 +409,6 @@ export function filePathById(manifest: OverleafCodexManifest, entityId: string):
   return getManifestEntityIndex(manifest).files.get(entityId);
 }
 
-export function invalidateManifestEntityIndex(manifest: OverleafCodexManifest): void {
-  manifestEntityIndexes.delete(manifest);
-}
 
 function getManifestEntityIndex(manifest: OverleafCodexManifest): ManifestEntityIndex {
   const existing = manifestEntityIndexes.get(manifest);
@@ -441,8 +420,3 @@ function getManifestEntityIndex(manifest: OverleafCodexManifest): ManifestEntity
   return index;
 }
 
-export function findParentFolderId(manifest: OverleafCodexManifest, relPath: string): string | undefined {
-  const parent = toPosixPath(path.posix.dirname(toPosixPath(relPath)));
-  const folderPath = parent === '.' ? '' : parent;
-  return manifest.folders[folderPath]?.entityId;
-}

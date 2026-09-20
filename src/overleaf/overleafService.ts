@@ -12,7 +12,7 @@ import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "
 import { SecretStore } from "./secretStore";
 import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
-import type { Identity, NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
+import type { NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
 import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from "./util";
 import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
@@ -81,7 +81,7 @@ export class OverleafService implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
-    private readonly context: vscode.ExtensionContext,
+    context: vscode.ExtensionContext,
     private readonly output: vscode.OutputChannel,
     private readonly onChanged: () => void = () => undefined,
     scope = "local",

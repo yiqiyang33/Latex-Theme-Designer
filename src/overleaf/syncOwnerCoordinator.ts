@@ -2,12 +2,10 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as net from 'net';
 import * as path from 'path';
-import { EventEmitter } from 'events';
 import { runtimeRoot } from './sharedState';
 import { readTextFileBounded } from './manifest';
 import { formatUnknownError, processAlive, processStartSignature } from './util';
 
-export const SYNC_IPC_VERSION = 1;
 const MAX_IPC_FRAME_BYTES = 1024 * 1024;
 const MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 const MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
@@ -74,7 +72,6 @@ export class SyncOwnerCoordinator {
   private clientSockets = new Set<net.Socket>();
   private subscriberSockets = new Set<net.Socket>();
   private eventSockets = new Set<net.Socket>();
-  private readonly events = new EventEmitter();
   private readonly writeQueues = new WeakMap<net.Socket, Promise<void>>();
   private commandQueue: Promise<unknown> = Promise.resolve();
   private releasing = false;
@@ -198,13 +195,8 @@ export class SyncOwnerCoordinator {
         });
       }
     }
-    this.events.emit('event', message);
   }
 
-  onEvent(listener: (event: OwnerEvent) => void): () => void {
-    this.events.on('event', listener);
-    return () => this.events.off('event', listener);
-  }
 
   async subscribe(
     onEvent: (event: OwnerEvent) => void,

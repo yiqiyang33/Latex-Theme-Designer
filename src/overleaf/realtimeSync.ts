@@ -39,7 +39,6 @@ import {
   ManifestFile,
   ManifestFolder,
   OnlineUser,
-  OtOperation,
   OtUpdate,
   OverleafCodexManifest,
   OverleafDoc,
@@ -50,10 +49,9 @@ import {
 } from './types';
 import {
   scanLocalProject,
-  isBlockingStatus,
   trashPathFor
 } from './syncStatus';
-import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, sleep, toPosixPath, validateProjectPathSegment } from './util';
+import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, assertPathWithin, formatUnknownError, isTextLike, normalizeProjectRelativePath, sanitizeDiagnosticText, sha1, sleep, toPosixPath, validateProjectPathSegment } from './util';
 import { SyncGate } from './syncGate';
 import { fetchRemoteSnapshot, reconcileProject, type RemoteSnapshot } from './syncReconciler';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
@@ -61,29 +59,14 @@ import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
-import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
+import { SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { planSafeSyncActions } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
-import {
-  applyOtOperations,
-  buildOtOperations,
-  hasLocalChangedSinceLastSync,
-  hasRemoteChangedSinceLastSync,
-  mergeRemoteIntoLocal,
-  shareJsBlobHash
-} from './ot';
-export {
-  applyOtOperations,
-  buildOtOperations,
-  hasLocalChangedSinceLastSync,
-  hasRemoteChangedSinceLastSync,
-  mergeRemoteIntoLocal,
-  shareJsBlobHash
-} from './ot';
+import { mergeRemoteIntoLocal } from './ot';
 
 interface DocState extends OtDocumentState {
   relPath: string;
@@ -207,7 +190,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private lastLogMessage?: string;
   private lastLogRepeat = 0;
 
-  constructor(private readonly context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
+  constructor(context: vscode.ExtensionContext, output?: vscode.OutputChannel) {
     this.output = output ?? vscode.window.createOutputChannel('LaTeX Editing Toolkit');
     this.checkScheduler = new SyncCheckScheduler(
       request => {
@@ -2517,7 +2500,6 @@ export class RealtimeSyncService implements vscode.Disposable {
         this.scheduleSyncStatusCheck(5000, [oldPath]);
         return;
       }
-      const file = this.manifest!.files[oldPath];
       const newPath = path.posix.join(parentPath, path.posix.basename(oldPath));
       try {
         await this.applyRemoteFilePathChange(oldPath, newPath, newParentFolderId);
