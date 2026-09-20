@@ -249,6 +249,10 @@ export class OverleafSyncEngine {
         syncHealth: this.syncHealth,
         mode,
         paths: requestedPaths,
+        // The rename pre-pass above already reasoned about this exact tree. Re-indexing inside the
+        // snapshot would classify against a later view, since the session keeps applying remote
+        // events to the project as they arrive.
+        indexedRemote: remote,
         onProgress: ({ path: relPath, completed, total }) => this.host.progress({
           phase: 'check',
           message: `Read remote metadata ${relPath}`,

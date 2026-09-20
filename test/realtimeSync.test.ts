@@ -200,3 +200,74 @@ describe('activity log retention', () => {
     expect(log[0].message).toBe('message 0');
   });
 });
+
+describe('downloadVerifiedBinary', () => {
+  function serviceWithClient(download: (...args: any[]) => Promise<any>) {
+    const { service, internals } = makeService();
+    internals.root = tmpRoot;
+    internals.manifest = makeManifest(tmpRoot);
+    internals.client = { downloadProjectFileToPath: download };
+    return { service, internals };
+  }
+
+  it('refuses to install content whose hash does not match what Overleaf advertised', async () => {
+    // An expired session answers the download with a login page; without the check that HTML
+    // would replace the user's file and its digest would become the manifest's truth.
+    const { internals } = serviceWithClient(async (_p: string, _e: string, target: string) => {
+      await fs.writeFile(target, '<html>please log in</html>');
+      return { size: 26, sha1: 'sha-of-login-page', gitBlobHash: 'blob-of-login-page' };
+    });
+    await fs.writeFile(path.join(tmpRoot, 'fig.png'), 'original bytes');
+
+    await expect(internals.downloadVerifiedBinary('e1', 'fig.png', 'blob-expected'))
+      .rejects.toThrow(/unexpected content/);
+    // The working copy is untouched.
+    await expect(fs.readFile(path.join(tmpRoot, 'fig.png'), 'utf8')).resolves.toBe('original bytes');
+  });
+
+  it('installs when the hash matches, and stages outside the watched workspace', async () => {
+    let stagedIn = '';
+    const { internals } = serviceWithClient(async (_p: string, _e: string, target: string) => {
+      stagedIn = target;
+      await fs.writeFile(target, 'new bytes');
+      return { size: 9, sha1: 'sha-new', gitBlobHash: 'blob-expected' };
+    });
+
+    const result = await internals.downloadVerifiedBinary('e1', 'fig.png', 'blob-expected');
+
+    expect(result.gitBlobHash).toBe('blob-expected');
+    await expect(fs.readFile(path.join(tmpRoot, 'fig.png'), 'utf8')).resolves.toBe('new bytes');
+    // Staging inside .overleaf-codex keeps the partial file away from the file watcher.
+    expect(stagedIn).toContain('.overleaf-codex');
+    expect(stagedIn.startsWith(path.join(tmpRoot, '.overleaf-codex'))).toBe(true);
+  });
+
+  it('still installs when Overleaf advertised no hash to compare against', async () => {
+    const { internals } = serviceWithClient(async (_p: string, _e: string, target: string) => {
+      await fs.writeFile(target, 'bytes');
+      return { size: 5, sha1: 'sha', gitBlobHash: 'blob' };
+    });
+    await internals.downloadVerifiedBinary('e1', 'fig.png', undefined);
+    await expect(fs.readFile(path.join(tmpRoot, 'fig.png'), 'utf8')).resolves.toBe('bytes');
+  });
+});
+
+describe('reconnect backoff', () => {
+  it('does not reset the attempt counter before the connection is established', async () => {
+    const { internals } = makeService();
+    internals.root = tmpRoot;
+    internals.client = {};
+    internals.shouldReconnect = true;
+
+    // Two consecutive failures must escalate rather than retry at a flat 1s forever.
+    internals.scheduleReconnect();
+    const first = internals.reconnectAttempt;
+    internals.reconnectTimer = undefined;
+    internals.scheduleReconnect();
+    const second = internals.reconnectAttempt;
+
+    expect(first).toBe(1);
+    expect(second).toBe(2);
+    for (const timer of [internals.reconnectTimer]) if (timer) clearTimeout(timer);
+  });
+});

@@ -957,19 +957,21 @@ describe('Overleaf CLI parser and managed installation', () => {
       // Each install prunes what it supersedes, so versions never pile up in the first place.
       expect((await installCli(extensionRoot, '1.0.1')).removedVersions).toEqual(['1.0.0']);
 
-      // Leftovers from an interrupted install, and a directory this installer does not own.
-      await fs.mkdir(path.join(supportRoot, '.staging-1.0.1-123-456'), { recursive: true });
-      await fs.mkdir(path.join(supportRoot, '.backup-1.0.1-123-456'), { recursive: true });
+      // Our own interrupted leftovers, another process's in-flight scratch, and a directory this
+      // installer does not own.
+      const mine = `.staging-1.0.1-${process.pid}-456`;
+      const theirs = `.staging-1.0.1-${process.pid + 1}-456`;
+      await fs.mkdir(path.join(supportRoot, mine), { recursive: true });
+      await fs.mkdir(path.join(supportRoot, theirs), { recursive: true });
       await fs.mkdir(path.join(supportRoot, 'not-ours'), { recursive: true });
       await fs.writeFile(path.join(supportRoot, 'not-ours', 'keep.txt'), 'keep me');
 
       const result = await installCli(extensionRoot, '1.0.2');
 
+      // Another process may be mid-install in `theirs`; deleting it would break its rename.
       const remaining = (await fs.readdir(supportRoot)).sort();
-      expect(remaining).toEqual(['1.0.2', 'not-ours']);
-      expect(result.removedVersions.sort()).toEqual(
-        ['.backup-1.0.1-123-456', '.staging-1.0.1-123-456', '1.0.1']
-      );
+      expect(remaining).toEqual(['1.0.2', 'not-ours', theirs].sort());
+      expect(result.removedVersions.sort()).toEqual([mine, '1.0.1'].sort());
       // The live command still resolves after the prune.
       expect(await fs.realpath(result.commandPath)).toBe(
         await fs.realpath(path.join(supportRoot, '1.0.2', 'cli.js'))

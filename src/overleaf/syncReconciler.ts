@@ -60,6 +60,12 @@ export interface RemoteSnapshotDeps {
   onProgress?(progress: RemoteReadProgress): void;
   /** Per-path read failure. The snapshot records it either way; this is for logging. */
   onFailure?(relPath: string, message: string): void;
+  /**
+   * A tree index the caller already built. Pass it when earlier work in the same pass depended on
+   * that exact view: `session.getProject()` keeps mutating as remote events arrive, so re-indexing
+   * here would classify against a different tree than the caller reasoned about.
+   */
+  indexedRemote?: OverleafCodexManifest;
 }
 
 const BINARY_READ_CONCURRENCY = 4;
@@ -73,11 +79,14 @@ const DOC_JOIN_CONCURRENCY = 4;
  */
 export async function fetchRemoteSnapshot(deps: RemoteSnapshotDeps): Promise<RemoteSnapshot> {
   const { manifest, session, client, syncHealth, signal } = deps;
-  const project = session.getProject();
-  if (!project) {
-    throw new Error('Overleaf realtime session does not have a project tree.');
+  let indexedRemote = deps.indexedRemote;
+  if (!indexedRemote) {
+    const project = session.getProject();
+    if (!project) {
+      throw new Error('Overleaf realtime session does not have a project tree.');
+    }
+    indexedRemote = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project).manifest;
   }
-  const indexed = buildProjectTreeIndex(manifest.serverUrl, manifest.projectId, manifest.projectName, project);
   const contents = new Map<string, string>();
   const hashes = new Map<string, string>();
   const blobHashes = new Map<string, string>();
@@ -90,7 +99,7 @@ export async function fetchRemoteSnapshot(deps: RemoteSnapshotDeps): Promise<Rem
     remoteCacheReuseCount: 0
   };
 
-  const plan = syncHealth.planRemoteReads(manifest, indexed.manifest, {
+  const plan = syncHealth.planRemoteReads(manifest, indexedRemote, {
     mode: deps.mode ?? 'incremental',
     paths: deps.paths
   });
@@ -158,7 +167,7 @@ export async function fetchRemoteSnapshot(deps: RemoteSnapshotDeps): Promise<Rem
     await fs.rm(remoteTempRoot, { recursive: true, force: true });
   }
 
-  return { manifest: indexed.manifest, contents, hashes, blobHashes, failures, reused, metrics };
+  return { manifest: indexedRemote, contents, hashes, blobHashes, failures, reused, metrics };
 }
 
 export interface DivergedContext {

@@ -74,8 +74,12 @@ async function pruneSupersededInstalls(supportRoot: string, keepVersion: string)
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === keepVersion) continue;
     const candidate = path.join(supportRoot, entry.name);
-    const leftover = entry.name.startsWith('.staging-') || entry.name.startsWith('.backup-');
-    if (!leftover && !await hasManagedMarker(candidate)) continue;
+    const scratch = entry.name.startsWith('.staging-') || entry.name.startsWith('.backup-');
+    // Scratch directories carry the pid that created them. Another process can be mid-install in
+    // its own, and deleting that would break its rename - or, worse, its rollback. Reclaim only
+    // the ones this process left behind.
+    if (scratch && !entry.name.includes(`-${process.pid}-`)) continue;
+    if (!scratch && !await hasManagedMarker(candidate)) continue;
     if (await fs.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
       removed.push(entry.name);
     }

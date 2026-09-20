@@ -35,6 +35,7 @@ import {
 import { buildProjectTreeIndex } from './tree';
 import {
   CollaboratorPosition,
+  FileTransferResult,
   ManifestFile,
   ManifestFolder,
   OnlineUser,
@@ -630,10 +631,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     }
 
     if (remoteFile.entityType === 'file') {
-      const target = await assertNoSymlinkPath(this.root!, normalized);
-      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
-      const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, remoteFile.entityId, staging);
-      await installStagedFile(staging, target);
+      const result = await this.downloadVerifiedBinary(remoteFile.entityId, normalized, remoteFile.remoteBlobHash);
       addOrUpdateFile(this.manifest!, { ...remoteFile, remoteSize: result.size });
       this.manifest!.files[normalized].sha1 = result.sha1;
       this.manifest!.files[normalized].baseHash = result.sha1;
@@ -714,7 +712,6 @@ export class RealtimeSyncService implements vscode.Disposable {
     const generation = ++this.generation;
     this.stopping = false;
     this.shouldReconnect = true;
-    this.reconnectAttempt = 0;
     this.root = root;
     this.client = client;
     this.manifest = await readManifest(root);
@@ -734,8 +731,19 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.binaryTransactions = new BinaryTransactionStore(root);
     this.conflictStore = new ConflictStore(root);
     progress?.report({ message: 'Connecting to Overleaf realtime server' });
-    this.session = await client.connectSocket(this.manifest.projectId, signal);
-    this.assertGeneration(generation, signal);
+    const session = await client.connectSocket(this.manifest.projectId, signal);
+    try {
+      this.assertGeneration(generation, signal);
+    } catch (error) {
+      // A newer start (or a stop) already took over while we were connecting. Publishing this
+      // socket would strand it: nothing would ever disconnect it and `running` would stay true.
+      session.disconnect();
+      throw error;
+    }
+    this.session = session;
+    // Only now is the connection real, so this is the point at which the backoff may reset.
+    // Resetting earlier made a failing reconnect retry every second forever.
+    this.reconnectAttempt = 0;
     await this.recoverBinaryTransactions();
     this.registerRemoteHandlers();
     this.registerPresenceHandlers();
@@ -1696,7 +1704,9 @@ export class RealtimeSyncService implements vscode.Disposable {
       }
       void this.start(root, client).catch(error => {
         this.log(`Reconnect failed: ${formatUnknownError(error)}`);
-        this.scheduleReconnect();
+        // A live session means a newer start already superseded this attempt; reconnecting now
+        // would stop the healthy session it just established.
+        if (!this.session) this.scheduleReconnect();
       });
     }, delay);
   }
@@ -1864,6 +1874,38 @@ export class RealtimeSyncService implements vscode.Disposable {
       delete this.manifest!.folders[folder.path];
     }
     if (created.length > 0) await this.persistManifest();
+  }
+
+  /**
+   * Downloads a remote binary, verifies it against the hash Overleaf advertised, and only then
+   * installs it over the working copy.
+   *
+   * Both guards matter. The download follows redirects and accepts any 200, so an expired session
+   * can answer with a login page; without the hash check that HTML would replace the user's file
+   * and its digest would then be recorded as the manifest's truth, leaving the path reported as
+   * synced. Staging inside the metadata tree (which isAlwaysLocal excludes) also keeps the partial
+   * file out of the workspace, where the watcher would otherwise see it as a new file to upload.
+   */
+  private async downloadVerifiedBinary(
+    entityId: string,
+    relPath: string,
+    expectedBlobHash: string | undefined
+  ): Promise<FileTransferResult> {
+    const target = await assertNoSymlinkPath(this.root!, relPath);
+    const staging = metadataPath(this.root!, 'cache', `download-${entityId}-${process.pid}-${Date.now()}`);
+    await fs.mkdir(path.dirname(staging), { recursive: true });
+    try {
+      const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, entityId, staging);
+      if (expectedBlobHash && result.gitBlobHash !== expectedBlobHash) {
+        throw new Error(
+          `Overleaf returned unexpected content for ${relPath}; refusing to overwrite the local file.`
+        );
+      }
+      await installStagedFile(staging, target);
+      return result;
+    } finally {
+      await fs.rm(staging, { force: true }).catch(() => undefined);
+    }
   }
 
   /** Whether `relPath` still resolves to a real entry inside the project root. */
@@ -2368,10 +2410,9 @@ export class RealtimeSyncService implements vscode.Disposable {
       await this.writeLocalFile(relPath, Buffer.from(doc.content, 'utf8'), true);
       await this.session!.leaveDoc(entity._id).catch(() => undefined);
     } else {
-      const target = await assertNoSymlinkPath(this.root!, relPath);
-      const staging = `${target}.overleaf-download-${process.pid}-${Date.now()}`;
-      const result = await this.client!.downloadProjectFileToPath(this.manifest!.projectId, entity._id, staging);
-      await installStagedFile(staging, target);
+      // kind === 'file' here, so the ref carries the blob hash Overleaf advertises for it.
+      const expectedBlobHash = 'hash' in entity ? entity.hash : undefined;
+      const result = await this.downloadVerifiedBinary(entity._id, relPath, expectedBlobHash);
       addOrUpdateFile(this.manifest!, {
         path: relPath,
         entityId: entity._id,
