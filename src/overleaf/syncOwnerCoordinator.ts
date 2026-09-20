@@ -91,6 +91,19 @@ export class SyncOwnerCoordinator {
 
   async claim(root: string, handler: OwnerHandler): Promise<'owner' | 'client'> {
     await this.release();
+    try {
+      return await this.claimInner(root, handler);
+    } catch (error) {
+      // A failed claim must not leave the coordinator advertising a root it does not own: callers
+      // read currentRoot to decide they are a client of an owner that, here, never started - which
+      // strands the window with no owner and no retry.
+      this.handler = undefined;
+      this.root = undefined;
+      throw error;
+    }
+  }
+
+  private async claimInner(root: string, handler: OwnerHandler): Promise<'owner' | 'client'> {
     this.root = await fs.realpath(path.resolve(root)).catch(() => path.resolve(root));
     this.handler = handler;
     const paths = runtimePaths(this.root);

@@ -30,15 +30,22 @@ export function buildManifestFolderFingerprints(manifest: OverleafCodexManifest)
   }
   return new Map([...parts].map(([folder, values]) => [
     folder,
-    sha1(`folder\0${values.map(value => value.replace(`${folder}/`, '')).sort().join('\n')}`)
+    sha1(`folder\0${values.sort().join('\n')}`)
   ]));
 }
 
+/**
+ * Rewrites one part string so its path is relative to `folder`, matching what
+ * folderFingerprintFromLocal emits for the same entry. The two fingerprints are compared to detect
+ * folder renames, so any difference in shape here makes every comparison fail.
+ */
 function valueForFolder(folder: string, relPath: string, value: string): string {
   const prefix = folder ? `${folder}/` : '';
   if (!relPath.startsWith(prefix)) return value;
   const marker = value.indexOf('\0');
-  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1)}`;
+  // Skip past the full path rather than keeping it: the segment after the marker is relPath, and
+  // it is replaced by the folder-relative form, not prefixed with it.
+  return `${value.slice(0, marker + 1)}${relPath.slice(prefix.length)}${value.slice(marker + 1 + relPath.length)}`;
 }
 
 /** Computes a local folder fingerprint with bounded file hashing and the same ignore rules as syncStatus. */

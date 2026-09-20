@@ -229,6 +229,11 @@ export class OverleafService implements vscode.Disposable {
       }
       await this.realtimeSync.stop();
       this.takeoverEnabled = false;
+      // Every other teardown path clears this too. Without it a takeover armed moments earlier
+      // still fires and restarts sync for the folder the user just closed, because the timer
+      // callback does not re-check takeoverEnabled.
+      if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+      this.takeoverTimer = undefined;
       this.ownerSubscription = undefined;
       this.clearExternalSnapshot();
       await this.ownerCoordinator.release();

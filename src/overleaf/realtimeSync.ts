@@ -163,6 +163,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private watcher?: vscode.FileSystemWatcher;
   private renameDisposable?: vscode.Disposable;
   private readonly docStates = new Map<string, DocState>();
+  private readonly pendingDocJoins = new Map<string, Promise<DocState>>();
   private readonly documentSessions = new Map<string, OtDocumentSession>();
   private readonly bypassHashes = new Map<string, string>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
@@ -608,7 +609,10 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     if (refreshStatus) {
       await this.checkTargeted([normalized], 'post-push');
-    } else {
+    } else if (!this.docStates.get(normalized)?.paused) {
+      // syncDocContent pauses the document and gates the path when the submit came back with a
+      // remote conflict. Clearing unconditionally here dropped that gate while DocState stayed
+      // paused, leaving the conflict invisible to everything that consults the gate.
       this.syncGate.clearPath(normalized);
     }
   }
@@ -785,6 +789,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     await Promise.all([...this.inFlight.values()].map(operation => operation.catch(() => undefined)));
     await Promise.all([...this.healthChecks].map(operation => operation.catch(() => undefined)));
     this.docStates.clear();
+    this.pendingDocJoins.clear();
     this.documentSessions.clear();
     this.bypassHashes.clear();
     this.inFlight.clear();
@@ -2354,6 +2359,14 @@ export class RealtimeSyncService implements vscode.Disposable {
     const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
     const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => state.localCache) : state.localCache;
 
+    // Remote handlers are fire-and-forget, so a rename or delete for this document can land while
+    // the update above was being applied. Writing now would recreate the file at its old path and
+    // then touch a manifest entry that no longer describes it.
+    if (this.manifest!.files[relPath]?.entityId !== state.docId) {
+      this.scheduleSyncStatusCheck(undefined, [relPath]);
+      return;
+    }
+
     if (localContent === state.localCache) {
       state.localCache = remoteNext;
       await this.writeLocalFile(relPath, Buffer.from(remoteNext, 'utf8'), true);
@@ -2560,22 +2573,37 @@ export class RealtimeSyncService implements vscode.Disposable {
     if (existing) {
       return existing;
     }
+    // Remote updates arrive as unawaited handlers, so several can reach a not-yet-joined document
+    // at once. Without sharing the in-flight join they would each join it and build their own
+    // DocState, leaving two unsynchronised OtDocumentSessions writing the same file.
+    const pending = this.pendingDocJoins.get(relPath);
+    if (pending) {
+      return pending;
+    }
 
     const file = this.manifest!.files[relPath];
     if (!file || file.entityType !== 'doc') {
       throw new Error(`${relPath} is not an Overleaf document.`);
     }
-    const joined = await this.session!.joinDoc(file.entityId);
-    const state: DocState = {
-      relPath,
-      docId: file.entityId,
-      version: joined.version,
-      localCache: joined.content,
-      remoteCache: joined.content
-    };
-    this.docStates.set(relPath, state);
-    this.manifest!.files[relPath].version = joined.version;
-    return state;
+    const join = (async (): Promise<DocState> => {
+      const joined = await this.session!.joinDoc(file.entityId);
+      const state: DocState = {
+        relPath,
+        docId: file.entityId,
+        version: joined.version,
+        localCache: joined.content,
+        remoteCache: joined.content
+      };
+      this.docStates.set(relPath, state);
+      this.manifest!.files[relPath].version = joined.version;
+      return state;
+    })();
+    this.pendingDocJoins.set(relPath, join);
+    try {
+      return await join;
+    } finally {
+      this.pendingDocJoins.delete(relPath);
+    }
   }
 
   private documentSessionFor(state: DocState): OtDocumentSession {
