@@ -280,11 +280,21 @@ Available starters:
 - `book-minimal`
 - `article-minimal`
 - `homework-assignment`
+- `research-paper`
 - `beamer-uchicago`
 - `beamer-blei`
 - `beamer-gotham`
 
 The default starter remains `book-minimal`.
+
+`research-paper` is a journal-style article starter: `newtx` Times text and math, natbib
+author-year citations against `references.bib`, `cleveref` cross-references, shared-counter
+`amsthm` environments, and an `\appendix` proofs section. Like the Beamer starters it is
+self-contained and does not load `theme.sty`, so the Theme Designer color panel does not
+apply to it; edit its preamble directly. It is written for the Split workflow: `\usepackage{subfiles}`
+is loaded last so each `Sections/*.tex` unit produced by `Split` inherits the full preamble and
+compiles on its own, and the bundled `\loadmainreferences` macro pulls cross-section labels
+from the root `main.aux` (including an Overleaf mirror's `.overleaf-codex/local-build/main.aux`).
 
 Beamer starters are grouped under the Beamer Slides document type. Their theme files are
 bundled into the generated workspace so a new presentation can compile without a global

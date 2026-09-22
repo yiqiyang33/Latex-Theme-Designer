@@ -1,0 +1,182 @@
+% Research paper starter: subfiles-ready article with natbib and cleveref.
+% This starter is self-contained. It does not load theme.sty, so the Theme
+% Designer color panel does not apply here; edit this preamble directly.
+\documentclass[11pt]{article}
+
+% -------------------- Page layout and typography --------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+% \doublespacing % Uncomment for a double-spaced submission draft.
+
+% Only pdfLaTeX needs the legacy encoding packages. XeLaTeX and LuaLaTeX are
+% Unicode engines and would lose that capability if T1/inputenc were forced.
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+\fi
+
+% -------------------- Mathematics --------------------
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\allowdisplaybreaks
+
+% Times-like text and math that works under both pdfLaTeX and XeLaTeX.
+% newtxmath already provides the AMS symbols: do not add \usepackage{amssymb},
+% it clashes with the newtxmath symbol fonts.
+\usepackage{newtxtext}
+\usepackage{newtxmath}
+
+% -------------------- Figures, tables, lists, algorithms --------------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{threeparttable}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% -------------------- Bibliography and cross-references --------------------
+\usepackage[round,authoryear]{natbib}
+\usepackage{xr}
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,noabbrev]{cleveref}
+\crefname{theorem}{Theorem}{Theorems}
+\crefname{proposition}{Proposition}{Propositions}
+\crefname{lemma}{Lemma}{Lemmas}
+\crefname{corollary}{Corollary}{Corollaries}
+\crefname{definition}{Definition}{Definitions}
+\crefname{assumption}{Assumption}{Assumptions}
+\crefname{remark}{Remark}{Remarks}
+\crefname{algorithm}{Algorithm}{Algorithms}
+
+% -------------------- Theorem environments --------------------
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem*{note}{Note}
+
+% -------------------- Notation --------------------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cX}{\mathcal{X}}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\title{Paper Title}
+\author{Author Name\thanks{Affiliation, contact address, and acknowledgements.}}
+\date{\today}
+
+% Load subfiles last so that every standalone section inherits this preamble.
+% Use the Toolkit's Split command to break this file into Sections/*.tex units
+% that each compile on their own.
+\usepackage{subfiles}
+
+% Import only references to other sections, avoiding duplicate local labels.
+% Compile main.tex first to make these cross-section references available.
+\makeatletter
+\newcommand{\loadmainreferences}[1]{%
+  \IfFileExists{main.aux}{\externaldocument[main-][nocite]{main}}{%
+    \IfFileExists{../main.aux}{\externaldocument[main-][nocite]{../main}}{%
+      \IfFileExists{../.overleaf-codex/local-build/main.aux}{%
+        \externaldocument[main-][nocite]{../.overleaf-codex/local-build/main}%
+      }{}%
+    }%
+  }%
+  \@for\mainref:=#1\do{%
+    \@ifundefined{r@main-\mainref}{}{%
+      \expandafter\let\expandafter\mainrefvalue\csname r@main-\mainref\endcsname
+      \expandafter\let\csname r@\mainref\endcsname\mainrefvalue
+      \expandafter\let\expandafter\mainrefvalue\csname r@main-\mainref @cref\endcsname
+      \expandafter\let\csname r@\mainref @cref\endcsname\mainrefvalue
+    }%
+  }%
+}
+\makeatother
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+State the question, the approach, and the main result in a single paragraph.
+Replace this text with the paper abstract.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:introduction}
+
+Motivate the problem, state the contribution, and position the paper against
+prior work. Citations use natbib: \citet{knuth1984} in the text, or
+parenthetically \citep{knuth1984}.
+
+\section{Model}
+\label{sec:model}
+
+Set up notation and the maintained conditions.
+
+\begin{assumption}
+\label{asm:regularity}
+State the regularity conditions the analysis relies on.
+\end{assumption}
+
+\begin{definition}
+\label{def:object}
+Define the central object of study.
+\end{definition}
+
+\section{Main Results}
+\label{sec:results}
+
+\begin{theorem}
+\label{thm:main}
+Under \Cref{asm:regularity}, every $x \in \cX$ satisfies
+\begin{equation}
+\label{eq:main}
+\E[f(x)] \le \argmax_{y \in \cX} g(y).
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Deferred to \Cref{sec:proofs}.
+\end{proof}
+
+\begin{remark}
+Comment on how \Cref{thm:main} and \Cref{eq:main} relate to the literature.
+\end{remark}
+
+\section{Numerical Study}
+\label{sec:numerical}
+
+Report the experimental design and the findings.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+Summarize the contribution and outline the open questions.
+
+\appendix
+
+\section{Proofs}
+\label{sec:proofs}
+
+\begin{proof}[Proof of \Cref{thm:main}]
+Write the full argument here.
+\end{proof}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

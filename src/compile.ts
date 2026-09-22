@@ -9,6 +9,19 @@ import { compileOutputPdfRelpath, exists, isSubpath, safeWorkspaceRel, stripTexC
 const COMMAND_TIMEOUT_MS = 120_000;
 const SUBFILE_PATTERN = /\\subfile(?:\[[^\]]*\])?\{([^}]+)\}/g;
 
+/**
+ * Pick the bibliography processor the internal pipeline should run, or null when
+ * the document declares no bibliography. biblatex needs biber; the classic
+ * \bibliography command needs bibtex, and running biber there always fails.
+ */
+export function detectBibliographyTool(source: string): "biber" | "bibtex" | null {
+  const clean = stripTexComments(source);
+  if (/\\addbibresource\b/i.test(clean)) return "biber";
+  if (/\\usepackage(?:\[[^\]]*\])?\s*\{[^}]*\bbiblatex\b[^}]*\}/i.test(clean)) return "biber";
+  if (/\\bibliography\s*\{/i.test(clean)) return "bibtex";
+  return null;
+}
+
 export class CompileService {
   constructor(private readonly rootDir: string, private readonly stateService: StateService) {}
 
@@ -92,41 +105,42 @@ export class CompileService {
   private async compileInternal(ctx: CompileContext): Promise<{ success: boolean; output: string; pdfPath: string }> {
     const logs: string[] = [];
     const source = await fs.readFile(ctx.targetAbs, "utf8").catch(() => "");
-    const isBeamer = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(source);
-    const hasBibliography = /\\(?:addbibresource|bibliography)\b/i.test(source);
     const latex = ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]] as const;
-    const pipeline: ReadonlyArray<readonly [string, readonly string[]]> = isBeamer
-      ? [latex]
-      : [latex, ["biber", [ctx.docstem]], latex, latex];
-    for (const [cmd, args] of pipeline) {
-      const resolved = await this.resolveBinary(cmd);
-      if (!resolved) {
-        logs.push(`[${cmd}] command not found in PATH.`);
-        return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-      }
-      const result = await this.runCommand(resolved, args, ctx.compileCwd);
-      this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
-      if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-    }
-    if (isBeamer) {
-      const bcfExists = await exists(path.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
-      const remaining: ReadonlyArray<readonly [string, readonly string[]]> = [
-        ...(hasBibliography || bcfExists ? [["biber", [ctx.docstem]] as const] : []),
-        latex,
-        latex
-      ];
-      for (const [cmd, args] of remaining) {
-        const resolved = await this.resolveBinary(cmd);
-        if (!resolved) {
-          logs.push(`[${cmd}] command not found in PATH.`);
-          return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-        }
-        const result = await this.runCommand(resolved, args, ctx.compileCwd);
-        this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
-        if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-      }
+    const failure = () => ({ success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel });
+
+    if (!(await this.runInternalStep(ctx, logs, latex))) return failure();
+
+    // The bibliography step is advisory: an empty database or a document without
+    // citations must still produce a PDF, exactly as latexmk behaves.
+    const bcfExists = await exists(path.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
+    const bibTool = detectBibliographyTool(source) ?? (bcfExists ? "biber" : null);
+    if (bibTool) await this.runInternalStep(ctx, logs, [bibTool, [ctx.docstem]], { fatal: false });
+
+    for (const step of [latex, latex]) {
+      if (!(await this.runInternalStep(ctx, logs, step))) return failure();
     }
     return this.finalizeCompileOutput(ctx, logs, ctx.defaultPdfRel);
+  }
+
+  private async runInternalStep(
+    ctx: CompileContext,
+    logs: string[],
+    step: readonly [string, readonly string[]],
+    options: { fatal?: boolean } = {}
+  ): Promise<boolean> {
+    const fatal = options.fatal !== false;
+    const [cmd, args] = step;
+    const resolved = await this.resolveBinary(cmd);
+    if (!resolved) {
+      logs.push(`[${cmd}] command not found in PATH.${fatal ? "" : " Skipping this step."}`);
+      return !fatal;
+    }
+    const result = await this.runCommand(resolved, args, ctx.compileCwd);
+    this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
+    if (result.code === 0) return true;
+    if (fatal) return false;
+    logs.push(`[${cmd}] exited with code ${result.code}; continuing without it.`);
+    return true;
   }
 
   private async compileRecipe(ctx: CompileContext, recipeId: string): Promise<{ success: boolean; output: string; pdfPath: string }> {

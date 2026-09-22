@@ -160,6 +160,15 @@ export const STARTER_TEMPLATE_DEFINITIONS: StarterTemplateDefinition[] = [
     capabilities: ["toolkit-theme", "homework-structure"]
   },
   {
+    id: "research-paper",
+    kind: "article",
+    label: "Research Paper",
+    description: "Journal-style paper with subfiles sections, natbib bibliography, and cleveref.",
+    filename: "research-paper.tex",
+    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+    capabilities: ["paper-structure", "subfiles-ready", "bibliography"]
+  },
+  {
     id: "beamer-uchicago",
     kind: "beamer",
     parentId: "beamer",

@@ -8,6 +8,7 @@ import { detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, 
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
+import { detectBibliographyTool } from "../src/compile";
 import { LOCAL_PROJECTS_MAX_ENTRIES, LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "../src/projectRegistry";
 import { LocalResourceRegistry, scopedStateKey as genericScopedStateKey, stableResourceId, type LocalResourceAdapter } from "../src/localResourceRegistry";
 import { PersonalStyleRegistry } from "../src/personalStyles";
@@ -33,7 +34,7 @@ async function copyBaseAssets(root: string): Promise<void> {
     await fs.copyFile(path.join(repoRoot, "assets", "template", file), path.join(root, file));
   }
   await fs.mkdir(path.join(root, "templates"), { recursive: true });
-  for (const file of ["book-minimal.tex", "article-minimal.tex", "homework-assignment.tex"]) {
+  for (const file of ["book-minimal.tex", "article-minimal.tex", "homework-assignment.tex", "research-paper.tex"]) {
     await fs.copyFile(path.join(repoRoot, "assets", "template", "templates", file), path.join(root, "templates", file));
   }
   await fs.mkdir(path.join(root, "Fig"), { recursive: true });
@@ -463,6 +464,15 @@ describe("TypeScript Toolkit migration", () => {
     expect((await preflightCreateProject({ parentPath: parent, projectName: "../escape", templateId: "book-minimal" }, repoRoot)).ok).toBe(false);
   });
 
+  it("preflights every declared starter template", async () => {
+    const parent = await tempWorkspace();
+    for (const template of STARTER_TEMPLATE_DEFINITIONS) {
+      const result = await preflightCreateProject({ parentPath: parent, projectName: template.id, templateId: template.id }, repoRoot);
+      expect(result.errors, `${template.id} preflight`).toEqual([]);
+      expect(result.plannedFiles).toContain("main.tex");
+    }
+  });
+
   it("stores complete personal styles globally and falls back without changing project colors", async () => {
     const store = new MemoryProjectStateStore();
     const registry = new PersonalStyleRegistry(store);
@@ -616,6 +626,49 @@ describe("TypeScript Toolkit migration", () => {
     expect(text).toContain("\\NewDocumentEnvironment{homeworkProblem}");
     expect(text).toContain("\\NewDocumentEnvironment{homeworkSection}");
     expect(text).toContain("\\NewDocumentEnvironment{solution}");
+  });
+
+  it("exposes and creates the research paper starter, and splits it into subfiles", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new TemplateService(root, repoRoot, state);
+    expect(STARTER_TEMPLATE_DEFINITIONS.map((entry) => entry.id)).toContain("research-paper");
+    const result = await service.createStarter("research-paper", "main.tex", false);
+    const text = await fs.readFile(path.join(root, result.generated_target), "utf8");
+    const response = await state.buildResponseState();
+    expect(result.generated_target).toBe("main.tex");
+    expect(response.schema.starter_templates.map((entry) => entry.id)).toContain("research-paper");
+    expect(text).toContain("\\documentclass[11pt]{article}");
+    expect(text).toContain("\\usepackage{subfiles}");
+    expect(text).toContain("\\newcommand{\\loadmainreferences}");
+    expect(text).toContain("\\bibliography{references}");
+    // The starter is self-contained and must not pull in the Theme Designer assets.
+    expect(text).not.toContain("\\usepackage{theme}");
+
+    const metadata = JSON.parse(await fs.readFile(path.join(root, ".latex-editing-toolkit", "template.json"), "utf8"));
+    expect(metadata).toMatchObject({ kind: "article", templateId: "research-paper", target: "main.tex" });
+    expect(response.state.workspace_template).toMatchObject({
+      kind: "article",
+      templateId: "research-paper",
+      detectionSource: "metadata",
+      confidence: "exact"
+    });
+    expect(response.state.workspace_template.warning).toBeUndefined();
+
+    const splitter = new SplitterService(root, state);
+    const split = await splitter.splitTexFile(path.join(root, "main.tex"), "Sections", false);
+    expect(split.generated_subfile_targets.length).toBeGreaterThan(0);
+    const firstUnit = await fs.readFile(path.join(root, split.generated_subfile_targets[0]), "utf8");
+    expect(firstUnit.startsWith("\\documentclass[../main.tex]{subfiles}")).toBe(true);
+  });
+
+  it("picks the bibliography processor the document actually needs", () => {
+    expect(detectBibliographyTool("\\addbibresource{refs.bib}")).toBe("biber");
+    expect(detectBibliographyTool("\\usepackage[style=authoryear]{biblatex}")).toBe("biber");
+    expect(detectBibliographyTool("\\bibliographystyle{plainnat}\n\\bibliography{references}")).toBe("bibtex");
+    expect(detectBibliographyTool("\\bibliographystyle{plainnat}")).toBeNull();
+    expect(detectBibliographyTool("\\documentclass{article}")).toBeNull();
+    expect(detectBibliographyTool("% \\bibliography{references}")).toBeNull();
   });
 
   it("creates bundled Beamer child templates with metadata and local theme assets", async () => {
