@@ -5,7 +5,7 @@ import { HistoryConflictError, workspaceHistoryStorageRoot } from "./changeHisto
 import { confirmationSpec, isConfirmAction } from "./confirmations";
 import { PersonalStyleRegistry } from "./personalStyles";
 import { LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "./projectRegistry";
-import { preflightCreateProject, runCreateProjectWorkflow } from "./projectWorkflow";
+import { preflightCreateProject, runCreateProjectWorkflow, validateTemplateAndParent } from "./projectWorkflow";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { registerSnippetHost } from "./snippets/engine/host";
 import { getSnippetDir } from "./snippets/engine/utils";
@@ -315,6 +315,72 @@ async function warnAboutLegacySnips(context: vscode.ExtensionContext, output: vs
   }
 }
 
+/**
+ * Creates the project on Overleaf and scaffolds the chosen starter into its new local mirror.
+ *
+ * The folder is named after the project id Overleaf assigns, matching every other mirror, so the
+ * remote has to exist before the local path is known. Everything that can be checked before that
+ * point is checked first, to avoid creating a project only to fail on a bad template.
+ */
+async function createOverleafProjectFromTemplate(
+  context: vscode.ExtensionContext,
+  registry: LocalProjectRegistry,
+  treeProvider: ToolkitTreeProvider,
+  projectName: string,
+  templateId: string,
+  output: vscode.OutputChannel
+): Promise<void> {
+  const service = overleafService;
+  if (!service) return;
+
+  const parentRoot = service.mirrorManager.getConfiguredProjectsRoot();
+  const earlyErrors = await validateTemplateAndParent(templateId, parentRoot, context.extensionPath);
+  if (earlyErrors.length > 0) {
+    output.appendLine(`[${new Date().toISOString()}] CREATE OVERLEAF PROJECT PREFLIGHT`);
+    for (const error of earlyErrors) output.appendLine(`- ${error}`);
+    const action = await vscode.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+
+  try {
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
+      () => service.createProjectFromTemplate(projectName, async (root) => {
+        const scoped = new ToolkitService(root, context.extensionPath, {
+          additionalStylePresets: personalStyles?.definitions() ?? []
+        });
+        await runCreateProjectWorkflow(scoped, registry, root, templateId);
+      })
+    );
+
+    treeProvider.refresh();
+    if (!result.published) {
+      output.appendLine(`[${new Date().toISOString()}] CREATE OVERLEAF PROJECT PUBLISH FAILED`);
+      output.appendLine(`- ${result.publishError?.message ?? "unknown error"}`);
+      const action = await vscode.window.showWarningMessage(
+        `Created '${projectName}' on Overleaf, but not every file finished uploading. The folder is a working mirror, so running a sync will retry.`,
+        "Open Folder",
+        "Show Log"
+      );
+      if (action === "Open Folder") await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(result.root), true);
+      if (action === "Show Log") output.show(true);
+      return;
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      `Created '${projectName}' on Overleaf and mirrored it locally.`,
+      "Open Folder"
+    );
+    if (action === "Open Folder") await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(result.root), true);
+  } catch (err) {
+    logToolkitError(output, "latexEditingToolkit.createProject", parentRoot, err);
+    const message = err instanceof Error ? err.message : String(err);
+    const action = await vscode.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
+    if (action === "Show Log") output.show(true);
+  }
+}
+
 async function createProjectWizard(
   context: vscode.ExtensionContext,
   registry: LocalProjectRegistry,
@@ -387,6 +453,24 @@ async function createProjectWizard(
     { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
+
+  // Offer the Overleaf route only when it can actually work, so people who never use Overleaf
+  // are not asked a fifth question they have no answer to.
+  const overleafState = await overleafService?.state().catch(() => undefined);
+  if (overleafState?.available && overleafState.authenticated) {
+    const target = await vscode.window.showQuickPick(
+      [
+        { label: "Local only", description: "Create the project in the folder you chose", remote: false },
+        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
+      ],
+      { title: "Create Project (5/5): Destination", placeHolder: "Where should this project live?" }
+    );
+    if (!target) return;
+    if (target.remote) {
+      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output);
+      return;
+    }
+  }
 
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
   if (!preflight.ok) {

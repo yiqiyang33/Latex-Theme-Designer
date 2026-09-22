@@ -151,6 +151,105 @@ async function writeInitialFile(
   }
 }
 
+/** A brand-new Overleaf project holds only its default main.tex; more than this is unexpected. */
+const MAX_ENTITIES_IN_FRESH_PROJECT = 2;
+
+export interface CreateRemoteProjectOptions {
+  /** Populates the freshly prepared, still-empty mirror. Throwing here rolls the project back. */
+  scaffold(root: string): Promise<void>;
+  /** Uploads the scaffolded files. Runs after the manifest exists, so failures do not roll back. */
+  publish(root: string, client: OverleafClient, projectId: string): Promise<void>;
+  register?(root: string): Promise<unknown>;
+}
+
+export interface CreateRemoteProjectResult {
+  root: string;
+  projectId: string;
+  /** False when the project exists and is tracked but publishing its contents did not finish. */
+  published: boolean;
+  publishError?: Error;
+}
+
+/**
+ * Creates an Overleaf project and turns it into a local mirror holding `scaffold`'s output.
+ *
+ * This is createProjectMirror run backwards: instead of materialising an existing project locally,
+ * it makes an empty one remote-side and pushes local content into it. Overleaf hands back a
+ * project containing a default main.tex, which is removed so the scaffolded files are the only
+ * thing the project has ever had.
+ *
+ * Rollback is deliberately asymmetric. Up to the point the manifest lands, a failure deletes both
+ * the remote project and the local folder, because a half-made mirror is worse than none. After
+ * the manifest exists the folder is a legitimate mirror whose upload can simply be retried, so a
+ * publish failure is reported rather than thrown and nothing is destroyed.
+ */
+export async function createRemoteProjectMirror(
+  client: OverleafClient,
+  projectName: string,
+  parentRoot: string,
+  options: CreateRemoteProjectOptions
+): Promise<CreateRemoteProjectResult> {
+  const projectId = await client.createProject(projectName);
+  const summary: ProjectSummary = { id: projectId, name: projectName };
+  const targetRoot = projectMirrorRoot(parentRoot, summary);
+
+  let manifestWritten = false;
+  let session: Awaited<ReturnType<OverleafClient['connectSocket']>> | undefined;
+  try {
+    await fs.mkdir(path.dirname(targetRoot), { recursive: true });
+    await fs.mkdir(targetRoot);
+
+    session = await client.connectSocket(projectId);
+    const joined = session.getProject();
+    if (!joined) throw new Error('Realtime connection did not provide a project tree.');
+    const index = buildProjectTreeIndex(client.getServerUrl(), projectId, projectName, joined);
+
+    // Guard against clearing a project that is not the blank one we just made. This should be
+    // impossible, but the alternative to being wrong here is deleting someone's work.
+    const existing = Object.values(index.manifest.files);
+    if (existing.length > MAX_ENTITIES_IN_FRESH_PROJECT) {
+      throw new Error(
+        `New Overleaf project unexpectedly contains ${existing.length} files; refusing to clear it.`
+      );
+    }
+    for (const file of existing) {
+      await client.deleteEntity(projectId, file.entityType, file.entityId);
+      delete index.manifest.files[file.path];
+    }
+    index.manifest.rootDocId = undefined;
+    index.manifest.rootDocPath = undefined;
+
+    await options.scaffold(targetRoot);
+
+    for (const name of ['output', 'conflicts', path.join('base', 'docs'), 'trash']) {
+      await fs.mkdir(metadataPath(targetRoot, name), { recursive: true });
+    }
+    await ensureLocalIgnoreFile(targetRoot);
+    await writeManifest(targetRoot, index.manifest);
+    manifestWritten = true;
+    await writeMirrorSupportFiles(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
+    await initializeMirrorGitRepository(targetRoot, `Initial Overleaf project: ${projectName}`);
+  } catch (error) {
+    if (!manifestWritten) {
+      await fs.rm(targetRoot, { recursive: true, force: true }).catch(() => undefined);
+      await client.deleteProject(projectId).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    session?.disconnect();
+  }
+
+  await (options.register ?? registerSharedMirror)(targetRoot);
+
+  try {
+    await options.publish(targetRoot, client, projectId);
+  } catch (error) {
+    // The mirror is real and tracked; retrying the sync is a better answer than deleting it.
+    return { root: targetRoot, projectId, published: false, publishError: error as Error };
+  }
+  return { root: targetRoot, projectId, published: true };
+}
+
 export async function writeMirrorSupportFiles(root: string, rootDocPath?: string, compiler?: string): Promise<void> {
   await Promise.all([
     writeLocalVsCodeSettings(root, rootDocPath, compiler),

@@ -173,6 +173,36 @@ export class OverleafClient {
     }
   }
 
+  /**
+   * Creates an empty Overleaf project and returns its id.
+   *
+   * Note that "empty" is Overleaf's word, not ours: a `template: 'none'` project still arrives
+   * holding one `main.tex` with a default skeleton, so a caller that wants to populate the project
+   * itself has to clear that entity first.
+   */
+  async createProject(projectName: string): Promise<string> {
+    const result = await this.requestJson<{ project_id?: unknown; projectId?: unknown }>(
+      'POST',
+      'project/new',
+      {
+        body: { projectName, template: 'none' },
+        includeCsrfHeader: true
+      }
+    );
+    // Overleaf.com answers with snake_case; accept camelCase too so a compatible server that
+    // normalises its JSON does not fail here for a cosmetic reason.
+    const projectId = result.project_id ?? result.projectId;
+    if (!isBoundedString(projectId)) {
+      throw new Error('Overleaf did not return an id for the new project.');
+    }
+    return projectId;
+  }
+
+  /** Deletes a whole project. Used to roll back a half-finished create. */
+  async deleteProject(projectId: string): Promise<void> {
+    await this.requestText('DELETE', `project/${projectId}`, { includeCsrfHeader: true });
+  }
+
   async addDoc(projectId: string, parentFolderId: string, filename: string): Promise<OverleafDoc> {
     const result = await this.requestJson<{ _id: string }>('POST', `project/${projectId}/doc`, {
       body: {

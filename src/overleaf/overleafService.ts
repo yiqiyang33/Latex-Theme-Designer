@@ -7,6 +7,7 @@ import { CompileService } from "./compileService";
 import { manifestPath, metadataPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES, OUTPUT_DIR } from "./manifest";
 import { latestRemotePdf } from './compileCore';
 import { MirrorManager, type LocalMirrorRecord, type LocalMirrorStatus } from "./mirrorManager";
+import { createRemoteProjectMirror, type CreateRemoteProjectResult } from "./mirrorCore";
 import { isOverleafAuthenticationError, OverleafClient, OverleafHttpError } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
@@ -243,6 +244,51 @@ export class OverleafService implements vscode.Disposable {
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
     if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
     if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
+  }
+
+  /**
+   * Creates an Overleaf project, scaffolds a starter template into its new local mirror, and
+   * uploads the result.
+   *
+   * The upload is issued explicitly rather than left to the reconcile's automatic push, because
+   * that push is gated on the autoPushLocalAhead and syncBinaryFiles settings - a user who turned
+   * either off would otherwise end up with an empty project and no error.
+   */
+  async createProjectFromTemplate(
+    projectName: string,
+    scaffold: (root: string) => Promise<void>
+  ): Promise<CreateRemoteProjectResult> {
+    const state = await this.state();
+    if (!state.available) throw new Error("Overleaf support is unavailable in this environment.");
+    if (!state.authenticated) throw new Error("Sign in to Overleaf before creating a project.");
+
+    // Prefer the configured server when it is one we are signed in to, so the common
+    // single-account case does not make the user answer a server prompt mid-wizard.
+    const known = await this.secrets.listServers();
+    const configured = normalizeServerUrl(this.getConfiguredServerUrl());
+    const serverUrl = known.includes(configured)
+      ? configured
+      : known.length === 1
+        ? known[0]
+        : await this.pickServerUrl("Create Overleaf Project");
+    if (!serverUrl) throw new Error("No Overleaf server was selected.");
+
+    const client = await this.makeClient(serverUrl);
+    return createRemoteProjectMirror(client, projectName, this.mirrorManager.getConfiguredProjectsRoot(), {
+      scaffold,
+      publish: async (root: string) => {
+        await this.realtimeSync.start(root, client);
+        const report = await this.realtimeSync.checkSyncStatus(root, client, undefined, {
+          mode: "full",
+          reason: "initial-publish"
+        });
+        // Push whatever the classifier says only exists locally, regardless of policy.
+        for (const item of report.items) {
+          if (item.entityType === "folder" || item.status !== "local only") continue;
+          await this.realtimeSync.pushLocalFile(item.path, false);
+        }
+      }
+    });
   }
 
   async listMirrors(): Promise<LocalMirrorStatus[]> {

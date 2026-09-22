@@ -35,6 +35,53 @@ export async function runCreateProjectWorkflow(
 
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 
+/**
+ * Checks the two things that do not depend on the final project path: the starter template is
+ * usable, and the parent directory can be written to.
+ *
+ * Creating a project on Overleaf has to happen before the local path is known, because the folder
+ * is named after the project id the server assigns. Running these checks first means a bad
+ * template or an unwritable parent fails before anything exists remotely to roll back.
+ */
+export async function validateTemplateAndParent(
+  templateId: string,
+  parentPath: string,
+  extensionDir: string
+): Promise<string[]> {
+  const errors: string[] = [];
+  const resolvedParent = path.resolve(parentPath || "");
+  try {
+    const stat = await fs.stat(resolvedParent);
+    if (!stat.isDirectory()) errors.push("Selected parent location is not a directory.");
+    else await fs.access(resolvedParent, fsConstants.W_OK);
+  } catch (err) {
+    errors.push(`Parent location is not writable: ${(err as Error).message}`);
+  }
+
+  const template = STARTER_TEMPLATE_DEFINITIONS.find((item) => item.id === templateId);
+  if (!template) {
+    errors.push(`Unknown starter template: ${templateId}.`);
+    return errors;
+  }
+  try {
+    const source = path.join(extensionDir, "assets", "template", "templates", template.filename);
+    const text = await fs.readFile(source, "utf8");
+    if (!extractDocumentclassDeclaration(text)) {
+      errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
+    }
+    for (const asset of template.assetManifest) {
+      try {
+        await fs.access(path.join(extensionDir, "assets", "template", asset));
+      } catch {
+        errors.push(`Starter template asset is unavailable: ${asset}`);
+      }
+    }
+  } catch (err) {
+    errors.push(`Starter template is unavailable: ${(err as Error).message}`);
+  }
+  return errors;
+}
+
 export async function preflightCreateProject(draft: CreateProjectDraft, extensionDir: string): Promise<CreateProjectPreflightResult> {
   const errors: string[] = [];
   const warnings: string[] = [];

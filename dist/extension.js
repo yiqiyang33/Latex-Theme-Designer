@@ -711,6 +711,15 @@ var init_schema = __esm({
         capabilities: ["toolkit-theme", "homework-structure"]
       },
       {
+        id: "research-paper",
+        kind: "article",
+        label: "Research Paper",
+        description: "Journal-style paper with subfiles sections, natbib bibliography, and cleveref.",
+        filename: "research-paper.tex",
+        assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
+        capabilities: ["paper-structure", "subfiles-ready", "bibliography"]
+      },
+      {
         id: "beamer-uchicago",
         kind: "beamer",
         parentId: "beamer",
@@ -17442,6 +17451,39 @@ async function runCreateProjectWorkflow(service, registry, rootPath, templateId)
   await registry.add(rootPath, templateId);
 }
 var WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+async function validateTemplateAndParent(templateId, parentPath, extensionDir) {
+  const errors = [];
+  const resolvedParent = path5.resolve(parentPath || "");
+  try {
+    const stat11 = await import_node_fs5.promises.stat(resolvedParent);
+    if (!stat11.isDirectory()) errors.push("Selected parent location is not a directory.");
+    else await import_node_fs5.promises.access(resolvedParent, import_node_fs5.constants.W_OK);
+  } catch (err) {
+    errors.push(`Parent location is not writable: ${err.message}`);
+  }
+  const template = STARTER_TEMPLATE_DEFINITIONS.find((item) => item.id === templateId);
+  if (!template) {
+    errors.push(`Unknown starter template: ${templateId}.`);
+    return errors;
+  }
+  try {
+    const source = path5.join(extensionDir, "assets", "template", "templates", template.filename);
+    const text = await import_node_fs5.promises.readFile(source, "utf8");
+    if (!extractDocumentclassDeclaration(text)) {
+      errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
+    }
+    for (const asset of template.assetManifest) {
+      try {
+        await import_node_fs5.promises.access(path5.join(extensionDir, "assets", "template", asset));
+      } catch {
+        errors.push(`Starter template asset is unavailable: ${asset}`);
+      }
+    }
+  } catch (err) {
+    errors.push(`Starter template is unavailable: ${err.message}`);
+  }
+  return errors;
+}
 async function preflightCreateProject(draft, extensionDir) {
   const errors = [];
   const warnings = [];
@@ -20881,6 +20923,13 @@ var path12 = __toESM(require("node:path"));
 init_utils();
 var COMMAND_TIMEOUT_MS = 12e4;
 var SUBFILE_PATTERN = /\\subfile(?:\[[^\]]*\])?\{([^}]+)\}/g;
+function detectBibliographyTool(source) {
+  const clean = stripTexComments(source);
+  if (/\\addbibresource\b/i.test(clean)) return "biber";
+  if (/\\usepackage(?:\[[^\]]*\])?\s*\{[^}]*\bbiblatex\b[^}]*\}/i.test(clean)) return "biber";
+  if (/\\bibliography\s*\{/i.test(clean)) return "bibtex";
+  return null;
+}
 var CompileService = class {
   constructor(rootDir, stateService) {
     this.rootDir = rootDir;
@@ -20964,39 +21013,31 @@ var CompileService = class {
   async compileInternal(ctx) {
     const logs = [];
     const source = await import_node_fs11.promises.readFile(ctx.targetAbs, "utf8").catch(() => "");
-    const isBeamer = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.test(source);
-    const hasBibliography = /\\(?:addbibresource|bibliography)\b/i.test(source);
     const latex = ["xelatex", ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", ctx.docfile]];
-    const pipeline2 = isBeamer ? [latex] : [latex, ["biber", [ctx.docstem]], latex, latex];
-    for (const [cmd, args] of pipeline2) {
-      const resolved = await this.resolveBinary(cmd);
-      if (!resolved) {
-        logs.push(`[${cmd}] command not found in PATH.`);
-        return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-      }
-      const result = await this.runCommand(resolved, args, ctx.compileCwd);
-      this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
-      if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-    }
-    if (isBeamer) {
-      const bcfExists = await exists(path12.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
-      const remaining = [
-        ...hasBibliography || bcfExists ? [["biber", [ctx.docstem]]] : [],
-        latex,
-        latex
-      ];
-      for (const [cmd, args] of remaining) {
-        const resolved = await this.resolveBinary(cmd);
-        if (!resolved) {
-          logs.push(`[${cmd}] command not found in PATH.`);
-          return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-        }
-        const result = await this.runCommand(resolved, args, ctx.compileCwd);
-        this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
-        if (result.code !== 0) return { success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel };
-      }
+    const failure = () => ({ success: false, output: logs.join("\n"), pdfPath: ctx.defaultPdfRel });
+    if (!await this.runInternalStep(ctx, logs, latex)) return failure();
+    const bcfExists = await exists(path12.join(ctx.compileCwd, `${ctx.docstem}.bcf`));
+    const bibTool = detectBibliographyTool(source) ?? (bcfExists ? "biber" : null);
+    if (bibTool) await this.runInternalStep(ctx, logs, [bibTool, [ctx.docstem]], { fatal: false });
+    for (const step of [latex, latex]) {
+      if (!await this.runInternalStep(ctx, logs, step)) return failure();
     }
     return this.finalizeCompileOutput(ctx, logs, ctx.defaultPdfRel);
+  }
+  async runInternalStep(ctx, logs, step, options = {}) {
+    const fatal = options.fatal !== false;
+    const [cmd, args] = step;
+    const resolved = await this.resolveBinary(cmd);
+    if (!resolved) {
+      logs.push(`[${cmd}] command not found in PATH.${fatal ? "" : " Skipping this step."}`);
+      return !fatal;
+    }
+    const result = await this.runCommand(resolved, args, ctx.compileCwd);
+    this.appendStepLog(logs, cmd, ctx.compileCwd, [cmd, ...args], result.output, result.code);
+    if (result.code === 0) return true;
+    if (fatal) return false;
+    logs.push(`[${cmd}] exited with code ${result.code}; continuing without it.`);
+    return true;
   }
   async compileRecipe(ctx, recipeId) {
     const catalog = await loadRecipeCatalog(this.rootDir);
@@ -26229,6 +26270,58 @@ async function writeInitialFile(client, session, projectId, root, file, reservat
     file.remoteBlobHash ??= result.gitBlobHash;
   }
 }
+var MAX_ENTITIES_IN_FRESH_PROJECT = 2;
+async function createRemoteProjectMirror(client, projectName, parentRoot, options) {
+  const projectId = await client.createProject(projectName);
+  const summary = { id: projectId, name: projectName };
+  const targetRoot = projectMirrorRoot(parentRoot, summary);
+  let manifestWritten = false;
+  let session;
+  try {
+    await fs20.mkdir(path26.dirname(targetRoot), { recursive: true });
+    await fs20.mkdir(targetRoot);
+    session = await client.connectSocket(projectId);
+    const joined = session.getProject();
+    if (!joined) throw new Error("Realtime connection did not provide a project tree.");
+    const index = buildProjectTreeIndex(client.getServerUrl(), projectId, projectName, joined);
+    const existing = Object.values(index.manifest.files);
+    if (existing.length > MAX_ENTITIES_IN_FRESH_PROJECT) {
+      throw new Error(
+        `New Overleaf project unexpectedly contains ${existing.length} files; refusing to clear it.`
+      );
+    }
+    for (const file of existing) {
+      await client.deleteEntity(projectId, file.entityType, file.entityId);
+      delete index.manifest.files[file.path];
+    }
+    index.manifest.rootDocId = void 0;
+    index.manifest.rootDocPath = void 0;
+    await options.scaffold(targetRoot);
+    for (const name of ["output", "conflicts", path26.join("base", "docs"), "trash"]) {
+      await fs20.mkdir(metadataPath(targetRoot, name), { recursive: true });
+    }
+    await ensureLocalIgnoreFile(targetRoot);
+    await writeManifest(targetRoot, index.manifest);
+    manifestWritten = true;
+    await writeMirrorSupportFiles(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
+    await initializeMirrorGitRepository(targetRoot, `Initial Overleaf project: ${projectName}`);
+  } catch (error) {
+    if (!manifestWritten) {
+      await fs20.rm(targetRoot, { recursive: true, force: true }).catch(() => void 0);
+      await client.deleteProject(projectId).catch(() => void 0);
+    }
+    throw error;
+  } finally {
+    session?.disconnect();
+  }
+  await (options.register ?? registerSharedMirror)(targetRoot);
+  try {
+    await options.publish(targetRoot, client, projectId);
+  } catch (error) {
+    return { root: targetRoot, projectId, published: false, publishError: error };
+  }
+  return { root: targetRoot, projectId, published: true };
+}
 async function writeMirrorSupportFiles(root, rootDocPath, compiler) {
   await Promise.all([
     writeLocalVsCodeSettings(root, rootDocPath, compiler),
@@ -26777,6 +26870,32 @@ var OverleafClient = class {
       const result = await this.requestJson("GET", "user/projects");
       return normalizeProjects(result.projects);
     }
+  }
+  /**
+   * Creates an empty Overleaf project and returns its id.
+   *
+   * Note that "empty" is Overleaf's word, not ours: a `template: 'none'` project still arrives
+   * holding one `main.tex` with a default skeleton, so a caller that wants to populate the project
+   * itself has to clear that entity first.
+   */
+  async createProject(projectName) {
+    const result = await this.requestJson(
+      "POST",
+      "project/new",
+      {
+        body: { projectName, template: "none" },
+        includeCsrfHeader: true
+      }
+    );
+    const projectId = result.project_id ?? result.projectId;
+    if (!isBoundedString(projectId)) {
+      throw new Error("Overleaf did not return an id for the new project.");
+    }
+    return projectId;
+  }
+  /** Deletes a whole project. Used to roll back a half-finished create. */
+  async deleteProject(projectId) {
+    await this.requestText("DELETE", `project/${projectId}`, { includeCsrfHeader: true });
   }
   async addDoc(projectId, parentFolderId, filename) {
     const result = await this.requestJson("POST", `project/${projectId}/doc`, {
@@ -32995,6 +33114,38 @@ var OverleafService = class {
     if (!vscode11.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
     if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
   }
+  /**
+   * Creates an Overleaf project, scaffolds a starter template into its new local mirror, and
+   * uploads the result.
+   *
+   * The upload is issued explicitly rather than left to the reconcile's automatic push, because
+   * that push is gated on the autoPushLocalAhead and syncBinaryFiles settings - a user who turned
+   * either off would otherwise end up with an empty project and no error.
+   */
+  async createProjectFromTemplate(projectName, scaffold) {
+    const state = await this.state();
+    if (!state.available) throw new Error("Overleaf support is unavailable in this environment.");
+    if (!state.authenticated) throw new Error("Sign in to Overleaf before creating a project.");
+    const known = await this.secrets.listServers();
+    const configured = normalizeServerUrl(this.getConfiguredServerUrl());
+    const serverUrl = known.includes(configured) ? configured : known.length === 1 ? known[0] : await this.pickServerUrl("Create Overleaf Project");
+    if (!serverUrl) throw new Error("No Overleaf server was selected.");
+    const client = await this.makeClient(serverUrl);
+    return createRemoteProjectMirror(client, projectName, this.mirrorManager.getConfiguredProjectsRoot(), {
+      scaffold,
+      publish: async (root) => {
+        await this.realtimeSync.start(root, client);
+        const report = await this.realtimeSync.checkSyncStatus(root, client, void 0, {
+          mode: "full",
+          reason: "initial-publish"
+        });
+        for (const item of report.items) {
+          if (item.entityType === "folder" || item.status !== "local only") continue;
+          await this.realtimeSync.pushLocalFile(item.path, false);
+        }
+      }
+    });
+  }
   async listMirrors() {
     return this.mirrorManager.listLocalMirrors();
   }
@@ -34525,6 +34676,53 @@ async function warnAboutLegacySnips(context, output) {
     await vscode13.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
   }
 }
+async function createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, templateId, output) {
+  const service = overleafService;
+  if (!service) return;
+  const parentRoot = service.mirrorManager.getConfiguredProjectsRoot();
+  const earlyErrors = await validateTemplateAndParent(templateId, parentRoot, context.extensionPath);
+  if (earlyErrors.length > 0) {
+    output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PREFLIGHT`);
+    for (const error of earlyErrors) output.appendLine(`- ${error}`);
+    const action = await vscode13.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
+    if (action === "Show Log") output.show(true);
+    return;
+  }
+  try {
+    const result = await vscode13.window.withProgress(
+      { location: vscode13.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
+      () => service.createProjectFromTemplate(projectName, async (root) => {
+        const scoped = new ToolkitService(root, context.extensionPath, {
+          additionalStylePresets: personalStyles?.definitions() ?? []
+        });
+        await runCreateProjectWorkflow(scoped, registry, root, templateId);
+      })
+    );
+    treeProvider.refresh();
+    if (!result.published) {
+      output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PUBLISH FAILED`);
+      output.appendLine(`- ${result.publishError?.message ?? "unknown error"}`);
+      const action2 = await vscode13.window.showWarningMessage(
+        `Created '${projectName}' on Overleaf, but not every file finished uploading. The folder is a working mirror, so running a sync will retry.`,
+        "Open Folder",
+        "Show Log"
+      );
+      if (action2 === "Open Folder") await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(result.root), true);
+      if (action2 === "Show Log") output.show(true);
+      return;
+    }
+    const action = await vscode13.window.showInformationMessage(
+      `Created '${projectName}' on Overleaf and mirrored it locally.`,
+      "Open Folder"
+    );
+    if (action === "Open Folder") await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(result.root), true);
+  } catch (err) {
+    logToolkitError(output, "latexEditingToolkit.createProject", parentRoot, err);
+    const message = err instanceof Error ? err.message : String(err);
+    const action = await vscode13.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
+    if (action === "Show Log") output.show(true);
+  }
+}
 async function createProjectWizard(context, registry, treeProvider, output, recentProjectParentsKey) {
   const recent = sanitizeRecentProjectParents(context.globalState.get(recentProjectParentsKey));
   const suggested = /* @__PURE__ */ new Set();
@@ -34589,6 +34787,21 @@ async function createProjectWizard(context, registry, treeProvider, output, rece
     { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
+  const overleafState = await overleafService?.state().catch(() => void 0);
+  if (overleafState?.available && overleafState.authenticated) {
+    const target = await vscode13.window.showQuickPick(
+      [
+        { label: "Local only", description: "Create the project in the folder you chose", remote: false },
+        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
+      ],
+      { title: "Create Project (5/5): Destination", placeHolder: "Where should this project live?" }
+    );
+    if (!target) return;
+    if (target.remote) {
+      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output);
+      return;
+    }
+  }
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
   if (!preflight.ok) {
     const action = await vscode13.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
