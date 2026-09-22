@@ -70,9 +70,11 @@ export interface RemoteSnapshotDeps {
 
 const BINARY_READ_CONCURRENCY = 4;
 const BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
-// Joins are small JSON round trips over one multiplexed socket, so depth here is latency, not load.
-// At 4, a 29-document project spent ~7 sequential waves (about 1.1-1.6s) on every startup check.
-const DOC_JOIN_CONCURRENCY = 8;
+// Kept at 4 deliberately. Raising it to 8 was tried and measured against real startup checks: a
+// 13-document project did not move (844ms -> 864ms) and a 29-document one got worse
+// (1594ms -> 5652ms, alongside joinDoc ack timeouts that had never appeared before). Joins are not
+// round-trip-bound the way a wave model predicts, so more of them in flight only adds pressure.
+const DOC_JOIN_CONCURRENCY = 4;
 
 /**
  * Reads the remote project tree, joins the documents and downloads the binaries that

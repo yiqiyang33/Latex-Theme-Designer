@@ -20278,7 +20278,7 @@ function canReuseRemoteMetadata(previous, remote) {
 // src/overleaf/syncReconciler.ts
 var BINARY_READ_CONCURRENCY = 4;
 var BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
-var DOC_JOIN_CONCURRENCY = 8;
+var DOC_JOIN_CONCURRENCY = 4;
 async function fetchRemoteSnapshot(deps) {
   const { manifest, session, client, syncHealth, signal } = deps;
   let indexedRemote = deps.indexedRemote;
