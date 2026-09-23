@@ -19,7 +19,13 @@ export class TemplateService {
   ) {}
 
   async initializeWorkspace(templateId?: string): Promise<{ copied: string[]; vscode_settings: { generated: boolean; generated_path: string; message: string } }> {
-    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, templateId);
+    // Beamer theme assets are resolved relative to the deck, so they have to land next to
+    // it, exactly as createStarter places them.
+    const definition = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : undefined;
+    const destination = definition?.kind === "beamer"
+      ? path.dirname(path.resolve(this.rootDir, (await this.stateService.loadState()).compile_target || "main.tex"))
+      : this.rootDir;
+    const copied = await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, templateId, destination);
     const vscodeSettings = await generateVscodeSettingsIfMissing(this.rootDir);
     return { copied, vscode_settings: vscodeSettings };
   }
@@ -94,15 +100,21 @@ export class TemplateService {
   }
 
   async createStarter(templateId: unknown, outputTarget: unknown, overwrite: boolean): Promise<{ response: unknown; generated_target: string; overwrote_existing: boolean }> {
-    const normalizedTarget = this.normalizeOutputTarget(outputTarget);
-    const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === String(templateId || "").trim())
-      ?? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal")
-      ?? STARTER_TEMPLATE_DEFINITIONS[0];
-    if (!template) throw new Error("No starter templates available.");
+    // Everything that can fail runs before the first write. The old order copied assets
+    // and wrote the target first, so a later failure (an unknown compile target, a
+    // rejected overwrite) left a half-populated workspace behind while reporting an error.
+    const requestedId = String(templateId || "").trim();
+    const template = requestedId
+      ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === requestedId)
+      : STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === "book-minimal") ?? STARTER_TEMPLATE_DEFINITIONS[0];
+    if (!template) {
+      throw new Error(requestedId
+        ? `Unknown starter template: ${requestedId}.`
+        : "No starter templates available.");
+    }
+    const normalizedTarget = await this.resolveOutputTarget(outputTarget, overwrite);
     const targetAbs = path.resolve(this.rootDir, normalizedTarget);
     await assertWorkspacePathSafe(this.rootDir, targetAbs);
-    const assetDestination = template.kind === "beamer" ? path.dirname(targetAbs) : this.rootDir;
-    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     const existed = await exists(targetAbs);
     if (existed) {
       const stat = await fs.stat(targetAbs);
@@ -112,8 +124,12 @@ export class TemplateService {
     const source = await this.stateService.templateSourcePath(template.filename);
     const text = await fs.readFile(source, "utf8");
     if (!extractDocumentclassDeclaration(text)) throw new Error(`Starter template is missing a valid \\documentclass declaration: ${template.filename}`);
+
+    const assetDestination = template.kind === "beamer" ? path.dirname(targetAbs) : this.rootDir;
+    await ensureWorkspaceTemplateAssets(this.rootDir, this.extensionDir, template.id, assetDestination);
     await fs.mkdir(path.dirname(targetAbs), { recursive: true });
-    await fs.writeFile(targetAbs, text, "utf8");
+    // 'wx' closes the window between the existence probe above and this write.
+    await fs.writeFile(targetAbs, text, { encoding: "utf8", flag: overwrite ? "w" : "wx" });
     await writeTemplateMetadata(this.rootDir, { kind: template.kind, templateId: template.id, target: normalizedTarget });
     if (template.kind === "beamer") await writeBeamerSettings(this.rootDir, normalizedTarget, defaultBeamerSettings());
 
@@ -127,6 +143,26 @@ export class TemplateService {
       generated_target: workspaceRel(this.rootDir, targetAbs),
       overwrote_existing: existed
     };
+  }
+
+  /**
+   * Normalizes the target and reconciles it with what is actually on disk. On a
+   * case-insensitive filesystem `Main.tex` and `main.tex` are one file, so writing the
+   * requested spelling would silently overwrite the existing one and then fail downstream
+   * when the compile-target lookup cannot find the requested casing.
+   */
+  private async resolveOutputTarget(raw: unknown, overwrite: boolean): Promise<string> {
+    const normalized = this.normalizeOutputTarget(raw);
+    const targetAbs = path.resolve(this.rootDir, normalized);
+    const directory = path.dirname(targetAbs);
+    const requestedName = path.basename(targetAbs);
+    const entries = await fs.readdir(directory).catch(() => [] as string[]);
+    const onDisk = entries.find((entry) => entry.toLowerCase() === requestedName.toLowerCase());
+    if (!onDisk || onDisk === requestedName) return normalized;
+    if (!overwrite) {
+      throw new Error(`Output target already exists as ${onDisk}: ${normalized}. Names differing only by case refer to the same file on this filesystem. Set overwrite=true to replace it.`);
+    }
+    return workspaceRel(this.rootDir, path.join(directory, onDisk));
   }
 
   normalizeOutputTarget(raw: unknown): string {

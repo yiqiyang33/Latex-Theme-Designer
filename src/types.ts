@@ -76,7 +76,11 @@ export interface BeamerSettings {
   author: string;
   institute: string;
   date: string;
-  aspectRatio: "169" | "43";
+  /**
+   * Beamer aspectratio code. "169" and "43" are the two the UI offers; any other numeric
+   * code found in the project is carried through unchanged rather than reset.
+   */
+  aspectRatio: string;
   notesMode: "hide" | "show-notes" | "only-notes";
   sectionOutline: boolean;
 }

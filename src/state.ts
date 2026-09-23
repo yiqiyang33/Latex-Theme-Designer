@@ -25,6 +25,7 @@ import {
   compileOutputPdfRelpath,
   defaultCompileTarget,
   exists,
+  extractDocumentclassDeclaration,
   extractDocumentclassName,
   formatBodyFontSize,
   isSubpath,
@@ -35,6 +36,7 @@ import {
   parseThemeColorDefaults,
   safeWorkspaceRel,
   slugify,
+  stripTexComments,
   workspaceRel
 } from "./utils";
 import { loadRecipeCatalog } from "./vscodeSettings";
@@ -382,17 +384,14 @@ export class StateService {
   }
 
   async starterTemplateMeta(): Promise<StarterTemplateMeta[]> {
-    const templateDir = path.join(this.rootDir, "templates");
-    const assetRoot = path.resolve(__dirname, "..", "assets", "template");
-    const assetTemplateDir = path.join(assetRoot, "templates");
-    const out: StarterTemplateMeta[] = [];
-    for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
-      const source = await this.resolveTemplateSource(entry.filename, templateDir, assetTemplateDir);
-      if (source && await this.templateAssetsAvailable(entry, assetRoot)) {
-        out.push({ id: entry.id, label: entry.label, description: entry.description, kind: entry.kind, parent_id: entry.parentId, capabilities: entry.capabilities });
-      }
-    }
-    return out;
+    // Only the bundled side is probed, and it ships inside the VSIX, so it cannot change
+    // while the process runs. This sits on the response path of roughly a dozen commands
+    // including autosave; probing it every time cost up to 40 sequential fs.access calls,
+    // most of them re-checking the same four shared theme files.
+    const bundled = await bundledStarterTemplates();
+    return STARTER_TEMPLATE_DEFINITIONS
+      .filter((entry) => bundled.has(entry.id))
+      .map((entry) => ({ id: entry.id, label: entry.label, description: entry.description, kind: entry.kind, parent_id: entry.parentId, capabilities: entry.capabilities }));
   }
 
   async templateSourcePath(filename: string): Promise<string> {
@@ -404,36 +403,26 @@ export class StateService {
   async refreshDerivedState(state: ToolkitState): Promise<void> {
     state.compile_recipe_name = state.compile_recipes.find((item) => item.id === state.compile_recipe)?.name ?? "";
     state.compile_output_pdf_expected = await this.expectedOutputPdfForSelection(state);
-    const detected = await this.detectTargetDocumentClass(state.compile_target);
+    // One read of the compile target feeds all three consumers below; they used to read
+    // and decode the same file separately.
+    const source = state.compile_target
+      ? await fs.readFile(path.resolve(this.rootDir, state.compile_target), "utf8").catch(() => "")
+      : "";
+    const detected = extractDocumentclassDeclaration(stripTexComments(source))?.className ?? "";
     const hasChapter = isChapterCapableClass(detected);
     const mode = this.normalizeClassConfigValue("theme_class_mode", state.class_config.theme_class_mode);
     state.detected_document_class = detected || "(unknown)";
     state.detected_document_class_has_chapter = hasChapter;
     state.effective_theme_class = mode === "book" || mode === "article" ? mode : hasChapter ? "book" : "article";
-    state.workspace_template = await detectWorkspaceTemplate(this.rootDir, state.compile_target);
+    state.workspace_template = await detectWorkspaceTemplate(this.rootDir, state.compile_target, source);
     if (state.workspace_template.kind === "beamer") {
       state.config_warnings = state.config_warnings.filter((warning) => !warning.startsWith("theme.sty is missing"));
-      const source = await fs.readFile(path.resolve(this.rootDir, state.compile_target), "utf8").catch(() => "");
       state.beamer_settings = await readBeamerSettings(this.rootDir, state.compile_target, source);
       state.beamer_hooks_enabled = beamerHooksEnabled(source);
     } else {
       state.beamer_settings = defaultBeamerSettings();
       state.beamer_hooks_enabled = undefined;
     }
-  }
-
-  private async resolveTemplateSource(filename: string, workspaceDir: string, assetDir: string): Promise<string | null> {
-    const workspace = path.join(workspaceDir, filename);
-    if (await exists(workspace)) return workspace;
-    const bundled = path.join(assetDir, filename);
-    return await exists(bundled) ? bundled : null;
-  }
-
-  private async templateAssetsAvailable(entry: typeof STARTER_TEMPLATE_DEFINITIONS[number], assetDir: string): Promise<boolean> {
-    for (const file of entry.assetManifest) {
-      if (!(await exists(path.join(assetDir, file)))) return false;
-    }
-    return true;
   }
 
   private beamerCapabilities(templateId: string): string[] {
@@ -833,7 +822,10 @@ export async function copyDirectory(src: string, dest: string): Promise<void> {
   }
 }
 
-async function copyMissingDirectory(src: string, dest: string, relLabel: string, copied: string[]): Promise<void> {
+async function copyMissingDirectory(rootDir: string, src: string, dest: string, relLabel: string, copied: string[]): Promise<void> {
+  // exists() follows symlinks, so a link pointing outside the workspace would look like a
+  // legitimate destination. assertWorkspacePathSafe rejects symlinked path components.
+  await assertWorkspacePathSafe(rootDir, dest);
   if (!(await exists(dest))) {
     await copyDirectory(src, dest);
     copied.push(`${relLabel}/`);
@@ -842,6 +834,7 @@ async function copyMissingDirectory(src: string, dest: string, relLabel: string,
   for (const entry of await fs.readdir(src, { withFileTypes: true })) {
     const source = path.join(src, entry.name);
     const target = path.join(dest, entry.name);
+    await assertWorkspacePathSafe(rootDir, target);
     if (await exists(target)) continue;
     if (entry.isDirectory()) {
       await copyDirectory(source, target);
@@ -851,6 +844,38 @@ async function copyMissingDirectory(src: string, dest: string, relLabel: string,
       copied.push(`${relLabel}/${entry.name}`);
     }
   }
+}
+
+let bundledStarterTemplatesCache: Promise<Set<string>> | undefined;
+
+/**
+ * Ids of the starters whose bundled files are all present, resolved once per process.
+ * The asset root lives inside the installed extension, so the answer cannot change.
+ */
+function bundledStarterTemplates(): Promise<Set<string>> {
+  if (!bundledStarterTemplatesCache) {
+    bundledStarterTemplatesCache = (async () => {
+      const assetRoot = path.resolve(__dirname, "..", "assets", "template");
+      // One probe per distinct file: the four shared theme assets appear in every
+      // non-Beamer manifest, so the naive walk checked them once per template.
+      const required = new Set<string>();
+      for (const entry of STARTER_TEMPLATE_DEFINITIONS) {
+        required.add(path.join("templates", entry.filename));
+        for (const asset of entry.assetManifest) required.add(asset);
+      }
+      const files = [...required];
+      const present = await Promise.all(files.map((file) => exists(path.join(assetRoot, file))));
+      const available = new Set(files.filter((_, index) => present[index]));
+      return new Set(
+        STARTER_TEMPLATE_DEFINITIONS
+          .filter((entry) =>
+            available.has(path.join("templates", entry.filename)) &&
+            entry.assetManifest.every((asset) => available.has(asset)))
+          .map((entry) => entry.id)
+      );
+    })();
+  }
+  return bundledStarterTemplatesCache;
 }
 
 export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDir: string, templateId?: string, destinationDir = rootDir): Promise<string[]> {
@@ -863,6 +888,7 @@ export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDi
       const source = path.join(assetRoot, file);
       const target = path.join(destinationDir, file);
       if (!isSubpath(target, rootDir)) throw new Error(`Template asset target is outside workspace: ${file}`);
+      await assertWorkspacePathSafe(rootDir, target);
       if (!(await exists(source))) throw new Error(`Bundled template asset is missing: ${file}`);
       if (await exists(target)) continue;
       await fs.mkdir(path.dirname(target), { recursive: true });
@@ -874,13 +900,14 @@ export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDi
   const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
   for (const file of files) {
     const target = path.join(rootDir, file);
+    await assertWorkspacePathSafe(rootDir, target);
     if (!(await exists(target))) {
       await fs.copyFile(path.join(assetRoot, file), target);
       copied.push(file);
     }
   }
-  await copyMissingDirectory(path.join(assetRoot, "Fig"), path.join(rootDir, "Fig"), "Fig", copied);
-  await copyMissingDirectory(path.join(assetRoot, "templates"), path.join(rootDir, "templates"), "templates", copied);
+  await copyMissingDirectory(rootDir, path.join(assetRoot, "Fig"), path.join(rootDir, "Fig"), "Fig", copied);
+  await copyMissingDirectory(rootDir, path.join(assetRoot, "templates"), path.join(rootDir, "templates"), "templates", copied);
   return copied.map((item) => item.endsWith("/") ? item : workspaceRel(rootDir, path.join(rootDir, item)));
 }
 

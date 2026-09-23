@@ -245,7 +245,7 @@ export async function listTexCandidates(rootDir: string): Promise<string[]> {
   const candidates: string[] = [];
   const all = await listFilesRecursive(rootDir);
   for (const abs of all) {
-    if (!abs.endsWith(".tex")) continue;
+    if (!abs.toLowerCase().endsWith(".tex")) continue;
     if (IGNORE_TEX_FILENAMES.has(path.basename(abs))) continue;
     try {
       const text = await fs.readFile(abs, "utf8");

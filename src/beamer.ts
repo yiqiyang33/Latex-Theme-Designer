@@ -9,8 +9,6 @@ export const BEAMER_CONFIG_DIR = ".latex-editing-toolkit";
 export const BEAMER_CLASS_OPTIONS_FILE = `${BEAMER_CONFIG_DIR}/beamer-class-options.tex`;
 export const BEAMER_SETTINGS_FILE = `${BEAMER_CONFIG_DIR}/beamer-settings.tex`;
 
-const BEAMER_TEMPLATE_IDS = new Set(["beamer-uchicago", "beamer-blei", "beamer-gotham"]);
-
 export interface TemplateMetadata {
   version: 1;
   kind: Exclude<DocumentKind, "unknown">;
@@ -83,11 +81,14 @@ export function detectTemplateFromSource(text: string): WorkspaceTemplateState {
   return { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" };
 }
 
-export async function detectWorkspaceTemplate(rootDir: string, targetRel: string): Promise<WorkspaceTemplateState> {
+export async function detectWorkspaceTemplate(rootDir: string, targetRel: string, sourceText?: string): Promise<WorkspaceTemplateState> {
   const metadata = await readTemplateMetadata(rootDir);
   let sourceState: WorkspaceTemplateState = { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" };
   try {
-    sourceState = detectTemplateFromSource(await fs.readFile(path.resolve(rootDir, targetRel), "utf8"));
+    // Callers that have already read the target pass it in rather than paying for a
+    // second read and decode of the same file.
+    const text = sourceText ?? await fs.readFile(path.resolve(rootDir, targetRel), "utf8");
+    sourceState = detectTemplateFromSource(text);
   } catch {
     // A missing target is handled by the normal compile diagnostics.
   }
@@ -102,7 +103,9 @@ export async function detectWorkspaceTemplate(rootDir: string, targetRel: string
     kind: metadata.kind,
     templateId: metadata.templateId,
     detectionSource: "metadata",
-    confidence: BEAMER_TEMPLATE_IDS.has(metadata.templateId) || metadata.kind !== "beamer" ? "exact" : "probable"
+    // Derived from the schema rather than a hardcoded id list, so adding a beamer
+    // starter does not silently downgrade its detection confidence.
+    confidence: metadata.kind !== "beamer" || starterTemplate(metadata.templateId)?.kind === "beamer" ? "exact" : "probable"
   };
   if (sourceState.kind !== "unknown" && sourceState.kind !== metadata.kind) {
     metadataState.warning = `Template metadata says ${metadata.kind}, but the target uses ${sourceState.kind}.`;
@@ -137,7 +140,7 @@ export function defaultBeamerSettings(): BeamerSettings {
 
 export function normalizeBeamerSettings(raw: unknown, base: BeamerSettings = defaultBeamerSettings()): BeamerSettings {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-  const aspectRatio = value.aspectRatio === "43" || value.aspectRatio === "169" ? value.aspectRatio : base.aspectRatio;
+  const aspectRatio = isBeamerAspectRatio(value.aspectRatio) ? value.aspectRatio : base.aspectRatio;
   const notesMode = value.notesMode === "show-notes" || value.notesMode === "only-notes" || value.notesMode === "hide" ? value.notesMode : base.notesMode;
   return {
     title: typeof value.title === "string" ? value.title.trim() || base.title : base.title,
@@ -156,12 +159,15 @@ export async function readBeamerSettings(rootDir: string, targetRel: string, sou
   const classOptions = await fs.readFile(paths.classOptions, "utf8").catch(() => "");
   const runtime = await fs.readFile(paths.settings, "utf8").catch(() => "");
   const source = stripTexComments(sourceText);
-  const aspect = /(aspectratio\s*=\s*(169|43)|aspectratio\s*=\s*(43|169))/i.exec(`${classOptions}\n${source}`)?.[2] || /(aspectratio\s*=\s*(43|169))/i.exec(`${classOptions}\n${source}`)?.[2];
-  if (aspect === "43" || aspect === "169") settings.aspectRatio = aspect;
-  settings.title = texMacro(runtime, "ToolkitBeamerTitle") || texCommand(source, "title") || settings.title;
-  settings.author = texMacro(runtime, "ToolkitBeamerAuthor") || texCommand(source, "author") || settings.author;
-  settings.institute = texMacro(runtime, "ToolkitBeamerInstitute") || texCommand(source, "institute") || settings.institute;
-  settings.date = texMacro(runtime, "ToolkitBeamerDate") || texCommand(source, "date") || settings.date;
+  // Accept any numeric code, not just the two the UI offers, so that a deck built around
+  // aspectratio=1610 is reported as-is instead of being silently reset to 16:9 the next
+  // time an unrelated presentation setting is saved.
+  const aspect = /aspectratio\s*=\s*(\d{2,4})/i.exec(`${classOptions}\n${source}`)?.[1];
+  if (isBeamerAspectRatio(aspect)) settings.aspectRatio = aspect;
+  settings.title = beamerMetadataValue(runtime, source, "ToolkitBeamerTitle", "title", settings.title);
+  settings.author = beamerMetadataValue(runtime, source, "ToolkitBeamerAuthor", "author", settings.author);
+  settings.institute = beamerMetadataValue(runtime, source, "ToolkitBeamerInstitute", "institute", settings.institute);
+  settings.date = beamerMetadataValue(runtime, source, "ToolkitBeamerDate", "date", settings.date);
   if (/\\setbeameroption\s*\{\s*show\s+notes\s+on\s+second\s+screen/i.test(runtime)) settings.notesMode = "show-notes";
   else if (/\\setbeameroption\s*\{\s*show\s+only\s+notes/i.test(runtime)) settings.notesMode = "only-notes";
   settings.sectionOutline = /\\ToolkitBeamerSectionOutlinetrue/.test(runtime);
@@ -177,7 +183,11 @@ export async function writeBeamerSettings(rootDir: string, targetRel: string, se
 }
 
 export function beamerHooksEnabled(sourceText: string): boolean {
-  return sourceText.includes(BEAMER_CLASS_OPTIONS_FILE) && sourceText.includes(BEAMER_SETTINGS_FILE);
+  // Commented-out hooks are not hooks. Without stripping, a user who comments them out
+  // while debugging gets a UI that claims the hooks are on and an enable command that
+  // does nothing.
+  const clean = stripTexComments(sourceText);
+  return clean.includes(BEAMER_CLASS_OPTIONS_FILE) && clean.includes(BEAMER_SETTINGS_FILE);
 }
 
 export async function enableBeamerHooks(rootDir: string, targetRel: string): Promise<void> {
@@ -193,11 +203,12 @@ export async function enableBeamerHooks(rootDir: string, targetRel: string): Pro
     "\\date{\\ToolkitBeamerDate}"
   ].join("\n");
   let updated = source;
-  if (!updated.includes(BEAMER_CLASS_OPTIONS_FILE)) {
+  // Same reason as beamerHooksEnabled: only an uncommented hook counts as present.
+  if (!stripTexComments(updated).includes(BEAMER_CLASS_OPTIONS_FILE)) {
     const documentClass = /\\documentclass(?:\[[^\]]*\])?\{\s*beamer\s*\}/i.exec(updated);
     if (documentClass?.index !== undefined) updated = `${updated.slice(0, documentClass.index)}${classHook}\n${updated.slice(documentClass.index)}`;
   }
-  if (!updated.includes(BEAMER_SETTINGS_FILE)) {
+  if (!stripTexComments(updated).includes(BEAMER_SETTINGS_FILE)) {
     const beginDocument = /\\begin\s*\{document\}/i.exec(updated);
     if (beginDocument?.index !== undefined) updated = `${updated.slice(0, beginDocument.index)}${runtimeHook}\n\n${updated.slice(beginDocument.index)}`;
   }
@@ -252,11 +263,47 @@ function texMacro(text: string, name: string): string {
 }
 
 function texCommand(text: string, name: string): string {
-  return new RegExp(`\\\\${name}\\s*\\{([^}]*)\\}`, "i").exec(text)?.[1]?.trim() || "";
+  // The optional argument is idiomatic beamer (\title[Short]{Long}); without this branch
+  // the real title reads as empty and a placeholder overwrites it on the next save.
+  return new RegExp(`\\\\${name}\\s*(?:\\[[^\\]]*\\])?\\s*\\{([^}]*)\\}`, "i").exec(text)?.[1]?.trim() || "";
 }
 
+/**
+ * Resolves one presentation field: the generated runtime file wins, then the document's
+ * own declaration. A declaration that just forwards to the Toolkit macro carries no
+ * value — taking it would make the next write emit \def\X{\X} and loop forever.
+ */
+function beamerMetadataValue(runtime: string, source: string, macroName: string, commandName: string, fallback: string): string {
+  const fromRuntime = unescapeTexValue(texMacro(runtime, macroName));
+  if (fromRuntime) return fromRuntime;
+  const declared = texCommand(source, commandName);
+  if (declared && !new RegExp(`^\\\\${macroName}\\b`).test(declared)) return declared;
+  return fallback;
+}
+
+const TEX_SPECIALS = /[#$%&_^~{}]/g;
+
 function escapeTexValue(value: string): string {
-  return String(value || "").replace(/[\r\n{}]/g, " ").replace(/(?<!\\)%/g, "\\%");
+  // Newlines and braces cannot survive inside a \def body at all; the rest are TeX
+  // specials that would otherwise break the document (# is a hard error at definition
+  // time) or typeset as something else.
+  return String(value || "")
+    .replace(/[\r\n]/g, " ")
+    .replace(/\\/g, "\\textbackslash{}")
+    .replace(TEX_SPECIALS, (character) => (character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`));
+}
+
+function unescapeTexValue(value: string): string {
+  // Inverse of escapeTexValue, so a round trip through the generated file gives the user
+  // back exactly what they typed instead of accumulating backslashes.
+  return String(value || "")
+    .replace(/\\([#$%&_{}])/g, "$1")
+    .replace(/\\([\^~])\{\}/g, "$1")
+    .replace(/\\textbackslash\{\}/g, "\\");
+}
+
+export function isBeamerAspectRatio(value: unknown): value is string {
+  return typeof value === "string" && /^\d{2,4}$/.test(value);
 }
 
 async function writeAtomic(target: string, text: string): Promise<void> {
