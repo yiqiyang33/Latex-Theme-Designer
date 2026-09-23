@@ -333,6 +333,23 @@
     selectSection(activeSection, false);
     byId("previewModeLabel").textContent = beamer ? "Presentation" : "Document";
   }
+  var ASPECT_RATIO_LABELS = { "169": "16:9", "43": "4:3", "1610": "16:10", "149": "14:9", "54": "5:4", "32": "3:2", "141": "1.41:1" };
+  function describeAspectRatio(value) {
+    return ASPECT_RATIO_LABELS[value] || `aspectratio=${value}`;
+  }
+  function setAspectRatioSelection(select, value) {
+    for (const option of Array.from(select.options)) {
+      if (option.dataset.external === "true" && option.value !== value) option.remove();
+    }
+    if (!Array.from(select.options).some((option) => option.value === value)) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = `${describeAspectRatio(value)} (from project)`;
+      option.dataset.external = "true";
+      select.appendChild(option);
+    }
+    select.value = value;
+  }
   function renderBeamerSettings() {
     const beamer = model?.state?.workspace_template?.kind === "beamer";
     const settings = model?.state?.beamer_settings || {};
@@ -354,12 +371,12 @@
     byId("enableBeamerHooksBtn").hidden = hooksEnabled;
     byId("presentationContextTheme").textContent = byId("beamerTemplateName").textContent;
     byId("presentationContextTarget").textContent = model.state.compile_target || "main.tex";
-    byId("presentationContextRatio").textContent = settings.aspectRatio === "43" ? "4:3" : "16:9";
+    byId("presentationContextRatio").textContent = describeAspectRatio(settings.aspectRatio);
     byId("beamerTitleInput").value = settings.title || "";
     byId("beamerAuthorInput").value = settings.author || "";
     byId("beamerInstituteInput").value = settings.institute || "";
     byId("beamerDateInput").value = settings.date || "";
-    byId("beamerAspectRatioSelect").value = settings.aspectRatio || "169";
+    setAspectRatioSelection(byId("beamerAspectRatioSelect"), settings.aspectRatio || "169");
     byId("beamerNotesModeSelect").value = settings.notesMode || "hide";
     byId("beamerSectionOutlineInput").checked = Boolean(settings.sectionOutline);
     const metadataEnabled = hooksEnabled && capabilities.has("presentation-metadata");
@@ -1370,11 +1387,14 @@
       }
     });
   }
-  function deleteSelectedSnippet() {
-    const document2 = selectedSnippetDocument();
-    const snippet = document2?.snippets?.find((entry) => entry.id === selectedSnippetId);
+  async function deleteSelectedSnippet() {
+    if (!selectedSnippetFile || !selectedSnippetId) return;
+    const targetId = selectedSnippetId;
+    snippetEditorContent = currentSnippetEditorValue();
+    await analyzeSnippetBuffer();
+    const snippet = snippetAnalysis?.snippets?.find((entry) => entry.id === targetId);
     if (!snippet?.isSimple) return;
-    const content = currentSnippetEditorValue();
+    const content = snippetEditorContent;
     const start = Number(snippet.priorityStart ?? snippet.headerStart ?? 0);
     const end = Number(snippet.endOffset ?? start);
     setSnippetEditorValue(content.slice(0, start) + content.slice(end));
@@ -1476,7 +1496,7 @@
     byId("snippetReloadFileBtn").addEventListener("click", () => void runSnippet(() => loadSnippetState("snippets-state")));
     byId("snippetSaveBtn").addEventListener("click", () => void runSnippet(saveSnippetFile));
     byId("snippetNewBtn").addEventListener("click", appendNewSnippet);
-    byId("snippetDeleteBtn").addEventListener("click", deleteSelectedSnippet);
+    byId("snippetDeleteBtn").addEventListener("click", () => void deleteSelectedSnippet());
     byId("snippetCreateFileBtn").addEventListener("click", () => void runSnippet(createSnippetFile));
     byId("snippetOpenSourceBtn").addEventListener("click", () => void runSnippet(async () => {
       if (selectedSnippetFile) await request("snippets-open-source", { file_path: selectedSnippetFile, line: 1 });
