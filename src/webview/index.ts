@@ -312,6 +312,30 @@ function renderWorkspaceMode(): void {
   byId("previewModeLabel").textContent = beamer ? "Presentation" : "Document";
 }
 
+const ASPECT_RATIO_LABELS: Record<string, string> = { "169": "16:9", "43": "4:3", "1610": "16:10", "149": "14:9", "54": "5:4", "32": "3:2", "141": "1.41:1" };
+
+function describeAspectRatio(value: string): string {
+  return ASPECT_RATIO_LABELS[value] || `aspectratio=${value}`;
+}
+
+/**
+ * A project can carry an aspectratio the dropdown does not list. Show it rather than
+ * snapping the control to 16:9, which would make the next save resize the deck.
+ */
+function setAspectRatioSelection(select: HTMLSelectElement, value: string): void {
+  for (const option of Array.from(select.options)) {
+    if (option.dataset.external === "true" && option.value !== value) option.remove();
+  }
+  if (!Array.from(select.options).some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = `${describeAspectRatio(value)} (from project)`;
+    option.dataset.external = "true";
+    select.appendChild(option);
+  }
+  select.value = value;
+}
+
 function renderBeamerSettings(): void {
   const beamer = model?.state?.workspace_template?.kind === "beamer";
   const settings = model?.state?.beamer_settings || {};
@@ -337,12 +361,12 @@ function renderBeamerSettings(): void {
   byId<HTMLButtonElement>("enableBeamerHooksBtn").hidden = hooksEnabled;
   byId("presentationContextTheme").textContent = byId("beamerTemplateName").textContent;
   byId("presentationContextTarget").textContent = model.state.compile_target || "main.tex";
-  byId("presentationContextRatio").textContent = settings.aspectRatio === "43" ? "4:3" : "16:9";
+  byId("presentationContextRatio").textContent = describeAspectRatio(settings.aspectRatio);
   byId<HTMLInputElement>("beamerTitleInput").value = settings.title || "";
   byId<HTMLInputElement>("beamerAuthorInput").value = settings.author || "";
   byId<HTMLInputElement>("beamerInstituteInput").value = settings.institute || "";
   byId<HTMLInputElement>("beamerDateInput").value = settings.date || "";
-  byId<HTMLSelectElement>("beamerAspectRatioSelect").value = settings.aspectRatio || "169";
+  setAspectRatioSelection(byId<HTMLSelectElement>("beamerAspectRatioSelect"), settings.aspectRatio || "169");
   byId<HTMLSelectElement>("beamerNotesModeSelect").value = settings.notesMode || "hide";
   byId<HTMLInputElement>("beamerSectionOutlineInput").checked = Boolean(settings.sectionOutline);
   const metadataEnabled = hooksEnabled && capabilities.has("presentation-metadata");
@@ -1449,11 +1473,17 @@ function appendNewSnippet(): void {
   });
 }
 
-function deleteSelectedSnippet(): void {
-  const document = selectedSnippetDocument();
-  const snippet = document?.snippets?.find((entry: any) => entry.id === selectedSnippetId);
+async function deleteSelectedSnippet(): Promise<void> {
+  if (!selectedSnippetFile || !selectedSnippetId) return;
+  const targetId = selectedSnippetId;
+  // The offsets below come from the analysis, so they have to describe the exact string
+  // being cut. Analysis runs on a 180 ms debounce, so a keystroke just before this click
+  // would leave them pointing into the previous revision of the buffer.
+  snippetEditorContent = currentSnippetEditorValue();
+  await analyzeSnippetBuffer();
+  const snippet = snippetAnalysis?.snippets?.find((entry: any) => entry.id === targetId);
   if (!snippet?.isSimple) return;
-  const content = currentSnippetEditorValue();
+  const content = snippetEditorContent;
   const start = Number(snippet.priorityStart ?? snippet.headerStart ?? 0);
   const end = Number(snippet.endOffset ?? start);
   setSnippetEditorValue(content.slice(0, start) + content.slice(end));
@@ -1559,7 +1589,7 @@ function wireSnippets(): void {
   byId("snippetReloadFileBtn").addEventListener("click", () => void runSnippet(() => loadSnippetState("snippets-state")));
   byId("snippetSaveBtn").addEventListener("click", () => void runSnippet(saveSnippetFile));
   byId("snippetNewBtn").addEventListener("click", appendNewSnippet);
-  byId("snippetDeleteBtn").addEventListener("click", deleteSelectedSnippet);
+  byId("snippetDeleteBtn").addEventListener("click", () => void deleteSelectedSnippet());
   byId("snippetCreateFileBtn").addEventListener("click", () => void runSnippet(createSnippetFile));
   byId("snippetOpenSourceBtn").addEventListener("click", () => void runSnippet(async () => {
     if (selectedSnippetFile) await request("snippets-open-source", { file_path: selectedSnippetFile, line: 1 });

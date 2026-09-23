@@ -8,6 +8,7 @@ import { SplitterService } from "./splitter";
 import { StateService } from "./state";
 import { TemplateService } from "./template";
 import { beamerConfigPaths, enableBeamerHooks, normalizeBeamerSettings, templateMetadataPath, writeBeamerSettings } from "./beamer";
+import { templateFilePlanPaths, UPGRADABLE_THEME_ASSETS } from "./templatePlan";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { exists } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
@@ -206,7 +207,7 @@ export class ToolkitService {
       case "initialize-workspace":
         return this.runFileMutation(command, "Initialize Toolkit workspace", [...this.workspaceAssetPaths(String(payload.template_id || "")), ".vscode", ".vscode/settings.json"], payload, () => this.template.initializeWorkspace(String(payload.template_id || "") || undefined));
       case "upgrade-theme-assets":
-        return this.runFileMutation(command, "Upgrade theme assets", ["theme.sty", "theorems.tex", "commands.tex", "theme.colors.tex", "theme.ui.json"], payload, async () => {
+        return this.runFileMutation(command, "Upgrade theme assets", [...UPGRADABLE_THEME_ASSETS, "theme.colors.tex", "theme.ui.json"], payload, async () => {
           const explicitPolicy = payload.color_policy;
           const colorPolicy = explicitPolicy === "default" || explicitPolicy === "preserve"
             ? explicitPolicy
@@ -256,20 +257,11 @@ export class ToolkitService {
   }
 
   private workspaceAssetPaths(templateId?: string, outputTarget?: string): string[] {
-    const selected = templateId ? STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId) : undefined;
-    if (selected?.kind === "beamer") {
-      const baseDir = outputTarget ? path.dirname(outputTarget) : ".";
-      return [
-        ...selected.assetManifest.map((asset) => path.join(baseDir, asset)),
-        path.join(baseDir, ".latex-editing-toolkit")
-      ];
-    }
-    if (templateId?.startsWith("beamer-")) return [".latex-editing-toolkit"];
-    return [
-      "theme.sty", "theorems.tex", "commands.tex", "references.bib",
-      "Fig", "Fig/cover.png", "templates",
-      ...STARTER_TEMPLATE_DEFINITIONS.map((entry) => `templates/${entry.filename}`)
-    ];
+    const paths = templateFilePlanPaths(templateId, outputTarget || "main.tex");
+    if (paths.length > 0) return paths;
+    // Unknown id: createStarter rejects it now, but an initialize-workspace call can still
+    // reach here, and the shared assets are what it would copy.
+    return templateFilePlanPaths("book-minimal");
   }
 
   private async nextSplitBackupPath(rootAbs: string): Promise<string> {

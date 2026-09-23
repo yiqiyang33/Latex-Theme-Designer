@@ -1,6 +1,7 @@
 import { promises as fs, constants as fsConstants } from "node:fs";
 import * as path from "node:path";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
+import { templateFilePlan } from "./templatePlan";
 import type { LocalNoteProject } from "./types";
 import type { CreateProjectDraft, CreateProjectPreflightResult } from "./types";
 import { extractDocumentclassDeclaration } from "./utils";
@@ -87,7 +88,6 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
   const warnings: string[] = [];
   const parentPath = path.resolve(String(draft.parentPath || ""));
   const projectName = String(draft.projectName || "").trim();
-  const template = STARTER_TEMPLATE_DEFINITIONS.find((item) => item.id === draft.templateId);
 
   if (!path.isAbsolute(String(draft.parentPath || ""))) errors.push("Parent location must be an absolute local path.");
   if (!projectName) errors.push("Project name is required.");
@@ -98,13 +98,9 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
   const rootPath = path.resolve(parentPath, projectName || "New Notes");
   if (path.dirname(rootPath) !== path.normalize(parentPath)) errors.push("Project path must remain directly inside the selected parent folder.");
 
-  try {
-    const stat = await fs.stat(parentPath);
-    if (!stat.isDirectory()) errors.push("Selected parent location is not a directory.");
-    else await fs.access(parentPath, fsConstants.W_OK);
-  } catch (err) {
-    errors.push(`Parent location is not writable: ${(err as Error).message}`);
-  }
+  // Parent writability and starter-template validity are exactly what
+  // validateTemplateAndParent checks; keeping a second copy here let the two drift.
+  errors.push(...await validateTemplateAndParent(String(draft.templateId || ""), parentPath, extensionDir));
 
   let targetExists = false;
   let targetEmpty = false;
@@ -122,23 +118,7 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") errors.push(`Could not inspect project path: ${(err as Error).message}`);
   }
 
-  if (!template) errors.push(`Unknown starter template: ${draft.templateId}.`);
-  else {
-    try {
-      const source = path.join(extensionDir, "assets", "template", "templates", template.filename);
-      const text = await fs.readFile(source, "utf8");
-      if (!extractDocumentclassDeclaration(text)) errors.push(`Starter template '${template.filename}' has no valid \\documentclass declaration.`);
-      for (const asset of template.assetManifest) {
-        try {
-          await fs.access(path.join(extensionDir, "assets", "template", asset));
-        } catch {
-          errors.push(`Starter template asset is unavailable: ${asset}`);
-        }
-      }
-    } catch (err) {
-      errors.push(`Starter template is unavailable: ${(err as Error).message}`);
-    }
-  }
+  const plan = templateFilePlan(draft.templateId, "main.tex");
 
   return {
     ok: errors.length === 0,
@@ -147,16 +127,10 @@ export async function preflightCreateProject(draft: CreateProjectDraft, extensio
     targetEmpty,
     errors,
     warnings,
-    plannedFiles: template
-      ? [
-          "main.tex",
-          ...template.assetManifest,
-          ".latex-editing-toolkit/template.json",
-          ...(template.kind === "beamer"
-            ? [".latex-editing-toolkit/beamer-class-options.tex", ".latex-editing-toolkit/beamer-settings.tex"]
-            : []),
-          ".vscode/settings.json"
-        ]
+    // Derived from the shared plan so the preview lists what the generator actually
+    // writes. The previous hand-written list omitted everything under templates/.
+    plannedFiles: plan
+      ? ["main.tex", ...plan.assets, ...plan.metadata, ".vscode/settings.json"]
       : ["main.tex", ".vscode/settings.json"]
   };
 }
