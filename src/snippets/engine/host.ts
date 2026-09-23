@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import * as path from 'path';
 import { openExplorer } from './openFileExplorer';
 import { HSnippet } from './hsnippet';
-import { HSnippetInstance } from './hsnippetInstance';
+import { HSnippetInstance, registerVisualSelectionTracker } from './hsnippetInstance';
 import { parse } from './parser';
 import { getSnippetDir } from './utils';
 import { getAutomaticCompletion, getCompletions, CompletionInfo } from './completion';
@@ -64,7 +64,6 @@ let latexContextOptionsCache:
         key: string;
     }
     | undefined;
-const DOCUMENT_TEXT_CACHE = new WeakMap<vscode.TextDocument, string>();
 let snippetOutput: vscode.OutputChannel | undefined;
 
 function isLatexLikeDocument(document: vscode.TextDocument) {
@@ -111,7 +110,9 @@ function getCachedLatexContext(document: vscode.TextDocument, position: vscode.P
         return undefined;
     }
 
-    let { options, key: optionsKey } = getLatexContextOptionsState();
+    let { options: baseOptions, key: baseKey } = getLatexContextOptionsState();
+    let options: LatexContextOptions = { ...baseOptions, languageId: document.languageId };
+    let optionsKey = `${baseKey}\u0000${document.languageId}`;
     let offset = document.offsetAt(position);
     if (
         latexContextCache &&
@@ -755,21 +756,27 @@ export async function expandSnippet(
     // TODO: Go back to inserting the snippet and removing in a single command once the VsCodeVim bug
     // is fixed.
 
+    // finally, not a trailing assignment: if either edit rejects (a closed editor, for
+    // instance) the flag would stay set and the bail in onDidChangeTextDocument would
+    // silently shut down the whole change pipeline for the rest of the session.
     insertingSnippet = true;
-    await editor.edit(
-        (eb) => {
-            eb.delete(snippetExpansion ? completion.completionRange : completion.range);
-        },
-        { undoStopAfter: false, undoStopBefore: !snippetExpansion }
-    );
+    try {
+        await editor.edit(
+            (eb) => {
+                eb.delete(snippetExpansion ? completion.completionRange : completion.range);
+            },
+            { undoStopAfter: false, undoStopBefore: !snippetExpansion }
+        );
 
-    await editor.insertSnippet(snippetInstance.snippetString, insertionRange, {
-        undoStopAfter: false,
-        undoStopBefore: false,
-    });
+        await editor.insertSnippet(snippetInstance.snippetString, insertionRange, {
+            undoStopAfter: false,
+            undoStopBefore: false,
+        });
 
-    if (snippetInstance.selectedPlaceholder != 0) SNIPPET_STACK.unshift(snippetInstance);
-    insertingSnippet = false;
+        if (snippetInstance.selectedPlaceholder != 0) SNIPPET_STACK.unshift(snippetInstance);
+    } finally {
+        insertingSnippet = false;
+    }
 }
 
 function snippetCommandError(output: vscode.OutputChannel, commandId: string, error: unknown): void {
@@ -799,13 +806,9 @@ export function registerSnippetHost(context: vscode.ExtensionContext, output: vs
     };
 
     loadSnippets();
-    if (vscode.window.activeTextEditor) {
-        DOCUMENT_TEXT_CACHE.set(
-            vscode.window.activeTextEditor.document,
-            vscode.window.activeTextEditor.document.getText()
-        );
-    }
     updateMathContext(vscode.window.activeTextEditor);
+
+    context.subscriptions.push(registerVisualSelectionTracker());
 
     context.subscriptions.push(
         vscode.commands.registerCommand('hsnips.openSnippetsDir', guarded('hsnips.openSnippetsDir', () => openExplorer(getSnippetDir())))
@@ -953,7 +956,9 @@ export function registerSnippetHost(context: vscode.ExtensionContext, output: vs
         vscode.commands.registerTextEditorCommand(
             'hsnips.expand',
             guarded('hsnips.expand', (editor: vscode.TextEditor, _: vscode.TextEditorEdit, completion: CompletionInfo) => {
-                expandSnippet(completion, editor, true);
+                // Returned so that guarded() can surface a rejection instead of it
+                // becoming an unhandled one.
+                return expandSnippet(completion, editor, true);
             })
         )
     );
@@ -982,63 +987,73 @@ export function registerSnippetHost(context: vscode.ExtensionContext, output: vs
     // Forward all document changes so that the active snippet can update its related blocks.
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(async (e) => {
-            let previousText = DOCUMENT_TEXT_CACHE.get(e.document);
-            let currentText = e.document.getText();
             let activeEditor = vscode.window.activeTextEditor;
-            try {
-                if (activeEditor && e.document == activeEditor.document) {
-                    updateMathContext(activeEditor);
-                }
+            if (activeEditor && e.document == activeEditor.document) {
+                updateMathContext(activeEditor);
+            }
 
-                if (SNIPPET_STACK.length && SNIPPET_STACK[0].editor.document == e.document) {
-                    SNIPPET_STACK[0].update(e.contentChanges);
-                }
+            if (SNIPPET_STACK.length && SNIPPET_STACK[0].editor.document == e.document) {
+                SNIPPET_STACK[0].update(e.contentChanges);
+            }
 
-                if (insertingSnippet) return;
+            if (insertingSnippet) return;
 
-                let mainChange = e.contentChanges[0];
+            let mainChange = e.contentChanges[0];
 
-                if (!mainChange) return;
+            if (!mainChange) return;
 
+            if (
+                activeEditor &&
+                e.document == activeEditor.document &&
+                e.contentChanges.length == 1
+            ) {
+                // Materialized here rather than at the top of the handler: most
+                // changes bail out above, and this is a full copy of the document.
+                let currentText = e.document.getText();
                 if (
-                    activeEditor &&
-                    e.document == activeEditor.document &&
-                    e.contentChanges.length == 1 &&
                     await recoverEnvironmentNameSyncAfterChange(
                         activeEditor,
                         mainChange,
-                        previousText || getTextBeforeChange(currentText, mainChange),
+                        getTextBeforeChange(currentText, mainChange),
                         currentText
                     )
                 ) {
                     return;
                 }
+            }
 
-                if (activeEditor && e.document == activeEditor.document && isPlainEnterChange(mainChange)) {
-                    void recoverSmartEnterAfterPlainEnter(activeEditor, mainChange).then(undefined, console.error);
-                    return;
-                }
+            // The single-change guard matters as much here as it does above:
+            // recoverSmartEnterAfterPlainEnter rebuilds the pre-edit text by slicing
+            // currentText at mainChange.rangeOffset, and with a multi-cursor Enter
+            // that offset is in old-document coordinates while currentText already
+            // contains the other cursors' insertions.
+            if (
+                activeEditor &&
+                e.document == activeEditor.document &&
+                e.contentChanges.length == 1 &&
+                isPlainEnterChange(mainChange)
+            ) {
+                void recoverSmartEnterAfterPlainEnter(activeEditor, mainChange).then(undefined, console.error);
+                return;
+            }
 
-                // Let's try to detect only events that come from keystrokes.
-                if (mainChange.text.length != 1) return;
+            // Let's try to detect only events that come from keystrokes.
+            if (mainChange.text.length != 1) return;
 
-                let snippets = getSnippetsForDocument(e.document);
-                if (!snippets) return;
-                let editor = vscode.window.activeTextEditor;
-                if (!editor || e.document != editor.document) return;
+            let snippets = getSnippetsForDocument(e.document);
+            if (!snippets) return;
+            let editor = vscode.window.activeTextEditor;
+            if (!editor || e.document != editor.document) return;
 
-                let latexContext = getEditorLatexContext(editor);
-                snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
+            let latexContext = getEditorLatexContext(editor);
+            snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
 
-                let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
-                let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
+            let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
+            let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
 
-                if (completion) {
-                    expandSnippet(completion, editor);
-                    return;
-                }
-            } finally {
-                DOCUMENT_TEXT_CACHE.set(e.document, e.document.getText());
+            if (completion) {
+                void expandSnippet(completion, editor).then(undefined, console.error);
+                return;
             }
         })
     );
@@ -1053,9 +1068,6 @@ export function registerSnippetHost(context: vscode.ExtensionContext, output: vs
 
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (editor) {
-                DOCUMENT_TEXT_CACHE.set(editor.document, editor.document.getText());
-            }
             updateMathContext(editor);
         })
     );

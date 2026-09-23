@@ -5,7 +5,7 @@ import { readSnippetDocuments } from "./snippetManagerModel";
 import { assertExpectedSnippetDocumentHash, parseSnippetDocument } from "./engine/snippetDocument";
 import { discoverSnippetProfiles, getProfilesDir, getWorkspaceSnippetDir, normalizeProfileName } from "./engine/snippetProfiles";
 import { getSnippetDir } from "./engine/utils";
-import { assertSnippetPathAllowed } from "./pathPolicy";
+import { assertSnippetPathAllowed, canonicalSnippetPath, samePath } from "./pathPolicy";
 
 export interface SnippetManagerDocumentState {
   filePath: string;
@@ -79,7 +79,14 @@ export class SnippetService {
 
   async save(filePath: string, content: string, expectedHash?: string, expectedMtimeMs?: number): Promise<SnippetManagerState> {
     await this.assertAllowed(filePath, true);
-    const openDocument = vscode.workspace.textDocuments.find((document) => document.uri.scheme === "file" && path.resolve(document.uri.fsPath) === path.resolve(filePath));
+    // Match the identity rule assertAllowed just used: resolve symlinks and fold case on
+    // the platforms that ignore it. A plain path.resolve comparison lets a symlinked
+    // snippet root or a differently-cased path slip past, and atomicWrite then discards
+    // the user's unsaved buffer.
+    const canonicalTarget = await canonicalSnippetPath(filePath, true);
+    const openDocuments = vscode.workspace.textDocuments.filter((document) => document.uri.scheme === "file");
+    const canonicalOpen = await Promise.all(openDocuments.map((document) => canonicalSnippetPath(document.uri.fsPath, false)));
+    const openDocument = openDocuments.find((_, index) => samePath(canonicalOpen[index], canonicalTarget));
     if (openDocument?.isDirty) {
       throw new Error("The snippet file has unsaved changes in the editor. Save or discard them before using the manager.");
     }
