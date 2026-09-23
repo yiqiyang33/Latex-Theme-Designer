@@ -4,17 +4,24 @@ import { applyOffset, getWorkspaceUri } from './utils';
 import { HSnippet, GeneratorResult } from './hsnippet';
 
 
-// listen to the selection text
+// Tracks the most recent non-empty selection so that ${VISUAL} can pick it up. Registered
+// from activate() rather than at import time so that it is disposed with the extension.
 let selectedText = "";
 let lastTimeOfselectedTextChanged = new Date().getTime();
-vscode.window.onDidChangeTextEditorSelection((e) => {
+
+export function registerVisualSelectionTracker(): vscode.Disposable {
+  return vscode.window.onDidChangeTextEditorSelection((e) => {
     const newSelectedText = e.textEditor.document.getText(e.selections[0]);
-    if (newSelectedText) {
-        selectedText = newSelectedText;
-        selectedText = selectedText.replace(/\\\\/g,"\\\\\\ ").replace(/\}/g,"\\}");
-        lastTimeOfselectedTextChanged = new Date().getTime();
+    if (!newSelectedText) {
+      // Collapsing the selection has to clear the capture, otherwise a stale selection
+      // from another document keeps feeding ${VISUAL} inside the five-second window.
+      selectedText = "";
+      return;
     }
-});
+    selectedText = newSelectedText.replace(/\\\\/g, "\\\\\\ ").replace(/\}/g, "\\}");
+    lastTimeOfselectedTextChanged = new Date().getTime();
+  });
+}
 
 enum HSnippetPartType {
   Placeholder,
@@ -102,11 +109,11 @@ export class HSnippetInstance {
 
       if (typeof(section) == 'string') {
         // Replace ${VISUAL} with selected text
-        if (new Date().getTime() - lastTimeOfselectedTextChanged < 5000) {
-          section = section.replace(/\${VISUAL}/g, selectedText);
-        } else {
-          section = section.replace(/\${VISUAL}/g, '');
-        }
+        // Replacement function, not a replacement string: the selection is user data and
+        // `$&`, `$$`, `` $` `` and `$'` in it would otherwise be expanded by replace().
+        const visual =
+          new Date().getTime() - lastTimeOfselectedTextChanged < 5000 ? selectedText : '';
+        section = section.replace(/\${VISUAL}/g, () => visual);
       }
 
       let rawSection = section;
@@ -148,7 +155,7 @@ export class HSnippetInstance {
     this.snippetString = new vscode.SnippetString(snippetString);
     this.range = new DynamicRange(start, position);
 
-    this.placeholderIds.sort();
+    this.placeholderIds.sort((a, b) => a - b);
     if (this.placeholderIds[0] == 0) this.placeholderIds.shift();
     this.placeholderIds.push(0);
     this.selectedPlaceholder = this.placeholderIds[0];
@@ -208,7 +215,11 @@ export class HSnippetInstance {
 
       if (currentPart >= this.parts.length) break;
 
-      while (part.range.contains(change.range)) {
+      // The bound matters: without it, a change contained by the last part that matches
+      // neither branch below walks currentPart past the end and the loop condition
+      // dereferences undefined. That happens whenever the caret moves into a tab stop
+      // by mouse click, which does not update selectedPlaceholder.
+      while (currentPart < this.parts.length && part.range.contains(change.range)) {
         if (
           (part.type == HSnippetPartType.Placeholder &&
             part.id == this.selectedPlaceholder &&
@@ -242,26 +253,43 @@ export class HSnippetInstance {
       .filter((p) => p.type == HSnippetPartType.Placeholder)
       .map((p) => p.content);
 
-    let blocks = this.type.generator(
-      placeholderContents,
-      this.matchGroups,
-      getWorkspaceUri(),
-      this.editor.document.uri.toString()
-    )[1].map(String);
+    // Snippet bodies are user-authored scripts, so re-generation can throw on input the
+    // initial (empty-placeholder) run accepted. The constructor already guards its call
+    // for the same reason; an escape from here would surface as an unhandled rejection
+    // in the document-change listener.
+    let blocks: string[];
+    try {
+      blocks = this.type.generator(
+        placeholderContents,
+        this.matchGroups,
+        getWorkspaceUri(),
+        this.editor.document.uri.toString()
+      )[1].map(String);
+    } catch (e) {
+      let message = e instanceof Error ? e.message : String(e);
+      vscode.window.showWarningMessage(
+        `Snippet ${this.type.description} failed to update with error: ${message}`
+      );
+      return;
+    }
 
-    this.editor.edit((edit) => {
-      for (let i = 0; i < blocks.length; i++) {
-        let range = this.blockParts[i].range;
-        let oldContent = this.blockParts[i].content;
-        let content = blocks[i];
+    this.editor
+      .edit((edit) => {
+        for (let i = 0; i < blocks.length; i++) {
+          let range = this.blockParts[i].range;
+          let oldContent = this.blockParts[i].content;
+          let content = blocks[i];
 
-        if (content != oldContent) {
-          edit.replace(range.range, content);
-          this.blockChanged = true;
+          if (content != oldContent) {
+            edit.replace(range.range, content);
+            this.blockChanged = true;
+          }
         }
-      }
-    });
-
-    this.blockParts.forEach((b, i) => (b.content = blocks[i]));
+      })
+      .then((applied) => {
+        // Only record the new content once the edit really landed, otherwise the model
+        // claims text the document never received.
+        if (applied) this.blockParts.forEach((b, i) => (b.content = blocks[i]));
+      }, console.error);
   }
 }

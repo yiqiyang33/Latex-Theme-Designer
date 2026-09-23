@@ -9,8 +9,12 @@ function parseSnippetHeader(header: string): IHSnippetHeader {
 
   let trigger: string | RegExp = match[2];
   if (match[1]) {
-    if (!match[1].endsWith('$')) match[1] += '$';
-    trigger = new RegExp(match[1], 'm');
+    // The trailing anchor has to mean "end of the matched context", not "end of any
+    // line": under the m flag a bare $ also matches before every newline, so a
+    // multiline trigger could fire against text well above the cursor. The m flag
+    // itself stays so that a user's own ^ keeps its per-line meaning.
+    let source = match[1].endsWith('$') ? match[1] : `${match[1]}$`;
+    trigger = new RegExp(`${source}(?![\\s\\S])`, 'm');
   }
 
   return {
@@ -27,7 +31,10 @@ interface IHSnippetInfo {
 }
 
 function escapeString(string: string) {
-  return string.replace(/"/g, '\\"').replace(/\\/g, '\\\\');
+  // Backslashes must be doubled before quotes are escaped. The other order turns the
+  // backslash this pass just added in front of a quote into an escaped backslash,
+  // leaving the quote bare and making the generated snippet function unparseable.
+  return string.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function countPlaceholders(string: string) {
@@ -77,8 +84,10 @@ function parseSnippet(headerLine: string, lines: string[]): IHSnippetInfo {
     }
   }
 
-  // Remove extra newline at the end.
-  script.pop();
+  // Remove extra newline at the end, but only when the body loop actually emitted one.
+  // An empty body leaves just the declarations, and popping one of those makes the
+  // generated function throw ReferenceError at expansion time.
+  if (script[script.length - 1] === `result.push("\\n");`) script.pop();
   script.push(`return [result, blockResults];`);
   script.push(`}`);
 
@@ -89,7 +98,8 @@ function parseSnippet(headerLine: string, lines: string[]): IHSnippetInfo {
 // transformed into a local function inside this and the list of all snippet functions is returned
 // so we can build the approppriate HSnippet objects.
 export function parse(content: string): HSnippet[] {
-  let lines = content.split(/\r?\n/);
+  // A BOM would glue itself to the first header keyword and silently drop that snippet.
+  let lines = content.replace(/^﻿/, '').split(/\r?\n/);
 
   let snippetInfos = [];
   let script = [];

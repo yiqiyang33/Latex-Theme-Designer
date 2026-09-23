@@ -4,23 +4,13 @@ import {
   LatexContextOptions,
 } from './latexContext';
 
+// Only the names with actual consumers are re-exported; the other twelve this block used
+// to forward had none anywhere in src/ or test/.
 export {
-  ALIGNMENT_SEPARATOR_ENVIRONMENTS,
-  findLatexCommentStart,
   getLatexContext,
-  getOpenLatexEnvironmentFrames,
   getOpenLatexEnvironmentStack,
-  isInsideLatexLineComment,
-  isInsideMarkdownCode,
-  isInsideTextLikeCommand,
-  LatexContext,
   LatexContextOptions,
-  LatexEditorContext,
-  LatexEnvironmentFrame,
-  MATH_ENVIRONMENTS,
-  ROW_BREAK_ENVIRONMENTS,
   sanitizeLatexForParsing,
-  stripLatexComments,
 } from './latexContext';
 
 export interface TextEdit {
@@ -39,7 +29,11 @@ function getLineBounds(text: string, offset: number) {
   let start = text.lastIndexOf('\n', Math.max(offset - 1, 0)) + 1;
   let nextNewline = text.indexOf('\n', offset);
   let end = nextNewline == -1 ? text.length : nextNewline;
-  return { start, end };
+  // Keep the carriage return out of the line: it is part of the line ending, not of the
+  // content, and letting an edit range cover it turns a CRLF document into a mixed one.
+  let crlf = end > start && text[end - 1] == '\r';
+  if (crlf) end -= 1;
+  return { start, end, eol: crlf ? '\r\n' : '\n' };
 }
 
 function getLineIndent(line: string) {
@@ -133,7 +127,7 @@ export function getSmartEnterPlan(
 
   if (commentStart == -1) {
     let replaceStart = lineBounds.start + formulaEnd;
-    let insertText = ' ' + '\\\\' + '\n' + indent;
+    let insertText = ' ' + '\\\\' + lineBounds.eol + indent;
     return {
       handled: true,
       edits: [{ start: replaceStart, end: lineBounds.end, text: insertText }],
@@ -144,7 +138,7 @@ export function getSmartEnterPlan(
   let replaceStart = lineBounds.start + formulaEnd;
   let replaceEnd = lineBounds.start + commentStart;
   let insertText = ' ' + '\\\\' + ' ';
-  let lineBreakText = '\n' + indent;
+  let lineBreakText = lineBounds.eol + indent;
 
   return {
     handled: true,

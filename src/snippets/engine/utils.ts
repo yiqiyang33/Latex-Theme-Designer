@@ -52,7 +52,9 @@ export function applyOffset(
   text: string,
   indent: number
 ): vscode.Position {
-  text = text.replace('\\$', '$');
+  // A string pattern only replaces the first occurrence, which under-counts the length
+  // of any section holding more than one escaped dollar and skews every later range.
+  text = text.replace(/\\\$/g, '$');
   let lines = text.split('\n');
   let newLine = position.line + lines.length - 1;
   let charOffset = lines[lines.length - 1].length;

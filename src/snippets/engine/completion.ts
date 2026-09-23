@@ -139,7 +139,10 @@ function matchSnippet(
       snippetMatches = context.wordContext == snippet.trigger;
       matchingPrefix = snippet.trigger.startsWith(context.wordContext) ? context.wordContext : null;
     } else if (snippet.beginningofline) {
-      snippetMatches = context.context.endsWith(snippet.trigger) && context.isPrecedingContextWhitespace;
+      // Must agree with the matchingPrefix test below: endsWith would report a match for
+      // `xxfoo` against trigger `foo` while matchingPrefix stays null, leaving the range
+      // at the full contextRange so the expansion deletes the `xx` too.
+      snippetMatches = context.context == snippet.trigger && context.isPrecedingContextWhitespace;
       matchingPrefix =
         snippet.trigger.startsWith(context.context) && context.isPrecedingContextWhitespace
           ? context.context
@@ -161,7 +164,9 @@ function matchSnippet(
     }
 
     let match = snippet.regexp.exec(regexContext);
-    if (match) {
+    // The range below assumes the match ends at the cursor. Enforce it rather than trust
+    // the trigger's own anchoring, which a hand-written regex can defeat.
+    if (match && match.index + match[0].length == regexContext.length) {
       let charOffset = match.index - regexContext.lastIndexOf('\n', match.index) - 1;
       let lineOffset = match[0].split('\n').length - 1;
 

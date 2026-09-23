@@ -25,7 +25,12 @@ function getRangeDelta(
   let lineDelta =
     change.text.split('\n').length - (change.range.end.line - change.range.start.line + 1);
   let charDelta = textLines[textLines.length - 1].length - change.range.end.character;
-  if (lineDelta == 0) charDelta += change.range.start.character;
+  // The start column only carries over when the replacement text stays on one line; then
+  // the new end column is start.character + text.length. With multiline replacement text
+  // the new end column is just the last line's length. Gating on lineDelta gets both the
+  // line-joining case (single-line text, lineDelta < 0) and the equal-line-count
+  // replacement case (multiline text, lineDelta == 0) wrong.
+  if (textLines.length == 1) charDelta += change.range.start.character;
 
   if (range.start.isAfterOrEqual(change.range.end)) {
     deltaStart.lineDelta = lineDelta;

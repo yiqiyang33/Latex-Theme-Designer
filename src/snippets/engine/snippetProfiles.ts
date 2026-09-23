@@ -55,7 +55,9 @@ function readSnippetFileEntries(
       let filePath = path.join(directory, file);
       return {
         filePath,
-        language: path.basename(file, '.hsnips').toLowerCase(),
+        // path.basename(file, '.hsnips') strips case-sensitively, so `LaTeX.HSnips`
+        // would keep its extension and yield a language id nothing ever matches.
+        language: file.slice(0, -'.hsnips'.length).toLowerCase(),
         profile,
         scope,
         workspaceFolder,
@@ -73,7 +75,14 @@ export function discoverSnippetProfiles(snippetDir: string) {
   return readdirSync(profilesDir)
     .filter((name) => {
       let filePath = path.join(profilesDir, name);
-      return normalizeProfileName(name) == name && statSync(filePath).isDirectory() && isInside(canonicalPath(filePath), canonicalProfilesDir);
+      if (normalizeProfileName(name) != name) return false;
+      try {
+        // A broken symlink here used to throw out of profile discovery entirely.
+        if (!statSync(filePath).isDirectory()) return false;
+      } catch {
+        return false;
+      }
+      return isInside(canonicalPath(filePath), canonicalProfilesDir);
     })
     .sort((a, b) => a.localeCompare(b));
 }
