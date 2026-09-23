@@ -17677,12 +17677,11 @@ function beamerMetadataValue(runtime, source, macroName, commandName, fallback) 
   if (declared && !new RegExp(`^\\\\${macroName}\\b`).test(declared)) return declared;
   return fallback;
 }
-var TEX_SPECIALS = /[#$%&_^~{}]/g;
 function escapeTexValue(value) {
-  return String(value || "").replace(/[\r\n]/g, " ").replace(/\\/g, "\\textbackslash{}").replace(TEX_SPECIALS, (character) => character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`);
+  return String(value || "").replace(/[\r\n{}]/g, " ").replace(/(?<!\\)[#$%&_^~]/g, (character) => character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`);
 }
 function unescapeTexValue(value) {
-  return String(value || "").replace(/\\([#$%&_{}])/g, "$1").replace(/\\([\^~])\{\}/g, "$1").replace(/\\textbackslash\{\}/g, "\\");
+  return String(value || "").replace(/\\([\^~])\{\}/g, "$1").replace(/\\([#$%&_])/g, "$1");
 }
 function isBeamerAspectRatio(value) {
   return typeof value === "string" && /^\d{2,4}$/.test(value);

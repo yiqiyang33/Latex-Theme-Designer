@@ -281,25 +281,23 @@ function beamerMetadataValue(runtime: string, source: string, macroName: string,
   return fallback;
 }
 
-const TEX_SPECIALS = /[#$%&_^~{}]/g;
-
 function escapeTexValue(value: string): string {
-  // Newlines and braces cannot survive inside a \def body at all; the rest are TeX
-  // specials that would otherwise break the document (# is a hard error at definition
-  // time) or typeset as something else.
+  // Newlines and braces cannot survive inside a \def body; the rest are TeX specials that
+  // would otherwise break the document (# is a hard error at definition time) or typeset
+  // as something else. A backslash is deliberately left alone: the default date is
+  // \today, and escaping it would break every command a user legitimately puts here.
+  // The lookbehind keeps an already-escaped special from being escaped twice.
   return String(value || "")
-    .replace(/[\r\n]/g, " ")
-    .replace(/\\/g, "\\textbackslash{}")
-    .replace(TEX_SPECIALS, (character) => (character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`));
+    .replace(/[\r\n{}]/g, " ")
+    .replace(/(?<!\\)[#$%&_^~]/g, (character) => (character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`));
 }
 
 function unescapeTexValue(value: string): string {
   // Inverse of escapeTexValue, so a round trip through the generated file gives the user
-  // back exactly what they typed instead of accumulating backslashes.
+  // back what they typed instead of accumulating backslashes.
   return String(value || "")
-    .replace(/\\([#$%&_{}])/g, "$1")
     .replace(/\\([\^~])\{\}/g, "$1")
-    .replace(/\\textbackslash\{\}/g, "\\");
+    .replace(/\\([#$%&_])/g, "$1");
 }
 
 export function isBeamerAspectRatio(value: unknown): value is string {

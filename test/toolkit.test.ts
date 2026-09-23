@@ -733,6 +733,11 @@ describe("TypeScript Toolkit migration", () => {
     const source = await fs.readFile(path.join(root, "main.tex"), "utf8");
     const readBack = await readBeamerSettings(root, "main.tex", source);
     expect(readBack.title).toBe("Sprint #4: 100% Q&A_1");
+    // A backslash must pass through untouched: the default date is \today, and every
+    // other command a user puts in these fields would break if it were escaped.
+    expect(readBack.date).toBe("\\today");
+    const runtimeAfterWrite = await fs.readFile(path.join(root, ".latex-editing-toolkit", "beamer-settings.tex"), "utf8");
+    expect(runtimeAfterWrite).toContain("\\def\\ToolkitBeamerDate{\\today}");
 
     // With no runtime file the starter's own \title{\ToolkitBeamerTitle} must not be
     // mistaken for a value, or the next write emits \def\X{\X} and TeX loops forever.
