@@ -87,6 +87,8 @@ export interface LatexContextOptions {
   extraRowBreakEnvironments?: string[];
   extraAlignmentEnvironments?: string[];
   extraTextLikeCommands?: string[];
+  /** Document language id; decides whether backtick code spans are masked. */
+  languageId?: string;
 }
 
 export interface ResolvedLatexContextOptions {
@@ -122,8 +124,6 @@ export interface LatexEditorContext {
   canExpandMathSnippet: boolean;
 }
 
-export type LatexContext = LatexEditorContext;
-
 interface MathDelimiterFrame {
   kind: Exclude<LatexMathKind, 'none' | 'environment'>;
   start: number;
@@ -144,9 +144,27 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+// getLatexContext runs on every keystroke, and resolving the options rebuilds five deduped
+// arrays each time from configuration that changes at most when settings do. One slot is
+// enough: the key is stable for the whole session in practice.
+let resolvedOptionsCache: { key: string; resolved: ResolvedLatexContextOptions } | undefined;
+
 export function resolveLatexContextOptions(
   options: LatexContextOptions = {}
 ): ResolvedLatexContextOptions {
+  let key = JSON.stringify([
+    options.extraMathEnvironments || [],
+    options.extraRowBreakEnvironments || [],
+    options.extraAlignmentEnvironments || [],
+    options.extraTextLikeCommands || [],
+  ]);
+  if (resolvedOptionsCache?.key === key) return resolvedOptionsCache.resolved;
+  let resolved = computeLatexContextOptions(options);
+  resolvedOptionsCache = { key, resolved };
+  return resolved;
+}
+
+function computeLatexContextOptions(options: LatexContextOptions): ResolvedLatexContextOptions {
   let rowBreakEnvironments = unique([
     ...ROW_BREAK_ENVIRONMENTS,
     ...(options.extraRowBreakEnvironments || []),
@@ -241,7 +259,8 @@ function maskRegexRanges(chars: string[], text: string, regexp: RegExp) {
 
 export function sanitizeLatexForParsing(
   text: string,
-  markdownFenceRanges = getMarkdownFenceRanges(text)
+  markdownFenceRanges = getMarkdownFenceRanges(text),
+  maskInlineCodeSpans = true
 ) {
   let chars = text.split('');
 
@@ -250,7 +269,10 @@ export function sanitizeLatexForParsing(
   }
 
   maskRegexRanges(chars, text, /<!--[\s\S]*?-->/g);
-  maskRegexRanges(chars, text, /`[^`\n]*`/g);
+  // Backtick code spans are a Markdown construct. In LaTeX a backtick is an opening
+  // quote, so two ordinary quotes on one line would be paired into a bogus span and
+  // everything between them — including real math — would be masked out.
+  if (maskInlineCodeSpans) maskRegexRanges(chars, text, /`[^`\n]*`/g);
 
   let lineStart = 0;
   while (lineStart <= chars.length) {
@@ -269,18 +291,24 @@ export function sanitizeLatexForParsing(
   return chars.join('');
 }
 
-export function stripLatexComments(text: string) {
-  return sanitizeLatexForParsing(text);
-}
-
-function createLatexParsingPrefix(text: string, offset: number): LatexParsingPrefix {
+function createLatexParsingPrefix(
+  text: string,
+  offset: number,
+  maskInlineCodeSpans = true
+): LatexParsingPrefix {
   let original = text.substring(0, offset);
   let markdownFenceRanges = getMarkdownFenceRanges(original);
   return {
     original,
     markdownFenceRanges,
-    sanitized: sanitizeLatexForParsing(original, markdownFenceRanges),
+    sanitized: sanitizeLatexForParsing(original, markdownFenceRanges, maskInlineCodeSpans),
   };
+}
+
+const TEX_LANGUAGE_IDS = new Set(['latex', 'tex', 'latex-expl3', 'doctex', 'rsweave', 'jlweave']);
+
+export function masksInlineCodeSpans(languageId?: string): boolean {
+  return !languageId || !TEX_LANGUAGE_IDS.has(languageId.toLowerCase());
 }
 
 function getOpenLatexEnvironmentFramesFromSanitized(
@@ -371,18 +399,25 @@ export function isInsideMarkdownCode(text: string, offset: number) {
   return isInsideMarkdownCodeInPrefix(beforeCursor, getMarkdownFenceRanges(beforeCursor));
 }
 
-function isInsideMarkdownCodeInPrefix(beforeCursor: string, markdownFenceRanges: SourceRange[]) {
+function isInsideMarkdownCodeInPrefix(
+  beforeCursor: string,
+  markdownFenceRanges: SourceRange[],
+  countInlineBackticks = true
+) {
   if (markdownFenceRanges.some((range) => range.end == beforeCursor.length)) {
     return true;
   }
 
+  // Fences are unambiguous in any language, but a lone backtick is an opening quote in
+  // LaTeX, so counting them there reports text as code and suppresses math detection.
+  if (!countInlineBackticks) return false;
   let lineStart = beforeCursor.lastIndexOf('\n') + 1;
   let lineBeforeCursor = beforeCursor.substring(lineStart);
   let inlineBackticks = lineBeforeCursor.match(/`/g);
   return inlineBackticks ? inlineBackticks.length % 2 == 1 : false;
 }
 
-function findMatchingBrace(text: string, openBrace: number, limit: number) {
+export function findMatchingBrace(text: string, openBrace: number, limit = text.length) {
   let depth = 0;
   for (let index = openBrace; index < limit; index++) {
     if (isEscaped(text, index)) {
@@ -419,6 +454,22 @@ function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Keyed on the resolved options object, which resolveLatexContextOptions now memoizes, so
+// the pattern is compiled once per configuration instead of once per keystroke.
+const textLikeCommandRegExpCache = new WeakMap<ResolvedLatexContextOptions, RegExp>();
+
+function textLikeCommandRegExp(resolved: ResolvedLatexContextOptions): RegExp {
+  let cached = textLikeCommandRegExpCache.get(resolved);
+  if (!cached) {
+    cached = new RegExp(
+      '\\\\(' + resolved.textLikeCommands.map(escapeRegExp).join('|') + ')\\s*\\{',
+      'g'
+    );
+    textLikeCommandRegExpCache.set(resolved, cached);
+  }
+  return cached;
+}
+
 function isInsideTextLikeCommandInSanitized(
   sanitized: string,
   resolved: ResolvedLatexContextOptions
@@ -427,10 +478,10 @@ function isInsideTextLikeCommandInSanitized(
     return false;
   }
 
-  const commandReg = new RegExp(
-    '\\\\(' + resolved.textLikeCommands.map(escapeRegExp).join('|') + ')\\s*\\{',
-    'g'
-  );
+  const commandReg = textLikeCommandRegExp(resolved);
+  // Shared /g regex: reset explicitly so a previous call's lastIndex cannot skip the
+  // beginning of this document.
+  commandReg.lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = commandReg.exec(sanitized)) !== null) {
@@ -444,7 +495,7 @@ function isInsideTextLikeCommandInSanitized(
   return false;
 }
 
-function getMathDelimiterStack(text: string, offset: number) {
+export function getMathDelimiterStack(text: string, offset: number) {
   return getMathDelimiterStackFromSanitized(sanitizeLatexForParsing(text.substring(0, offset)));
 }
 
@@ -477,7 +528,11 @@ function getMathDelimiterStackFromSanitized(beforeCursor: string) {
     }
 
     if (char == '$' && !isEscaped(beforeCursor, index)) {
-      let delimiter = beforeCursor[index + 1] == '$' ? '$$' : '$';
+      // `$$` only opens display math when no inline `$` is currently open. Inside inline
+      // math it is a close immediately followed by an open, and treating it as display
+      // math would strand an inline frame on the stack and report math mode forever.
+      let insideInline = stack[stack.length - 1]?.kind == 'inlineDollar';
+      let delimiter = beforeCursor[index + 1] == '$' && !insideInline ? '$$' : '$';
       let kind: MathDelimiterFrame['kind'] = delimiter == '$$' ? 'displayDollar' : 'inlineDollar';
       if (stack[stack.length - 1]?.kind == kind) {
         stack.pop();
@@ -499,7 +554,8 @@ export function getLatexContext(
   options: LatexContextOptions = {}
 ): LatexEditorContext {
   let resolved = resolveLatexContextOptions(options);
-  let parsedPrefix = createLatexParsingPrefix(text, offset);
+  let inlineCodeSpans = masksInlineCodeSpans(options.languageId);
+  let parsedPrefix = createLatexParsingPrefix(text, offset, inlineCodeSpans);
   let environmentFrames = getOpenLatexEnvironmentFramesFromSanitized(
     parsedPrefix.sanitized,
     resolved
@@ -510,7 +566,8 @@ export function getLatexContext(
   let inComment = isInsideLatexLineComment(text, offset);
   let inMarkdownCode = isInsideMarkdownCodeInPrefix(
     parsedPrefix.original,
-    parsedPrefix.markdownFenceRanges
+    parsedPrefix.markdownFenceRanges,
+    inlineCodeSpans
   );
   let inTextLikeCommand = isInsideTextLikeCommandInSanitized(parsedPrefix.sanitized, resolved);
   let verbatimEnvironments = new Set(resolved.verbatimLikeEnvironments);

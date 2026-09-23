@@ -1,8 +1,10 @@
 import {
+  findMatchingBrace,
   isEscaped,
   LatexContextOptions,
+  masksInlineCodeSpans,
+  resolveLatexContextOptions,
   sanitizeLatexForParsing,
-  VERBATIM_LIKE_ENVIRONMENTS,
 } from './latexContext';
 import { TextEdit } from './latexEdit';
 
@@ -106,35 +108,15 @@ interface DelimiterToken {
   openEnd: number;
 }
 
-function findMatchingBrace(text: string, openBrace: number) {
-  let depth = 0;
-  for (let index = openBrace; index < text.length; index++) {
-    if (isEscaped(text, index)) {
-      continue;
-    }
-
-    if (text[index] == '{') {
-      depth++;
-      continue;
-    }
-
-    if (text[index] == '}') {
-      depth--;
-      if (depth == 0) {
-        return index;
-      }
-    }
-  }
-
-  return -1;
-}
-
 function parseBracedArguments(text: string, start: number): LatexArgumentRange[] {
   let args: LatexArgumentRange[] = [];
   let index = start;
 
   while (index < text.length) {
-    while (/\s/.test(text[index] || '')) index++;
+    // Only blanks and tabs, never a newline: a brace group on the next line belongs to
+    // the environment body, and swallowing it as a \begin argument makes the conversion
+    // delete it.
+    while (/[^\S\r\n]/.test(text[index] || '')) index++;
     if (text[index] != '{') break;
 
     let end = findMatchingBrace(text, index);
@@ -164,13 +146,19 @@ function getEnvironmentNameRange(match: RegExpExecArray) {
   };
 }
 
-export function findLatexEnvironmentPairAt(
+/**
+ * Enumerates every begin/end pair in the document. Split out from
+ * findLatexEnvironmentPairAt so a caller that needs the pairs at two offsets can sanitize
+ * and scan the document once instead of twice — this runs on the keystroke path.
+ */
+export function enumerateLatexEnvironmentPairs(
   text: string,
-  offset: number,
-  _options: LatexContextOptions = {}
-) {
-  let sanitized = sanitizeLatexForParsing(text);
-  let verbatimEnvironments = new Set(VERBATIM_LIKE_ENVIRONMENTS);
+  options: LatexContextOptions = {}
+): LatexEnvironmentPair[] {
+  let sanitized = sanitizeLatexForParsing(text, undefined, masksInlineCodeSpans(options.languageId));
+  // The options argument used to be ignored here while latexContext honoured it, so the
+  // two scanners disagreed about which environments are verbatim-like.
+  let verbatimEnvironments = new Set(resolveLatexContextOptions(options).verbatimLikeEnvironments);
   let stack: BeginToken[] = [];
   let pairs: LatexEnvironmentPair[] = [];
   const environmentReg = /\\(begin|end)\s*\{([^}]+)\}/g;
@@ -225,13 +213,28 @@ export function findLatexEnvironmentPairAt(
       endEnd: environmentReg.lastIndex,
       endNameStart: nameStart,
       endNameEnd: nameEnd,
-      beginArguments: parseBracedArguments(text, begin.beginEnd),
+      // Only table-like environments take \begin arguments; for everything else a
+      // leading brace group is body content.
+      beginArguments: isTableLikeEnvironment(name) ? parseBracedArguments(text, begin.beginEnd) : [],
     });
   }
 
+  return pairs;
+}
+
+/** Innermost pair containing the offset, from an already-enumerated list. */
+export function selectLatexEnvironmentPairAt(pairs: LatexEnvironmentPair[], offset: number) {
   return pairs
     .filter((pair) => pair.beginStart <= offset && offset <= pair.endEnd)
     .sort((a, b) => (a.endEnd - a.beginStart) - (b.endEnd - b.beginStart))[0];
+}
+
+export function findLatexEnvironmentPairAt(
+  text: string,
+  offset: number,
+  options: LatexContextOptions = {}
+) {
+  return selectLatexEnvironmentPairAt(enumerateLatexEnvironmentPairs(text, options), offset);
 }
 
 export function findDisplayMathDelimiterAt(text: string, offset: number) {
@@ -277,7 +280,9 @@ export function findDisplayMathDelimiterAt(text: string, offset: number) {
     }
 
     if (char == '$' && !isEscaped(sanitized, index)) {
-      let isDisplay = sanitized[index + 1] == '$';
+      // `$$` inside an open inline `$` is a close plus an open, not display math.
+      // Same rule as getMathDelimiterStackFromSanitized in latexContext.ts.
+      let isDisplay = sanitized[index + 1] == '$' && stack[stack.length - 1]?.kind != 'inlineDollar';
       let kind: DelimiterToken['kind'] = isDisplay ? 'displayDollar' : 'inlineDollar';
       let width = isDisplay ? 2 : 1;
       if (stack[stack.length - 1]?.kind == kind) {
@@ -631,9 +636,12 @@ export function createEnvironmentNameSyncPlan(
   change: SingleTextChange,
   options: LatexContextOptions = {}
 ): ConversionPlan {
+  // One scan of beforeText, two selections. This runs on every single-change document
+  // event, and each scan sanitizes the whole document.
+  let allPairs = enumerateLatexEnvironmentPairs(beforeText, options);
   let pairsToCheck = [
-    findLatexEnvironmentPairAt(beforeText, change.rangeOffset, options),
-    findLatexEnvironmentPairAt(beforeText, change.rangeOffset + change.rangeLength, options),
+    selectLatexEnvironmentPairAt(allPairs, change.rangeOffset),
+    selectLatexEnvironmentPairAt(allPairs, change.rangeOffset + change.rangeLength),
   ].filter((pair): pair is LatexEnvironmentPair => Boolean(pair));
 
   for (let pair of pairsToCheck) {
