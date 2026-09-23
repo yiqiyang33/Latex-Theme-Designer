@@ -4,7 +4,8 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { HistoryConflictError } from "../src/changeHistory";
-import { detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, writeTemplateMetadata } from "../src/beamer";
+import { beamerHooksEnabled, defaultBeamerSettings, detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, renderBeamerClassOptions, writeBeamerSettings, writeTemplateMetadata } from "../src/beamer";
+import { templateFilePlan } from "../src/templatePlan";
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
@@ -669,6 +670,105 @@ describe("TypeScript Toolkit migration", () => {
     expect(detectBibliographyTool("\\bibliographystyle{plainnat}")).toBeNull();
     expect(detectBibliographyTool("\\documentclass{article}")).toBeNull();
     expect(detectBibliographyTool("% \\bibliography{references}")).toBeNull();
+  });
+
+  it("leaves the workspace untouched when a starter cannot be generated", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new TemplateService(root, repoRoot, state);
+    // An unknown id used to fall back to book-minimal and silently produce a book.
+    await expect(service.createStarter("beamer-nonexistent", "main.tex", false)).rejects.toThrow(/Unknown starter template/);
+    expect(await fs.readdir(root)).toEqual([]);
+
+    await service.createStarter("article-minimal", "main.tex", false);
+    const before = (await fs.readdir(root)).sort();
+    const originalText = await fs.readFile(path.join(root, "main.tex"), "utf8");
+    // A rejected overwrite must not copy assets or touch the existing target either.
+    await expect(service.createStarter("book-minimal", "main.tex", false)).rejects.toThrow(/already exists/);
+    expect((await fs.readdir(root)).sort()).toEqual(before);
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe(originalText);
+  });
+
+  it("refuses a target that differs from an existing file only by case", async () => {
+    const root = await tempWorkspace();
+    const state = new StateService(root);
+    const service = new TemplateService(root, repoRoot, state);
+    await service.createStarter("article-minimal", "main.tex", false);
+    const originalText = await fs.readFile(path.join(root, "main.tex"), "utf8");
+    const caseInsensitive = await fs.access(path.join(root, "MAIN.TEX")).then(() => true, () => false);
+    if (!caseInsensitive) return;
+    // On APFS/NTFS this is the same file; it used to be overwritten and then reported as
+    // a failure because the compile-target lookup could not find the requested casing.
+    await expect(service.createStarter("book-minimal", "Main.tex", false)).rejects.toThrow(/only by case/);
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe(originalText);
+  });
+
+  it("refuses to follow a symlink when copying template assets", async () => {
+    const root = await tempWorkspace();
+    const outside = await tempWorkspace();
+    const escaped = path.join(outside, "escaped.sty");
+    await fs.symlink(escaped, path.join(root, "theme.sty"));
+    await expect(ensureWorkspaceTemplateAssets(root, repoRoot, "article-minimal")).rejects.toThrow(/symlink/i);
+    await expect(fs.access(escaped)).rejects.toThrow();
+  });
+
+  it("plans the files a starter actually writes", async () => {
+    const article = templateFilePlan("article-minimal", "main.tex");
+    // The old hand-written preview omitted everything under templates/.
+    expect(article?.assets).toContain("templates/research-paper.tex");
+    expect(article?.assets).toContain("theme.sty");
+    const beamer = templateFilePlan("beamer-gotham", "slides/deck.tex");
+    expect(beamer?.assets).toContain("slides/beamer/gotham/beamerthemegotham.sty");
+    expect(beamer?.metadata).toContain("slides/.latex-editing-toolkit/beamer-settings.tex");
+    expect(templateFilePlan("nope")).toBeUndefined();
+  });
+
+  it("round-trips Beamer presentation settings without corrupting them", async () => {
+    const root = await tempWorkspace();
+    await new TemplateService(root, repoRoot, new StateService(root)).createStarter("beamer-blei", "main.tex", false);
+    // TeX specials must survive a write/read cycle unchanged; # used to be a hard
+    // compile error and % came back with a stray backslash.
+    const typed = { ...defaultBeamerSettings(), title: "Sprint #4: 100% Q&A_1", author: "A. Author" };
+    await writeBeamerSettings(root, "main.tex", typed);
+    const source = await fs.readFile(path.join(root, "main.tex"), "utf8");
+    const readBack = await readBeamerSettings(root, "main.tex", source);
+    expect(readBack.title).toBe("Sprint #4: 100% Q&A_1");
+
+    // With no runtime file the starter's own \title{\ToolkitBeamerTitle} must not be
+    // mistaken for a value, or the next write emits \def\X{\X} and TeX loops forever.
+    await fs.rm(path.join(root, ".latex-editing-toolkit", "beamer-settings.tex"));
+    const fresh = await readBeamerSettings(root, "main.tex", source);
+    expect(fresh.title).toBe(defaultBeamerSettings().title);
+    await writeBeamerSettings(root, "main.tex", fresh);
+    const runtime = await fs.readFile(path.join(root, ".latex-editing-toolkit", "beamer-settings.tex"), "utf8");
+    expect(runtime).not.toContain("\\def\\ToolkitBeamerTitle{\\ToolkitBeamerTitle}");
+  });
+
+  it("reads Beamer metadata with optional arguments and keeps an unmanaged aspect ratio", async () => {
+    const root = await tempWorkspace();
+    const source = [
+      "\\documentclass[aspectratio=1610]{beamer}",
+      "\\title[Short]{My Real Title}",
+      "\\author[JD]{Jane Doe}",
+      "\\begin{document}\\end{document}"
+    ].join("\n");
+    await fs.writeFile(path.join(root, "main.tex"), source, "utf8");
+    const settings = await readBeamerSettings(root, "main.tex", source);
+    expect(settings.title).toBe("My Real Title");
+    expect(settings.author).toBe("Jane Doe");
+    // 16:10 is not one of the two the UI offers, but rewriting it to 169 would resize
+    // the deck behind the user's back.
+    expect(settings.aspectRatio).toBe("1610");
+    expect(renderBeamerClassOptions(settings)).toContain("aspectratio=1610");
+  });
+
+  it("does not count commented-out Beamer hooks as enabled", () => {
+    const enabled = [
+      "\\IfFileExists{.latex-editing-toolkit/beamer-class-options.tex}{}{}",
+      "\\IfFileExists{.latex-editing-toolkit/beamer-settings.tex}{}{}"
+    ].join("\n");
+    expect(beamerHooksEnabled(enabled)).toBe(true);
+    expect(beamerHooksEnabled(enabled.split("\n").map((line) => `% ${line}`).join("\n"))).toBe(false);
   });
 
   it("creates bundled Beamer child templates with metadata and local theme assets", async () => {

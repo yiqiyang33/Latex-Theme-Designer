@@ -18,6 +18,8 @@ import {
   type TextEdit
 } from "../src/snippets/engine/latexEdit";
 import { parse } from "../src/snippets/engine/parser";
+import { getMathDelimiterStack } from "../src/snippets/engine/latexContext";
+
 import {
   assertExpectedSnippetDocumentHash,
   appendSnippet,
@@ -217,5 +219,100 @@ a &= b|
       await fs.rm(root, { recursive: true, force: true });
       await fs.rm(outside, { recursive: true, force: true });
     }
+  });
+  // --- Regressions from the 2026-09 engine review -------------------------------------
+
+  it("keeps snippet bodies loadable when they contain quotes or backslashes", () => {
+    const snippets = parse([
+      'snippet quoted "Quotes" A',
+      String.raw`He said "hello" and \emph{"bye"}`,
+      "endsnippet"
+    ].join("\n"));
+    expect(snippets).toHaveLength(1);
+    // Before the fix escapeString escaped quotes first, so the backslash pass reopened
+    // them and new Function() rejected the whole file, dropping every snippet in it.
+    const [parts] = snippets[0].generator([], [], "", "");
+    expect(parts.join("")).toContain(String.raw`He said "hello" and \emph{"bye"}`);
+  });
+
+  it("expands a snippet with an empty body instead of throwing", () => {
+    const snippets = parse(['snippet empty "Empty" A', "endsnippet"].join("\n"));
+    expect(snippets).toHaveLength(1);
+    // The unconditional script.pop() used to remove the blockResults declaration.
+    expect(() => snippets[0].generator([], [], "", "")).not.toThrow();
+  });
+
+  it("anchors a multiline regex trigger at the cursor, not at every line end", () => {
+    const [snippet] = parse(['snippet `foo` "Regex" MA', "bar", "endsnippet"].join("\n"));
+    expect(snippet.regexp?.test("foo")).toBe(true);
+    // "foo\nbar" ends with bar: the trigger must not match the earlier line.
+    expect(snippet.regexp?.test("foo\nbar")).toBe(false);
+  });
+
+  it("ignores a byte order mark before the first snippet header", () => {
+    const snippets = parse('\uFEFFsnippet bom "BOM" A\nbody\nendsnippet');
+    expect(snippets.map((snippet) => snippet.trigger)).toEqual(["bom"]);
+  });
+
+  it("does not treat $$ inside open inline math as display math", () => {
+    // `text $a$$b$ X`: the $$ closes the inline span and opens a new one, so after the
+    // final $ nothing is open and the cursor is in text mode.
+    const stack = getMathDelimiterStack("text $a$$b$ X", "text $a$$b$ X".length);
+    expect(stack).toHaveLength(0);
+    expect(getLatexContext("text $a$$b$ X", "text $a$$b$ X".length).inMath).toBe(false);
+    // A genuine display block still registers.
+    expect(getLatexContext("text $$a", "text $$a".length).mathKind).toBe("displayDollar");
+  });
+
+  it("treats backticks as quotes in LaTeX and as code spans in Markdown", () => {
+    const text = "He said `hello' and $x=1$, then `bye'.";
+    const offset = text.indexOf("$x=1$") + 3;
+    expect(getLatexContext(text, offset, { languageId: "latex" }).inMath).toBe(true);
+    expect(getLatexContext(text, offset, { languageId: "markdown" }).inMath).toBe(false);
+  });
+
+  it("keeps a brace group that opens the environment body during conversion", () => {
+    const text = "\\begin{aligned}\n{\\bf x} = 1\n\\end{aligned}";
+    const plan = createEnvironmentConversionPlan(text, text.indexOf("= 1"), "align");
+    expect(plan.handled).toBe(true);
+    // parseBracedArguments used to cross the newline and claim {\bf x} as a \begin
+    // argument, after which the conversion dropped it.
+    expect(applyTextEdits(text, plan.edits)).toContain("{\\bf x} = 1");
+  });
+
+  it("preserves CRLF line endings when Smart Enter splits a line", () => {
+    const text = "\\begin{align}\r\nx = 1\r\n\\end{align}";
+    const plan = getSmartEnterPlan(text, text.indexOf("x = 1") + "x = 1".length);
+    expect(plan.handled).toBe(true);
+    const result = applyTextEdits(text, plan.edits);
+    expect(result).not.toMatch(/[^\r]\n/);
+    expect(result).toContain("x = 1 \\\\\r\n");
+  });
+
+  it("tracks a range across an edit that joins two lines", async () => {
+    const { DynamicRange, GrowthType } = await import("../src/snippets/engine/dynamicRange");
+    const { Position, Range } = await import("./mocks/vscode");
+    // Document "hello\nworld" with a tracked range at (1,3)-(1,5); backspace at the start
+    // of line 1 joins it onto the 5-character line 0, so the range must land at column 8.
+    const tracked = new DynamicRange(new Position(1, 3) as never, new Position(1, 5) as never);
+    tracked.update([
+      {
+        change: { range: new Range(0, 5, 1, 0), rangeOffset: 5, rangeLength: 1, text: "" } as never,
+        growth: GrowthType.Grow
+      }
+    ]);
+    expect({ line: tracked.range.start.line, character: tracked.range.start.character })
+      .toEqual({ line: 0, character: 8 });
+  });
+
+  it("unescapes every escaped dollar when measuring a snippet section", async () => {
+    // A string pattern replaced only the first occurrence, so a section with two escaped
+    // dollars measured one character too wide and every later range drifted.
+    const { applyOffset } = await import("../src/snippets/engine/utils");
+    const { Position } = await import("./mocks/vscode");
+    const origin = new Position(0, 0);
+    const single = applyOffset(origin as never, String.raw`\$`, 0);
+    const double = applyOffset(origin as never, String.raw`\$\$`, 0);
+    expect(double.character - single.character).toBe(1);
   });
 });

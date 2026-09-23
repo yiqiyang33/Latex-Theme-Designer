@@ -44,13 +44,53 @@ export class Uri {
   }
 }
 
+export class Position {
+  constructor(public readonly line: number, public readonly character: number) {}
+  with(line = this.line, character = this.character): Position {
+    return new Position(line, character);
+  }
+  /** Mirrors the real API: either two deltas or a {lineDelta, characterDelta} object. */
+  translate(lineDeltaOrChange: number | { lineDelta?: number; characterDelta?: number } = 0, characterDelta = 0): Position {
+    const lineDelta = typeof lineDeltaOrChange === "number" ? lineDeltaOrChange : lineDeltaOrChange.lineDelta ?? 0;
+    const charDelta = typeof lineDeltaOrChange === "number" ? characterDelta : lineDeltaOrChange.characterDelta ?? 0;
+    return new Position(this.line + lineDelta, this.character + charDelta);
+  }
+  private compare(other: Position): number {
+    return this.line !== other.line ? this.line - other.line : this.character - other.character;
+  }
+  isEqual(other: Position): boolean { return this.compare(other) === 0; }
+  isBefore(other: Position): boolean { return this.compare(other) < 0; }
+  isBeforeOrEqual(other: Position): boolean { return this.compare(other) <= 0; }
+  isAfter(other: Position): boolean { return this.compare(other) > 0; }
+  isAfterOrEqual(other: Position): boolean { return this.compare(other) >= 0; }
+}
+
 export class Range {
-  constructor(
-    public readonly startLine: number,
-    public readonly startCharacter: number,
-    public readonly endLine: number,
-    public readonly endCharacter: number
-  ) {}
+  readonly start: Position;
+  readonly end: Position;
+  // Both real-API constructor shapes: (start, end) and (startLine, startChar, endLine, endChar).
+  constructor(start: Position, end: Position);
+  constructor(startLine: number, startCharacter: number, endLine: number, endCharacter: number);
+  constructor(a: Position | number, b: Position | number, c?: number, d?: number) {
+    if (typeof a === "number") {
+      this.start = new Position(a, b as number);
+      this.end = new Position(c as number, d as number);
+    } else {
+      this.start = a;
+      this.end = b as Position;
+    }
+  }
+  get startLine(): number { return this.start.line; }
+  get startCharacter(): number { return this.start.character; }
+  get endLine(): number { return this.end.line; }
+  get endCharacter(): number { return this.end.character; }
+  with(start = this.start, end = this.end): Range {
+    return new Range(start, end);
+  }
+  contains(other: Range | Position): boolean {
+    const [otherStart, otherEnd] = other instanceof Range ? [other.start, other.end] : [other, other];
+    return this.start.isBeforeOrEqual(otherStart) && this.end.isAfterOrEqual(otherEnd);
+  }
 }
 
 export class Selection extends Range {}
