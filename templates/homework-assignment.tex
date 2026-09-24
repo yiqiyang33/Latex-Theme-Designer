@@ -115,10 +115,28 @@
 % An explicit number must be an integer; the style comes from
 % \homeworkProblemNumbering, so under Roman you still write [5] to get V.
 \makeatletter
+% An explicit number must be an integer. Without this check \numexpr stops at the
+% first non-digit and the remainder leaks into the page: [1.1] silently printed
+% ".1-1" as body text, numbered the problem 2, and returned exit status 0.
+\ExplSyntaxOn
+\tl_new:N \l__hw_num_tl
+\NewDocumentCommand{\hwIfInteger}{m +m +m}{
+    % The target must be expanded first: \regex_match:nn does not expand its
+    % argument and would test the literal control sequence instead.
+    \tl_set:Nx \l__hw_num_tl { \tl_to_str:n {#1} }
+    \regex_match:nVTF { \A\s*-?[0-9]+\s*\Z } \l__hw_num_tl {#2} {#3}
+}
+\ExplSyntaxOff
 \newcommand{\hw@advance}[2]{%
     % Setting the counter before stepping keeps the printed number, the following
     % items and \ref all in agreement.
-    \if\relax\detokenize{#2}\relax\else\setcounter{#1}{\numexpr#2-1\relax}\fi
+    \if\relax\detokenize{#2}\relax\else
+        \hwIfInteger{#2}
+            {\setcounter{#1}{\numexpr#2-1\relax}}
+            {\PackageError{homework}{Number '#2' is not an integer.\MessageBreak
+                Write [5], not [V] or [1.1]. The printed style comes from
+                \string\homeworkProblemNumbering}{}}%
+    \fi
     \refstepcounter{#1}%
 }
 \newcommand{\hw@word}[1]{#1\if\relax\detokenize{#1}\relax\else~\fi}
