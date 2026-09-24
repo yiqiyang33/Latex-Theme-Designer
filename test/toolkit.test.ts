@@ -776,6 +776,26 @@ describe("TypeScript Toolkit migration", () => {
     expect(beamerHooksEnabled(enabled.split("\n").map((line) => `% ${line}`).join("\n"))).toBe(false);
   });
 
+  it("ships a line-breakable inline highlight in every tracked commands.tex copy", async () => {
+    const copies = ["assets/template/commands.tex", "commands.tex", "examples/toolkit-guide/commands.tex"];
+    const contents = await Promise.all(copies.map((rel) => fs.readFile(path.join(repoRoot, rel), "utf8")));
+    // The three copies are meant to be the same file; nothing enforced that before.
+    for (const [index, text] of contents.entries()) {
+      expect(text, copies[index]).toBe(contents[0]);
+    }
+    const canonical = contents[0];
+    // \tcbox is a single unbreakable hbox: a phrase longer than the space left on the
+    // line used to overflow the margin instead of wrapping. The text highlights must
+    // stay on the soulpos path.
+    expect(canonical).toContain("\\ulposdef{\\thmi@underlay}");
+    for (const command of ["key", "term", "warn", "todo"]) {
+      expect(canonical, command).toMatch(new RegExp(`\\\\newcommand\\{\\\\${command}\\}\\[1\\]\\{\\\\themeInlineBox`));
+    }
+    // \code keeps the unbreakable chip on purpose: soul cannot scan \detokenize output,
+    // and an identifier has no spaces to break at anyway.
+    expect(canonical).toContain("\\themeInlineChip[fontupper=\\ttfamily\\footnotesize]");
+  });
+
   it("creates bundled Beamer child templates with metadata and local theme assets", async () => {
     for (const template of STARTER_TEMPLATE_DEFINITIONS.filter((entry) => entry.kind === "beamer")) {
       const root = await tempWorkspace();

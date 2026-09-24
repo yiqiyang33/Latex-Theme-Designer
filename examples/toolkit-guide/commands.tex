@@ -1,8 +1,47 @@
 \RequirePackage{soul}
-\sethlcolor{inline-term-bg}
+\RequirePackage{soulpos}
+\RequirePackage{tikz}
 
 \makeatletter
+% Inline highlights are drawn as a soulpos underlay rather than as a \tcbox. A \tcbox is
+% a single unbreakable hbox, so a phrase longer than the space left on the line was
+% pushed out whole: it stranded the following words at the right margin, or ran past it
+% (a full sentence inside a theorem block overflowed by ~100pt). soulpos calls the
+% underlay once per line fragment, so the highlight follows line breaks instead.
+\newcommand\thmi@bg{inline-term-bg}
+\newcommand\thmi@fg{inline-term-fg}
+\newlength\thmi@pad
+\setlength\thmi@pad{1.7pt}
+
+\ulposdef{\thmi@underlay}{%
+    \begin{tikzpicture}[overlay]
+        \draw[
+            fill=\thmi@bg,
+            draw=\thmi@fg!30!white,
+            line width=0.25pt,
+            rounded corners=1.6pt
+        ]
+            (-\thmi@pad, -0.32em) rectangle (\dimexpr\ulwidth+\thmi@pad\relax, 1.02em);
+    \end{tikzpicture}%
+}
+
+% Breakable inline highlight.
+% #1 font declaration (e.g. \bfseries), #2 background color, #3 text color, #4 content.
+% Note: the optional argument is a font declaration, not tcolorbox keys.
 \NewDocumentCommand{\themeInlineBox}{O{} m m +m}{%
+    \begingroup
+    \renewcommand\thmi@bg{#2}%
+    \renewcommand\thmi@fg{#3}%
+    \kern\thmi@pad
+    \begingroup\color{#3}#1\thmi@underlay{#4}\endgroup
+    \kern\thmi@pad
+    \endgroup
+}
+
+% Unbreakable variant, kept for content that must not be re-typeset word by word.
+% soul cannot scan \detokenize output, and a code identifier has no spaces to break at
+% anyway, so \code gains nothing from the breakable path.
+\NewDocumentCommand{\themeInlineChip}{O{} m m +m}{%
     \tcbox[
         on line,
         nobeforeafter,
@@ -21,13 +60,16 @@
         #1
     ]{\strut #4}%
 }
-\newcommand{\key}[1]{\themeInlineBox[fontupper=\bfseries]{inline-term-bg}{inline-key-fg}{#1}}
+\makeatother
+
+\newcommand{\key}[1]{\themeInlineBox[\bfseries]{inline-term-bg}{inline-key-fg}{#1}}
 \newcommand{\term}[1]{\themeInlineBox{inline-term-bg}{inline-term-fg}{#1}}
-\newcommand{\warn}[1]{\themeInlineBox[fontupper=\bfseries]{inline-todo-bg}{inline-warn-fg}{#1}}
-\newcommand{\todo}[1]{\themeInlineBox[fontupper=\sffamily\footnotesize\bfseries]{inline-todo-bg}{inline-todo-fg}{TODO\hspace{0.25em}#1}}
+\newcommand{\warn}[1]{\themeInlineBox[\bfseries]{inline-todo-bg}{inline-warn-fg}{#1}}
+\newcommand{\todo}[1]{\themeInlineBox[\sffamily\footnotesize\bfseries]{inline-todo-bg}{inline-todo-fg}{TODO #1}}
 \newcommand{\code}[1]{%
-    \themeInlineBox[fontupper=\ttfamily\footnotesize]{inline-code-bg}{inline-code-fg}{\detokenize{#1}}%
+    \themeInlineChip[fontupper=\ttfamily\footnotesize]{inline-code-bg}{inline-code-fg}{\detokenize{#1}}%
 }
+\makeatletter
 \newcommand{\sidenote}[1]{%
     \marginnote{%
         \footnotesize
