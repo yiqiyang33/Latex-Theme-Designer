@@ -37,8 +37,12 @@ SPEC = {
  # Brand tier: maroon is the constant. It used to be applied to only some families, so
  # the title text alternated maroon / grey / brown with no rule behind it. Now every
  # title and every spine is maroon, and the family shows in the bar tint alone.
- "uchicago": dict(center=0, spread=1.00, title=(0.905,0.013), body=(0.974,0.005),
-                  accent=(0.600,0.028), fg=(0.380,0.020), callout=(0.945,0.011),
+ # Brand tier: maroon is the constant. Its hue is 29deg, so the family tints are folded
+ # into a warm arc around it (roughly 325deg through 90deg: mauve, clay, buff, gold)
+ # rather than spanning the whole ring -- greens and teals near the complement fought
+ # the maroon. Families are told apart by the title text anyway, not by these tints.
+ "uchicago": dict(center=32, spread=0.37, title=(0.905,0.016), body=(0.974,0.006),
+                  accent=(0.600,0.028), fg=(0.380,0.020), callout=(0.945,0.013),
                   spine=(0.600,0.028), brand=UCHICAGO_MAROON),
 }
 
