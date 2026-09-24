@@ -671,6 +671,13 @@ describe("TypeScript Toolkit migration", () => {
     expect(text).toContain("\\documentclass[oneside]{article}");
     expect(text).toContain("\\NewDocumentEnvironment{homeworkProblem}");
     expect(text).toContain("\\NewDocumentEnvironment{homeworkSection}");
+    // Heading word, numbering style and an explicit number are all meant to be
+    // configurable; the two levels are configured independently.
+    expect(text).toContain("\\newcommand{\\homeworkProblemName}");
+    expect(text).toContain("\\homeworkProblemNumbering{arabic}");
+    expect(text).toContain("\\homeworkSectionNumbering{alph}");
+    expect(text).toMatch(/NewDocumentEnvironment\{homeworkProblem\}\{o o D<>/);
+    expect(text).toMatch(/NewDocumentEnvironment\{homeworkSection\}\{o o D<>/);
     expect(text).toContain("\\NewDocumentEnvironment{solution}");
   });
 

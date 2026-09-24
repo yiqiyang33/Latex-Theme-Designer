@@ -79,30 +79,76 @@
     \vspace{1.2em}
 }
 
-% -------------------- Homework Environments --------------------
-\newcounter{homeworkProblemCounter}
-\newcounter{homeworkSectionCounter}[homeworkProblemCounter]
-\renewcommand{\thehomeworkSectionCounter}{\alph{homeworkSectionCounter}}
+% -------------------- Homework Configuration --------------------
+% Heading word for each level. Change once here for the whole document, or per
+% instance with <...> on the environment, e.g. \begin{homeworkProblem}[3][Extra]<Bonus>.
+\newcommand{\homeworkProblemName}{Problem}
+\newcommand{\homeworkSectionName}{}
 
-\NewDocumentEnvironment{homeworkProblem}{o}
+\newcounter{homeworkProblemCounter}
+% Sections hang off the problem counter, so they restart at every problem.
+\newcounter{homeworkSectionCounter}[homeworkProblemCounter]
+
+\makeatletter
+% Numbering style per level, set independently: arabic (1) | alph (a) | Alph (A)
+% | roman (i) | Roman (I). A misspelt style would otherwise expand to \relax and
+% make the number vanish with no error at all, so check it exists first.
+\newcommand{\homeworkSetNumbering}[2]{%
+    \@ifundefined{#2}
+        {\PackageError{homework}{Unknown numbering style '#2'.\MessageBreak
+            Use arabic, alph, Alph, roman or Roman}{}}
+        {\expandafter\renewcommand\csname the#1\endcsname{\csname #2\endcsname{#1}}}%
+}
+\newcommand{\homeworkProblemNumbering}[1]{\homeworkSetNumbering{homeworkProblemCounter}{#1}}
+\newcommand{\homeworkSectionNumbering}[1]{\homeworkSetNumbering{homeworkSectionCounter}{#1}}
+\makeatother
+
+\homeworkProblemNumbering{arabic}
+\homeworkSectionNumbering{alph}
+
+% -------------------- Homework Environments --------------------
+% Both environments read their optional arguments by count:
+%   \begin{homeworkProblem}              -> Problem 1
+%   \begin{homeworkProblem}[Name]        -> Problem 1 --- Name
+%   \begin{homeworkProblem}[5][Name]     -> Problem 5 --- Name, and the next one is 6
+%   \begin{homeworkProblem}[5][Name]<Bonus> -> Bonus 5 --- Name
+% An explicit number must be an integer; the style comes from
+% \homeworkProblemNumbering, so under Roman you still write [5] to get V.
+\makeatletter
+\newcommand{\hw@advance}[2]{%
+    % Setting the counter before stepping keeps the printed number, the following
+    % items and \ref all in agreement.
+    \if\relax\detokenize{#2}\relax\else\setcounter{#1}{\numexpr#2-1\relax}\fi
+    \refstepcounter{#1}%
+}
+\newcommand{\hw@word}[1]{#1\if\relax\detokenize{#1}\relax\else~\fi}
+\newcommand{\hw@trailing}[1]{\if\relax\detokenize{#1}\relax\else\ --- #1\fi}
+
+\NewDocumentEnvironment{homeworkProblem}{o o D<>{\homeworkProblemName}}
 {
-    \refstepcounter{homeworkProblemCounter}
-    \setcounter{homeworkSectionCounter}{0}
-    \section*{Problem \thehomeworkProblemCounter\IfNoValueTF{#1}{}{ --- #1}}
-    \addcontentsline{toc}{section}{Problem \thehomeworkProblemCounter\IfNoValueTF{#1}{}{ --- #1}}
+    \IfNoValueTF{#2}
+        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hw@advance{homeworkProblemCounter}{}}
+        {\def\hw@nm{#2}\hw@advance{homeworkProblemCounter}{#1}}
+    % Built once so the heading and the TOC entry cannot drift apart.
+    \edef\hw@txt{\noexpand\hw@word{#3}\thehomeworkProblemCounter\noexpand\hw@trailing{\hw@nm}}
+    \section*{\hw@txt}
+    \addcontentsline{toc}{section}{\hw@txt}
 }
 {
     \vspace{0.4em}
 }
 
-\NewDocumentEnvironment{homeworkSection}{o}
+\NewDocumentEnvironment{homeworkSection}{o o D<>{\homeworkSectionName}}
 {
-    \refstepcounter{homeworkSectionCounter}
-    \subsection*{(\thehomeworkSectionCounter)\IfNoValueTF{#1}{}{ #1}}
+    \IfNoValueTF{#2}
+        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hw@advance{homeworkSectionCounter}{}}
+        {\def\hw@nm{#2}\hw@advance{homeworkSectionCounter}{#1}}
+    \subsection*{\hw@word{#3}(\thehomeworkSectionCounter)\if\relax\detokenize{\hw@nm}\relax\else\ \hw@nm\fi}
 }
 {
     \vspace{0.25em}
 }
+\makeatother
 
 \NewDocumentEnvironment{solution}{o}
 {
@@ -155,6 +201,22 @@ State part (b) here.
 Solve part (b) here.
 \end{solution}
 \end{homeworkSection}
+\end{homeworkProblem}
+
+% Two optional arguments set the number explicitly; numbering continues from it,
+% so the next problem would be 6.
+\begin{homeworkProblem}[5][Renumbered Problem]\label{prob:renumbered}
+This problem is numbered 5 regardless of how many came before it.
+\end{homeworkProblem}
+
+% <...> overrides the heading word for this one problem only.
+\begin{homeworkProblem}[Extra Credit]<Bonus>
+Set the word for every problem at once with
+\texttt{\textbackslash renewcommand\{\textbackslash homeworkProblemName\}\{Question\}},
+and the numbering style with
+\texttt{\textbackslash homeworkProblemNumbering\{Roman\}} --- problems and
+sections are configured independently. Cross-references follow the override too:
+this is Problem~\ref{prob:renumbered}.
 \end{homeworkProblem}
 
 \end{document}
