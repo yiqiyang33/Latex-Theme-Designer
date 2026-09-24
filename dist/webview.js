@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/webview/uiState.ts
-  var TOOLKIT_SECTIONS = ["style", "presentation", "build", "document", "colors", "setup", "structure", "snippets", "sync", "diagnostics"];
+  var TOOLKIT_SECTIONS = ["style", "presentation", "homework", "build", "document", "colors", "setup", "structure", "snippets", "sync", "diagnostics"];
   var STRUCTURE_TASKS = ["split", "renumber", "unsplit"];
   function readWorkspaceUiState(value, workspaceKey) {
     const root = record(value);
@@ -318,6 +318,7 @@
     renderStyleDifferences();
     renderSplitResult();
     renderBeamerSettings();
+    renderHomeworkSettings();
     renderWorkspaceMode();
     renderContextPanels();
     void refreshOverleafState();
@@ -387,6 +388,117 @@
     byId("beamerNotesModeSelect").disabled = !hooksEnabled || !capabilities.has("speaker-notes");
     byId("beamerSectionOutlineInput").disabled = !hooksEnabled || !capabilities.has("section-outline");
     byId("saveBeamerSettingsBtn").disabled = !hooksEnabled || capabilities.size === 0;
+  }
+  var HOMEWORK_INPUTS = {
+    course: "homeworkCourseInput",
+    title: "homeworkTitleInput",
+    author: "homeworkAuthorInput",
+    instructor: "homeworkInstructorInput",
+    dueDate: "homeworkDueDateInput",
+    problemWord: "homeworkProblemWordInput",
+    sectionWord: "homeworkSectionWordInput"
+  };
+  var HOMEWORK_PREFIX_PATTERN = /^-?\d+(\.\d+)*$/;
+  function homeworkNumeral(value, style) {
+    const alphabet = (upper) => {
+      const letter = String.fromCharCode(96 + Math.min(Math.max(value, 1), 26));
+      return upper ? letter.toUpperCase() : letter;
+    };
+    const roman = (upper) => {
+      const table = [[10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+      let rest = value;
+      let out = "";
+      for (const [weight, glyph] of table) while (rest >= weight) {
+        out += glyph;
+        rest -= weight;
+      }
+      return upper ? out.toUpperCase() : out;
+    };
+    switch (style) {
+      case "alph":
+        return alphabet(false);
+      case "Alph":
+        return alphabet(true);
+      case "roman":
+        return roman(false);
+      case "Roman":
+        return roman(true);
+      default:
+        return String(value);
+    }
+  }
+  function renderHomeworkPreview(settings) {
+    const prefix = HOMEWORK_PREFIX_PATTERN.test(String(settings.problemPrefix || "")) ? `${settings.problemPrefix}.` : "";
+    const problem = (n) => `${prefix}${homeworkNumeral(n, settings.problemStyle)}`;
+    const word = String(settings.problemWord || "").trim();
+    const partWord = String(settings.sectionWord || "").trim();
+    const part = (n) => {
+      const numeral = homeworkNumeral(n, settings.sectionStyle);
+      const body = settings.sectionMode === "nested" ? `${problem(1)}.${numeral}` : `(${numeral})`;
+      return partWord ? `${partWord} ${body}` : body;
+    };
+    byId("homeworkContextTitle").textContent = `${word ? `${word} ` : ""}${problem(1)}`;
+    byId("homeworkContextProblems").textContent = [1, 2, 3].map((n) => `${word ? `${word} ` : ""}${problem(n)}`).join(", ");
+    byId("homeworkContextSections").textContent = [1, 2, 3].map(part).join(", ");
+  }
+  function readHomeworkForm() {
+    const settings = {};
+    for (const [key, id] of Object.entries(HOMEWORK_INPUTS)) settings[key] = byId(id).value;
+    settings.problemStyle = byId("homeworkProblemStyleSelect").value;
+    settings.sectionStyle = byId("homeworkSectionStyleSelect").value;
+    settings.sectionMode = byId("homeworkSectionModeSelect").value;
+    settings.problemPrefix = byId("homeworkProblemPrefixInput").value.trim();
+    return settings;
+  }
+  function validateHomeworkForm() {
+    const prefix = byId("homeworkProblemPrefixInput").value.trim();
+    const valid = prefix === "" || HOMEWORK_PREFIX_PATTERN.test(prefix);
+    const notice = byId("homeworkPrefixError");
+    notice.textContent = valid ? "" : `"${prefix}" is not a number. Use an integer such as 1, or a dotted one such as 2.3.`;
+    notice.hidden = valid;
+    return valid;
+  }
+  function renderHomeworkSettings() {
+    const panel = document.getElementById("panelHomework");
+    if (!panel) return;
+    const homework = isHomeworkWorkspace();
+    panel.hidden = !homework;
+    if (!homework) return;
+    const settings = model?.state?.homework_settings || {};
+    const capabilities = new Set(model?.schema?.homework_capabilities || []);
+    byId("homeworkTargetName").textContent = model.state.compile_target || "main.tex";
+    byId("homeworkDetectionSource").textContent = model.state.workspace_template.detectionSource;
+    const hooksEnabled = model.state.homework_hooks_enabled !== false;
+    const inlineMachinery = Boolean(model.state.homework_machinery_inline);
+    byId("homeworkHookNotice").textContent = inlineMachinery ? "This target still defines the homework environments itself, from a starter generated before the homework package existed. Regenerate it from Project Setup with overwrite enabled to pick up the configurable numbering." : "This target does not load the homework package. Enable the hook before changing generated homework settings.";
+    byId("homeworkHookNotice").hidden = hooksEnabled;
+    byId("enableHomeworkHooksBtn").hidden = hooksEnabled || inlineMachinery;
+    for (const [key, id] of Object.entries(HOMEWORK_INPUTS)) byId(id).value = settings[key] ?? "";
+    byId("homeworkProblemPrefixInput").value = settings.problemPrefix ?? "";
+    byId("homeworkProblemStyleSelect").value = settings.problemStyle || "arabic";
+    byId("homeworkSectionStyleSelect").value = settings.sectionStyle || "alph";
+    byId("homeworkSectionModeSelect").value = settings.sectionMode || "standalone";
+    const numbering = hooksEnabled && capabilities.has("homework-numbering");
+    for (const id of [...Object.values(HOMEWORK_INPUTS), "homeworkProblemPrefixInput", "homeworkProblemStyleSelect", "homeworkSectionStyleSelect", "homeworkSectionModeSelect"]) {
+      byId(id).disabled = !numbering;
+    }
+    validateHomeworkForm();
+    byId("saveHomeworkSettingsBtn").disabled = !numbering;
+    renderHomeworkPreview(readHomeworkForm());
+  }
+  async function saveHomeworkSettings() {
+    if (!validateHomeworkForm()) {
+      setStatus("Fix the problem number prefix before saving.", "error");
+      return;
+    }
+    const result = await request("homework-settings", { target: model.state.compile_target, settings: readHomeworkForm() });
+    acceptServerModel(result);
+    setStatus("Homework settings saved.", "ok");
+  }
+  async function enableHomeworkHooks() {
+    const result = await request("homework-enable-hooks", { target: model.state.compile_target });
+    acceptServerModel(result);
+    setStatus("Homework Toolkit controls enabled.", "ok");
   }
   async function saveBeamerSettings() {
     const settings = {
@@ -596,7 +708,23 @@
     const preferred = starterTemplateSelection || select.value || model.schema.starter_default_template || "book-minimal";
     starterTemplateSelection = renderSelect(select, templates.map((item) => ({ value: item.id, label: item.label })), preferred);
     renderStarterDescription();
+    renderStarterStyle();
     if (!output.value) output.value = model.schema.starter_default_output_target || "main.tex";
+  }
+  function renderStarterStyle() {
+    const select = byId("starterStylePreset");
+    const row = byId("starterStyleRow");
+    const hint = byId("starterStyleHint");
+    const selected = (model.schema.starter_templates || []).find((item) => item.id === starterTemplateSelection);
+    const themed = (selected?.capabilities || []).includes("toolkit-theme");
+    row.hidden = !themed;
+    hint.hidden = themed || !selected;
+    if (!themed) {
+      if (selected) hint.textContent = `${selected.label} is self-contained and does not load theme.sty, so the Theme Designer styles do not apply to it.`;
+      return;
+    }
+    const presets = model.schema.style_presets || [];
+    renderSelect(select, presets.map((preset) => ({ value: preset.id, label: preset.label })), select.value || model.state.style_preset || "default");
   }
   function renderStarterDescription() {
     const kind = byId("starterKindSelect").value;
@@ -1572,10 +1700,12 @@
     const output = byId("starterOutputTarget").value.trim();
     const overwrite = byId("starterOverwrite").checked;
     if (overwrite && !await confirmAction("starter-overwrite", output)) return;
+    const themed = !byId("starterStyleRow").hidden;
     const result = await request("template-bootstrap", {
       template_id: byId("starterTemplateSelect").value,
       output_target: output,
-      overwrite
+      overwrite,
+      style_preset: themed ? byId("starterStylePreset").value : void 0
     });
     starterTemplateSelection = byId("starterTemplateSelect").value;
     setStatus(`Generated ${result.generated_target}.`, "ok");
@@ -1766,6 +1896,7 @@
     byId("starterTemplateSelect").addEventListener("change", () => {
       starterTemplateSelection = byId("starterTemplateSelect").value;
       renderStarterDescription();
+      renderStarterStyle();
     });
     byId("upgradeColorPolicy").addEventListener("change", () => {
       const reset = byId("upgradeColorPolicy").value === "default";
@@ -1807,6 +1938,14 @@
     byId("upgradeThemeAssetsBtn").addEventListener("click", () => run(upgradeThemeAssets));
     byId("upgradeColorPolicy").addEventListener("change", renderStarterDescription);
     byId("saveBeamerSettingsBtn").addEventListener("click", () => run(saveBeamerSettings));
+    byId("saveHomeworkSettingsBtn").addEventListener("click", () => run(saveHomeworkSettings));
+    byId("enableHomeworkHooksBtn").addEventListener("click", () => run(enableHomeworkHooks));
+    for (const id of ["homeworkProblemWordInput", "homeworkSectionWordInput", "homeworkProblemPrefixInput", "homeworkProblemStyleSelect", "homeworkSectionStyleSelect", "homeworkSectionModeSelect"]) {
+      byId(id).addEventListener("input", () => {
+        validateHomeworkForm();
+        renderHomeworkPreview(readHomeworkForm());
+      });
+    }
     byId("enableBeamerHooksBtn").addEventListener("click", () => run(enableBeamerToolkit));
     byId("compileBtn").addEventListener("click", () => run(compilePdf));
     byId("openPdfBtn").addEventListener("click", () => run(async () => request("open-pdf", { path: currentPdfPath() })));
@@ -1955,10 +2094,14 @@
       snippetSearch: snippetSearch || void 0
     }));
   }
+  function isHomeworkWorkspace() {
+    return model?.state?.workspace_template?.templateId === "homework-assignment";
+  }
   function availableSections() {
     if (initialData.snippetsOnly) return ["snippets"];
     if (model?.state?.workspace_template?.kind === "beamer") return ["presentation", "build", "setup", "structure", "snippets", "sync", "diagnostics"];
-    return TOOLKIT_SECTIONS.filter((section) => section !== "presentation");
+    const homework = isHomeworkWorkspace();
+    return TOOLKIT_SECTIONS.filter((section) => section !== "presentation" && (homework || section !== "homework"));
   }
   function workspaceStateKey() {
     return document.body.dataset.workspacePath || "workspace";
@@ -1998,6 +2141,7 @@
         <nav class="workspace-nav surface" role="tablist" aria-label="Toolkit sections">
           <button data-section-target="style" role="tab"><i class="codicon codicon-symbol-color" aria-hidden="true"></i><span>Style</span></button>
           <button data-section-target="presentation" role="tab"><i class="codicon codicon-device-camera-video" aria-hidden="true"></i><span>Presentation</span></button>
+          <button data-section-target="homework" role="tab"><i class="codicon codicon-checklist" aria-hidden="true"></i><span>Homework</span></button>
           <button data-section-target="build" role="tab"><i class="codicon codicon-play" aria-hidden="true"></i><span>Build</span><small id="navBuildBadge" class="nav-badge" hidden></small></button>
           <button data-section-target="document" role="tab"><i class="codicon codicon-book" aria-hidden="true"></i><span>Document</span></button>
           <button data-section-target="colors" role="tab"><i class="codicon codicon-symbol-property" aria-hidden="true"></i><span>Colors</span></button>
@@ -2032,6 +2176,18 @@
             <div class="action-card-footer"><button id="saveBeamerSettingsBtn" class="primary"><i class="codicon codicon-save" aria-hidden="true"></i><span>Save Presentation Settings</span></button></div>
           </section>
 
+          <section id="panelHomework" class="toolkit-panel" data-toolkit-panel="homework" hidden>
+            <header class="section-heading"><div><p class="eyebrow">Homework</p><h2>Homework Toolkit</h2><p class="hint">Heading words and numbering for the problem and part environments, written to a generated file rather than into your main.tex.</p></div></header>
+            <div class="form-card">
+              <div class="summary-list"><div><dt>Target</dt><dd id="homeworkTargetName"></dd></div><div><dt>Detection</dt><dd id="homeworkDetectionSource"></dd></div></div>
+              <p id="homeworkHookNotice" class="inline-notice">This target does not load the homework package. Enable the hook before changing generated homework settings.</p>
+              <button id="enableHomeworkHooksBtn" class="secondary" hidden><i class="codicon codicon-wrench" aria-hidden="true"></i><span>Enable Homework Toolkit Controls</span></button>
+            </div>
+            <div class="settings-group"><h3>Assignment Metadata</h3><div class="config-row"><span>Course</span><input id="homeworkCourseInput" type="text"></div><div class="config-row"><span>Title</span><input id="homeworkTitleInput" type="text"></div><div class="config-row"><span>Author</span><input id="homeworkAuthorInput" type="text"></div><div class="config-row"><span>Instructor</span><input id="homeworkInstructorInput" type="text"></div><div class="config-row"><span>Due</span><input id="homeworkDueDateInput" type="text"></div></div>
+            <div class="settings-group"><h3>Problems</h3><div class="config-row"><span>Heading word</span><input id="homeworkProblemWordInput" type="text" placeholder="Problem"></div><div class="config-row"><span>Numbering</span><select id="homeworkProblemStyleSelect"><option value="arabic">1, 2, 3</option><option value="alph">a, b, c</option><option value="Alph">A, B, C</option><option value="roman">i, ii, iii</option><option value="Roman">I, II, III</option></select></div><div class="config-row"><span>Number prefix</span><input id="homeworkProblemPrefixInput" type="text" placeholder="none"></div><p id="homeworkPrefixError" class="inline-notice" hidden></p><p class="hint">A prefix qualifies every problem number, for a set that belongs to a chapter: <code>1</code> numbers the problems 1.1, 1.2, 1.3. Leave it empty for plain numbering. Integers only, dots allowed.</p></div>
+            <div class="settings-group"><h3>Parts</h3><div class="config-row"><span>Heading word</span><input id="homeworkSectionWordInput" type="text" placeholder="none"></div><div class="config-row"><span>Numbering</span><select id="homeworkSectionStyleSelect"><option value="arabic">1, 2, 3</option><option value="alph">a, b, c</option><option value="Alph">A, B, C</option><option value="roman">i, ii, iii</option><option value="Roman">I, II, III</option></select></div><div class="config-row"><span>Number format</span><select id="homeworkSectionModeSelect"><option value="standalone">Standalone &mdash; (a), (b)</option><option value="nested">Within the problem &mdash; 1.1, 1.2</option></select></div><p class="hint">Parts restart at every problem either way. <em>Within the problem</em> puts the problem number in front, so problem 1's parts read 1.1 &hellip; 1.5 and problem 2's read 2.1 &hellip; 2.19.</p></div>
+            <div class="action-card-footer"><button id="saveHomeworkSettingsBtn" class="primary"><i class="codicon codicon-save" aria-hidden="true"></i><span>Save Homework Settings</span></button></div>
+          </section>
           <section id="panelBuild" class="toolkit-panel" data-toolkit-panel="build" hidden>
             <header class="section-heading"><div><p class="eyebrow">Build</p><h2>Compile Configuration</h2><p class="hint">Choose local or Overleaf Remote compilation for the next explicit build.</p></div></header>
             <div class="form-card"><label class="field"><span>Compile Mode</span><select id="compileModeSelect"><option value="local">Local</option><option value="overleaf">Overleaf Remote</option></select></label><label class="field"><span>Target</span><select id="targetSelect"></select></label><label class="field"><span>Recipe</span><select id="recipeSelect"></select></label><label class="toggle-row standalone"><span class="toggle-copy"><strong>Internal fallback</strong><small>Compile without the selected VS Code recipe.</small></span><span class="switch"><input id="useInternalFallback" type="checkbox"><span aria-hidden="true"></span></span></label><p id="compileHelp" class="hint"></p></div>
@@ -2054,7 +2210,7 @@
 
           <section id="panelSetup" class="toolkit-panel" data-toolkit-panel="setup" hidden>
             <header class="section-heading"><div><p class="eyebrow">Workspace</p><h2>Project Setup</h2><p class="hint">Generate or safely upgrade Toolkit-managed project resources.</p></div></header>
-            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div class="action-card-body"><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Creates the selected target and missing Toolkit theme assets.</p><div class="form-row"><select id="starterKindSelect"></select><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label></div><div class="action-card-footer"><button id="generateTemplateBtn">Generate</button></div></div></article>
+            <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-new-file" aria-hidden="true"></i></div><div class="action-card-body"><h3>Starter Template</h3><p id="starterTemplateDesc" class="hint"></p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Creates the selected target and missing Toolkit theme assets.</p><div class="form-row"><select id="starterKindSelect"></select><select id="starterTemplateSelect"></select><input id="starterOutputTarget" placeholder="main.tex"><label class="inline"><input id="starterOverwrite" type="checkbox"> overwrite</label></div><div class="form-row" id="starterStyleRow"><label class="inline" for="starterStylePreset">Theme</label><select id="starterStylePreset"></select></div><p id="starterStyleHint" class="hint" hidden></p><div class="action-card-footer"><button id="generateTemplateBtn">Generate</button></div></div></article>
             <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-settings-gear" aria-hidden="true"></i></div><div class="action-card-body"><h3>VS Code Settings</h3><p class="hint">Generate the recommended LaTeX Workshop recipe and output-directory settings.</p><p class="affected-files"><i class="codicon codicon-file-code" aria-hidden="true"></i> Creates .vscode/settings.json only when it is missing.</p><div class="action-card-footer"><button id="generateVscodeSettingsBtn">Generate VS Code Settings</button></div></div></article>
             <article class="action-card"><div class="action-card-icon"><i class="codicon codicon-cloud-download" aria-hidden="true"></i></div><div class="action-card-body"><h3>Theme Assets</h3><p class="hint">Back up and replace bundled theme resources without changing colors by default.</p><p class="affected-files"><i class="codicon codicon-files" aria-hidden="true"></i> Replaces theme.sty, theorems.tex, and commands.tex after backup.</p><div class="form-row"><label class="field compact-field"><span>Colors</span><select id="upgradeColorPolicy"><option value="preserve" selected>Preserve Colors</option><option value="default">Reset to Default</option></select></label></div><div class="action-card-footer"><button id="upgradeThemeAssetsBtn">Upgrade Theme Assets</button></div></div></article>
             <article class="danger-zone"><div><h3>Danger Zone</h3><p>Delete generated Toolkit overrides and configuration from this workspace.</p></div><button id="resetBtn" class="danger">Reset All Toolkit Overrides</button></article>
@@ -2126,6 +2282,7 @@
             <dl class="summary-list"><div><dt>PDF</dt><dd id="buildContextPath"></dd></div><div><dt>Mode</dt><dd id="buildContextRecipe"></dd></div><div><dt>History</dt><dd id="buildContextLastCompile"></dd></div><div><dt>Duration</dt><dd id="buildContextDuration">Not measured</dd></div></dl>
             <div class="context-actions"><button id="compileBtn" class="primary"><i class="codicon codicon-play" aria-hidden="true"></i><span>Compile PDF</span></button><button id="openPdfBtn"><i class="codicon codicon-open-preview" aria-hidden="true"></i><span>Open PDF</span></button><button id="openDiagnosticsBtn" class="ghost-button" hidden><i class="codicon codicon-warning" aria-hidden="true"></i><span>Open Diagnostics</span></button><button id="buildShowLogBtn" class="ghost-button" hidden><i class="codicon codicon-output" aria-hidden="true"></i><span>Show Log</span></button></div>
           </section>
+          <section class="context-panel" data-context-panel="homework" hidden><header class="context-heading"><div><p class="eyebrow">Numbering Preview</p><h2 id="homeworkContextTitle">Problem 1</h2></div></header><p class="context-copy">How the first headings read with the settings on the left.</p><dl class="summary-list"><div><dt>Problems</dt><dd id="homeworkContextProblems">&mdash;</dd></div><div><dt>Parts</dt><dd id="homeworkContextSections">&mdash;</dd></div><div><dt>Settings file</dt><dd>.latex-editing-toolkit/homework-settings.tex</dd></div></dl></section>
           <section class="context-panel" data-context-panel="setup" hidden><header class="context-heading"><div><p class="eyebrow">Selected Starter</p><h2 id="setupContextTitle">Starter template</h2></div></header><p id="setupContextDescription" class="context-copy"></p><dl class="summary-list"><div><dt>Output</dt><dd>Toolkit-managed workspace files</dd></div><div><dt>Upgrade</dt><dd id="setupContextPolicy">Preserve current colors</dd></div></dl><div class="safety-note"><i class="codicon codicon-shield" aria-hidden="true"></i><p>Theme upgrades create backups first. Reset and overwrite actions still require confirmation.</p></div></section>
           <section class="context-panel" data-context-panel="structure" hidden><header class="context-heading"><div><p class="eyebrow">Latest Result</p><h2 id="structureContextTitle">No structure operation yet</h2></div><span id="structureResultBadge" class="context-badge" hidden></span></header><p id="structureContextDescription" class="context-copy"></p><div id="structureEmptyState" class="empty-state compact"><i class="codicon codicon-list-tree" aria-hidden="true"></i><div><strong>No structure result</strong><p>Run a dry-run first to inspect planned file changes.</p></div></div><div id="structureResultState" hidden><div class="result-stats"><div><strong id="structureCreatedCount">0</strong><span>Created</span></div><div><strong id="structureUpdatedCount">0</strong><span>Updated</span></div><div><strong id="structureRenamedCount">0</strong><span>Renamed</span></div><div><strong id="structureDeletedCount">0</strong><span>Deleted</span></div><div><strong id="structureWarningCount">0</strong><span>Warnings</span></div></div><details class="result-details"><summary id="structureFilesSummary">Affected items</summary><ul id="splitResult" class="result-file-list"></ul></details></div></section>
           <section class="context-panel" data-context-panel="snippets" hidden>
