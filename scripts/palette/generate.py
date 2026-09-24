@@ -14,18 +14,23 @@ def warp(h, center, spread):
     return (center + d*spread) % 360
 
 SPEC = {
- # light tier
- "meadow":   dict(center=152, spread=0.84, title=(0.945,0.030), body=(0.982,0.011),
-                  accent=(0.575,0.088), fg=(0.360,0.064), callout=(0.968,0.019)),
- # medium tier
- "default":  dict(center=215, spread=1.00, title=(0.926,0.026), body=(0.976,0.010),
-                  accent=(0.585,0.074), fg=(0.375,0.054), callout=(0.960,0.017)),
- "ember":    dict(center=42,  spread=0.84, title=(0.930,0.034), body=(0.977,0.013),
-                  accent=(0.578,0.090), fg=(0.362,0.066), callout=(0.962,0.022)),
- # dark tier: near-neutral ink. The family colour moves to the accent spine so the
- # bars stay uniformly black instead of turning into nine tinted greys.
+ # The three light presets are separated by WEIGHT, not by hue: compressing hues far
+ # enough to tell them apart is what pushed blue into violet, so instead meadow is pale
+ # and muted, default is balanced, and ember is deep and saturated.
+ "meadow":   dict(center=152, spread=0.88, title=(0.956,0.020), body=(0.987,0.008),
+                  accent=(0.600,0.068), fg=(0.380,0.050), callout=(0.960,0.022),
+                  spine=(0.600,0.068)),
+ "default":  dict(center=215, spread=1.00, title=(0.925,0.029), body=(0.975,0.011),
+                  accent=(0.575,0.082), fg=(0.365,0.058), callout=(0.940,0.030),
+                  spine=(0.575,0.082)),
+ "ember":    dict(center=42,  spread=0.88, title=(0.888,0.050), body=(0.962,0.020),
+                  accent=(0.520,0.110), fg=(0.320,0.078), callout=(0.905,0.046),
+                  spine=(0.520,0.110)),
+ # Dark tier: ink bar, paper text, family colour on the spine. Callouts get a deep tint
+ # and an ink spine so they belong to the same page instead of floating on it.
  "midnight": dict(center=0, spread=0.0, title=(0.305,0.014), body=(0.966,0.008),
-                  accent=(0.520,0.105), fg=(0.965,0.006), callout=(0.960,0.014), dark=True),
+                  accent=(0.520,0.105), fg=(0.965,0.006), callout=(0.905,0.030),
+                  spine=(0.360,0.055), dark=True),
 }
 
 def build(preset):
@@ -51,12 +56,12 @@ def build(preset):
     out["note-frame"] = oklch_to_hex(min(s["title"][0]+0.0, 0.90) if dark else s["title"][0]-0.035,
                                      s["title"][1], H(250))
     # Callouts are single-tone on light paper in every tier, including the dark one.
-    label_L, label_C = (0.330, 0.070) if dark else s["fg"]
+    label_L, label_C = (0.300, 0.070) if dark else (s["fg"][0] - 0.02, s["fg"][1])
     for name, h in CALLOUT_HUE.items():
         out[f"{name}-bg"]       = oklch_to_hex(*s["callout"], H(h))
         out[f"{name}-label-fg"] = oklch_to_hex(label_L, label_C, H(h))
-        out[f"{name}-accent"]   = oklch_to_hex(*s["accent"], H(h))
-    out["remark-inline-fg"] = oklch_to_hex(label_L+0.10, label_C, H(232))
+        out[f"{name}-accent"]   = oklch_to_hex(*s["spine"], H(h))
+    out["remark-inline-fg"] = oklch_to_hex(label_L+0.12, label_C, H(232))
     return out
 
 src = pathlib.Path("src/stylePresets.ts").read_text()
