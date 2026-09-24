@@ -43,23 +43,30 @@ SPEC = {
  # the maroon. Families are told apart by the title text anyway, not by these tints.
  "uchicago": dict(center=32, spread=0.37, title=(0.905,0.016), body=(0.974,0.006),
                   accent=(0.600,0.028), fg=(0.380,0.020), callout=(0.945,0.013),
-                  spine=(0.600,0.028), brand=UCHICAGO_MAROON),
+                  spine=(0.600,0.028), brand=UCHICAGO_MAROON, tone_zigzag=0.019),
 }
 
 def build(preset):
     s = SPEC[preset]; out = {}
     dark = s.get("dark", False)
     brand = s.get("brand")
+    # Folding the ring into a narrow warm arc leaves neighbouring families only ~12deg
+    # apart, which at this chroma is invisible. In a near-monochrome palette the
+    # differentiator has to be value, so alternate the bar lightness along the arc:
+    # whatever two families end up adjacent in hue are then furthest apart in tone.
+    zig = s.get("tone_zigzag", 0.0)
+    by_hue = sorted(HUE, key=lambda f: warp(HUE[f], s["center"], s["spread"]))
+    tone = {f: (zig if i % 2 == 0 else -zig) for i, f in enumerate(by_hue)}
     def H(h): return h if dark else warp(h, s["center"], s["spread"])
-    def title_pair(h):
+    def title_pair(h, dL=0.0):
         # Dark tier: ink bar, family-tinted text. Brand tier: family-tinted bar, one
         # fixed maroon. Otherwise both follow the family hue.
-        bar = oklch_to_hex(*s["title"], H(h))
+        bar = oklch_to_hex(s["title"][0] + dL, s["title"][1], H(h))
         text = brand if brand else oklch_to_hex(*s["fg"], H(h))
         return (bar, text)
     for fam, h in HUE.items():
-        tb, tf = title_pair(h)
-        out[f"{fam}-body-bg"]  = oklch_to_hex(*s["body"], H(h))
+        tb, tf = title_pair(h, tone.get(fam, 0.0))
+        out[f"{fam}-body-bg"]  = oklch_to_hex(s["body"][0] + tone.get(fam, 0.0) * 0.35, s["body"][1], H(h))
         out[f"{fam}-title-bg"] = tb
         out[f"{fam}-title-fg"] = tf
         out[f"{fam}-accent"]   = brand if brand else oklch_to_hex(*s["accent"], H(h))
