@@ -2,10 +2,11 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { BEAMER_DEFAULT_SETTINGS, STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import type { BeamerSettings, DocumentKind, WorkspaceTemplateState } from "./types";
-import { exists, extractDocumentclassDeclaration, isChapterCapableClass, isSubpath, stripTexComments, workspaceRel } from "./utils";
+import { escapeTexValue, texMacro, unescapeTexValue, writeAtomic } from "./texValue";
+import { exists, extractDocumentclassDeclaration, isChapterCapableClass, isSubpath, stripTexComments, TOOLKIT_CONFIG_DIR, workspaceRel } from "./utils";
 
-export const TEMPLATE_METADATA_REL = ".latex-editing-toolkit/template.json";
-export const BEAMER_CONFIG_DIR = ".latex-editing-toolkit";
+export const TEMPLATE_METADATA_REL = `${TOOLKIT_CONFIG_DIR}/template.json`;
+export const BEAMER_CONFIG_DIR = TOOLKIT_CONFIG_DIR;
 export const BEAMER_CLASS_OPTIONS_FILE = `${BEAMER_CONFIG_DIR}/beamer-class-options.tex`;
 export const BEAMER_SETTINGS_FILE = `${BEAMER_CONFIG_DIR}/beamer-settings.tex`;
 
@@ -60,6 +61,13 @@ export function starterTemplate(templateId: string) {
   return STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId);
 }
 
+export const HOMEWORK_TEMPLATE_ID = "homework-assignment";
+
+/** Homework projects are ordinary articles, so only the template id identifies them. */
+export function isHomeworkTemplate(templateId: string): boolean {
+  return templateId === HOMEWORK_TEMPLATE_ID;
+}
+
 export function detectTemplateFromSource(text: string): WorkspaceTemplateState {
   const clean = stripTexComments(text);
   const declaration = extractDocumentclassDeclaration(clean);
@@ -77,6 +85,9 @@ export function detectTemplateFromSource(text: string): WorkspaceTemplateState {
     };
   }
   if (isChapterCapableClass(className)) return { kind: "book", templateId: "book-minimal", detectionSource: "source", confidence: "probable" };
+  if (className && (/\\usepackage(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/.test(clean) || /\\begin\s*\{\s*homeworkProblem\s*\}/.test(clean))) {
+    return { kind: "article", templateId: HOMEWORK_TEMPLATE_ID, detectionSource: "source", confidence: "probable" };
+  }
   if (className) return { kind: "article", templateId: "article-minimal", detectionSource: "source", confidence: "probable" };
   return { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" };
 }
@@ -258,10 +269,6 @@ function exactBeamer(templateId: string): WorkspaceTemplateState {
   return { kind: "beamer", templateId, detectionSource: "source", confidence: "exact" };
 }
 
-function texMacro(text: string, name: string): string {
-  return new RegExp(`\\\\def\\\\${name}\\{([^}]*)\\}`, "i").exec(text)?.[1]?.trim() || "";
-}
-
 function texCommand(text: string, name: string): string {
   // The optional argument is idiomatic beamer (\title[Short]{Long}); without this branch
   // the real title reads as empty and a placeholder overwrites it on the next save.
@@ -281,31 +288,6 @@ function beamerMetadataValue(runtime: string, source: string, macroName: string,
   return fallback;
 }
 
-function escapeTexValue(value: string): string {
-  // Newlines and braces cannot survive inside a \def body; the rest are TeX specials that
-  // would otherwise break the document (# is a hard error at definition time) or typeset
-  // as something else. A backslash is deliberately left alone: the default date is
-  // \today, and escaping it would break every command a user legitimately puts here.
-  // The lookbehind keeps an already-escaped special from being escaped twice.
-  return String(value || "")
-    .replace(/[\r\n{}]/g, " ")
-    .replace(/(?<!\\)[#$%&_^~]/g, (character) => (character === "^" || character === "~" ? `\\${character}{}` : `\\${character}`));
-}
-
-function unescapeTexValue(value: string): string {
-  // Inverse of escapeTexValue, so a round trip through the generated file gives the user
-  // back what they typed instead of accumulating backslashes.
-  return String(value || "")
-    .replace(/\\([\^~])\{\}/g, "$1")
-    .replace(/\\([#$%&_])/g, "$1");
-}
-
 export function isBeamerAspectRatio(value: unknown): value is string {
   return typeof value === "string" && /^\d{2,4}$/.test(value);
-}
-
-async function writeAtomic(target: string, text: string): Promise<void> {
-  const temporary = `${target}.tmp-${process.pid}`;
-  await fs.writeFile(temporary, text, "utf8");
-  await fs.rename(temporary, target);
 }

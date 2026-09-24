@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { HistoryConflictError } from "../src/changeHistory";
 import { beamerHooksEnabled, defaultBeamerSettings, detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, renderBeamerClassOptions, writeBeamerSettings, writeTemplateMetadata } from "../src/beamer";
-import { templateFilePlan } from "../src/templatePlan";
+import { assetsForTemplate, templateFilePlan, upgradableTemplateExtras } from "../src/templatePlan";
+import { defaultHomeworkSettings, enableHomeworkHooks, homeworkHooksEnabled, homeworkMachineryIsInline, isHomeworkNumberPrefix, normalizeHomeworkSettings, readHomeworkSettings, renderHomeworkSettings, writeHomeworkSettings } from "../src/homework";
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
@@ -669,16 +670,31 @@ describe("TypeScript Toolkit migration", () => {
     expect(result.generated_target).toBe("homework.tex");
     expect(starterIds).toContain("homework-assignment");
     expect(text).toContain("\\documentclass[oneside]{article}");
-    expect(text).toContain("\\NewDocumentEnvironment{homeworkProblem}");
-    expect(text).toContain("\\NewDocumentEnvironment{homeworkSection}");
-    // Heading word, numbering style and an explicit number are all meant to be
-    // configurable; the two levels are configured independently.
-    expect(text).toContain("\\newcommand{\\homeworkProblemName}");
-    expect(text).toContain("\\homeworkProblemNumbering{arabic}");
-    expect(text).toContain("\\homeworkSectionNumbering{alph}");
-    expect(text).toMatch(/NewDocumentEnvironment\{homeworkProblem\}\{o o D<>/);
-    expect(text).toMatch(/NewDocumentEnvironment\{homeworkSection\}\{o o D<>/);
-    expect(text).toContain("\\NewDocumentEnvironment{solution}");
+    // The machinery deliberately does NOT live in main.tex: a starter is copied verbatim
+    // once and never touched again, so anything here can never reach an existing project.
+    // homework.sty is replaced in place by an asset upgrade, so improvements do land.
+    expect(text).toContain("\\usepackage{homework}");
+    expect(text).toContain("\\InputIfFileExists{.latex-editing-toolkit/homework-settings.tex}");
+    expect(text).not.toContain("\\NewDocumentEnvironment{homeworkProblem}");
+    expect(await fs.readFile(path.join(root, "homework.sty"), "utf8")).toBeTruthy();
+
+    const sty = await fs.readFile(path.join(root, "homework.sty"), "utf8");
+    expect(sty).toContain("\\NewDocumentEnvironment{homeworkProblem}");
+    expect(sty).toContain("\\NewDocumentEnvironment{homeworkSection}");
+    expect(sty).toContain("\\NewDocumentEnvironment{solution}");
+    // Heading word, numbering style, prefix and section mode are all configurable, and
+    // the two levels are configured independently.
+    expect(sty).toContain("\\providecommand{\\homeworkProblemName}");
+    expect(sty).toMatch(/NewDocumentEnvironment\{homeworkProblem\}\{o o D<>/);
+    expect(sty).toMatch(/NewDocumentEnvironment\{homeworkSection\}\{o o D<>/);
+    for (const command of ["homeworkProblemNumbering", "homeworkSectionNumbering", "homeworkProblemPrefix", "homeworkSectionNested", "homeworkSectionStandalone"]) {
+      expect(sty).toContain(`\\NewDocumentCommand \\${command}`);
+    }
+
+    // homework.sty ships only to the homework starter, never to a plain article.
+    const articleRoot = await tempWorkspace();
+    await new TemplateService(articleRoot, repoRoot, new StateService(articleRoot)).createStarter("article-minimal", "main.tex", false);
+    await expect(fs.access(path.join(articleRoot, "homework.sty"))).rejects.toThrow();
   });
 
   it("exposes and creates the research paper starter, and splits it into subfiles", async () => {
@@ -819,6 +835,141 @@ describe("TypeScript Toolkit migration", () => {
     expect(renderBeamerClassOptions(settings)).toContain("aspectratio=1610");
   });
 
+  it("round-trips homework settings through the generated file without corrupting them", async () => {
+    const root = await tempWorkspace();
+    const settings = {
+      ...defaultHomeworkSettings(),
+      course: "Linear Programming 101 & Beyond",
+      title: "Problem Set #1",
+      author: "Yiqi",
+      dueDate: "\\today",
+      problemWord: "Question",
+      sectionWord: "Part",
+      problemStyle: "Roman" as const,
+      sectionStyle: "arabic" as const,
+      problemPrefix: "1",
+      sectionMode: "nested" as const
+    };
+    await writeHomeworkSettings(root, "main.tex", settings);
+    expect(await readHomeworkSettings(root, "main.tex")).toEqual(settings);
+
+    // \today must survive: escaping the backslash is what broke the Beamer date once.
+    expect(renderHomeworkSettings(settings)).toContain("\\def\\ToolkitHomeworkDueDate{\\today}");
+    // TeX specials in free text are escaped rather than breaking the build.
+    expect(renderHomeworkSettings(settings)).toContain("\\def\\ToolkitHomeworkTitle{Problem Set \\#1}");
+
+    // An empty heading word is a real choice — it prints the bare number — so it must not
+    // be coalesced back to the default on the next read.
+    const bare = { ...settings, problemWord: "", sectionWord: "", problemPrefix: "", sectionMode: "standalone" as const };
+    await writeHomeworkSettings(root, "main.tex", bare);
+    expect(await readHomeworkSettings(root, "main.tex")).toEqual(bare);
+  });
+
+  it("rejects a homework number prefix that LaTeX could not use", () => {
+    for (const good of ["", "1", "12", "2.3", "1.2.3"]) expect(isHomeworkNumberPrefix(good), good).toBe(true);
+    // These are exactly the values homework.sty raises bad-number for; catching them here
+    // is what keeps the panel from writing a file that only fails at compile time.
+    for (const bad of ["V", "1.x", "abc", "1..2", "1.", "-"]) expect(isHomeworkNumberPrefix(bad), bad).toBe(false);
+    // An unusable value falls back to the previous setting instead of being written through.
+    const base = { ...defaultHomeworkSettings(), problemPrefix: "1" };
+    expect(normalizeHomeworkSettings({ problemPrefix: "1.x" }, base).problemPrefix).toBe("1");
+    expect(normalizeHomeworkSettings({ problemStyle: "sideways" }, base).problemStyle).toBe("arabic");
+    expect(normalizeHomeworkSettings({ sectionMode: "elsewhere" }, base).sectionMode).toBe("standalone");
+  });
+
+  it("does not count a commented-out homework hook as enabled", () => {
+    const enabled = [
+      "\\usepackage{homework}",
+      "\\InputIfFileExists{.latex-editing-toolkit/homework-settings.tex}{}{}"
+    ].join("\n");
+    expect(homeworkHooksEnabled(enabled)).toBe(true);
+    expect(homeworkHooksEnabled(enabled.split("\n").map((line) => `% ${line}`).join("\n"))).toBe(false);
+    // The package alone is not enough: without the settings file the panel would appear
+    // to work while saving into a file nothing reads.
+    expect(homeworkHooksEnabled("\\usepackage{homework}")).toBe(false);
+  });
+
+  it("adds the homework hooks to a target that lacks them, and refuses one that defines the environments itself", async () => {
+    const preamble = [
+      "\\documentclass[oneside]{article}",
+      "\\usepackage{theme}",
+      "\\input{theorems.tex}",
+      "\\input{commands.tex}"
+    ].join("\n");
+    const body = "\n\\begin{document}\n\\makehomeworktitle\n\\end{document}\n";
+
+    const root = await tempWorkspace();
+    await fs.writeFile(path.join(root, "main.tex"), `${preamble}${body}`, "utf8");
+    await enableHomeworkHooks(root, "main.tex");
+    const updated = await fs.readFile(path.join(root, "main.tex"), "utf8");
+    expect(homeworkHooksEnabled(updated)).toBe(true);
+    // The package belongs with the other Toolkit includes, and the settings file has to be
+    // read after it so the numbering commands exist by the time it calls them.
+    expect(updated.indexOf("\\input{commands.tex}")).toBeLessThan(updated.indexOf("\\usepackage{homework}"));
+    expect(updated.indexOf("\\usepackage{homework}")).toBeLessThan(updated.indexOf("homework-settings.tex"));
+    expect(updated.indexOf("homework-settings.tex")).toBeLessThan(updated.indexOf("\\begin{document}"));
+    // Idempotent: clicking Enable twice must not stack a second copy.
+    await enableHomeworkHooks(root, "main.tex");
+    expect(await fs.readFile(path.join(root, "main.tex"), "utf8")).toBe(updated);
+
+    // A target generated before homework.sty existed carries its own definitions, and
+    // \NewDocumentEnvironment refuses to redefine — retrofitting would break the build
+    // outright, so it has to be refused with the file left alone.
+    const legacyRoot = await tempWorkspace();
+    const legacy = `${preamble}\n\\newcounter{homeworkProblemCounter}\n\\NewDocumentEnvironment{homeworkProblem}{o}{}{}\n${body}`;
+    await fs.writeFile(path.join(legacyRoot, "main.tex"), legacy, "utf8");
+    expect(homeworkMachineryIsInline(legacy)).toBe(true);
+    await expect(enableHomeworkHooks(legacyRoot, "main.tex")).rejects.toThrow(/its own copy of the homework environments/);
+    expect(await fs.readFile(path.join(legacyRoot, "main.tex"), "utf8")).toBe(legacy);
+
+    // The current starter loads the package, so it is never mistaken for a legacy target.
+    const current = await fs.readFile(path.join(repoRoot, "assets/template/templates/homework-assignment.tex"), "utf8");
+    expect(homeworkMachineryIsInline(current)).toBe(false);
+    expect(homeworkHooksEnabled(current)).toBe(true);
+  });
+
+  it("ships homework.sty only to the homework starter, and exposes it to upgrade", () => {
+    const definition = (id: string) => STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === id);
+    expect(assetsForTemplate(definition("homework-assignment"))).toContain("homework.sty");
+    expect(assetsForTemplate(definition("article-minimal"))).not.toContain("homework.sty");
+    expect(templateFilePlan("homework-assignment")!.assets).toContain("homework.sty");
+    expect(templateFilePlan("article-minimal")!.assets).not.toContain("homework.sty");
+    // The plan is also the undo snapshot, so a duplicate entry would be a real smell.
+    const assets = templateFilePlan("book-minimal")!.assets;
+    expect(new Set(assets).size).toBe(assets.length);
+    // An upgrade replaces Toolkit-authored packages but never project-owned content.
+    expect(upgradableTemplateExtras(definition("homework-assignment"))).toEqual(["homework.sty"]);
+    expect(upgradableTemplateExtras(definition("book-minimal"))).not.toContain("Fig/cover.png");
+  });
+
+  it("applies the chosen style preset while generating, and leaves self-contained starters alone", async () => {
+    const generate = async (templateId: string, stylePreset: string) => {
+      const root = await tempWorkspace();
+      const state = new StateService(root);
+      await new TemplateService(root, repoRoot, state).createStarter(templateId, "main.tex", false, stylePreset);
+      return { root, colors: await fs.readFile(path.join(root, "theme.colors.tex"), "utf8").catch(() => "") };
+    };
+    const hex = (preset: string) => STYLE_PRESET_DEFINITIONS.find((item) => item.id === preset)!.colors["theme-chapter"].replace("#", "").toUpperCase();
+
+    // Generation never used to write theme.colors.tex at all, so a new project silently
+    // took whatever was baked into theme.sty regardless of the choice.
+    const themed = await generate("homework-assignment", "uchicago");
+    expect(themed.colors).toContain(hex("uchicago"));
+    expect(themed.colors).not.toContain(hex("ember"));
+
+    // research-paper does not load theme.sty (asserted above), so writing colour overrides
+    // for it would produce a file nothing reads.
+    expect((await generate("research-paper", "uchicago")).colors).toBe("");
+
+    // A homework project is generated ready to configure: package, hook and settings file.
+    const state = new StateService(themed.root);
+    const loaded = await state.loadState();
+    expect(loaded.workspace_template.templateId).toBe("homework-assignment");
+    expect(loaded.homework_hooks_enabled).toBe(true);
+    expect(loaded.homework_settings).toEqual(defaultHomeworkSettings());
+    expect((await state.buildResponseState()).schema.homework_capabilities).toContain("homework-numbering");
+  });
+
   it("does not count commented-out Beamer hooks as enabled", () => {
     const enabled = [
       "\\IfFileExists{.latex-editing-toolkit/beamer-class-options.tex}{}{}",
@@ -828,14 +979,31 @@ describe("TypeScript Toolkit migration", () => {
     expect(beamerHooksEnabled(enabled.split("\n").map((line) => `% ${line}`).join("\n"))).toBe(false);
   });
 
-  it("ships a line-breakable inline highlight in every tracked commands.tex copy", async () => {
-    const copies = ["assets/template/commands.tex", "commands.tex", "examples/toolkit-guide/commands.tex"];
-    const contents = await Promise.all(copies.map((rel) => fs.readFile(path.join(repoRoot, rel), "utf8")));
-    // The three copies are meant to be the same file; nothing enforced that before.
-    for (const [index, text] of contents.entries()) {
-      expect(text, copies[index]).toBe(contents[0]);
+  it("keeps every tracked mirror copy of a shared asset or starter identical to the bundled one", async () => {
+    // The repo root and examples/toolkit-guide are themselves Toolkit workspaces, so they
+    // carry their own copies of the shared assets and starters. A project's templates/
+    // copy shadows the bundled starter (StateService.templateSourcePath prefers it), so a
+    // stale mirror silently regenerates an old template. Only commands.tex was guarded.
+    const mirrors: Array<[string, string]> = [];
+    for (const file of ["theme.sty", "theorems.tex", "commands.tex"]) {
+      mirrors.push([`assets/template/${file}`, file], [`assets/template/${file}`, `examples/toolkit-guide/${file}`]);
     }
-    const canonical = contents[0];
+    for (const definition of STARTER_TEMPLATE_DEFINITIONS) {
+      const mirror = `templates/${definition.filename}`;
+      // The root workspace only keeps the non-Beamer starters.
+      if (await fs.access(path.join(repoRoot, mirror)).then(() => true, () => false)) {
+        mirrors.push([`assets/template/templates/${definition.filename}`, mirror]);
+      }
+    }
+    expect(mirrors.length).toBeGreaterThan(6);
+    for (const [bundled, mirror] of mirrors) {
+      const [a, b] = await Promise.all([bundled, mirror].map((rel) => fs.readFile(path.join(repoRoot, rel), "utf8")));
+      expect(b, `${mirror} has drifted from ${bundled}`).toBe(a);
+    }
+  });
+
+  it("ships a line-breakable inline highlight in commands.tex", async () => {
+    const canonical = await fs.readFile(path.join(repoRoot, "assets/template/commands.tex"), "utf8");
     // \tcbox is a single unbreakable hbox: a phrase longer than the space left on the
     // line used to overflow the margin instead of wrapping. The text highlights must
     // stay on the soulpos path.

@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
-import { defaultBeamerSettings, writeBeamerSettings, writeTemplateMetadata } from "./beamer";
+import { defaultBeamerSettings, isHomeworkTemplate, readTemplateMetadata, starterTemplate, writeBeamerSettings, writeTemplateMetadata } from "./beamer";
+import { defaultHomeworkSettings, writeHomeworkSettings } from "./homework";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
+import { upgradableTemplateExtras } from "./templatePlan";
 import type { UpgradeThemeAssetsOptions, UpgradeThemeAssetsResult } from "./types";
 import { assertWorkspacePathSafe, exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
@@ -42,15 +44,38 @@ export class TemplateService {
     const skippedMissingFiles: string[] = [];
     const assetReplacements: Array<{ file: string; source: string; target: string }> = [];
 
-    for (const file of UPGRADE_THEME_ASSET_FILES) {
+    const queueReplacement = async (file: string, onlyWhenPresent = false): Promise<void> => {
       const source = path.join(assetRoot, file);
       const target = path.join(this.rootDir, file);
       this.assertInsideWorkspace(target);
       if (!(await exists(source))) {
         skippedMissingFiles.push(file);
-        continue;
+        return;
       }
+      if (onlyWhenPresent && !(await exists(target))) return;
       assetReplacements.push({ file, source, target });
+    };
+
+    for (const file of UPGRADE_THEME_ASSET_FILES) await queueReplacement(file);
+
+    // Per-starter support packages, e.g. homework.sty. Taken from the project's recorded
+    // template so a homework project that predates the package gains it here, and also
+    // from disk so a project keeps whatever it already has even without metadata.
+    const metadata = await readTemplateMetadata(this.rootDir);
+    const extras = new Set(upgradableTemplateExtras(starterTemplate(metadata?.templateId ?? "")));
+    for (const definition of STARTER_TEMPLATE_DEFINITIONS) {
+      for (const file of upgradableTemplateExtras(definition)) {
+        if (!extras.has(file) && await exists(path.join(this.rootDir, file))) extras.add(file);
+      }
+    }
+    for (const file of extras) await queueReplacement(file);
+
+    // The project's own templates/ copies shadow the bundled starters
+    // (StateService.templateSourcePath prefers them), so leaving them stale means
+    // regenerating inside an old project reproduces the old starter. They are backed up
+    // like every other replaced file.
+    for (const definition of STARTER_TEMPLATE_DEFINITIONS) {
+      await queueReplacement(toPosixPath(path.join("templates", definition.filename)), true);
     }
 
     // Load before replacing theme.sty so malformed/legacy state is normalized against
@@ -99,7 +124,12 @@ export class TemplateService {
     };
   }
 
-  async createStarter(templateId: unknown, outputTarget: unknown, overwrite: boolean): Promise<{ response: unknown; generated_target: string; overwrote_existing: boolean }> {
+  /**
+   * @param stylePreset Applied to the generated project when the starter actually consumes
+   *   theme.sty. Without it a new project falls back to the defaults baked into theme.sty,
+   *   because generation otherwise never writes theme.colors.tex.
+   */
+  async createStarter(templateId: unknown, outputTarget: unknown, overwrite: boolean, stylePreset?: string): Promise<{ response: unknown; generated_target: string; overwrote_existing: boolean }> {
     // Everything that can fail runs before the first write. The old order copied assets
     // and wrote the target first, so a later failure (an unknown compile target, a
     // rejected overwrite) left a half-populated workspace behind while reporting an error.
@@ -132,11 +162,18 @@ export class TemplateService {
     await fs.writeFile(targetAbs, text, { encoding: "utf8", flag: overwrite ? "w" : "wx" });
     await writeTemplateMetadata(this.rootDir, { kind: template.kind, templateId: template.id, target: normalizedTarget });
     if (template.kind === "beamer") await writeBeamerSettings(this.rootDir, normalizedTarget, defaultBeamerSettings());
+    if (isHomeworkTemplate(template.id)) await writeHomeworkSettings(this.rootDir, normalizedTarget, defaultHomeworkSettings());
 
     const state = await this.stateService.loadState();
     state.compile_targets = await this.stateService.listCandidateTexFiles();
     state.compile_target = normalizeCompileTarget(this.rootDir, normalizedTarget, state.compile_targets);
     await this.stateService.applyCompilePreferences(state, { compile_target: state.compile_target });
+    // Only starters that load theme.sty can be themed; research-paper and the Beamer
+    // decks are self-contained and would silently ignore the choice.
+    if (stylePreset && template.capabilities.includes("toolkit-theme")) {
+      this.stateService.applyStylePreset(state, stylePreset);
+      await this.stateService.writeOverrideFiles(state);
+    }
     await this.stateService.persistUiState(state);
     return {
       response: await this.stateService.buildResponseState(),

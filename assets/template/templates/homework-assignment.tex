@@ -52,150 +52,22 @@
 \input{theorems.tex}
 \input{commands.tex}
 
-% -------------------- Homework Metadata --------------------
-\newcommand{\homeworkCourse}{Course Name}
-\newcommand{\homeworkTitle}{Homework 1}
-\newcommand{\homeworkAuthor}{Student Name}
-\newcommand{\homeworkInstructor}{Instructor Name}
-\newcommand{\homeworkDueDate}{\today}
+% The homework problem/section environments, the title block and the solution box all
+% live in homework.sty so that improvements reach projects that already exist: a .sty is
+% replaced in place by Upgrade Theme Assets, whereas this file is copied once and never
+% touched again.
+\usepackage{homework}
 
-% The title block follows the active Toolkit style: course line, title, field labels
-% and rule all take their colour from the theme, so switching preset restyles the whole
-% header rather than leaving it black above coloured problem headings.
-\newcommand{\makehomeworktitle}{
-    \begin{center}
-        {\Large\bfseries\color{theme-subsection} \homeworkCourse\par}
-        \vspace{0.35em}
-        {\huge\bfseries\color{theme-chapter} \homeworkTitle\par}
-        \vspace{0.7em}
-        {\color{theme-header-rule}\rule{0.42\linewidth}{0.7pt}\par}
-        \vspace{0.7em}
-        \begin{tabular}{rl}
-            {\bfseries\color{theme-section}Name:} & \homeworkAuthor \\
-            {\bfseries\color{theme-section}Instructor:} & \homeworkInstructor \\
-            {\bfseries\color{theme-section}Due:} & \homeworkDueDate
-        \end{tabular}
-    \end{center}
-    \vspace{1.2em}
-}
-
-% -------------------- Homework Configuration --------------------
-% Heading word for each level. Change once here for the whole document, or per
-% instance with <...> on the environment, e.g. \begin{homeworkProblem}[3][Extra]<Bonus>.
-\newcommand{\homeworkProblemName}{Problem}
-\newcommand{\homeworkSectionName}{}
-
-\newcounter{homeworkProblemCounter}
-% Sections hang off the problem counter, so they restart at every problem.
-\newcounter{homeworkSectionCounter}[homeworkProblemCounter]
-
-\makeatletter
-% Numbering style per level, set independently: arabic (1) | alph (a) | Alph (A)
-% | roman (i) | Roman (I). A misspelt style would otherwise expand to \relax and
-% make the number vanish with no error at all, so check it exists first.
-\newcommand{\homeworkSetNumbering}[2]{%
-    \@ifundefined{#2}
-        {\PackageError{homework}{Unknown numbering style '#2'.\MessageBreak
-            Use arabic, alph, Alph, roman or Roman}{}}
-        {\expandafter\renewcommand\csname the#1\endcsname{\csname #2\endcsname{#1}}}%
-}
-\newcommand{\homeworkProblemNumbering}[1]{\homeworkSetNumbering{homeworkProblemCounter}{#1}}
-\newcommand{\homeworkSectionNumbering}[1]{\homeworkSetNumbering{homeworkSectionCounter}{#1}}
-\makeatother
-
-\homeworkProblemNumbering{arabic}
-\homeworkSectionNumbering{alph}
-
-% -------------------- Homework Environments --------------------
-% Both environments read their optional arguments by count:
-%   \begin{homeworkProblem}              -> Problem 1
-%   \begin{homeworkProblem}[Name]        -> Problem 1 --- Name
-%   \begin{homeworkProblem}[5][Name]     -> Problem 5 --- Name, and the next one is 6
-%   \begin{homeworkProblem}[5][Name]<Bonus> -> Bonus 5 --- Name
-% An explicit number must be an integer; the style comes from
-% \homeworkProblemNumbering, so under Roman you still write [5] to get V.
-\makeatletter
-% An explicit number must be an integer. Without this check \numexpr stops at the
-% first non-digit and the remainder leaks into the page: [1.1] silently printed
-% ".1-1" as body text, numbered the problem 2, and returned exit status 0.
-\ExplSyntaxOn
-\tl_new:N \l__hw_num_tl
-\NewDocumentCommand{\hwIfInteger}{m +m +m}{
-    % The target must be expanded first: \regex_match:nn does not expand its
-    % argument and would test the literal control sequence instead.
-    \tl_set:Nx \l__hw_num_tl { \tl_to_str:n {#1} }
-    \regex_match:nVTF { \A\s*-?[0-9]+\s*\Z } \l__hw_num_tl {#2} {#3}
-}
-\ExplSyntaxOff
-\newcommand{\hw@advance}[2]{%
-    % Setting the counter before stepping keeps the printed number, the following
-    % items and \ref all in agreement.
-    \if\relax\detokenize{#2}\relax\else
-        \hwIfInteger{#2}
-            {\setcounter{#1}{\numexpr#2-1\relax}}
-            {\PackageError{homework}{Number '#2' is not an integer.\MessageBreak
-                Write [5], not [V] or [1.1]. The printed style comes from
-                \string\homeworkProblemNumbering}{}}%
-    \fi
-    \refstepcounter{#1}%
-}
-\newcommand{\hw@word}[1]{#1\if\relax\detokenize{#1}\relax\else~\fi}
-\newcommand{\hw@trailing}[1]{\if\relax\detokenize{#1}\relax\else\ --- #1\fi}
-
-\NewDocumentEnvironment{homeworkProblem}{o o D<>{\homeworkProblemName}}
-{
-    \IfNoValueTF{#2}
-        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hw@advance{homeworkProblemCounter}{}}
-        {\def\hw@nm{#2}\hw@advance{homeworkProblemCounter}{#1}}
-    % Built once so the heading and the TOC entry cannot drift apart.
-    \edef\hw@txt{\noexpand\hw@word{#3}\thehomeworkProblemCounter\noexpand\hw@trailing{\hw@nm}}
-    \section*{\hw@txt}
-    \addcontentsline{toc}{section}{\hw@txt}
-}
-{
-    \vspace{0.4em}
-}
-
-\NewDocumentEnvironment{homeworkSection}{o o D<>{\homeworkSectionName}}
-{
-    \IfNoValueTF{#2}
-        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hw@advance{homeworkSectionCounter}{}}
-        {\def\hw@nm{#2}\hw@advance{homeworkSectionCounter}{#1}}
-    \subsection*{\hw@word{#3}(\thehomeworkSectionCounter)\if\relax\detokenize{\hw@nm}\relax\else\ \hw@nm\fi}
-}
-{
-    \vspace{0.25em}
-}
-\makeatother
-
-\NewDocumentEnvironment{solution}{o}
-{
-    \begin{tcolorbox}[
-        enhanced,
-        breakable,
-        title={\IfNoValueTF{#1}{Solution}{#1}},
-        colback=note-bg,
-        colframe=note-accent,
-        coltitle=note-title-fg,
-        colbacktitle=note-title-bg,
-        fonttitle=\bfseries,
-        boxrule=0.8pt,
-        arc=2pt,
-        left=8pt,
-        right=8pt,
-        top=7pt,
-        bottom=7pt
-    ]
-}
-{
-    \end{tcolorbox}
-}
+% Course name, title, author, heading words and numbering are all set in the Toolkit's
+% Homework panel, which writes the file below. Edit that file directly if you prefer;
+% anything you put after this line overrides it.
+\InputIfFileExists{.latex-editing-toolkit/homework-settings.tex}{}{}
 
 \begin{document}
 \makehomeworktitle
 
 \begin{homeworkProblem}[Sample Problem]
-State the problem here. Use the \texttt{hwp} snippet for a full problem with a solution block.
+State the problem here.
 
 \begin{solution}
 Write the solution here. Use equations, explanations, and references as needed:
@@ -221,20 +93,30 @@ Solve part (b) here.
 \end{homeworkSection}
 \end{homeworkProblem}
 
-% Two optional arguments set the number explicitly; numbering continues from it,
-% so the next problem would be 6.
+% Two optional arguments set the number explicitly; numbering continues from it, so the
+% next problem would be 6.
 \begin{homeworkProblem}[5][Renumbered Problem]\label{prob:renumbered}
 This problem is numbered 5 regardless of how many came before it.
+\end{homeworkProblem}
+
+% A dotted number sets a prefix as well, for a problem set that belongs to a chapter:
+% this one is 1.1 and the problem after it would be 1.2. The same effect for the whole
+% document comes from \homeworkProblemPrefix{1} in the Homework panel.
+\begin{homeworkProblem}[1.1][Chapter-Qualified Problem]
+Explicit numbers are integers or dotted integers. The representation is chosen
+separately, so under \texttt{Roman} you still write \texttt{[5]} to get V.
 \end{homeworkProblem}
 
 % <...> overrides the heading word for this one problem only.
 \begin{homeworkProblem}[Extra Credit]<Bonus>
 Set the word for every problem at once with
 \texttt{\textbackslash renewcommand\{\textbackslash homeworkProblemName\}\{Question\}},
-and the numbering style with
-\texttt{\textbackslash homeworkProblemNumbering\{Roman\}} --- problems and
-sections are configured independently. Cross-references follow the override too:
-this is Problem~\ref{prob:renumbered}.
+the representation with \texttt{\textbackslash homeworkProblemNumbering\{Roman\}}, and
+switch part numbering between \texttt{(a)} and \texttt{1.1} with
+\texttt{\textbackslash homeworkSectionStandalone} or
+\texttt{\textbackslash homeworkSectionNested} --- problems and sections are configured
+independently. Cross-references follow an override too: this is
+Problem~\ref{prob:renumbered}.
 \end{homeworkProblem}
 
 \end{document}

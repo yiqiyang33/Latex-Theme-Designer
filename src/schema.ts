@@ -157,8 +157,8 @@ export const STARTER_TEMPLATE_DEFINITIONS: StarterTemplateDefinition[] = [
     label: "Homework Assignment",
     description: "Formal homework starter with problem, part, and solution environments.",
     filename: "homework-assignment.tex",
-    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib"],
-    capabilities: ["toolkit-theme", "homework-structure"]
+    assetManifest: ["theme.sty", "theorems.tex", "commands.tex", "references.bib", "homework.sty"],
+    capabilities: ["toolkit-theme", "homework-structure", "homework-numbering"]
   },
   {
     id: "research-paper",
@@ -222,6 +222,20 @@ export const BEAMER_DEFAULT_SETTINGS = {
   aspectRatio: "169" as const,
   notesMode: "hide" as const,
   sectionOutline: false
+};
+
+export const HOMEWORK_DEFAULT_SETTINGS = {
+  course: "Course Name",
+  title: "Homework 1",
+  author: "Student Name",
+  instructor: "Instructor Name",
+  dueDate: "\\today",
+  problemWord: "Problem",
+  sectionWord: "",
+  problemStyle: "arabic" as const,
+  sectionStyle: "alph" as const,
+  problemPrefix: "",
+  sectionMode: "standalone" as const
 };
 
 export const CHAPTER_CLASS_NAMES = new Set(["book", "report", "memoir", "scrbook", "scrreprt", "ctexbook", "ctexrep", "bxjsbook"]);

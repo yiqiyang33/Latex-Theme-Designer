@@ -7,7 +7,8 @@ import { CompileService } from "./compile";
 import { SplitterService } from "./splitter";
 import { StateService } from "./state";
 import { TemplateService } from "./template";
-import { beamerConfigPaths, enableBeamerHooks, normalizeBeamerSettings, templateMetadataPath, writeBeamerSettings } from "./beamer";
+import { beamerConfigPaths, enableBeamerHooks, isHomeworkTemplate, normalizeBeamerSettings, templateMetadataPath, writeBeamerSettings } from "./beamer";
+import { enableHomeworkHooks, homeworkSettingsPath, normalizeHomeworkSettings, writeHomeworkSettings } from "./homework";
 import { templateFilePlanPaths, UPGRADABLE_THEME_ASSETS } from "./templatePlan";
 import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { exists } from "./utils";
@@ -92,14 +93,19 @@ export class ToolkitService {
         return this.runSerialized(async () => {
           const output = this.template.normalizeOutputTarget(payload.output_target);
           const templateId = String(payload.template_id || "book-minimal");
-          const paths = [...this.workspaceAssetPaths(templateId, output), output, "theme.ui.json", ".vscode/settings.json", templateMetadataPath(this.rootDir)];
+          // theme.colors.tex / theme.overrides.tex are in the snapshot because generating
+          // with a style preset writes them; without them, undoing a generate would leave
+          // the new colours behind.
+          const paths = [...this.workspaceAssetPaths(templateId, output), output, "theme.ui.json", "theme.colors.tex", "theme.overrides.tex", ".vscode/settings.json", templateMetadataPath(this.rootDir)];
           const definition = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === templateId);
           if (definition?.kind === "beamer") {
             const config = beamerConfigPaths(this.rootDir, output);
             paths.push(config.classOptions, config.settings);
           }
+          if (isHomeworkTemplate(templateId)) paths.push(homeworkSettingsPath(this.rootDir, output));
+          const stylePreset = typeof payload.style_preset === "string" && payload.style_preset ? payload.style_preset : undefined;
           const result = await this.history.runFileChange(command, "Generate starter", paths, async () => {
-            const created = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite));
+            const created = await this.template.createStarter(payload.template_id, payload.output_target, Boolean(payload.overwrite), stylePreset);
             return { ...(created.response as ResponseState), generated_target: created.generated_target, overwrote_existing: created.overwrote_existing };
           }, payload.record_history !== false);
           return this.responseWithHistory(result);
@@ -200,6 +206,32 @@ export class ToolkitService {
           const result = await this.history.runFileChange(command, "Enable Beamer Toolkit controls", [path.resolve(this.rootDir, target), config.dir, config.classOptions, config.settings], async () => {
             await writeBeamerSettings(this.rootDir, target, current.beamer_settings);
             await enableBeamerHooks(this.rootDir, target);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
+      case "homework-settings":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (!isHomeworkTemplate(current.workspace_template.templateId)) throw new Error("Homework settings are only available for the homework starter.");
+          const target = String(payload.target || current.compile_target);
+          const settings = normalizeHomeworkSettings(payload.settings, current.homework_settings);
+          const generated = homeworkSettingsPath(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Edit Homework settings", [path.dirname(generated), generated], async () => {
+            await writeHomeworkSettings(this.rootDir, target, settings);
+            return this.state.buildResponseState();
+          }, payload.record_history !== false);
+          return this.responseWithHistory(result);
+        });
+      case "homework-enable-hooks":
+        return this.runSerialized(async () => {
+          const current = await this.state.loadState();
+          if (!isHomeworkTemplate(current.workspace_template.templateId)) throw new Error("Homework hooks are only available for the homework starter.");
+          const target = String(payload.target || current.compile_target);
+          const generated = homeworkSettingsPath(this.rootDir, target);
+          const result = await this.history.runFileChange(command, "Enable Homework Toolkit controls", [path.resolve(this.rootDir, target), path.dirname(generated), generated], async () => {
+            await writeHomeworkSettings(this.rootDir, target, current.homework_settings);
+            await enableHomeworkHooks(this.rootDir, target);
             return this.state.buildResponseState();
           }, payload.record_history !== false);
           return this.responseWithHistory(result);

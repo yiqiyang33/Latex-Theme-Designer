@@ -6,7 +6,7 @@ import { confirmationSpec, isConfirmAction } from "./confirmations";
 import { PersonalStyleRegistry } from "./personalStyles";
 import { LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "./projectRegistry";
 import { preflightCreateProject, runCreateProjectWorkflow, validateTemplateAndParent } from "./projectWorkflow";
-import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
+import { STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "./schema";
 import { registerSnippetHost } from "./snippets/engine/host";
 import { getSnippetDir } from "./snippets/engine/utils";
 import { getSnippetFiles } from "./snippets/engine/snippetProfiles";
@@ -328,7 +328,8 @@ async function createOverleafProjectFromTemplate(
   treeProvider: ToolkitTreeProvider,
   projectName: string,
   templateId: string,
-  output: vscode.OutputChannel
+  output: vscode.OutputChannel,
+  stylePreset?: string
 ): Promise<void> {
   const service = overleafService;
   if (!service) return;
@@ -350,7 +351,7 @@ async function createOverleafProjectFromTemplate(
         const scoped = new ToolkitService(root, context.extensionPath, {
           additionalStylePresets: personalStyles?.definitions() ?? []
         });
-        await runCreateProjectWorkflow(scoped, registry, root, templateId);
+        await runCreateProjectWorkflow(scoped, registry, root, templateId, stylePreset);
       })
     );
 
@@ -454,8 +455,19 @@ async function createProjectWizard(
   );
   if (!pickedTemplate) return;
 
+  // Both remaining questions are conditional, so the step count is too; deriving it keeps
+  // the labels from contradicting what is actually shown.
+  let step = 4;
+  const style = await pickStylePresetForTemplate(
+    pickedTemplate.template,
+    [...STYLE_PRESET_DEFINITIONS, ...(personalStyles?.definitions() ?? [])],
+    `Create Project (${step + 1}/${step + 1}): Theme`
+  );
+  if (style.cancelled) return;
+  if (style.stylePreset) step += 1;
+
   // Offer the Overleaf route only when it can actually work, so people who never use Overleaf
-  // are not asked a fifth question they have no answer to.
+  // are not asked a question they have no answer to.
   const overleafState = await overleafService?.state().catch(() => undefined);
   if (overleafState?.available && overleafState.authenticated) {
     const target = await vscode.window.showQuickPick(
@@ -463,16 +475,16 @@ async function createProjectWizard(
         { label: "Local only", description: "Create the project in the folder you chose", remote: false },
         { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
       ],
-      { title: "Create Project (5/5): Destination", placeHolder: "Where should this project live?" }
+      { title: `Create Project (${step + 1}/${step + 1}): Destination`, placeHolder: "Where should this project live?" }
     );
     if (!target) return;
     if (target.remote) {
-      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output);
+      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output, style.stylePreset);
       return;
     }
   }
 
-  const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id }, context.extensionPath);
+  const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id, stylePreset: style.stylePreset }, context.extensionPath);
   if (!preflight.ok) {
     const action = await vscode.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
     output.appendLine(`[${new Date().toISOString()}] CREATE PROJECT PREFLIGHT`);
@@ -497,7 +509,7 @@ async function createProjectWizard(
   });
   try {
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => (
-      runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id)
+      runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset)
     ));
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
@@ -769,6 +781,32 @@ function localProjectPathFromArgument(value: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Asks which Theme Designer style the generated project should start from. Generation
+ * otherwise never writes theme.colors.tex, so a new project silently inherited whatever
+ * was baked into theme.sty. Skipped for starters that do not load theme.sty at all —
+ * research-paper and the Beamer decks — which the toolkit-theme capability records.
+ */
+async function pickStylePresetForTemplate(
+  template: { label?: string; capabilities?: string[] },
+  presets: Array<{ id: string; label: string; description?: string }>,
+  title: string,
+  activePreset?: string
+): Promise<{ cancelled: boolean; stylePreset?: string }> {
+  if (!(template.capabilities || []).includes("toolkit-theme") || presets.length === 0) return { cancelled: false };
+  const picked = await vscode.window.showQuickPick(
+    presets.map((preset) => ({
+      label: preset.id === activePreset ? `$(check) ${preset.label}` : preset.label,
+      description: preset.id,
+      detail: preset.description,
+      id: preset.id
+    })),
+    { title, placeHolder: "Choose the starting theme" }
+  );
+  if (!picked) return { cancelled: true };
+  return { cancelled: false, stylePreset: picked.id };
+}
+
 async function createStarterInWorkspace(context: vscode.ExtensionContext, treeProvider: ToolkitTreeProvider, folderUri?: vscode.Uri): Promise<void> {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
@@ -801,10 +839,18 @@ async function createStarterInWorkspace(context: vscode.ExtensionContext, treePr
     if (ok !== "Overwrite") return;
     overwrite = true;
   }
+  const style = await pickStylePresetForTemplate(
+    picked.template,
+    scoped.response.schema.style_presets || [],
+    "Generate Starter: Theme",
+    scoped.response.state.style_preset
+  );
+  if (style.cancelled) return;
   const result = await scoped.service.handle("template-bootstrap", {
     template_id: picked.template.id,
     output_target: outputTarget,
-    overwrite
+    overwrite,
+    style_preset: style.stylePreset
   }) as { generated_target?: string };
   treeProvider.refresh();
   vscode.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
@@ -1652,7 +1698,7 @@ class ToolkitPanel {
       if (request.command === "compile") {
         logCompileResult(this.output, this.workspacePath, data as { success?: boolean; output?: string });
       }
-      if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete"].includes(request.command)) {
+      if (["autosave", "undo-last-change", "redo-last-change", "reset", "upgrade-theme-assets", "template-bootstrap", "split", "renumber", "unsplit", "personal-style-save", "personal-style-delete", "homework-settings", "homework-enable-hooks"].includes(request.command)) {
         this.onStateChanged();
       }
       await this.panel.webview.postMessage({ id: request.id, ok: true, data });

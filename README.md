@@ -269,6 +269,7 @@ The extension reads and writes these project files:
 - `theme.ui.json`
 - `theme.overrides.tex`
 - `theme.colors.tex`
+- `.latex-editing-toolkit/homework-settings.tex` (homework projects)
 - `.vscode/settings.json`
 
 Template assets live under `assets/template/` and are copied into a workspace only when missing.
@@ -286,6 +287,48 @@ Available starters:
 - `beamer-gotham`
 
 The default starter remains `book-minimal`.
+
+Generating asks which Theme Designer style the project should start from, in the Toolkit's
+Project Setup card and in both Generate Starter / Create Project command flows. Generation
+previously never wrote `theme.colors.tex`, so a new project silently took whatever was baked
+into `theme.sty`. The question is skipped for starters that do not load `theme.sty` at all —
+`research-paper` and the Beamer decks — which the `toolkit-theme` capability records.
+
+`homework-assignment` keeps its problem and part environments, the title block and the
+solution box in a bundled `homework.sty` rather than inline in `main.tex`. A starter's
+`main.tex` is copied verbatim once and never touched again, and a project's own `templates/`
+directory shadows the bundled starters, so machinery living in `main.tex` can never reach a
+project that already exists; a `.sty` is replaced in place by Upgrade Theme Assets, so
+improvements do land. Upgrade Theme Assets also refreshes the project's `templates/` copies
+(backed up first), because a stale copy otherwise regenerates the old starter.
+
+Homework projects get a **Homework** section in the Toolkit that writes
+`.latex-editing-toolkit/homework-settings.tex`. It covers the assignment metadata plus, for
+problems and parts independently:
+
+- **Heading word** — `Problem`, `Question`, `Exercise`, or empty for a bare number.
+- **Numbering** — `arabic` (1), `alph` (a), `Alph` (A), `roman` (i), `Roman` (I).
+- **Problem number prefix** — qualifies every problem number for a set that belongs to a
+  chapter: `1` numbers the problems 1.1, 1.2, … 1.12.
+- **Part number format** — standalone `(a)`, or qualified by the problem so problem 1's
+  parts read 1.1 … 1.5 and problem 2's read 2.1 … 2.19. Parts restart at every problem
+  either way.
+
+Both environments read their optional arguments by count, so the common case stays short:
+
+```latex
+\begin{homeworkProblem}                   % Problem 1
+\begin{homeworkProblem}[Name]             % Problem 1 --- Name
+\begin{homeworkProblem}[5][Name]          % Problem 5 --- Name, and the next one is 6
+\begin{homeworkProblem}[1.1][Name]        % Problem 1.1 --- Name, and the next one is 1.2
+\begin{homeworkProblem}[5][Name]<Bonus>   % Bonus 5 --- Name
+```
+
+An explicit number is an integer or a dotted run of integers; the last component sets the
+counter and anything before it becomes the prefix, which then sticks. The representation is
+chosen separately, so under `Roman` you still write `[5]` to get V. A value that is not a
+number (`[V]`, `[1.x]`) raises a named package error — `\numexpr` would otherwise stop at the
+first non-digit and leak the remainder into the page as body text.
 
 `research-paper` is a journal-style article starter: `newtx` Times text and math, natbib
 author-year citations against `references.bib`, `cleveref` cross-references, shared-counter
@@ -312,6 +355,7 @@ extension release.
 The Toolkit Webview uses a responsive three-part layout:
 
 - Section navigation for Style, Build, Document, Colors, Project Setup, Structure, and Diagnostics.
+- Template-specific sections shown only where they apply: Presentation for Beamer decks, Homework for the homework starter.
 - A task-focused center panel that shows only the active tool.
 - A contextual panel that shows the live Style preview or the current build/setup/operation summary.
 

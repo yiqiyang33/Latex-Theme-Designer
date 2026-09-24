@@ -13,6 +13,28 @@ export const SHARED_THEME_ASSETS = ["theme.sty", "theorems.tex", "commands.tex",
 /** Subset replaced by an explicit theme upgrade; the bibliography stays with the project. */
 export const UPGRADABLE_THEME_ASSETS = SHARED_THEME_ASSETS.filter((file) => file !== "references.bib");
 
+/**
+ * Support files a single starter brings on top of the shared set, e.g. homework.sty for
+ * the homework starter. Declared per starter in schema.ts via assetManifest; this is the
+ * one place that turns a manifest into "what a non-Beamer project actually receives".
+ */
+export function assetsForTemplate(definition: StarterTemplateDefinition | undefined): string[] {
+  const extras = (definition?.kind !== "beamer" ? definition?.assetManifest ?? [] : [])
+    .filter((file) => !SHARED_THEME_ASSETS.includes(file));
+  return [...SHARED_THEME_ASSETS, ...extras];
+}
+
+/**
+ * The subset of a starter's extra assets that an explicit upgrade may overwrite. A .sty
+ * is a Toolkit-authored package, so replacing it is the whole point; a manifest also
+ * names things the project owns (book-minimal's Fig/cover.png), which must survive —
+ * the same distinction that keeps references.bib out of UPGRADABLE_THEME_ASSETS.
+ */
+export function upgradableTemplateExtras(definition: StarterTemplateDefinition | undefined): string[] {
+  return assetsForTemplate(definition)
+    .filter((file) => file.endsWith(".sty") && !SHARED_THEME_ASSETS.includes(file));
+}
+
 export interface TemplateFilePlan {
   definition: StarterTemplateDefinition;
   /** Asset files the generator may write, workspace-relative and posix-separated. */
@@ -30,6 +52,7 @@ export interface TemplateFilePlan {
  * copier in state.ts, the undo snapshot in toolkitService.ts, and the create-project
  * preview in projectWorkflow.ts. They had already drifted apart — the preview omitted
  * everything under templates/, so undo and the preview disagreed with what landed on disk.
+ * state.ts consumes assetsForTemplate below, so that drift cannot reopen.
  */
 export function templateFilePlan(templateId: string | undefined, outputTarget = "main.tex"): TemplateFilePlan | undefined {
   const definition = templateId
@@ -40,11 +63,12 @@ export function templateFilePlan(templateId: string | undefined, outputTarget = 
   if (definition.kind !== "beamer") {
     return {
       definition,
-      assets: [
-        ...SHARED_THEME_ASSETS,
+      // Deduplicated: book-minimal already names Fig/cover.png in its own manifest.
+      assets: [...new Set([
+        ...assetsForTemplate(definition),
         "Fig/cover.png",
         ...STARTER_TEMPLATE_DEFINITIONS.map((entry) => `templates/${entry.filename}`)
-      ],
+      ])],
       directories: ["Fig", "templates"],
       metadata: [TEMPLATE_METADATA_REL]
     };

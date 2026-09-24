@@ -1,0 +1,287 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{homework}[2026/09/24 v1.0 Homework problem and section environments]
+
+% This package carries the homework machinery that used to sit inline in the starter's
+% main.tex. A starter's main.tex is copied verbatim at generate time and never touched
+% again, and a project's own templates/ directory shadows the bundled starters, so
+% anything living in main.tex can never reach a project that already exists. A .sty is
+% replaced in place by Upgrade Theme Assets, so improvements land on old projects too.
+%
+% Load order: after \usepackage{theme}, theorems.tex and commands.tex. The theme colour
+% tokens this package uses are only evaluated when the title and the solution box are
+% typeset, so the package itself has no colour dependency at load time.
+
+\RequirePackage{xparse}
+\RequirePackage{tcolorbox}
+\tcbuselibrary{theorems,skins,breakable}
+
+% -------------------- Metadata --------------------
+% Defaults only. The Toolkit's Homework panel overrides them with \def in
+% .latex-editing-toolkit/homework-settings.tex, which main.tex inputs after this package.
+\providecommand{\ToolkitHomeworkCourse}{Course Name}
+\providecommand{\ToolkitHomeworkTitle}{Homework 1}
+\providecommand{\ToolkitHomeworkAuthor}{Student Name}
+\providecommand{\ToolkitHomeworkInstructor}{Instructor Name}
+\providecommand{\ToolkitHomeworkDueDate}{\today}
+
+% Heading word for each level, e.g. Problem / Question / Exercise / Bonus.
+\providecommand{\homeworkProblemName}{Problem}
+\providecommand{\homeworkSectionName}{}
+
+% Separator between a prefix and the number it qualifies.
+\providecommand{\homeworkNumberSeparator}{.}
+
+\newcounter{homeworkProblemCounter}
+% Sections hang off the problem counter, so they restart at every problem.
+\newcounter{homeworkSectionCounter}[homeworkProblemCounter]
+
+% hyperref names an anchor after the counter's value, so two problems that both carry
+% an explicit number collide ("Object @homeworkProblemCounter.1 already defined") and
+% one of the two links goes to the wrong place. These counters only ever increase, so
+% pointing \theH... at them keeps every anchor unique no matter how the visible numbers
+% are reassigned.
+\newcounter{hwProblemUid}
+\newcounter{hwSectionUid}
+\def\theHhomeworkProblemCounter{hwproblem.\arabic{hwProblemUid}}
+\def\theHhomeworkSectionCounter{hwsection.\arabic{hwSectionUid}}
+
+% -------------------- Numbering --------------------
+% A printed number has three independent parts:
+%
+%   style   arabic (1) | alph (a) | Alph (A) | roman (i) | Roman (I)
+%   prefix  what comes before it, joined by \homeworkNumberSeparator
+%   mode    (sections only) standalone "(a)" or nested "1.1"
+%
+% Problems take their prefix from \homeworkProblemPrefix, which is how a problem set
+% that belongs to chapter 1 gets numbered 1.1 ... 1.12. Sections in nested mode take
+% theirs from the enclosing problem, so problem 2's parts read 2.1 ... 2.19.
+\ExplSyntaxOn
+
+\tl_new:N \g__hw_problem_prefix_tl        % "" or e.g. "1\homeworkNumberSeparator"
+\tl_new:N \g__hw_section_prefix_tl        % the section prefix in force right now
+\tl_new:N \g__hw_section_mode_prefix_tl   % what the current mode resets it to
+\tl_new:N \g__hw_problem_style_tl
+\tl_new:N \g__hw_section_style_tl
+\bool_new:N \g__hw_nested_bool
+
+\seq_new:N \l__hw_parts_seq
+\tl_new:N  \l__hw_scan_tl
+\tl_new:N  \l__hw_last_tl
+
+\msg_new:nnnn { homework } { bad-style }
+  { Unknown~numbering~style~'#1'. }
+  {
+    Use~arabic,~alph,~Alph,~roman~or~Roman. \\
+    A~misspelt~style~would~otherwise~expand~to~\token_to_str:N \relax
+    ~and~make~the~number~vanish~with~no~error~at~all.
+  }
+
+\msg_new:nnnn { homework } { bad-number }
+  { Number~'#1'~is~not~an~integer~or~a~dotted~integer. }
+  {
+    Write~[5]~or~[1.5]. \\
+    The~printed~style~comes~from~\token_to_str:N \homeworkProblemNumbering ,~so~under~
+    Roman~you~still~write~[5]~to~get~V.
+  }
+
+% Only the five LaTeX number representations are accepted. Testing \cs_if_exist: would
+% also let through anything else that happens to be defined, such as \relax.
+\cs_new_protected:Npn \__hw_set_style:Nn #1#2
+  {
+    \clist_if_in:nnTF { arabic , alph , Alph , roman , Roman } {#2}
+      { \tl_gset:Nn #1 {#2} }
+      { \msg_error:nnn { homework } { bad-style } {#2} }
+  }
+
+% One regex covers both the plain and the dotted form. The target has to be expanded
+% into a token list first: \regex_match:nn does not expand its second argument and
+% would test the literal control sequence instead of the content.
+\prg_new_protected_conditional:Npnn \__hw_number_ok:n #1 { TF }
+  {
+    \tl_set:Nx \l__hw_scan_tl { \tl_to_str:n {#1} }
+    \regex_match:nVTF { \A\s*-?[0-9]+(\.[0-9]+)*\s*\Z } \l__hw_scan_tl
+      { \prg_return_true: } { \prg_return_false: }
+  }
+
+\cs_new_protected:Npn \__hw_set_prefix:Nn #1#2
+  {
+    \tl_if_blank:nTF {#2}
+      { \tl_gclear:N #1 }
+      {
+        \__hw_number_ok:nTF {#2}
+          % Stored with the separator unexpanded so a later change to
+          % \homeworkNumberSeparator still applies.
+          { \tl_gset:Nn #1 { #2 \homeworkNumberSeparator } }
+          { \msg_error:nnn { homework } { bad-number } {#2} }
+      }
+  }
+
+% Splits a dotted override: the last component sets this level's counter, anything
+% before it becomes this level's prefix.
+\cs_new_protected:Npn \__hw_apply_number:nnN #1#2#3
+  {
+    \__hw_number_ok:nTF {#2}
+      {
+        \seq_set_split:Nnn \l__hw_parts_seq { . } {#2}
+        \seq_pop_right:NN \l__hw_parts_seq \l__hw_last_tl
+        \seq_if_empty:NF \l__hw_parts_seq
+          {
+            \tl_set:Nx \l__hw_scan_tl { \seq_use:Nn \l__hw_parts_seq { . } }
+            \tl_gset:Nx #3 { \l__hw_scan_tl \exp_not:N \homeworkNumberSeparator }
+          }
+        % Setting the counter before stepping keeps the printed number, the items that
+        % follow and \ref all in agreement.
+        \setcounter {#1} { \int_eval:n { \l__hw_last_tl - 1 } }
+      }
+      { \msg_error:nnn { homework } { bad-number } {#2} }
+  }
+
+\cs_new_protected:Npn \__hw_advance:nnN #1#2#3
+  {
+    \tl_if_blank:nF {#2} { \__hw_apply_number:nnN {#1} {#2} #3 }
+    \refstepcounter {#1}
+  }
+
+% Fully expandable, so \label, \ref, \edef and the TOC entry all see the same string.
+\cs_set:Npn \thehomeworkProblemCounter
+  { \g__hw_problem_prefix_tl \use:c { \g__hw_problem_style_tl } { homeworkProblemCounter } }
+\cs_set:Npn \thehomeworkSectionCounter
+  { \g__hw_section_prefix_tl \use:c { \g__hw_section_style_tl } { homeworkSectionCounter } }
+
+\cs_new:Npn \homeworkSectionLabelFormat #1
+  { \bool_if:NTF \g__hw_nested_bool {#1} { (#1) } }
+
+% -------------------- Public configuration --------------------
+\NewDocumentCommand \homeworkProblemNumbering { m }
+  { \__hw_set_style:Nn \g__hw_problem_style_tl {#1} }
+\NewDocumentCommand \homeworkSectionNumbering { m }
+  { \__hw_set_style:Nn \g__hw_section_style_tl {#1} }
+\NewDocumentCommand \homeworkProblemPrefix { m }
+  { \__hw_set_prefix:Nn \g__hw_problem_prefix_tl {#1} }
+
+\NewDocumentCommand \homeworkSectionStandalone { }
+  {
+    \bool_gset_false:N \g__hw_nested_bool
+    \tl_gclear:N \g__hw_section_mode_prefix_tl
+    \tl_gset_eq:NN \g__hw_section_prefix_tl \g__hw_section_mode_prefix_tl
+  }
+\NewDocumentCommand \homeworkSectionNested { }
+  {
+    \bool_gset_true:N \g__hw_nested_bool
+    \tl_gset:Nn \g__hw_section_mode_prefix_tl
+      { \thehomeworkProblemCounter \homeworkNumberSeparator }
+    \tl_gset_eq:NN \g__hw_section_prefix_tl \g__hw_section_mode_prefix_tl
+  }
+
+% Plain-named entry points so the environments below can stay outside expl3 syntax.
+\NewDocumentCommand \hwAdvanceProblem { m }
+  {
+    \stepcounter { hwProblemUid }
+    \__hw_advance:nnN { homeworkProblemCounter } {#1} \g__hw_problem_prefix_tl
+  }
+\NewDocumentCommand \hwAdvanceSection { m }
+  {
+    \stepcounter { hwSectionUid }
+    \__hw_advance:nnN { homeworkSectionCounter } {#1} \g__hw_section_prefix_tl
+  }
+% A dotted override on a section is scoped to its problem, exactly like the counter.
+\NewDocumentCommand \hwResetSectionPrefix { }
+  { \tl_gset_eq:NN \g__hw_section_prefix_tl \g__hw_section_mode_prefix_tl }
+
+\ExplSyntaxOff
+
+\homeworkProblemNumbering{arabic}
+\homeworkSectionNumbering{alph}
+\homeworkSectionStandalone
+
+% -------------------- Environments --------------------
+% Both environments read their optional arguments by count:
+%   \begin{homeworkProblem}                 -> Problem 1
+%   \begin{homeworkProblem}[Name]           -> Problem 1 --- Name
+%   \begin{homeworkProblem}[5][Name]        -> Problem 5 --- Name, and the next one is 6
+%   \begin{homeworkProblem}[1.1][Name]      -> Problem 1.1 --- Name, next is 1.2
+%   \begin{homeworkProblem}[5][Name]<Bonus> -> Bonus 5 --- Name
+% An explicit number is an integer or a dotted integer; the representation comes from
+% \homeworkProblemNumbering, so under Roman you still write [5] to get V.
+\makeatletter
+\newcommand{\hw@word}[1]{#1\if\relax\detokenize{#1}\relax\else~\fi}
+\newcommand{\hw@trailing}[1]{\if\relax\detokenize{#1}\relax\else\ --- #1\fi}
+\newcommand{\hw@suffix}[1]{\if\relax\detokenize{#1}\relax\else\ #1\fi}
+
+\NewDocumentEnvironment{homeworkProblem}{o o D<>{\homeworkProblemName}}
+{%
+    \IfNoValueTF{#2}
+        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hwAdvanceProblem{}}
+        {\def\hw@nm{#2}\hwAdvanceProblem{#1}}%
+    \hwResetSectionPrefix
+    % Built once, so the heading and the TOC entry cannot drift apart. The \edef also
+    % expands \hw@nm, which is what lets \hw@trailing test the content rather than the
+    % macro name.
+    \edef\hw@txt{\noexpand\hw@word{#3}\thehomeworkProblemCounter\noexpand\hw@trailing{\hw@nm}}%
+    \section*{\hw@txt}%
+    \addcontentsline{toc}{section}{\hw@txt}%
+}
+{%
+    \vspace{0.4em}%
+}
+
+\NewDocumentEnvironment{homeworkSection}{o o D<>{\homeworkSectionName}}
+{%
+    \IfNoValueTF{#2}
+        {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hwAdvanceSection{}}
+        {\def\hw@nm{#2}\hwAdvanceSection{#1}}%
+    \edef\hw@txt{\noexpand\hw@word{#3}%
+        \noexpand\homeworkSectionLabelFormat{\thehomeworkSectionCounter}%
+        \noexpand\hw@suffix{\hw@nm}}%
+    \subsection*{\hw@txt}%
+}
+{%
+    \vspace{0.25em}%
+}
+\makeatother
+
+% -------------------- Title block --------------------
+% Follows the active Toolkit style: course line, title, field labels and rule all take
+% their colour from the theme, so switching preset restyles the whole header rather than
+% leaving it black above coloured problem headings.
+\newcommand{\makehomeworktitle}{%
+    \begin{center}
+        {\Large\bfseries\color{theme-subsection} \ToolkitHomeworkCourse\par}
+        \vspace{0.35em}
+        {\huge\bfseries\color{theme-chapter} \ToolkitHomeworkTitle\par}
+        \vspace{0.7em}
+        {\color{theme-header-rule}\rule{0.42\linewidth}{0.7pt}\par}
+        \vspace{0.7em}
+        \begin{tabular}{rl}
+            {\bfseries\color{theme-section}Name:} & \ToolkitHomeworkAuthor \\
+            {\bfseries\color{theme-section}Instructor:} & \ToolkitHomeworkInstructor \\
+            {\bfseries\color{theme-section}Due:} & \ToolkitHomeworkDueDate
+        \end{tabular}
+    \end{center}
+    \vspace{1.2em}%
+}
+
+\NewDocumentEnvironment{solution}{o}
+{%
+    \begin{tcolorbox}[
+        enhanced,
+        breakable,
+        title={\IfNoValueTF{#1}{Solution}{#1}},
+        colback=note-bg,
+        colframe=note-accent,
+        coltitle=note-title-fg,
+        colbacktitle=note-title-bg,
+        fonttitle=\bfseries,
+        boxrule=0.8pt,
+        arc=2pt,
+        left=8pt,
+        right=8pt,
+        top=7pt,
+        bottom=7pt
+    ]%
+}
+{%
+    \end{tcolorbox}%
+}
+
+\endinput

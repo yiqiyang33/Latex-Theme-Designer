@@ -16,11 +16,13 @@ import {
   TOGGLE_IDS,
   TOGGLE_SCHEMA
 } from "./schema";
-import { beamerHooksEnabled, defaultBeamerSettings, detectWorkspaceTemplate, readBeamerSettings, starterTemplate } from "./beamer";
+import { assetsForTemplate } from "./templatePlan";
+import { beamerHooksEnabled, defaultBeamerSettings, detectWorkspaceTemplate, isHomeworkTemplate, readBeamerSettings, starterTemplate } from "./beamer";
+import { defaultHomeworkSettings, homeworkHooksEnabled, homeworkMachineryIsInline, HOMEWORK_NUMBER_STYLES, readHomeworkSettings } from "./homework";
 import type { PresetMeta, ResponseState, StarterTemplateGroup, StarterTemplateMeta, StylePresetDefinition, StylePresetSchema, ToolkitState } from "./types";
 import {
-  assertWorkspacePathSafe,
   assertValidBodyFontSize,
+  assertWorkspacePathSafe,
   boolFromTex,
   compileOutputPdfRelpath,
   defaultCompileTarget,
@@ -28,8 +30,8 @@ import {
   extractDocumentclassDeclaration,
   extractDocumentclassName,
   formatBodyFontSize,
-  isSubpath,
   isChapterCapableClass,
+  isSubpath,
   normalizeBodyFontSize,
   normalizeCompileTarget,
   parseHexColor,
@@ -37,6 +39,7 @@ import {
   safeWorkspaceRel,
   slugify,
   stripTexComments,
+  toPosixPath,
   workspaceRel
 } from "./utils";
 import { loadRecipeCatalog } from "./vscodeSettings";
@@ -93,7 +96,9 @@ export class StateService {
         starter_default_template: starterTemplates.some((item) => item.id === "book-minimal") ? "book-minimal" : starterTemplates[0]?.id ?? "",
         starter_default_output_target: "main.tex",
         workspace_template: state.workspace_template,
-        beamer_capabilities: this.beamerCapabilities(state.workspace_template.templateId)
+        beamer_capabilities: this.beamerCapabilities(state.workspace_template.templateId),
+        homework_capabilities: this.homeworkCapabilities(state.workspace_template.templateId),
+        homework_number_styles: HOMEWORK_NUMBER_STYLES
       }
     };
   }
@@ -150,7 +155,8 @@ export class StateService {
       detected_document_class_has_chapter: false,
       effective_theme_class: "article",
       workspace_template: { kind: "unknown", templateId: "unknown", detectionSource: "unknown", confidence: "unknown" },
-      beamer_settings: defaultBeamerSettings()
+      beamer_settings: defaultBeamerSettings(),
+      homework_settings: defaultHomeworkSettings()
     };
 
     await this.mergePersistedState(state);
@@ -423,6 +429,21 @@ export class StateService {
       state.beamer_settings = defaultBeamerSettings();
       state.beamer_hooks_enabled = undefined;
     }
+    // Keyed on the template rather than the kind: a homework project is an ordinary
+    // article, so state.workspace_template.kind cannot tell it apart from the others.
+    if (isHomeworkTemplate(state.workspace_template.templateId)) {
+      state.homework_settings = await readHomeworkSettings(this.rootDir, state.compile_target);
+      state.homework_hooks_enabled = homeworkHooksEnabled(source);
+      state.homework_machinery_inline = homeworkMachineryIsInline(source);
+    } else {
+      state.homework_settings = defaultHomeworkSettings();
+      state.homework_hooks_enabled = undefined;
+      state.homework_machinery_inline = undefined;
+    }
+  }
+
+  private homeworkCapabilities(templateId: string): string[] {
+    return isHomeworkTemplate(templateId) ? starterTemplate(templateId)?.capabilities ?? [] : [];
   }
 
   private beamerCapabilities(templateId: string): string[] {
@@ -897,13 +918,17 @@ export async function ensureWorkspaceTemplateAssets(rootDir: string, extensionDi
     }
     return copied;
   }
-  const files = ["theme.sty", "theorems.tex", "commands.tex", "references.bib"];
-  for (const file of files) {
+  // assetsForTemplate is what templateFilePlan reports to undo and to the create-project
+  // preview; reading the same list here is what keeps the three in agreement.
+  for (const file of assetsForTemplate(selected)) {
     const target = path.join(rootDir, file);
     await assertWorkspacePathSafe(rootDir, target);
     if (!(await exists(target))) {
+      // A manifest entry may sit in a subdirectory (book-minimal names Fig/cover.png),
+      // and copyFile does not create one.
+      await fs.mkdir(path.dirname(target), { recursive: true });
       await fs.copyFile(path.join(assetRoot, file), target);
-      copied.push(file);
+      copied.push(toPosixPath(file));
     }
   }
   await copyMissingDirectory(rootDir, path.join(assetRoot, "Fig"), path.join(rootDir, "Fig"), "Fig", copied);

@@ -45,6 +45,8 @@ export interface CreateProjectDraft {
   parentPath: string;
   projectName: string;
   templateId: string;
+  /** Style preset to apply while generating; ignored by starters without toolkit-theme. */
+  stylePreset?: string;
 }
 
 export interface CreateProjectPreflightResult {
@@ -83,6 +85,28 @@ export interface BeamerSettings {
   aspectRatio: string;
   notesMode: "hide" | "show-notes" | "only-notes";
   sectionOutline: boolean;
+}
+
+export type HomeworkNumberStyle = "arabic" | "alph" | "Alph" | "roman" | "Roman";
+
+export interface HomeworkSettings {
+  course: string;
+  title: string;
+  author: string;
+  instructor: string;
+  dueDate: string;
+  /** Heading word per level, e.g. Problem / Question / Exercise. Empty prints the bare number. */
+  problemWord: string;
+  sectionWord: string;
+  problemStyle: HomeworkNumberStyle;
+  sectionStyle: HomeworkNumberStyle;
+  /**
+   * What a problem number is qualified by, for a set that belongs to a chapter: "1"
+   * numbers the problems 1.1 ... 1.12. Empty, an integer, or a dotted run of integers.
+   */
+  problemPrefix: string;
+  /** "standalone" prints parts as (a); "nested" qualifies them with the problem, 1.1. */
+  sectionMode: "standalone" | "nested";
 }
 
 export interface StarterTemplateDefinition {
@@ -178,6 +202,10 @@ export interface ToolkitState {
   workspace_template: WorkspaceTemplateState;
   beamer_settings: BeamerSettings;
   beamer_hooks_enabled?: boolean;
+  homework_settings: HomeworkSettings;
+  homework_hooks_enabled?: boolean;
+  /** Set when the target still defines the environments itself, so the hooks cannot be added. */
+  homework_machinery_inline?: boolean;
 }
 
 export interface ToolkitSchema {
@@ -200,6 +228,8 @@ export interface ToolkitSchema {
   starter_default_output_target: string;
   workspace_template: WorkspaceTemplateState;
   beamer_capabilities: string[];
+  homework_capabilities: string[];
+  homework_number_styles: HomeworkNumberStyle[];
 }
 
 export interface ResponseState {

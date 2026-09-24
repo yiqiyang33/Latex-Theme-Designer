@@ -22,14 +22,16 @@ export async function runCreateProjectWorkflow(
   service: CreateProjectService,
   registry: CreateProjectRegistry,
   rootPath: string,
-  templateId: string
+  templateId: string,
+  stylePreset?: string
 ): Promise<void> {
   await fs.mkdir(rootPath, { recursive: true });
   await service.handle("initialize-workspace", { template_id: templateId });
   await service.handle("template-bootstrap", {
     template_id: templateId,
     output_target: "main.tex",
-    overwrite: false
+    overwrite: false,
+    style_preset: stylePreset
   });
   await registry.add(rootPath, templateId);
 }

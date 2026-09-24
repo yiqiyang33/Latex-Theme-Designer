@@ -23,11 +23,13 @@ examples/**
 commands.tex
 main.tex
 references.bib
+homework.sty
 theme.sty
 theorems.tex
 !assets/template/Fig/**
 !assets/template/templates/**
 !assets/template/commands.tex
+!assets/template/homework.sty
 !assets/template/references.bib
 !assets/template/theme.sty
 !assets/template/theorems.tex

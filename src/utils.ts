@@ -41,6 +41,9 @@ export async function statOrNull(filePath: string) {
   }
 }
 
+/** Per-project directory for everything the Toolkit generates rather than the user authoring it. */
+export const TOOLKIT_CONFIG_DIR = ".latex-editing-toolkit";
+
 export function toPosixPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
