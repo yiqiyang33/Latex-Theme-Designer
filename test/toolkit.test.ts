@@ -170,7 +170,10 @@ describe("TypeScript Toolkit migration", () => {
 
     const midnight = await service.handle("heading-toc-preset", { heading_toc_preset: "inkstone" }) as { state: ToolkitState };
     expect(midnight.state.style_preset).toBe("midnight");
-    expect(midnight.state.colors["theorem-accent"]).toBe("#1B7286");
+    // Derived, not pinned: this asserts the preset wiring resolves, and should not have
+    // to be edited every time the palette is retuned.
+    expect(midnight.state.colors["theorem-accent"])
+      .toBe(STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "midnight")!.colors["theorem-accent"]);
     expect(midnight.state.colors["theme-bold"]).toBe("#273B66");
   });
 

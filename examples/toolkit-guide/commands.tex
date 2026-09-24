@@ -25,6 +25,21 @@
     \end{tikzpicture}%
 }
 
+% soul re-typesets its argument token by token and cannot reconstruct CJK text under
+% ctex/xeCJK -- it aborts the build with "Reconstruction failed". Such content falls back
+% to the unbreakable chip: a failed build is worse than a highlight that will not wrap,
+% and CJK has no inter-word spaces for soul to break at anyway.
+\ExplSyntaxOn
+\tl_new:N \l__theme_inline_tl
+\NewDocumentCommand{\ThemeIfInlineSoulSafe}{m +m +m}{
+    % The target has to be expanded into a token list first: passing
+    % \tl_to_str:n {#1} inline leaves it unexpanded and the match then tests the
+    % literal control sequence instead of the content.
+    \tl_set:Nx \l__theme_inline_tl { \tl_to_str:n {#1} }
+    \regex_match:nVTF { [^\x00-\x{2E7F}] } \l__theme_inline_tl {#3} {#2}
+}
+\ExplSyntaxOff
+
 % Breakable inline highlight.
 % #1 font declaration (e.g. \bfseries), #2 background color, #3 text color, #4 content.
 % Note: the optional argument is a font declaration, not tcolorbox keys.
@@ -32,9 +47,13 @@
     \begingroup
     \renewcommand\thmi@bg{#2}%
     \renewcommand\thmi@fg{#3}%
-    \kern\thmi@pad
-    \begingroup\color{#3}#1\thmi@underlay{#4}\endgroup
-    \kern\thmi@pad
+    \ThemeIfInlineSoulSafe{#4}{%
+        \kern\thmi@pad
+        \begingroup\color{#3}#1\thmi@underlay{#4}\endgroup
+        \kern\thmi@pad
+    }{%
+        \themeInlineChip[fontupper=#1]{#2}{#3}{#4}%
+    }%
     \endgroup
 }
 
