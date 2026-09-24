@@ -100,6 +100,10 @@ var init_stylePresets = __esm({
           "assumption-title-bg": "#EEE5CD",
           "assumption-title-fg": "#5F5133",
           "assumption-accent": "#9A8555",
+          "axiom-body-bg": "#F0F5F6",
+          "axiom-title-bg": "#D8E6E9",
+          "axiom-title-fg": "#26454C",
+          "axiom-accent": "#52808A",
           "note-bg": "#F5F7FA",
           "note-title-bg": "#E4EBF2",
           "note-title-fg": "#2F4050",
@@ -193,6 +197,10 @@ var init_stylePresets = __esm({
           "assumption-title-bg": "#F2E2B5",
           "assumption-title-fg": "#5E4A14",
           "assumption-accent": "#927320",
+          "axiom-body-bg": "#EDF4F7",
+          "axiom-title-bg": "#C9DEE8",
+          "axiom-title-fg": "#143A4C",
+          "axiom-accent": "#2F6480",
           "note-bg": "#EEF2FF",
           "note-title-bg": "#CFD7FF",
           "note-title-fg": "#1B2562",
@@ -286,6 +294,10 @@ var init_stylePresets = __esm({
           "assumption-title-bg": "#F4E5BF",
           "assumption-title-fg": "#64531B",
           "assumption-accent": "#9A7A29",
+          "axiom-body-bg": "#F1F4F6",
+          "axiom-title-bg": "#DAE2E8",
+          "axiom-title-fg": "#2B414E",
+          "axiom-accent": "#587687",
           "note-bg": "#EEF8F5",
           "note-title-bg": "#D4ECE4",
           "note-title-fg": "#1F4A3D",
@@ -379,6 +391,10 @@ var init_stylePresets = __esm({
           "assumption-title-bg": "#F5E3C6",
           "assumption-title-fg": "#6A4C20",
           "assumption-accent": "#A7782D",
+          "axiom-body-bg": "#F2F5F7",
+          "axiom-title-bg": "#DBE3EA",
+          "axiom-title-fg": "#334451",
+          "axiom-accent": "#5C7A8C",
           "note-bg": "#F8F2FF",
           "note-title-bg": "#E4D7F9",
           "note-title-fg": "#3F2A66",
@@ -472,6 +488,10 @@ var init_stylePresets = __esm({
           "assumption-title-bg": "#E3DDD4",
           "assumption-title-fg": "#5A4738",
           "assumption-accent": "#737373",
+          "axiom-body-bg": "#F5F7F8",
+          "axiom-title-bg": "#DCE2E6",
+          "axiom-title-fg": "#3A4A54",
+          "axiom-accent": "#6B7F8C",
           "note-bg": "#F6F6F6",
           "note-title-bg": "#D9D9D9",
           "note-title-fg": "#4A4A4A",
@@ -610,7 +630,8 @@ var init_schema = __esm({
         ["Proposition", "proposition"],
         ["Claim", "claim"],
         ["Fact", "fact"],
-        ["Assumption", "assumption"]
+        ["Assumption", "assumption"],
+        ["Axiom", "axiom"]
       ].map(([title, prefix]) => ({
         title,
         items: [
@@ -16931,7 +16952,7 @@ var PersonalStyleRegistry = class {
     const out = [];
     const seen = /* @__PURE__ */ new Set();
     for (const item of raw) {
-      const parsed = this.parseRecord(item);
+      const parsed = this.parseRecord(item, { backfillFromBase: true });
       if (!parsed || seen.has(parsed.id)) continue;
       seen.add(parsed.id);
       out.push(parsed);
@@ -17032,13 +17053,14 @@ var PersonalStyleRegistry = class {
   exportLibrary() {
     return { version: 1, styles: this.list() };
   }
-  parseRecord(raw) {
+  parseRecord(raw, options = {}) {
     if (!isRecord(raw) || raw.version !== 1 || typeof raw.id !== "string" || !raw.id.startsWith("personal:")) return void 0;
     if (typeof raw.label !== "string" || !raw.label.trim() || typeof raw.basePresetId !== "string") return void 0;
     let colors;
     try {
-      colors = this.validateColors(isRecord(raw.colors) ? Object.fromEntries(Object.entries(raw.colors).map(([key, value]) => [key, String(value)])) : {});
-      this.validateBasePreset(raw.basePresetId);
+      const base = this.validateBasePreset(raw.basePresetId);
+      const stored = isRecord(raw.colors) ? Object.fromEntries(Object.entries(raw.colors).map(([key, value]) => [key, String(value)])) : {};
+      colors = this.validateColors(options.backfillFromBase ? Object.fromEntries(COLOR_ORDER.map((token) => [token, stored[token] ?? base.colors[token]])) : stored);
     } catch {
       return void 0;
     }

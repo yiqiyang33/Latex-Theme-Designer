@@ -8,6 +8,7 @@
 %   Claim:          \clm
 %   Fact:           \fact
 %   Assumption:     \assumption
+%   Axiom:          \axiom
 %   Proof:          \pf
 %   Example:        \ex
 %   Remark:         \rmk (sentence), \rmkb (block)
@@ -119,6 +120,14 @@
         \begin{assumption}[#1]%
     \fi
 }
+
+\newcommand{\ThemeBeginAxiom}[1]{%
+    \if\relax\detokenize{#1}\relax
+        \begin{axiom}%
+    \else
+        \begin{axiom}[#1]%
+    \fi
+}
 \makeatother
 
 \ExplSyntaxOn
@@ -222,19 +231,23 @@
         \theoremstyle{plain}
         \newtheorem{fact}{Fact}
         \newtheorem{assumption}{Assumption}
+        \newtheorem{axiom}{Axiom}
     \else
         \ifThemeTheoremCounterWithinChapter
             \theoremstyle{plain}
             \newtheorem{fact}{Fact}[chapter]
             \newtheorem{assumption}{Assumption}[chapter]
+            \newtheorem{axiom}{Axiom}[chapter]
         \else
             \theoremstyle{plain}
             \newtheorem{fact}{Fact}[section]
             \newtheorem{assumption}{Assumption}[section]
+            \newtheorem{axiom}{Axiom}[section]
         \fi
     \fi
     \let\ThemeFactEnvBegin\fact
     \let\ThemeAssumptionEnvBegin\assumption
+    \let\ThemeAxiomEnvBegin\axiom
 \else
     % -------------------- Styled tcolorbox theorem family --------------------
     \ifThemeTheoremNumberingNone
@@ -283,6 +296,11 @@
     {
         theorem/variant={assumption-body-bg}{assumption-title-bg}{assumption-accent}{assumption-title-fg},
     }{assump}
+
+    \newtcbtheorem[use counter from=mydefinition]{myaxiom}{Axiom}
+    {
+        theorem/variant={axiom-body-bg}{axiom-title-bg}{axiom-accent}{axiom-title-fg},
+    }{axiom}
 \fi
 
 % -------------------- Study Callout Blocks --------------------
@@ -409,9 +427,17 @@
         \end{assumption}
     }
 
+    \newcommand{\ThemeAxiomCommand}[3]{
+        \ThemeBeginAxiom{#1}
+            \ThemeEmitPrefixedLabel{axiom}{#2}
+            #3
+        \end{axiom}
+    }
+
     \makeatletter
     \renewcommand{\fact}{\@ifnextchar\bgroup{\ThemeFactCommand}{\ThemeFactEnvBegin}}
     \renewcommand{\assumption}{\@ifnextchar\bgroup{\ThemeAssumptionCommand}{\ThemeAssumptionEnvBegin}}
+    \renewcommand{\axiom}{\@ifnextchar\bgroup{\ThemeAxiomCommand}{\ThemeAxiomEnvBegin}}
     \makeatother
 \else
     \NewDocumentCommand{\defn}{mm+m}{
@@ -444,6 +470,10 @@
 
     \NewDocumentCommand{\assumption}{mm+m}{
         \ThemeRunTcbTheorem{myassumption}{assump}{#1}{#2}{#3}
+    }
+
+    \NewDocumentCommand{\axiom}{mm+m}{
+        \ThemeRunTcbTheorem{myaxiom}{axiom}{#1}{#2}{#3}
     }
 \fi
 

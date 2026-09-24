@@ -12,7 +12,7 @@ import { CleanupService } from "../src/cleanup";
 import { detectBibliographyTool } from "../src/compile";
 import { LOCAL_PROJECTS_MAX_ENTRIES, LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry, sanitizeRecentProjectParents, scopedLocalProjectsStateKey, scopedStateKey } from "../src/projectRegistry";
 import { LocalResourceRegistry, scopedStateKey as genericScopedStateKey, stableResourceId, type LocalResourceAdapter } from "../src/localResourceRegistry";
-import { PersonalStyleRegistry } from "../src/personalStyles";
+import { PersonalStyleRegistry, PERSONAL_STYLES_STATE_KEY } from "../src/personalStyles";
 import { preflightCreateProject, runCreateProjectWorkflow } from "../src/projectWorkflow";
 import { SplitterService } from "../src/splitter";
 import { StateService, ensureWorkspaceTemplateAssets } from "../src/state";
@@ -471,6 +471,48 @@ describe("TypeScript Toolkit migration", () => {
       const result = await preflightCreateProject({ parentPath: parent, projectName: template.id, templateId: template.id }, repoRoot);
       expect(result.errors, `${template.id} preflight`).toEqual([]);
       expect(result.plannedFiles).toContain("main.tex");
+    }
+  });
+
+  it("migrates a personal style saved before a color token existed", async () => {
+    const store = new MemoryProjectStateStore();
+    const base = STYLE_PRESET_DEFINITIONS.find((preset) => preset.id === "default")!;
+    const { "axiom-body-bg": _dropped, ...older } = base.colors;
+    // A record written by an older Toolkit is missing only the tokens added since.
+    // parseRecord discards whatever validateColors rejects, so without a backfill the
+    // user's saved styles would silently disappear on the next launch.
+    await store.update(PERSONAL_STYLES_STATE_KEY, [{
+      version: 1,
+      id: "personal:older",
+      label: "Older",
+      basePresetId: "default",
+      colors: older,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }]);
+    const registry = new PersonalStyleRegistry(store);
+    const listed = registry.list();
+    expect(listed).toHaveLength(1);
+    expect(listed[0].colors["axiom-body-bg"]).toBe(base.colors["axiom-body-bg"]);
+    expect(Object.keys(listed[0].colors).sort()).toEqual([...COLOR_ORDER].sort());
+  });
+
+  it("defines the axiom block in both theorem rendering modes", async () => {
+    const theorems = await fs.readFile(path.join(repoRoot, "assets", "template", "theorems.tex"), "utf8");
+    const theme = await fs.readFile(path.join(repoRoot, "assets", "template", "theme.sty"), "utf8");
+    // amsthm mode: its own counter, matching every other numbering branch.
+    expect(theorems).toContain("\\newtheorem{axiom}{Axiom}");
+    expect(theorems).toContain("\\newtheorem{axiom}{Axiom}[chapter]");
+    expect(theorems).toContain("\\newtheorem{axiom}{Axiom}[section]");
+    // tcolorbox mode: shares the definition counter like the rest of the family.
+    expect(theorems).toContain("\\newtcbtheorem[use counter from=mydefinition]{myaxiom}{Axiom}");
+    expect(theorems).toContain("\\ThemeRunTcbTheorem{myaxiom}{axiom}");
+    for (const token of ["body-bg", "title-bg", "title-fg", "accent"]) {
+      expect(theme, token).toContain(`\\colorlet{axiom-${token}}{theme-default-axiom-${token}}`);
+    }
+    // Every preset must carry the tokens, which the whole-catalog test also enforces.
+    for (const preset of STYLE_PRESET_DEFINITIONS) {
+      expect(preset.colors["axiom-accent"], preset.id).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
   });
 

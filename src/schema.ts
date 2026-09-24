@@ -79,7 +79,8 @@ export const COLOR_GROUPS: ColorGroup[] = [
   },
   ...[
     ["Definition", "definition"], ["Theorem", "theorem"], ["Lemma", "lemma"], ["Corollary", "corollary"],
-    ["Proposition", "proposition"], ["Claim", "claim"], ["Fact", "fact"], ["Assumption", "assumption"]
+    ["Proposition", "proposition"], ["Claim", "claim"], ["Fact", "fact"], ["Assumption", "assumption"],
+    ["Axiom", "axiom"]
   ].map(([title, prefix]) => ({
     title,
     items: [

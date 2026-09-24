@@ -16,7 +16,9 @@ export class PersonalStyleRegistry {
     const out: PersonalStyleRecord[] = [];
     const seen = new Set<string>();
     for (const item of raw) {
-      const parsed = this.parseRecord(item);
+      // Stored styles are this Toolkit's own data: migrate them across a token addition
+      // rather than dropping them. Imports below stay strict.
+      const parsed = this.parseRecord(item, { backfillFromBase: true });
       if (!parsed || seen.has(parsed.id)) continue;
       seen.add(parsed.id);
       out.push(parsed);
@@ -125,13 +127,22 @@ export class PersonalStyleRegistry {
     return { version: 1, styles: this.list() };
   }
 
-  private parseRecord(raw: unknown): PersonalStyleRecord | undefined {
+  private parseRecord(raw: unknown, options: { backfillFromBase?: boolean } = {}): PersonalStyleRecord | undefined {
     if (!isRecord(raw) || raw.version !== 1 || typeof raw.id !== "string" || !raw.id.startsWith("personal:")) return undefined;
     if (typeof raw.label !== "string" || !raw.label.trim() || typeof raw.basePresetId !== "string") return undefined;
     let colors: Record<string, string>;
     try {
-      colors = this.validateColors(isRecord(raw.colors) ? Object.fromEntries(Object.entries(raw.colors).map(([key, value]) => [key, String(value)])) : {});
-      this.validateBasePreset(raw.basePresetId);
+      const base = this.validateBasePreset(raw.basePresetId);
+      const stored = isRecord(raw.colors) ? Object.fromEntries(Object.entries(raw.colors).map(([key, value]) => [key, String(value)])) : {};
+      // A style saved before a token existed is missing only the tokens added since, so
+      // fill those from its base preset instead of dropping the whole record —
+      // validateColors demands every token and parseRecord discards what it rejects, so
+      // otherwise every saved style would vanish the moment the Toolkit adds a color.
+      // Rebuilt from COLOR_ORDER so a token the Toolkit has since removed cannot linger
+      // and trip the exact-key-count check either.
+      colors = this.validateColors(options.backfillFromBase
+        ? Object.fromEntries(COLOR_ORDER.map((token) => [token, stored[token] ?? base.colors[token]]))
+        : stored);
     } catch {
       return undefined;
     }
