@@ -395,6 +395,11 @@
         "category": "LaTeX Editing Toolkit: Overleaf"
       },
       {
+        "command": "overleafCodex.publishFolder",
+        "title": "LaTeX Editing Toolkit: Overleaf: Publish Folder to Overleaf",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
         "command": "overleafCodex.startRealtimeSync",
         "title": "LaTeX Editing Toolkit: Overleaf: Start Realtime Sync",
         "category": "LaTeX Editing Toolkit: Overleaf"

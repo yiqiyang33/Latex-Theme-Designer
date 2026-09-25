@@ -2898,7 +2898,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     );
   }
 
-  private canSyncToolkitOverrides(): boolean {
+  canSyncToolkitOverrides(): boolean {
     return getWithLegacyFallback(
       vscode.workspace.getConfiguration('latexEditingToolkit.overleaf'),
       'syncToolkitOverrides',

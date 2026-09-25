@@ -4,11 +4,24 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { buildProjectTreeIndex } from './tree';
-import { ensureLocalIgnoreFile, metadataPath, writeBaseDoc, writeManifest } from './manifest';
-import type { ManifestFile, ProjectSummary } from './types';
+import {
+  DEFAULT_IGNORE_PATTERNS,
+  ensureLocalIgnoreFile,
+  isAlwaysLocal,
+  LOCAL_IGNORE_NAME,
+  manifestPath,
+  MAX_METADATA_JSON_BYTES,
+  metadataPath,
+  readTextFileBounded,
+  writeBaseDoc,
+  writeManifest
+} from './manifest';
+import type { ManifestFile, OverleafCodexManifest, ProjectSummary } from './types';
 import { OverleafClient } from './overleafClient';
 import { expandHome, isTextLike, sanitizeProjectFolderName, sha1 } from './util';
 import { registerSharedMirror } from './sharedState';
+import { scanLocalProject } from './syncStatus';
+import { extractDocumentclassDeclaration, stripTexComments } from '../utils';
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, type DynamicByteReservation } from './syncHealthService';
 
 const execFileAsync = promisify(execFile);
@@ -154,6 +167,48 @@ async function writeInitialFile(
 /** A brand-new Overleaf project holds only its default main.tex; more than this is unexpected. */
 const MAX_ENTITIES_IN_FRESH_PROJECT = 2;
 
+/**
+ * Joins a project created moments ago and removes the default content Overleaf seeds it with,
+ * returning a manifest that describes the now-empty project.
+ *
+ * Overleaf hands back a `template: 'none'` project already holding a main.tex. The size guard
+ * refuses to clear anything larger than that: it should never trigger, but being wrong here would
+ * mean deleting someone's work, so it fails closed.
+ */
+async function emptyFreshProject(
+  client: OverleafClient,
+  projectId: string,
+  projectName: string
+): Promise<OverleafCodexManifest> {
+  const session = await client.connectSocket(projectId);
+  try {
+    const joined = session.getProject();
+    if (!joined) throw new Error('Realtime connection did not provide a project tree.');
+    const index = buildProjectTreeIndex(client.getServerUrl(), projectId, projectName, joined);
+    const existing = Object.values(index.manifest.files);
+    if (existing.length > MAX_ENTITIES_IN_FRESH_PROJECT) {
+      throw new Error(
+        `New Overleaf project unexpectedly contains ${existing.length} files; refusing to clear it.`
+      );
+    }
+    for (const file of existing) {
+      await client.deleteEntity(projectId, file.entityType, file.entityId);
+      delete index.manifest.files[file.path];
+    }
+    index.manifest.rootDocId = undefined;
+    index.manifest.rootDocPath = undefined;
+    return index.manifest;
+  } finally {
+    session.disconnect();
+  }
+}
+
+async function createMetadataDirectories(root: string): Promise<void> {
+  for (const name of ['output', 'conflicts', path.join('base', 'docs'), 'trash']) {
+    await fs.mkdir(metadataPath(root, name), { recursive: true });
+  }
+}
+
 export interface CreateRemoteProjectOptions {
   /** Populates the freshly prepared, still-empty mirror. Throwing here rolls the project back. */
   scaffold(root: string): Promise<void>;
@@ -194,49 +249,27 @@ export async function createRemoteProjectMirror(
   const targetRoot = projectMirrorRoot(parentRoot, summary);
 
   let manifestWritten = false;
-  let session: Awaited<ReturnType<OverleafClient['connectSocket']>> | undefined;
   try {
     await fs.mkdir(path.dirname(targetRoot), { recursive: true });
     await fs.mkdir(targetRoot);
 
-    session = await client.connectSocket(projectId);
-    const joined = session.getProject();
-    if (!joined) throw new Error('Realtime connection did not provide a project tree.');
-    const index = buildProjectTreeIndex(client.getServerUrl(), projectId, projectName, joined);
-
-    // Guard against clearing a project that is not the blank one we just made. This should be
-    // impossible, but the alternative to being wrong here is deleting someone's work.
-    const existing = Object.values(index.manifest.files);
-    if (existing.length > MAX_ENTITIES_IN_FRESH_PROJECT) {
-      throw new Error(
-        `New Overleaf project unexpectedly contains ${existing.length} files; refusing to clear it.`
-      );
-    }
-    for (const file of existing) {
-      await client.deleteEntity(projectId, file.entityType, file.entityId);
-      delete index.manifest.files[file.path];
-    }
-    index.manifest.rootDocId = undefined;
-    index.manifest.rootDocPath = undefined;
-
+    const manifest = await emptyFreshProject(client, projectId, projectName);
     await options.scaffold(targetRoot);
 
-    for (const name of ['output', 'conflicts', path.join('base', 'docs'), 'trash']) {
-      await fs.mkdir(metadataPath(targetRoot, name), { recursive: true });
-    }
+    await createMetadataDirectories(targetRoot);
     await ensureLocalIgnoreFile(targetRoot);
-    await writeManifest(targetRoot, index.manifest);
+    await writeManifest(targetRoot, manifest);
     manifestWritten = true;
-    await writeMirrorSupportFiles(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
+    await writeMirrorSupportFiles(targetRoot, manifest.rootDocPath, manifest.compiler);
     await initializeMirrorGitRepository(targetRoot, `Initial Overleaf project: ${projectName}`);
   } catch (error) {
     if (!manifestWritten) {
+      // This function created targetRoot moments ago, so removing it whole is safe here - unlike
+      // publishLocalFolder, where the directory belongs to the user.
       await fs.rm(targetRoot, { recursive: true, force: true }).catch(() => undefined);
       await client.deleteProject(projectId).catch(() => undefined);
     }
     throw error;
-  } finally {
-    session?.disconnect();
   }
 
   await (options.register ?? registerSharedMirror)(targetRoot);
@@ -250,12 +283,163 @@ export async function createRemoteProjectMirror(
   return { root: targetRoot, projectId, published: true };
 }
 
-export async function writeMirrorSupportFiles(root: string, rootDocPath?: string, compiler?: string): Promise<void> {
-  await Promise.all([
-    writeLocalVsCodeSettings(root, rootDocPath, compiler),
-    writeLocalLatexmkRc(root, rootDocPath),
-    fs.writeFile(path.join(root, 'AGENTS.md'), AGENTS_CONTENT, 'utf8')
-  ]);
+/**
+ * Writes the editor, latexmk and agent files a mirror relies on. Returns the paths it left alone.
+ *
+ * A mirror created from scratch owns its folder, so overwriting is right there. A folder published
+ * in place already belongs to the user and may carry its own versions of every one of these files;
+ * `overwriteExisting: false` keeps theirs and reports what was kept, so they can merge by hand.
+ */
+/** A manifest with nothing tracked, used to ask scanLocalProject what a folder would sync. */
+function untrackedManifest(): OverleafCodexManifest {
+  return {
+    schemaVersion: 3,
+    serverUrl: '',
+    projectId: '',
+    projectName: '',
+    files: {},
+    folders: { '': { path: '', entityId: '' } },
+    ignore: [...DEFAULT_IGNORE_PATTERNS],
+    lastSyncAt: new Date(0).toISOString()
+  };
+}
+
+export interface LocalPublishPreview {
+  files: Array<{ path: string; size: number }>;
+  totalBytes: number;
+}
+
+/**
+ * Lists what publishing `root` would upload, applying the same rules a sync would: the manifest
+ * ignore patterns, the toolkit exclusions, the default local-ignore list for untracked paths, and
+ * isAlwaysLocal. Build output, PDFs, `.git` and editor state therefore never appear here.
+ */
+export async function previewLocalPublish(
+  root: string,
+  isExcluded: (relPath: string) => boolean = () => false
+): Promise<LocalPublishPreview> {
+  const scan = await scanLocalProject(root, untrackedManifest());
+  const files = scan.files
+    .filter(relPath => !isAlwaysLocal(relPath) && !isExcluded(relPath))
+    .map(relPath => ({ path: relPath, size: scan.fileMetadata.get(relPath)?.size ?? 0 }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+  return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0) };
+}
+
+/**
+ * Returns the .tex files that declare a \documentclass, i.e. the ones that could be a root
+ * document. main.tex sorts first, then shallower paths, so a caller offering a choice leads with
+ * the conventional answer. Comments are stripped first so a commented-out declaration is ignored.
+ */
+export async function detectRootDocuments(root: string, candidatePaths: string[]): Promise<string[]> {
+  const found: string[] = [];
+  for (const relPath of candidatePaths) {
+    if (!/\.tex$/i.test(relPath)) continue;
+    const text = await readTextFileBounded(path.join(root, relPath), MAX_METADATA_JSON_BYTES).catch(() => '');
+    if (extractDocumentclassDeclaration(stripTexComments(text))) found.push(relPath);
+  }
+  const depth = (relPath: string) => relPath.split('/').length;
+  return found.sort((a, b) => {
+    const aMain = path.posix.basename(a) === 'main.tex' ? 0 : 1;
+    const bMain = path.posix.basename(b) === 'main.tex' ? 0 : 1;
+    return aMain - bMain || depth(a) - depth(b) || a.localeCompare(b);
+  });
+}
+
+export interface PublishLocalFolderOptions {
+  /** Uploads the folder's content. Runs after the manifest exists, so failures do not roll back. */
+  publish(root: string, client: OverleafClient, projectId: string): Promise<void>;
+  register?(root: string): Promise<unknown>;
+}
+
+export interface PublishLocalFolderResult {
+  root: string;
+  projectId: string;
+  published: boolean;
+  publishError?: Error;
+  /** Support files that already existed and were left as the user had them. */
+  keptFiles: string[];
+}
+
+/**
+ * Publishes an existing local folder to a new Overleaf project, turning the folder itself into
+ * the mirror.
+ *
+ * Unlike createRemoteProjectMirror, this function does not own `root`: it belongs to the user and
+ * may hold years of work. So rollback removes only what this call created - the metadata folder,
+ * the ignore file if it was new, and the remote project - and never the folder itself. Support
+ * files the user already has are kept rather than overwritten.
+ */
+export async function publishLocalFolder(
+  client: OverleafClient,
+  root: string,
+  projectName: string,
+  rootDocPath: string,
+  options: PublishLocalFolderOptions
+): Promise<PublishLocalFolderResult> {
+  if (await exists(manifestPath(root))) {
+    throw new Error('This folder is already an Overleaf mirror.');
+  }
+
+  // Record what exists before touching anything, so rollback can tell ours from theirs.
+  const metadataRoot = metadataPath(root);
+  const ignoreFile = path.join(root, LOCAL_IGNORE_NAME);
+  const metadataExisted = await exists(metadataRoot);
+  const ignoreExisted = await exists(ignoreFile);
+
+  const projectId = await client.createProject(projectName);
+  let manifestWritten = false;
+  let keptFiles: string[] = [];
+  try {
+    const manifest = await emptyFreshProject(client, projectId, projectName);
+    // The root doc has no remote entity yet, so only the path is known; the id arrives with it.
+    manifest.rootDocPath = rootDocPath;
+    await createMetadataDirectories(root);
+    await ensureLocalIgnoreFile(root);
+    await writeManifest(root, manifest);
+    manifestWritten = true;
+    keptFiles = await writeMirrorSupportFiles(root, rootDocPath, manifest.compiler, { overwriteExisting: false });
+  } catch (error) {
+    if (!manifestWritten) {
+      if (!metadataExisted) await fs.rm(metadataRoot, { recursive: true, force: true }).catch(() => undefined);
+      if (!ignoreExisted) await fs.rm(ignoreFile, { force: true }).catch(() => undefined);
+      await client.deleteProject(projectId).catch(() => undefined);
+    }
+    throw error;
+  }
+
+  await (options.register ?? registerSharedMirror)(root);
+
+  try {
+    await options.publish(root, client, projectId);
+  } catch (error) {
+    return { root, projectId, published: false, publishError: error as Error, keptFiles };
+  }
+  return { root, projectId, published: true, keptFiles };
+}
+
+export async function writeMirrorSupportFiles(
+  root: string,
+  rootDocPath?: string,
+  compiler?: string,
+  options: { overwriteExisting?: boolean } = {}
+): Promise<string[]> {
+  const overwrite = options.overwriteExisting ?? true;
+  const rootDir = rootDocPath ? path.posix.dirname(rootDocPath) : '.';
+  const writers: Array<[string, () => Promise<void>]> = [
+    ['.vscode/settings.json', () => writeLocalVsCodeSettings(root, rootDocPath, compiler)],
+    [path.posix.join(rootDir, '.latexmkrc'), () => writeLocalLatexmkRc(root, rootDocPath)],
+    ['AGENTS.md', () => fs.writeFile(path.join(root, 'AGENTS.md'), AGENTS_CONTENT, 'utf8')]
+  ];
+  const kept: string[] = [];
+  await Promise.all(writers.map(async ([relative, write]) => {
+    if (!overwrite && await exists(path.join(root, relative))) {
+      kept.push(relative);
+      return;
+    }
+    await write();
+  }));
+  return kept.sort();
 }
 
 export async function initializeMirrorGitRepository(
