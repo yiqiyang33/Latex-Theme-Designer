@@ -26600,6 +26600,7 @@ function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPa
       items.push({
         path: folderPath,
         status: "local only",
+        entityType: "folder",
         blocking: true,
         blockingScope: "subtree",
         localPath: folderPath,
@@ -31183,11 +31184,16 @@ var RealtimeSyncService = class {
       syncBinaryFiles: this.canSyncBinaryFiles()
     }).pushes.filter((item) => !this.docStates.get(item.path)?.paused);
     let pushed = 0;
-    for (const item of candidates) {
-      progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${candidates.length}` });
+    for (const [index, item] of candidates.entries()) {
+      progress?.report({ message: `Pushing safe local changes ${index + 1}/${candidates.length}` });
       this.log(`Auto-pushing local-ahead document ${item.path}.`);
-      await this.pushLocalFile(item.path, false);
-      pushed += 1;
+      try {
+        await this.pushLocalFile(item.path, false);
+        pushed += 1;
+      } catch (error) {
+        if (isOverleafAuthenticationError(error)) throw error;
+        this.log(`Auto-push of ${item.path} failed: ${formatUnknownError(error)}`);
+      }
     }
     if (pushed === 0) {
       return report;
@@ -33768,10 +33774,18 @@ var OverleafService = class {
         mode: "full",
         reason: "initial-publish"
       });
+      const failed = [];
       for (const item of report.items) {
         if (item.entityType === "folder" || item.status !== "local only") continue;
-        await this.realtimeSync.pushLocalFile(item.path, false);
+        try {
+          await this.realtimeSync.pushLocalFile(item.path, false);
+        } catch (error) {
+          if (isOverleafAuthenticationError(error)) throw error;
+          this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Could not upload ${item.path}: ${formatUnknownError(error)}`);
+          failed.push(item.path);
+        }
       }
+      if (failed.length) throw new Error(`${failed.length} file(s) did not upload: ${failed.join(", ")}.`);
     } finally {
       if (!this.isWorkspaceRoot(root)) {
         await this.stopRealtimeSync(root).catch(() => void 0);

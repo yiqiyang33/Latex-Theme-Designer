@@ -150,8 +150,9 @@ export function classifyFolderStructure(
     const remoteFolder = remote.folders[folderPath];
     const localExists = localPaths ? localPaths.has(folderPath) : true;
     if (!localFolder && !remoteFolder && localExists) {
-      items.push({ path: folderPath, status: 'local only', blocking: true, blockingScope: 'subtree', localPath: folderPath,
-        changeKind: 'create', message: 'This local directory is not represented by the trusted manifest or Overleaf tree.' });
+      items.push({ path: folderPath, status: 'local only', entityType: 'folder', blocking: true, blockingScope: 'subtree',
+        localPath: folderPath, changeKind: 'create',
+        message: 'This local directory is not represented by the trusted manifest or Overleaf tree.' });
       continue;
     }
     if (localFolder && !localExists) {

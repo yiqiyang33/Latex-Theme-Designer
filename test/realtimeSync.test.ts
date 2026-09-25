@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { OverleafHttpError } from '../src/overleaf/overleafClient';
 import { RealtimeSyncService } from '../src/overleaf/realtimeSync';
 import { SyncGate } from '../src/overleaf/syncGate';
 import { createExtensionContextMock, createOutputChannelMock, resetTestState } from './mocks/vscode';
@@ -270,6 +271,46 @@ describe('reconnect backoff', () => {
     expect(first).toBe(1);
     expect(second).toBe(2);
     for (const timer of [internals.reconnectTimer]) if (timer) clearTimeout(timer);
+  });
+});
+
+describe('startup auto-push', () => {
+  const localOnly = (paths: string[]) => ({
+    schemaVersion: 2, checkedAt: 'now', projectId: 'p1', projectName: 'p', hasBlocking: true, completeness: 'complete',
+    items: paths.map(relPath => ({ path: relPath, entityType: 'doc', status: 'local only', blocking: true }))
+  });
+
+  function autoPushService(pushLocalFile: (relPath: string) => Promise<void>) {
+    const { internals } = makeService();
+    internals.root = tmpRoot;
+    internals.client = {};
+    internals.canAutoPushLocalAhead = () => true;
+    internals.canSyncBinaryFiles = () => true;
+    internals.pushLocalFile = vi.fn(pushLocalFile);
+    internals.checkSyncStatus = vi.fn(async () => localOnly([]));
+    return internals;
+  }
+
+  it('keeps pushing past a file that fails, instead of aborting sync startup', async () => {
+    const pushed: string[] = [];
+    const internals = autoPushService(async relPath => {
+      if (relPath === 'b.tex') throw new Error('upload exploded');
+      pushed.push(relPath);
+    });
+
+    await expect(internals.autoPushLocalAhead(localOnly(['a.tex', 'b.tex', 'c.tex']))).resolves.toBeDefined();
+    expect(pushed).toEqual(['a.tex', 'c.tex']);
+    await flushActivityLog(internals);
+  });
+
+  it('still stops on an expired login, so the re-login prompt can run', async () => {
+    const internals = autoPushService(async () => {
+      throw new OverleafHttpError('Forbidden', 403);
+    });
+
+    await expect(internals.autoPushLocalAhead(localOnly(['a.tex', 'b.tex']))).rejects.toThrow('Forbidden');
+    expect(internals.pushLocalFile).toHaveBeenCalledTimes(1);
+    await flushActivityLog(internals);
   });
 });
 

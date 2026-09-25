@@ -25,6 +25,7 @@ import { getWithLegacyFallback, hasExplicitConfigurationValue, needsGlobalConfig
 import { firstWorkspaceMirrorRoot, resolveMirrorRootForPath, workspaceContainsPath } from "../src/overleaf/mirrorRoots";
 import { assertNoSymlinkPath, formatUnknownError, gitBlobHash, normalizeProjectRelativePath, normalizeServerUrl, sanitizeDiagnosticText, validateProjectPathSegment } from "../src/overleaf/util";
 import { validateManifest } from "../src/overleaf/metadataValidation";
+import { planSafeSyncActions } from "../src/overleaf/syncCommandCore";
 import {
   isCollaboratorPosition,
   isOverleafAuthenticationError,
@@ -230,6 +231,25 @@ describe("Overleaf integration primitives", () => {
       ".git": { path: ".git", entityId: "remote-git", parentFolderId: "root" }
     };
     expect(classifyFolderStructure(make(gitFolder), make(gitFolder), undefined, []).items).toEqual([]);
+  });
+
+  it("types a new local directory as a folder, so nothing tries to upload it as a file", () => {
+    // Regression: the first real publish died on "Binary transfer source is not a file" because
+    // this item had no entityType and every "skip folders" filter let it through.
+    const make = (folders: OverleafCodexManifest["folders"]): OverleafCodexManifest => ({
+      schemaVersion: 3, serverUrl: "https://www.overleaf.com/", projectId: "project", projectName: "Project",
+      files: {}, folders, ignore: [], lastSyncAt: "now"
+    });
+    const root = { "": { path: "", entityId: "root" } };
+    const { items } = classifyFolderStructure(make(root), make(root), undefined, ["Fig"]);
+    expect(items).toMatchObject([{ path: "Fig", status: "local only", entityType: "folder" }]);
+
+    const report: SyncStatusReport = {
+      schemaVersion: 2, checkedAt: "now", projectId: "project", projectName: "Project", hasBlocking: true, completeness: "complete",
+      items: [...items, { path: "Fig/cover.png", entityType: "file", status: "local only", blocking: true }]
+    };
+    expect(planSafeSyncActions(report, { autoPushLocalAhead: true, syncBinaryFiles: true }).pushes.map(item => item.path))
+      .toEqual(["Fig/cover.png"]);
   });
 
   it("repairs corroborated folder renames and missing folder metadata", () => {

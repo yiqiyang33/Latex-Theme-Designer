@@ -447,10 +447,18 @@ export class OverleafService implements vscode.Disposable {
         mode: "full",
         reason: "initial-publish"
       });
+      const failed: string[] = [];
       for (const item of report.items) {
         if (item.entityType === "folder" || item.status !== "local only") continue;
-        await this.realtimeSync.pushLocalFile(item.path, false);
+        try {
+          await this.realtimeSync.pushLocalFile(item.path, false);
+        } catch (error) {
+          if (isOverleafAuthenticationError(error)) throw error;
+          this.output.appendLine(`[${new Date().toISOString()}] Could not upload ${item.path}: ${formatUnknownError(error)}`);
+          failed.push(item.path);
+        }
       }
+      if (failed.length) throw new Error(`${failed.length} file(s) did not upload: ${failed.join(", ")}.`);
     } finally {
       if (!this.isWorkspaceRoot(root)) {
         await this.stopRealtimeSync(root).catch(() => undefined);

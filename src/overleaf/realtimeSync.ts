@@ -8,6 +8,7 @@ import {
   isOverleafDoc,
   isOverleafFileRef,
   isOverleafFolder,
+  isOverleafAuthenticationError,
   isOverleafOtUpdate,
   OverleafClient,
   OverleafSocketSession
@@ -1527,11 +1528,18 @@ export class RealtimeSyncService implements vscode.Disposable {
       syncBinaryFiles: this.canSyncBinaryFiles()
     }).pushes.filter(item => !this.docStates.get(item.path)?.paused);
     let pushed = 0;
-    for (const item of candidates) {
-      progress?.report({ message: `Pushing safe local changes ${pushed + 1}/${candidates.length}` });
+    for (const [index, item] of candidates.entries()) {
+      progress?.report({ message: `Pushing safe local changes ${index + 1}/${candidates.length}` });
       this.log(`Auto-pushing local-ahead document ${item.path}.`);
-      await this.pushLocalFile(item.path, false);
-      pushed += 1;
+      try {
+        await this.pushLocalFile(item.path, false);
+        pushed += 1;
+      } catch (error) {
+        // A file that cannot be pushed stays in the report for review. Letting it throw would
+        // skip every file after it and, at startup, stop sync from starting at all.
+        if (isOverleafAuthenticationError(error)) throw error;
+        this.log(`Auto-push of ${item.path} failed: ${formatUnknownError(error)}`);
+      }
     }
 
     if (pushed === 0) {

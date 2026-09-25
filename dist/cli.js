@@ -19726,6 +19726,7 @@ function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPa
       items.push({
         path: folderPath,
         status: "local only",
+        entityType: "folder",
         blocking: true,
         blockingScope: "subtree",
         localPath: folderPath,
