@@ -2,7 +2,13 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { detectRootDocuments, previewLocalPublish, publishLocalFolder } from '../src/overleaf/mirrorCore';
+import {
+  detectRootDocuments,
+  isPublishedInPlace,
+  localIgnoreEntries,
+  previewLocalPublish,
+  publishLocalFolder
+} from '../src/overleaf/mirrorCore';
 import type { OverleafClient } from '../src/overleaf/overleafClient';
 
 /**
@@ -48,18 +54,24 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
   } as unknown as OverleafClient;
 }
 
-const opts = (publish = async () => undefined) => ({ publish, register: async () => undefined });
+const opts = (publish = async () => undefined, excludedPaths?: string[]) => ({ publish, register: async () => undefined, excludedPaths });
+
+/**
+ * A client whose server URL the manifest validator rejects, so writeManifest throws - after the
+ * metadata folder, the in-place marker and the ignore entries already exist, which is exactly the
+ * window rollback has to clean up.
+ */
+const failingAtManifest = () => fakeClient({ getServerUrl: () => undefined });
 
 describe('publishLocalFolder rollback never touches the user folder', () => {
   it('keeps every user file when a failure lands before the manifest', async () => {
     await write('paper.tex', '\\documentclass{article}\n');
     await write('figures/plot.png', 'PNG');
     await write('notes/draft.md', 'my notes');
-    const client = fakeClient();
+    const client = failingAtManifest();
 
-    // An unsafe root doc makes writeManifest reject, after the metadata folders already exist.
-    await expect(publishLocalFolder(client, root, 'Paper', '../escape.tex', opts()))
-      .rejects.toThrow(/rootDocPath/);
+    await expect(publishLocalFolder(client, root, 'Paper', 'paper.tex', opts(undefined, ['notes/draft.md'])))
+      .rejects.toThrow(/serverUrl/);
 
     // The user's work is untouched...
     await expect(read('paper.tex')).resolves.toBe('\\documentclass{article}\n');
@@ -72,12 +84,23 @@ describe('publishLocalFolder rollback never touches the user folder', () => {
     expect((client.deleteProject as any)).toHaveBeenCalledWith('proj-1');
   });
 
-  it('leaves a pre-existing ignore file alone on rollback', async () => {
+  it('restores a pre-existing ignore file exactly on rollback, appended entries and all', async () => {
     await write('paper.tex', '\\documentclass{article}\n');
-    await write('.overleaf-codexignore', '# mine\nscratch/\n');
+    await write('notes.txt', 'n');
+    await write('.overleaf-codexignore', '# mine\nscratch/');
 
-    await expect(publishLocalFolder(fakeClient(), root, 'Paper', '../escape.tex', opts())).rejects.toThrow();
-    await expect(read('.overleaf-codexignore')).resolves.toBe('# mine\nscratch/\n');
+    await expect(publishLocalFolder(failingAtManifest(), root, 'Paper', 'paper.tex', opts(undefined, ['notes.txt'])))
+      .rejects.toThrow();
+    await expect(read('.overleaf-codexignore')).resolves.toBe('# mine\nscratch/');
+  });
+
+  it('keeps a pre-existing metadata folder but removes the marker it added', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    await write('.overleaf-codex/leftover.txt', 'from an earlier attempt');
+
+    await expect(publishLocalFolder(failingAtManifest(), root, 'Paper', 'paper.tex', opts())).rejects.toThrow();
+    await expect(read('.overleaf-codex/leftover.txt')).resolves.toBe('from an earlier attempt');
+    expect(await isPublishedInPlace(root)).toBe(false);
   });
 
   it('keeps the mirror and reports rather than deleting when only the upload fails', async () => {
@@ -130,7 +153,91 @@ describe('publishLocalFolder keeps the files a user already has', () => {
   });
 });
 
+describe('publishLocalFolder leaves unchecked files out', () => {
+  it('appends them to the ignore file, so neither this upload nor later syncs pick them up', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    await write('figures/draft [old].png', 'PNG');
+    await write('notes.txt', 'n');
+    await write('.overleaf-codexignore', '# mine\nscratch/\n');
+
+    await publishLocalFolder(fakeClient(), root, 'Paper', 'paper.tex', opts(undefined, ['figures/draft [old].png', 'notes.txt']));
+
+    const ignore = await read('.overleaf-codexignore');
+    expect(ignore.startsWith('# mine\nscratch/\n')).toBe(true);
+    expect(ignore).toContain('/figures/draft \\[old].png\n/notes.txt\n');
+    expect((await previewLocalPublish(root)).files.map(file => file.path)).toEqual(['paper.tex']);
+  });
+
+  it('refuses to leave out the main document, before creating anything remotely', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    const client = fakeClient();
+
+    await expect(publishLocalFolder(client, root, 'Paper', 'paper.tex', opts(undefined, ['paper.tex'])))
+      .rejects.toThrow(/main document/);
+    expect((client.createProject as any)).not.toHaveBeenCalled();
+  });
+
+  it('refuses a main document that would not be uploaded', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    const client = fakeClient();
+
+    await expect(publishLocalFolder(client, root, 'Paper', '../escape.tex', opts())).rejects.toThrow(/not among the files/);
+    expect((client.createProject as any)).not.toHaveBeenCalled();
+  });
+
+  it('marks the folder as published in place, so deleting the mirror keeps it', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    expect(await isPublishedInPlace(root)).toBe(false);
+    await publishLocalFolder(fakeClient(), root, 'Paper', 'paper.tex', opts());
+    expect(await isPublishedInPlace(root)).toBe(true);
+  });
+});
+
+describe('publishLocalFolder refuses to nest mirrors', () => {
+  it('refuses a folder inside a mirror', async () => {
+    await write('.overleaf-codex/manifest.json', '{}');
+    await write('chapter/paper.tex', '\\documentclass{article}\n');
+    const client = fakeClient();
+
+    await expect(publishLocalFolder(client, path.join(root, 'chapter'), 'Chapter', 'paper.tex', opts()))
+      .rejects.toThrow(/inside the Overleaf mirror/);
+    expect((client.createProject as any)).not.toHaveBeenCalled();
+  });
+
+  it('refuses a folder that contains a mirror', async () => {
+    await write('paper.tex', '\\documentclass{article}\n');
+    await write('old-copy/.overleaf-codex/manifest.json', '{}');
+    const client = fakeClient();
+
+    expect((await previewLocalPublish(root)).nestedMirrors).toEqual(['old-copy']);
+    await expect(publishLocalFolder(client, root, 'Paper', 'paper.tex', opts())).rejects.toThrow(/contains another Overleaf mirror/);
+    expect((client.createProject as any)).not.toHaveBeenCalled();
+  });
+});
+
+describe('localIgnoreEntries', () => {
+  it('anchors each path and escapes the characters the ignore syntax would read as patterns', () => {
+    const excluded = ['a[1].tex', 'x*.png', '#notes.md', '!keep.tex', 'trailing.tex '];
+    const entries = localIgnoreEntries(excluded, [...excluded, 'a1.tex', 'xy.png', 'notes.md', 'keep.tex', 'trailing.tex']);
+    expect(entries).toEqual(['/a\\[1].tex', '/x\\*.png', '/#notes.md', '/!keep.tex', '/trailing.tex\\ ']);
+  });
+
+  it('rejects entries that would also catch a file nobody unchecked', () => {
+    // `?` has no escape, so it stays a one-character wildcard and would also match qa.tex.
+    expect(() => localIgnoreEntries(['q?.tex'], ['q?.tex', 'qa.tex'])).toThrow(/qa\.tex/);
+    expect(localIgnoreEntries(['q?.tex'], ['q?.tex', 'other.tex'])).toEqual(['/q?.tex']);
+  });
+});
+
 describe('previewLocalPublish', () => {
+  it('applies an ignore file the folder already has', async () => {
+    await write('main.tex', '\\documentclass{article}\n');
+    await write('scratch/try.tex', 'x');
+    await write('.overleaf-codexignore', 'scratch/\n');
+
+    expect((await previewLocalPublish(root)).files.map(file => file.path)).toEqual(['main.tex']);
+  });
+
   it('lists sources and leaves out build output, VCS and editor state', async () => {
     await write('main.tex', '\\documentclass{article}\n');
     await write('refs.bib', '@article{x}');

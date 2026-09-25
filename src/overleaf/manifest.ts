@@ -172,9 +172,13 @@ export async function readManifest(root: string): Promise<OverleafCodexManifest>
     throw new Error(`Overleaf manifest failed schema validation at ${validationError} and was quarantined at ${target}.`);
   }
   const manifest = migrateManifest(parsed as OverleafCodexManifest);
-  const ignoreContent = await ensureLocalIgnoreFile(root);
-  localIgnoreRules.set(manifest, createIgnore().add(ignoreContent));
+  setLocalIgnoreRules(manifest, await ensureLocalIgnoreFile(root));
   return manifest;
+}
+
+/** Makes shouldIgnoreUntrackedLocalPath apply `content` for this manifest, as readManifest does with the ignore file. */
+export function setLocalIgnoreRules(manifest: OverleafCodexManifest, content: string): void {
+  localIgnoreRules.set(manifest, createIgnore().add(content));
 }
 
 export async function ensureLocalIgnoreFile(root: string): Promise<string> {

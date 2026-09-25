@@ -10,11 +10,14 @@ import { MirrorManager, type LocalMirrorRecord, type LocalMirrorStatus } from ".
 import {
   createRemoteProjectMirror,
   detectRootDocuments,
+  findEnclosingMirror,
+  isPublishedInPlace,
   previewLocalPublish,
   publishLocalFolder,
   type CreateRemoteProjectResult,
   type PublishLocalFolderResult
 } from "./mirrorCore";
+import { projectNameError } from "./projectName";
 import { isOverleafAuthenticationError, OverleafClient, OverleafHttpError } from "./overleafClient";
 import { RealtimeSyncService, type ConflictInfo, type SyncActivityEntry } from "./realtimeSync";
 import { SecretStore } from "./secretStore";
@@ -64,18 +67,31 @@ interface OwnerStateSnapshot {
   activityLog: SyncActivityEntry[];
 }
 
-type CommandRegistrar = (id: string, handler: (...args: any[]) => unknown) => vscode.Disposable;
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/** What the publish form shows for a folder. */
+export interface PublishFormState {
+  folder: string;
+  folderName: string;
+  /** Why the folder cannot be published, when it cannot. */
+  blockedReason?: string;
+  /** Documents Overleaf could compile, the conventional choice first. */
+  roots: string[];
+  files: Array<{ path: string; size: number }>;
+  totalBytes: number;
+  signedIn: boolean;
 }
 
-/** Shows the upload list in a confirmation dialog without letting a large folder flood it. */
-function listForConfirmation(paths: string[], limit = 25): string {
-  const shown = paths.slice(0, limit).join("\n");
-  return paths.length > limit ? `${shown}\n... and ${paths.length - limit} more` : shown;
+export interface PublishFormResult {
+  root: string;
+  published: boolean;
+  keptFiles: string[];
+  /** Whether this window keeps syncing the new mirror, i.e. it is one of its workspace folders. */
+  syncingHere: boolean;
+}
+
+type CommandRegistrar = (id: string, handler: (...args: any[]) => unknown) => vscode.Disposable;
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 export class OverleafService implements vscode.Disposable {
@@ -136,7 +152,6 @@ export class OverleafService implements vscode.Disposable {
       ["overleafCodex.loginWithCookie", (candidate?: unknown) => this.loginWithCookie(candidate)],
       ["overleafCodex.listProjects", (candidate?: unknown) => this.listProjects(candidate)],
       ["overleafCodex.openProjectLocally", (candidate?: unknown) => this.openProjectLocally(candidate)],
-      ["overleafCodex.publishFolder", (candidate?: unknown) => this.publishFolderInteractive(candidate)],
       ["overleafCodex.startRealtimeSync", (candidate?: unknown) => this.startRealtimeSync(candidate)],
       ["overleafCodex.stopRealtimeSync", (candidate?: unknown) => this.stopRealtimeSync(candidate)],
       ["overleafCodex.checkSyncStatus", (candidate?: unknown) => this.checkSyncStatus("incremental", candidate)],
@@ -289,92 +304,108 @@ export class OverleafService implements vscode.Disposable {
   async publishFolderToOverleaf(
     folder: string,
     projectName: string,
-    rootDocPath: string
+    rootDocPath: string,
+    excludedPaths: string[] = []
   ): Promise<PublishLocalFolderResult> {
     const client = await this.clientForNewProject("Publish to Overleaf");
     return publishLocalFolder(client, folder, projectName, rootDocPath, {
+      excludedPaths,
       publish: root => this.uploadEverythingLocal(root, client)
     });
   }
 
   /**
-   * Walks the user through publishing a folder: pick it, choose the root document, review what
-   * will be uploaded, then create the project. Everything that can fail cheaply is checked before
-   * the project exists, so a rejected folder never leaves anything behind on Overleaf.
+   * Everything the publish form needs for `folder`. What makes a folder unpublishable is reported
+   * as blockedReason rather than thrown, so the form can say why instead of just failing.
    */
-  private async publishFolderInteractive(candidate?: unknown): Promise<void> {
-    const folder = await this.pickFolderToPublish(candidate);
-    if (!folder) return;
-
+  async publishForm(folder: string): Promise<PublishFormState> {
+    const folderName = path.basename(folder);
+    const state: PublishFormState = {
+      folder,
+      folderName,
+      roots: [],
+      files: [],
+      totalBytes: 0,
+      signedIn: (await this.secrets.listServers()).length > 0
+    };
+    if (!folder || !await fs.stat(folder).then(stat => stat.isDirectory(), () => false)) {
+      return { ...state, blockedReason: "This folder does not exist." };
+    }
     if (await fs.stat(manifestPath(folder)).then(() => true, () => false)) {
-      vscode.window.showWarningMessage(`${path.basename(folder)} is already an Overleaf mirror; it syncs with its existing project.`);
-      return;
+      return { ...state, blockedReason: `${folderName} is already an Overleaf mirror; it syncs with its existing project.` };
     }
-
+    const enclosing = await findEnclosingMirror(folder);
+    if (enclosing) {
+      return { ...state, blockedReason: `${folderName} is inside the Overleaf mirror at ${enclosing}; its files already sync with that project.` };
+    }
     const preview = await previewLocalPublish(folder, relPath => !this.realtimeSync.canSyncToolkitOverrides() && isToolkitOverridePath(relPath));
+    const scanned = { ...state, files: preview.files, totalBytes: preview.totalBytes };
+    if (preview.nestedMirrors.length) {
+      return { ...scanned, blockedReason: `${folderName} contains another Overleaf mirror (${preview.nestedMirrors.join(", ")}); publish a folder that does not.` };
+    }
     const roots = await detectRootDocuments(folder, preview.files.map(file => file.path));
-    if (roots.length === 0) {
-      vscode.window.showErrorMessage(
-        `No .tex file in ${path.basename(folder)} declares a \\documentclass, so there is no document to compile on Overleaf.`
-      );
-      return;
+    if (!roots.length) {
+      return { ...scanned, blockedReason: `No .tex file in ${folderName} declares a \\documentclass, so there is nothing for Overleaf to compile.` };
     }
-    const rootDocPath = roots.length === 1 ? roots[0] : await vscode.window.showQuickPick(roots, {
-      title: "Publish to Overleaf: Main Document",
-      placeHolder: "Several files declare a \\documentclass. Which one should Overleaf compile?"
-    });
-    if (!rootDocPath) return;
-
-    const projectName = await vscode.window.showInputBox({
-      title: "Publish to Overleaf: Project Name",
-      value: path.basename(folder),
-      validateInput: value => value.trim() ? undefined : "Project name is required."
-    });
-    if (!projectName?.trim()) return;
-
-    const confirm = await vscode.window.showWarningMessage(
-      `Upload ${preview.files.length} file(s), ${formatBytes(preview.totalBytes)}, from ${path.basename(folder)} `
-        + `to a new Overleaf project "${projectName.trim()}"? The folder itself becomes the mirror, `
-        + `so a .overleaf-codex folder will be added to it.`,
-      { modal: true, detail: listForConfirmation(preview.files.map(file => file.path)) },
-      "Publish"
-    );
-    if (confirm !== "Publish") return;
-
-    try {
-      const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `Publishing ${path.basename(folder)} to Overleaf`, cancellable: false },
-        () => this.publishFolderToOverleaf(folder, projectName.trim(), rootDocPath)
-      );
-      this.onChanged();
-      const kept = result.keptFiles.length
-        ? ` Kept your existing ${result.keptFiles.join(", ")}; merge the toolkit's settings by hand if you want its local build.`
-        : "";
-      if (!result.published) {
-        this.output.appendLine(`[${new Date().toISOString()}] PUBLISH FOLDER UPLOAD FAILED: ${result.publishError?.message ?? "unknown"}`);
-        vscode.window.showWarningMessage(
-          `Created the Overleaf project, but not every file finished uploading. The folder is now a mirror, so running a sync will retry.${kept}`
-        );
-        return;
-      }
-      vscode.window.showInformationMessage(`Published ${path.basename(folder)} to Overleaf.${kept}`);
-    } catch (error) {
-      this.output.appendLine(`[${new Date().toISOString()}] PUBLISH FOLDER FAILED: ${formatUnknownError(error)}`);
-      vscode.window.showErrorMessage(`Could not publish to Overleaf: ${formatUnknownError(error)}`);
-    }
+    return { ...scanned, roots };
   }
 
-  private async pickFolderToPublish(candidate?: unknown): Promise<string | undefined> {
-    if (candidate instanceof vscode.Uri && candidate.scheme === "file") return candidate.fsPath;
-    const folders = (vscode.workspace.workspaceFolders ?? []).filter(folder => folder.uri.scheme === "file");
-    if (folders.length === 1) return folders[0].uri.fsPath;
+  /** Runs a publish the form asked for. publishLocalFolder re-checks the folder, which may have changed since. */
+  private async publishFromForm(payload: Record<string, unknown>): Promise<PublishFormResult> {
+    const folder = typeof payload.folder === "string" ? payload.folder : "";
+    const projectName = typeof payload.projectName === "string" ? payload.projectName.trim() : "";
+    const rootDocPath = typeof payload.rootDocPath === "string" ? payload.rootDocPath : "";
+    const nameError = projectNameError(projectName);
+    if (nameError) throw new Error(nameError);
+    if (!(await detectRootDocuments(folder, [rootDocPath])).length) {
+      throw new Error(`${rootDocPath || "The main document"} does not declare a \\documentclass.`);
+    }
+
+    const folderName = path.basename(folder);
+    let result: PublishLocalFolderResult;
+    try {
+      result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Publishing ${folderName} to Overleaf`, cancellable: false },
+        () => this.publishFolderToOverleaf(folder, projectName, rootDocPath, stringList(payload.excluded))
+      );
+    } catch (error) {
+      this.output.appendLine(`[${new Date().toISOString()}] PUBLISH FOLDER FAILED: ${formatUnknownError(error)}`);
+      throw error;
+    }
+    this.onChanged();
+
+    const syncingHere = this.isWorkspaceRoot(result.root);
+    const kept = result.keptFiles.length
+      ? ` Kept your existing ${result.keptFiles.join(", ")}; merge the toolkit's settings by hand if you want its local build.`
+      : "";
+    const openAction = syncingHere ? [] : ["Open Folder"];
+    const followUp = (choice: string | undefined) => {
+      if (choice === "Open Folder") void vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(result.root), { forceNewWindow: true });
+    };
+    // Not awaited: the form should settle now, not when the notification is dismissed.
+    if (!result.published) {
+      this.output.appendLine(`[${new Date().toISOString()}] PUBLISH FOLDER UPLOAD FAILED: ${result.publishError?.message ?? "unknown"}`);
+      void vscode.window.showWarningMessage(
+        `Created the Overleaf project, but not every file finished uploading. The folder is now a mirror, so syncing it will retry.${kept}`,
+        ...openAction
+      ).then(followUp);
+    } else {
+      const where = syncingHere ? "" : " Open the folder to keep it in sync.";
+      void vscode.window.showInformationMessage(`Published ${folderName} to Overleaf.${where}${kept}`, ...openAction).then(followUp);
+    }
+    return { root: result.root, published: result.published, keptFiles: result.keptFiles, syncingHere };
+  }
+
+  private async pickFolderForPublishForm(current: unknown): Promise<PublishFormState | null> {
     const picked = await vscode.window.showOpenDialog({
+      title: "Publish to Overleaf",
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
-      openLabel: "Publish to Overleaf"
+      openLabel: "Select Folder",
+      defaultUri: typeof current === "string" && current ? vscode.Uri.file(current) : undefined
     });
-    return picked?.[0]?.fsPath;
+    return picked?.[0]?.scheme === "file" ? this.publishForm(picked[0].fsPath) : null;
   }
 
   /**
@@ -382,11 +413,10 @@ export class OverleafService implements vscode.Disposable {
    * we are signed in to it, so the common single-account case asks nothing mid-flow.
    */
   private async clientForNewProject(pickerTitle: string): Promise<OverleafClient> {
-    const state = await this.state();
-    if (!state.available) throw new Error("Overleaf support is unavailable in this environment.");
-    if (!state.authenticated) throw new Error("Sign in to Overleaf before creating a project.");
-
+    // Asked of the credential store rather than state(): state() describes the workspace's mirror,
+    // and the folder a project is created from is by definition not one yet.
     const known = await this.secrets.listServers();
+    if (!known.length) throw new Error("Sign in to Overleaf before creating a project.");
     const configured = normalizeServerUrl(this.getConfiguredServerUrl());
     const serverUrl = known.includes(configured)
       ? configured
@@ -403,16 +433,33 @@ export class OverleafService implements vscode.Disposable {
    * Issued explicitly rather than left to the reconcile's automatic push, which is gated on the
    * autoPushLocalAhead and syncBinaryFiles settings - a user who turned either off would otherwise
    * get an empty project and no error.
+   *
+   * A window syncs one project at a time, so the upload borrows this window's sync through the
+   * normal start path, which claims ownership of the new mirror. A mirror that is not one of this
+   * window's workspace folders is let go afterwards - otherwise it would keep syncing invisibly,
+   * alongside whichever window opens it - and the project that was syncing before resumes.
    */
   private async uploadEverythingLocal(root: string, client: OverleafClient): Promise<void> {
-    await this.realtimeSync.start(root, client);
-    const report = await this.realtimeSync.checkSyncStatus(root, client, undefined, {
-      mode: "full",
-      reason: "initial-publish"
-    });
-    for (const item of report.items) {
-      if (item.entityType === "folder" || item.status !== "local only") continue;
-      await this.realtimeSync.pushLocalFile(item.path, false);
+    const previousRoot = this.ownerCoordinator.currentRoot ?? (this.realtimeSync.running ? this.realtimeSync.currentRoot : undefined);
+    try {
+      await this.startRealtimeSync(root);
+      const report = await this.realtimeSync.checkSyncStatus(root, client, undefined, {
+        mode: "full",
+        reason: "initial-publish"
+      });
+      for (const item of report.items) {
+        if (item.entityType === "folder" || item.status !== "local only") continue;
+        await this.realtimeSync.pushLocalFile(item.path, false);
+      }
+    } finally {
+      if (!this.isWorkspaceRoot(root)) {
+        await this.stopRealtimeSync(root).catch(() => undefined);
+        if (previousRoot && previousRoot !== root) {
+          await this.startRealtimeSync(previousRoot).catch(error => this.output.appendLine(
+            `[${new Date().toISOString()}] Could not resume sync for ${previousRoot}: ${formatUnknownError(error)}`
+          ));
+        }
+      }
     }
   }
 
@@ -432,6 +479,9 @@ export class OverleafService implements vscode.Disposable {
       case "overleaf-login": await this.loginWithCookie(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-list-projects": await this.listProjects(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-open-project": await this.openProjectLocally(payload.workspacePath); return this.state(payload.workspacePath);
+      case "overleaf-publish-form": return this.publishForm(String(payload.folder ?? payload.workspacePath ?? ""));
+      case "overleaf-publish-pick-folder": return this.pickFolderForPublishForm(payload.folder);
+      case "overleaf-publish": return this.publishFromForm(payload);
       case "overleaf-start-sync": await this.startRealtimeSync(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-stop-sync": await this.stopRealtimeSync(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-check-sync": await this.checkSyncStatus(payload.mode === "full" ? "full" : "incremental", payload.workspacePath); return this.state(payload.workspacePath);
@@ -866,6 +916,20 @@ export class OverleafService implements vscode.Disposable {
       vscode.window.showWarningMessage("This Overleaf mirror is not available. Use Forget or Clear Missing Mirrors instead.");
       return;
     }
+    if (await isPublishedInPlace(mirror.root)) {
+      // The folder was the user's before it was a mirror, so only the sync metadata is ours to remove.
+      const choice = await vscode.window.showWarningMessage(
+        `"${mirror.name}" is a folder you published to Overleaf, so it will not be deleted. Stop syncing it and remove its .overleaf-codex metadata instead?`,
+        { modal: true, detail: "Your files stay where they are, and the Overleaf cloud project is not deleted." },
+        "Remove Sync Metadata"
+      );
+      if (choice !== "Remove Sync Metadata") return;
+      if (this.realtimeSync.currentRoot === mirror.root) await this.realtimeSync.stop();
+      await vscode.workspace.fs.delete(vscode.Uri.file(metadataPath(mirror.root)), { recursive: true, useTrash: true });
+      await this.mirrorManager.forgetLocalMirror(mirror.root);
+      this.onChanged();
+      return;
+    }
     const choice = await vscode.window.showWarningMessage(`Delete only the local mirror "${mirror.name}"? The Overleaf cloud project will not be deleted.`, { modal: true }, "Delete Local Mirror");
     if (choice !== "Delete Local Mirror") return;
     if (this.realtimeSync.currentRoot === mirror.root) await this.realtimeSync.stop();
@@ -1001,6 +1065,10 @@ export class OverleafService implements vscode.Disposable {
     return (vscode.workspace.workspaceFolders ?? [])
       .filter(folder => folder.uri.scheme === "file")
       .map(folder => folder.uri.fsPath);
+  }
+
+  private isWorkspaceRoot(root: string): boolean {
+    return this.workspaceFileRoots().some(folder => path.resolve(folder) === path.resolve(root));
   }
 
   private isMirrorRootOpen(root: string | undefined): boolean {

@@ -2,6 +2,7 @@ import type { ConfirmAction, ConfirmActionResult, ToolkitNotice } from "../types
 import { readWorkspaceUiState, TOOLKIT_SECTIONS, updateWorkspaceUiState } from "./uiState";
 import type { StructureTask, ToolkitSection } from "./uiState";
 import { buildStructureSummary } from "./structureSummary";
+import { projectNameError } from "../overleaf/projectName";
 
 type ToolkitRequest = { id: string; command: string; payload?: Record<string, unknown> };
 type ToolkitResponse = { id: string; ok: boolean; data?: any; error?: string };
@@ -51,6 +52,10 @@ let snippetApplyingContent = false;
 let overleafState: any = null;
 let syncSelectionMode = false;
 const selectedSyncPaths = new Set<string>();
+let publishForm: any = null;
+let publishLoading = false;
+let publishBusy = false;
+const publishExcluded = new Set<string>();
 
 function request(command: string, payload: Record<string, unknown> = {}): Promise<any> {
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -71,6 +76,11 @@ window.addEventListener("message", (event) => {
     selectSection(event.data.section, true, true);
     if (event.data.section === "snippets") void ensureSnippetsLoaded();
     if (event.data.section === "sync") void refreshOverleafState();
+    return;
+  }
+  if (event.data?.type === "toolkit-open-publish" && typeof event.data.folder === "string") {
+    selectSection("sync", true, true);
+    void openPublishForm(event.data.folder);
     return;
   }
   const response = event.data as ToolkitResponse;
@@ -543,13 +553,16 @@ function renderSyncPanel(): void {
   const state = overleafState;
   const unavailable = byId("syncUnavailable");
   const details = byId("syncDetails");
-  unavailable.hidden = Boolean(state?.available);
+  // The publish form replaces the empty state's call to action while it is open.
+  unavailable.hidden = Boolean(state?.available) || publishCardOpen();
   details.hidden = !state?.available;
   if (!state?.available) {
-    byId("syncContextTitle").textContent = "No mirror selected";
+    byId("syncContextTitle").textContent = publishCardOpen() ? "Publishing to Overleaf" : "No mirror selected";
     byId("syncContextBadge").textContent = "";
-    byId("syncContextDescription").textContent = "Open an Overleaf mirror to inspect realtime status.";
-    byId("syncContextEmpty").hidden = false;
+    byId("syncContextDescription").textContent = publishCardOpen()
+      ? "Review what will be uploaded, then publish. The folder becomes a live mirror of the new project."
+      : "Open an Overleaf mirror to inspect realtime status.";
+    byId("syncContextEmpty").hidden = publishCardOpen();
     byId("syncContextSummary").hidden = true;
     return;
   }
@@ -652,6 +665,158 @@ function formatBytes(value: unknown): string {
 
 function shortHash(value: unknown): string {
   return typeof value === "string" && value ? value.slice(0, 12) : "unknown";
+}
+
+function publishCardOpen(): boolean {
+  return publishLoading || publishForm !== null;
+}
+
+async function openPublishForm(folder: string): Promise<void> {
+  if (publishBusy) return;
+  publishLoading = true;
+  publishForm = null;
+  renderPublishCard();
+  renderSyncPanel();
+  try {
+    showPublishForm(await request("overleaf-publish-form", overleafPayload({ folder })));
+  } catch (err) {
+    closePublishForm();
+    setStatus((err as Error).message, "error");
+  }
+}
+
+function showPublishForm(form: any): void {
+  publishLoading = false;
+  publishForm = form;
+  publishExcluded.clear();
+  byId<HTMLInputElement>("publishNameInput").value = form.folderName || "";
+  const rootSelect = byId<HTMLSelectElement>("publishRootSelect");
+  rootSelect.innerHTML = (form.roots || []).map((root: string) => `<option value="${escapeHtml(root)}">${escapeHtml(root)}</option>`).join("");
+  rootSelect.value = form.roots?.[0] || "";
+  setPublishError("");
+  renderPublishCard();
+  renderSyncPanel();
+}
+
+function closePublishForm(): void {
+  publishForm = null;
+  publishLoading = false;
+  publishExcluded.clear();
+  renderPublishCard();
+  renderSyncPanel();
+}
+
+function renderPublishCard(): void {
+  byId("publishCard").hidden = !publishCardOpen();
+  byId("publishLoading").hidden = !publishLoading;
+  byId("publishBody").hidden = !publishForm;
+  const form = publishForm;
+  if (!form) return;
+  const folderPath = byId("publishFolderPath");
+  folderPath.textContent = form.folder;
+  folderPath.title = form.folder;
+  byId("publishBlocked").hidden = !form.blockedReason;
+  byId("publishBlockedMessage").textContent = form.blockedReason || "";
+  byId("publishFields").hidden = Boolean(form.blockedReason);
+  byId("publishLoginBtn").hidden = Boolean(form.signedIn);
+  renderPublishFiles();
+}
+
+function renderPublishFiles(): void {
+  const form = publishForm;
+  if (!form) return;
+  const root = byId<HTMLSelectElement>("publishRootSelect").value;
+  // The main document is always uploaded; choosing one that was unchecked checks it again.
+  publishExcluded.delete(root);
+  byId("publishFileList").innerHTML = (form.files || []).map((file: any) => {
+    const isRoot = file.path === root;
+    const excluded = publishExcluded.has(file.path);
+    const slash = file.path.lastIndexOf("/");
+    return `<label class="publish-file" data-excluded="${excluded}" title="${escapeHtml(isRoot ? `${file.path} is the main document and is always uploaded` : file.path)}">`
+      + `<input type="checkbox" data-publish-path="${escapeHtml(file.path)}"${excluded ? "" : " checked"}${isRoot ? " data-publish-root=\"true\"" : ""}>`
+      + `<span class="publish-file-name"><span class="publish-file-dir">${escapeHtml(file.path.slice(0, slash + 1))}</span>${escapeHtml(file.path.slice(slash + 1))}</span>`
+      + (isRoot ? `<span class="context-badge">main</span>` : "")
+      + `<span class="publish-file-size">${formatBytes(file.size)}</span></label>`;
+  }).join("");
+  updatePublishSummary();
+  renderPublishActions();
+}
+
+function updatePublishSummary(): void {
+  const form = publishForm;
+  if (!form) return;
+  const files = form.files || [];
+  const included = files.filter((file: any) => !publishExcluded.has(file.path));
+  const bytes = included.reduce((sum: number, file: any) => sum + (file.size || 0), 0);
+  byId("publishFileSummary").textContent = `${included.length} of ${files.length} files · ${formatBytes(bytes)}`;
+  const selectable = files.length - 1;
+  const selectAll = byId<HTMLInputElement>("publishSelectAll");
+  selectAll.checked = publishExcluded.size === 0;
+  selectAll.indeterminate = publishExcluded.size > 0 && publishExcluded.size < selectable;
+}
+
+function renderPublishActions(): void {
+  const form = publishForm;
+  const nameInput = byId<HTMLInputElement>("publishNameInput");
+  const nameError = projectNameError(nameInput.value);
+  nameInput.setAttribute("aria-invalid", String(Boolean(nameError)));
+  byId("publishNameError").textContent = nameError || "";
+  const submit = byId<HTMLButtonElement>("publishSubmitBtn");
+  submit.disabled = publishBusy || !form || Boolean(form.blockedReason) || !form.signedIn || Boolean(nameError);
+  submit.querySelector("span")!.textContent = publishBusy ? "Publishing…" : "Publish";
+  for (const id of ["publishCancelBtn", "publishChangeFolderBtn", "publishLoginBtn", "publishRootSelect", "publishNameInput", "publishSelectAll"]) {
+    byId<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>(id).disabled = publishBusy;
+  }
+  byId("publishFileList").querySelectorAll<HTMLInputElement>("input[data-publish-path]").forEach(input => {
+    input.disabled = publishBusy || input.dataset.publishRoot === "true";
+  });
+}
+
+function setPublishError(message: string): void {
+  const el = byId("publishError");
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+async function submitPublishForm(): Promise<void> {
+  const form = publishForm;
+  if (!form || publishBusy) return;
+  publishBusy = true;
+  setPublishError("");
+  renderPublishActions();
+  try {
+    await request("overleaf-publish", overleafPayload({
+      folder: form.folder,
+      projectName: byId<HTMLInputElement>("publishNameInput").value.trim(),
+      rootDocPath: byId<HTMLSelectElement>("publishRootSelect").value,
+      excluded: [...publishExcluded]
+    }));
+  } catch (err) {
+    publishBusy = false;
+    setPublishError((err as Error).message);
+    renderPublishActions();
+    return;
+  }
+  publishBusy = false;
+  closePublishForm();
+  await refreshOverleafState();
+}
+
+async function changePublishFolder(): Promise<void> {
+  if (publishBusy) return;
+  const form = await request("overleaf-publish-pick-folder", overleafPayload({ folder: publishForm?.folder }));
+  if (form) showPublishForm(form);
+}
+
+async function signInForPublish(): Promise<void> {
+  const folder = publishForm?.folder;
+  if (!folder) return;
+  await request("overleaf-login", overleafPayload());
+  const refreshed = await request("overleaf-publish-form", overleafPayload({ folder }));
+  if (publishForm?.folder !== folder) return;
+  publishForm.signedIn = Boolean(refreshed?.signedIn);
+  byId("publishLoginBtn").hidden = publishForm.signedIn;
+  renderPublishActions();
 }
 
 async function applySelectedSync(): Promise<void> {
@@ -1964,6 +2129,30 @@ function wire(): void {
   byId("syncCopyDiagnosticsBtn").addEventListener("click", () => run(async () => { await request("overleaf-copy-diagnostics", overleafPayload()); }));
   byId("syncClearActivityBtn").addEventListener("click", () => run(async () => { await request("overleaf-clear-activity", overleafPayload()); await refreshOverleafState(); }));
   byId("syncGitBtn").addEventListener("click", () => run(async () => { await request("overleaf-init-git", overleafPayload()); await refreshOverleafState(); }));
+  byId("syncPublishBtn").addEventListener("click", () => void openPublishForm(initialData.workspacePath || ""));
+  byId("syncOpenProjectBtn").addEventListener("click", () => run(async () => { await request("overleaf-open-project", overleafPayload()); await refreshOverleafState(); }));
+  byId("publishChangeFolderBtn").addEventListener("click", () => void changePublishFolder().catch(err => setPublishError((err as Error).message)));
+  byId("publishLoginBtn").addEventListener("click", () => void signInForPublish().catch(err => setPublishError((err as Error).message)));
+  byId("publishCancelBtn").addEventListener("click", closePublishForm);
+  byId("publishSubmitBtn").addEventListener("click", () => void submitPublishForm());
+  byId("publishNameInput").addEventListener("input", renderPublishActions);
+  byId("publishRootSelect").addEventListener("change", renderPublishFiles);
+  byId("publishSelectAll").addEventListener("change", () => {
+    const root = byId<HTMLSelectElement>("publishRootSelect").value;
+    const excludeAll = publishExcluded.size === 0;
+    publishExcluded.clear();
+    if (excludeAll) for (const file of publishForm?.files || []) if (file.path !== root) publishExcluded.add(file.path);
+    renderPublishFiles();
+  });
+  byId("publishFileList").addEventListener("change", event => {
+    const input = event.target as HTMLInputElement;
+    const relPath = input.dataset.publishPath;
+    if (!relPath) return;
+    if (input.checked) publishExcluded.delete(relPath);
+    else publishExcluded.add(relPath);
+    input.closest(".publish-file")?.setAttribute("data-excluded", String(!input.checked));
+    updatePublishSummary();
+  });
   byId("compileModeSelect").addEventListener("change", () => run(async () => {
     const mode = byId<HTMLSelectElement>("compileModeSelect").value === "overleaf" ? "overleaf" : "local";
     await request("overleaf-set-compile-mode", overleafPayload({ mode }));
@@ -2348,7 +2537,26 @@ function shell(): void {
 
           <section id="panelSync" class="toolkit-panel" data-toolkit-panel="sync" hidden>
             <header class="section-heading"><div><p class="eyebrow">Overleaf</p><h2>Realtime Sync</h2><p class="hint">Mirror local source and Toolkit configuration safely with explicit conflict handling.</p></div><div class="toolbar compact"><button id="overleafRefreshBtn" class="ghost-button"><i class="codicon codicon-refresh" aria-hidden="true"></i><span>Refresh</span></button></div></header>
-            <div id="syncUnavailable" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>No Overleaf mirror detected</strong><p>Open an Overleaf project locally to manage realtime sync here.</p></div></div>
+            <div id="publishCard" class="form-card publish-card" hidden>
+              <div><p class="eyebrow">New Overleaf project</p><h3>Publish to Overleaf</h3></div>
+              <div id="publishLoading" class="publish-loading" hidden><i class="codicon codicon-loading codicon-modifier-spin" aria-hidden="true"></i><span>Scanning folder…</span></div>
+              <div id="publishBody" class="publish-stack" hidden>
+                <div class="field"><span>Folder</span><div class="publish-folder-row"><code id="publishFolderPath" class="publish-folder-path"></code><button id="publishChangeFolderBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Change…</span></button></div></div>
+                <div id="publishBlocked" class="inline-notice" data-kind="warning" hidden><i class="codicon codicon-warning" aria-hidden="true"></i><span id="publishBlockedMessage"></span></div>
+                <div id="publishFields" class="publish-stack">
+                  <label class="field"><span>Main document</span><select id="publishRootSelect"></select></label>
+                  <label class="field"><span>Project name</span><input id="publishNameInput" type="text" maxlength="150" spellcheck="false" autocomplete="off"><small id="publishNameError" class="publish-error"></small></label>
+                  <div class="publish-files">
+                    <div class="publish-files-heading"><label class="inline"><input id="publishSelectAll" type="checkbox"><span>Files to upload</span></label><span id="publishFileSummary" class="value-pill"></span></div>
+                    <div id="publishFileList" class="publish-file-list"></div>
+                  </div>
+                  <div class="safety-note"><i class="codicon codicon-shield" aria-hidden="true"></i><p>The folder itself becomes the mirror. A <code>.overleaf-codex</code> folder is added for sync metadata, plus <code>.vscode/settings.json</code>, <code>.latexmkrc</code> and <code>AGENTS.md</code> where missing. Unchecked files go into <code>.overleaf-codexignore</code> and stay local. Nothing is moved, overwritten or deleted.</p></div>
+                </div>
+                <p id="publishError" class="publish-error" role="alert" hidden></p>
+                <div class="publish-actions"><button id="publishLoginBtn" class="secondary" hidden><i class="codicon codicon-key" aria-hidden="true"></i><span>Sign in to Overleaf</span></button><span class="publish-actions-spacer"></span><button id="publishCancelBtn" class="ghost-button">Cancel</button><button id="publishSubmitBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Publish</span></button></div>
+              </div>
+            </div>
+            <div id="syncUnavailable" class="empty-state compact"><i class="codicon codicon-cloud" aria-hidden="true"></i><div><strong>No Overleaf mirror detected</strong><p>Open an Overleaf project locally, or publish this folder as a new Overleaf project.</p><div class="toolbar compact empty-state-actions"><button id="syncPublishBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Publish to Overleaf…</span></button><button id="syncOpenProjectBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Overleaf Project…</span></button></div></div></div>
             <div id="syncDetails" hidden>
             <div class="form-card"><dl class="summary-list"><div><dt>Server</dt><dd id="syncServer">—</dd></div><div><dt>Project</dt><dd id="syncProject">—</dd></div><div><dt>Mirror</dt><dd id="syncMirror">—</dd></div><div><dt>Status</dt><dd id="syncStatus">—</dd></div><div><dt>Role</dt><dd id="syncRole">—</dd></div><div><dt>Connection</dt><dd id="syncConnection">—</dd></div><div><dt>Reconnects</dt><dd id="syncReconnects">—</dd></div></dl><div class="toolbar"><button id="syncLoginBtn" class="secondary"><i class="codicon codicon-key" aria-hidden="true"></i><span>Login</span></button><button id="syncProjectsBtn" class="ghost-button"><i class="codicon codicon-list-unordered" aria-hidden="true"></i><span>Projects</span></button><button id="syncOpenBtn" class="ghost-button"><i class="codicon codicon-folder-opened" aria-hidden="true"></i><span>Open Mirror</span></button><button id="syncStartBtn" class="primary"><i class="codicon codicon-cloud-upload" aria-hidden="true"></i><span>Start Sync</span></button><button id="syncStopBtn" class="ghost-button"><i class="codicon codicon-debug-stop" aria-hidden="true"></i><span>Stop Sync</span></button><button id="syncCheckBtn" class="ghost-button"><i class="codicon codicon-shield" aria-hidden="true"></i><span>Check Status</span></button><button id="syncFullAuditBtn" class="ghost-button"><i class="codicon codicon-search-fuzzy" aria-hidden="true"></i><span>Full Audit</span></button><button id="syncCollaboratorsBtn" class="ghost-button"><i class="codicon codicon-organization" aria-hidden="true"></i><span>Collaborators</span></button><button id="syncCopyDiagnosticsBtn" class="ghost-button"><i class="codicon codicon-copy" aria-hidden="true"></i><span>Copy diagnostics</span></button><button id="syncGitBtn" class="ghost-button"><i class="codicon codicon-git-branch" aria-hidden="true"></i><span>Init Git</span></button></div></div>
               <div class="settings-group"><div class="group-heading"><h3>Files needing attention</h3><span id="syncItemCount" class="value-pill">0</span></div><div class="toolbar compact"><button id="syncPreviewBtn" class="ghost-button"><i class="codicon codicon-list-selection" aria-hidden="true"></i><span>Preview and select</span></button><button id="syncApplySelectedBtn" class="primary" hidden><i class="codicon codicon-check" aria-hidden="true"></i><span>Apply selected</span></button></div><p id="syncSelectionSummary" class="hint"></p><div id="syncItemList" class="sync-item-list"></div></div>

@@ -14213,7 +14213,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve27, reject) {
+      return new Body.Promise(function(resolve29, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14247,7 +14247,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve27(Buffer.concat(accum, accumBytes));
+            resolve29(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -14922,7 +14922,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve27, reject) {
+      return new fetch2.Promise(function(resolve29, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15055,7 +15055,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve27(fetch2(new Request(locationURL, requestOpts)));
+                resolve29(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15076,7 +15076,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve27(response);
+            resolve29(response);
             return;
           }
           const zlibOptions = {
@@ -15086,7 +15086,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve27(response);
+            resolve29(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15098,12 +15098,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve27(response);
+              resolve29(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve27(response);
+                resolve29(response);
               }
             });
             return;
@@ -15111,11 +15111,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve27(response);
+            resolve29(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve27(response);
+          resolve29(response);
         });
         writeToStream(req, request);
       });
@@ -21529,7 +21529,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve27) => {
+    return new Promise((resolve29) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -21548,12 +21548,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve27({ code: 127, output: `${output}
+        resolve29({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve27({ code: code ?? 1, output });
+        resolve29({ code: code ?? 1, output });
       });
     });
   }
@@ -25130,7 +25130,7 @@ function processAlive(pid) {
   }
 }
 function sleep(ms) {
-  return new Promise((resolve27) => setTimeout(resolve27, ms));
+  return new Promise((resolve29) => setTimeout(resolve29, ms));
 }
 function formatUnknownError(error) {
   if (error instanceof Error) {
@@ -25522,9 +25522,11 @@ async function readManifest(root) {
     throw new Error(`Overleaf manifest failed schema validation at ${validationError} and was quarantined at ${target}.`);
   }
   const manifest = migrateManifest(parsed);
-  const ignoreContent = await ensureLocalIgnoreFile(root);
-  localIgnoreRules.set(manifest, (0, import_ignore.default)().add(ignoreContent));
+  setLocalIgnoreRules(manifest, await ensureLocalIgnoreFile(root));
   return manifest;
+}
+function setLocalIgnoreRules(manifest, content) {
+  localIgnoreRules.set(manifest, (0, import_ignore.default)().add(content));
 }
 async function ensureLocalIgnoreFile(root) {
   const target = path23.join(root, LOCAL_IGNORE_NAME);
@@ -25798,7 +25800,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve27) => setTimeout(resolve27, 50));
+      await new Promise((resolve29) => setTimeout(resolve29, 50));
     }
   }
 }
@@ -25974,7 +25976,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve27) => resolve27());
+  const wake = () => waiters.splice(0).forEach((resolve29) => resolve29());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -25986,7 +25988,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve27) => waiters.push(resolve27));
+            await new Promise((resolve29) => waiters.push(resolve29));
           }
           reservedBytes += amount;
         }
@@ -26316,7 +26318,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve27) => setTimeout(resolve27, ms));
+  return new Promise((resolve29) => setTimeout(resolve29, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -26333,6 +26335,7 @@ var os5 = __toESM(require("os"));
 var path29 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
 var import_util10 = require("util");
+var import_ignore2 = __toESM(require_ignore());
 
 // src/overleaf/tree.ts
 var path27 = __toESM(require("path"));
@@ -26788,8 +26791,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve27, reject) => {
-      pending.push(() => task().then(resolve27, reject).finally(() => {
+    return new Promise((resolve29, reject) => {
+      pending.push(() => task().then(resolve29, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -26812,11 +26815,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash2 = (0, import_fs4.createReadStream)(filePath);
-    const digest = await new Promise((resolve27, reject) => {
+    const digest = await new Promise((resolve29, reject) => {
       const state = (0, import_crypto2.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
-      hash2.on("end", () => resolve27(state.digest("hex")));
+      hash2.on("end", () => resolve29(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -27059,9 +27062,38 @@ function untrackedManifest() {
   };
 }
 async function previewLocalPublish(root, isExcluded = () => false) {
-  const scan = await scanLocalProject(root, untrackedManifest());
+  const manifest = untrackedManifest();
+  setLocalIgnoreRules(manifest, await readTextFileBounded(path29.join(root, LOCAL_IGNORE_NAME), MAX_METADATA_JSON_BYTES).catch(() => DEFAULT_LOCAL_IGNORE_CONTENT));
+  const scan = await scanLocalProject(root, manifest);
   const files = scan.files.filter((relPath) => !isAlwaysLocal(relPath) && !isExcluded(relPath)).map((relPath) => ({ path: relPath, size: scan.fileMetadata.get(relPath)?.size ?? 0 })).sort((a, b) => a.path.localeCompare(b.path));
-  return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0) };
+  const nestedMirrors = (await Promise.all(scan.folders.map(
+    async (folder) => await exists4(manifestPath(path29.join(root, folder))) ? folder : void 0
+  ))).filter((folder) => folder !== void 0);
+  return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0), nestedMirrors };
+}
+async function findEnclosingMirror(root) {
+  let current = path29.resolve(root);
+  while (path29.dirname(current) !== current) {
+    current = path29.dirname(current);
+    if (await exists4(manifestPath(current))) return current;
+  }
+  return void 0;
+}
+function localIgnoreEntries(excluded, candidates) {
+  const entries = excluded.map((relPath) => {
+    if (/[\r\n]/.test(relPath)) throw new Error(`Cannot leave out ${JSON.stringify(relPath)}: its name contains a line break.`);
+    return `/${relPath.replace(/[\\*[]/g, (match2) => `\\${match2}`).replace(/ +$/, (spaces) => spaces.replace(/ /g, "\\ "))}`;
+  });
+  const matcher = (0, import_ignore2.default)().add(entries);
+  const wanted = new Set(excluded);
+  const collateral = candidates.filter((relPath) => !wanted.has(relPath) && matcher.ignores(relPath));
+  const missed = excluded.filter((relPath) => !matcher.ignores(relPath));
+  if (collateral.length || missed.length) {
+    throw new Error(
+      `The selected files cannot be left out exactly (${[...missed, ...collateral].join(", ")}). Add them to ${LOCAL_IGNORE_NAME} by hand instead.`
+    );
+  }
+  return entries;
 }
 async function detectRootDocuments(root, candidatePaths) {
   const found = [];
@@ -27077,14 +27109,39 @@ async function detectRootDocuments(root, candidatePaths) {
     return aMain - bMain || depth(a) - depth(b) || a.localeCompare(b);
   });
 }
+var PUBLISHED_IN_PLACE_MARKER = "origin.json";
+async function isPublishedInPlace(root) {
+  const raw = await readTextFileBounded(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), MAX_METADATA_JSON_BYTES).catch(() => void 0);
+  if (raw === void 0) return false;
+  try {
+    return JSON.parse(raw).kind === "published-in-place";
+  } catch {
+    return true;
+  }
+}
 async function publishLocalFolder(client, root, projectName, rootDocPath, options) {
   if (await exists4(manifestPath(root))) {
     throw new Error("This folder is already an Overleaf mirror.");
   }
+  const enclosing = await findEnclosingMirror(root);
+  if (enclosing) {
+    throw new Error(`This folder is inside the Overleaf mirror at ${enclosing}; its files already sync with that project.`);
+  }
+  const preview = await previewLocalPublish(root);
+  if (preview.nestedMirrors.length) {
+    throw new Error(`This folder contains another Overleaf mirror (${preview.nestedMirrors.join(", ")}); publish a folder that does not.`);
+  }
+  const candidates = preview.files.map((file) => file.path);
+  if (!candidates.includes(rootDocPath)) {
+    throw new Error(`The main document ${rootDocPath} is not among the files that would be uploaded.`);
+  }
+  const excluded = [...new Set(options.excludedPaths ?? [])].filter((relPath) => candidates.includes(relPath));
+  if (excluded.includes(rootDocPath)) throw new Error("The main document cannot be left out of the project.");
+  const ignoreEntries = excluded.length ? localIgnoreEntries(excluded, candidates) : [];
   const metadataRoot = metadataPath(root);
   const ignoreFile = path29.join(root, LOCAL_IGNORE_NAME);
   const metadataExisted = await exists4(metadataRoot);
-  const ignoreExisted = await exists4(ignoreFile);
+  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat12) => stat12.size, () => void 0);
   const projectId = await client.createProject(projectName);
   let manifestWritten = false;
   let keptFiles = [];
@@ -27092,14 +27149,28 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
     const manifest = await emptyFreshProject(client, projectId, projectName);
     manifest.rootDocPath = rootDocPath;
     await createMetadataDirectories(root);
+    await fs23.writeFile(
+      metadataPath(root, PUBLISHED_IN_PLACE_MARKER),
+      `${JSON.stringify({ kind: "published-in-place", at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2)}
+`,
+      "utf8"
+    );
     await ensureLocalIgnoreFile(root);
+    if (ignoreEntries.length) {
+      await fs23.appendFile(ignoreFile, `
+# Left out when this folder was published to Overleaf.
+${ignoreEntries.join("\n")}
+`, "utf8");
+    }
     await writeManifest(root, manifest);
     manifestWritten = true;
     keptFiles = await writeMirrorSupportFiles(root, rootDocPath, manifest.compiler, { overwriteExisting: false });
   } catch (error) {
     if (!manifestWritten) {
       if (!metadataExisted) await fs23.rm(metadataRoot, { recursive: true, force: true }).catch(() => void 0);
-      if (!ignoreExisted) await fs23.rm(ignoreFile, { force: true }).catch(() => void 0);
+      else await fs23.rm(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), { force: true }).catch(() => void 0);
+      if (ignoreSizeBefore === void 0) await fs23.rm(ignoreFile, { force: true }).catch(() => void 0);
+      else await fs23.truncate(ignoreFile, ignoreSizeBefore).catch(() => void 0);
       await client.deleteProject(projectId).catch(() => void 0);
     }
     throw error;
@@ -27468,6 +27539,16 @@ function isPathWithin(parent, candidate) {
   return target === base || target.startsWith(`${base}${path30.sep}`);
 }
 
+// src/overleaf/projectName.ts
+var MAX_PROJECT_NAME_LENGTH = 150;
+function projectNameError(name) {
+  const trimmed = name.trim();
+  if (!trimmed) return "Project name is required.";
+  if (trimmed.length > MAX_PROJECT_NAME_LENGTH) return `Project name must be at most ${MAX_PROJECT_NAME_LENGTH} characters.`;
+  if (trimmed.includes("/")) return 'Project name cannot contain "/".';
+  return void 0;
+}
+
 // src/overleaf/overleafClient.ts
 var http = __toESM(require("http"));
 var https = __toESM(require("https"));
@@ -27537,14 +27618,14 @@ async function hashFileDigests(filePath) {
   const sha12 = (0, import_crypto3.createHash)("sha1");
   const git = (0, import_crypto3.createHash)("sha1");
   git.update(`blob ${stat12.size}\0`);
-  await new Promise((resolve27, reject) => {
+  await new Promise((resolve29, reject) => {
     const input = (0, import_fs5.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha12.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve27);
+    input.on("end", resolve29);
   });
   return { size: stat12.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
@@ -28157,7 +28238,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve27, reject) => {
+    return new Promise((resolve29, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -28170,7 +28251,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve27();
+        error ? reject(error) : resolve29();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -28185,7 +28266,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve27, reject) => {
+    return new Promise((resolve29, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -28193,7 +28274,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve27(project);
+        error ? reject(error) : resolve29(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
@@ -28204,7 +28285,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve27, reject) => {
+    return new Promise((resolve29, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -28216,7 +28297,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve27(project);
+        error ? reject(error) : resolve29(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -28274,7 +28355,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve27, reject) => {
+    return new Promise((resolve29, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -28284,7 +28365,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve27(values ?? []);
+        error ? reject(error) : resolve29(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -28577,7 +28658,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve27) => setTimeout(resolve27, 250 * 2 ** attempt));
+      await new Promise((resolve29) => setTimeout(resolve29, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -28609,7 +28690,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve27, reject) => {
+  return new Promise((resolve29, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -28637,7 +28718,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve27({
+            resolve29({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -29466,13 +29547,13 @@ var SyncCheckScheduler = class {
       this.active = true;
       return this.runBatch(request).finally(() => this.pump());
     }
-    return new Promise((resolve27, reject) => {
+    return new Promise((resolve29, reject) => {
       if (!this.pending) {
         this.pending = { request: normalizeRequest(request), waiters: [] };
       } else {
         this.pending.request = mergeRequests(this.pending.request, request);
       }
-      this.pending.waiters.push({ resolve: resolve27, reject });
+      this.pending.waiters.push({ resolve: resolve29, reject });
     });
   }
   schedule(request, delayMs) {
@@ -32696,7 +32777,7 @@ async function writePrivateJson(target, value) {
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve27, reject) => {
+  return new Promise((resolve29, reject) => {
     const child = (0, import_child_process4.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -32705,7 +32786,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve27(output);
+      if (code === 0) resolve29(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -32926,11 +33007,11 @@ var SyncOwnerCoordinator = class {
 `, { mode: 384 });
       await fs35.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve27, reject) => {
+      await new Promise((resolve29, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve27();
+          resolve29();
         });
       });
       await fs35.chmod(paths.socketPath, 384);
@@ -32942,7 +33023,7 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve27) => server.close(() => resolve27()));
+      if (server?.listening) await new Promise((resolve29) => server.close(() => resolve29()));
       await fs35.rm(paths.lockPath, { recursive: true, force: true });
       await fs35.rm(paths.socketPath, { force: true });
       throw error;
@@ -32993,7 +33074,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve27, reject) => {
+    const subscribed = new Promise((resolve29, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -33005,7 +33086,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve27();
+        error ? reject(error) : resolve29();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -33047,7 +33128,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve27) => server.close(() => resolve27()));
+      await new Promise((resolve29) => server.close(() => resolve29()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
@@ -33149,7 +33230,7 @@ function runtimePaths(root) {
   };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve27, reject) => {
+  return new Promise((resolve29, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -33158,7 +33239,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve27(result);
+      error ? reject(error) : resolve29(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -33263,7 +33344,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve27, reject) => {
+  return new Promise((resolve29, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -33271,7 +33352,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve27();
+      error ? reject(error) : resolve29();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -33299,7 +33380,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve27, reject) => {
+  return new Promise((resolve29, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -33308,7 +33389,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve27();
+      error ? reject(error) : resolve29();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -33317,7 +33398,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve27) => {
+  return new Promise((resolve29) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -33326,14 +33407,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve27(value);
+      resolve29(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve27) => setTimeout(resolve27, ms));
+  return new Promise((resolve29) => setTimeout(resolve29, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -33377,15 +33458,8 @@ function errorResponse(id, code, message) {
 }
 
 // src/overleaf/overleafService.ts
-function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-function listForConfirmation(paths, limit = 25) {
-  const shown = paths.slice(0, limit).join("\n");
-  return paths.length > limit ? `${shown}
-... and ${paths.length - limit} more` : shown;
+function stringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 var OverleafService = class {
   constructor(context, output, onChanged = () => void 0, scope = "local", migrateLegacyMirrors = false) {
@@ -33441,7 +33515,6 @@ var OverleafService = class {
       ["overleafCodex.loginWithCookie", (candidate) => this.loginWithCookie(candidate)],
       ["overleafCodex.listProjects", (candidate) => this.listProjects(candidate)],
       ["overleafCodex.openProjectLocally", (candidate) => this.openProjectLocally(candidate)],
-      ["overleafCodex.publishFolder", (candidate) => this.publishFolderInteractive(candidate)],
       ["overleafCodex.startRealtimeSync", (candidate) => this.startRealtimeSync(candidate)],
       ["overleafCodex.stopRealtimeSync", (candidate) => this.stopRealtimeSync(candidate)],
       ["overleafCodex.checkSyncStatus", (candidate) => this.checkSyncStatus("incremental", candidate)],
@@ -33570,90 +33643,106 @@ var OverleafService = class {
     });
   }
   /** Publishes an existing folder to a new Overleaf project, turning the folder into the mirror. */
-  async publishFolderToOverleaf(folder, projectName, rootDocPath) {
+  async publishFolderToOverleaf(folder, projectName, rootDocPath, excludedPaths = []) {
     const client = await this.clientForNewProject("Publish to Overleaf");
     return publishLocalFolder(client, folder, projectName, rootDocPath, {
+      excludedPaths,
       publish: (root) => this.uploadEverythingLocal(root, client)
     });
   }
   /**
-   * Walks the user through publishing a folder: pick it, choose the root document, review what
-   * will be uploaded, then create the project. Everything that can fail cheaply is checked before
-   * the project exists, so a rejected folder never leaves anything behind on Overleaf.
+   * Everything the publish form needs for `folder`. What makes a folder unpublishable is reported
+   * as blockedReason rather than thrown, so the form can say why instead of just failing.
    */
-  async publishFolderInteractive(candidate) {
-    const folder = await this.pickFolderToPublish(candidate);
-    if (!folder) return;
+  async publishForm(folder) {
+    const folderName = path42.basename(folder);
+    const state = {
+      folder,
+      folderName,
+      roots: [],
+      files: [],
+      totalBytes: 0,
+      signedIn: (await this.secrets.listServers()).length > 0
+    };
+    if (!folder || !await fs36.stat(folder).then((stat12) => stat12.isDirectory(), () => false)) {
+      return { ...state, blockedReason: "This folder does not exist." };
+    }
     if (await fs36.stat(manifestPath(folder)).then(() => true, () => false)) {
-      vscode11.window.showWarningMessage(`${path42.basename(folder)} is already an Overleaf mirror; it syncs with its existing project.`);
-      return;
+      return { ...state, blockedReason: `${folderName} is already an Overleaf mirror; it syncs with its existing project.` };
+    }
+    const enclosing = await findEnclosingMirror(folder);
+    if (enclosing) {
+      return { ...state, blockedReason: `${folderName} is inside the Overleaf mirror at ${enclosing}; its files already sync with that project.` };
     }
     const preview = await previewLocalPublish(folder, (relPath) => !this.realtimeSync.canSyncToolkitOverrides() && isToolkitOverridePath(relPath));
-    const roots = await detectRootDocuments(folder, preview.files.map((file) => file.path));
-    if (roots.length === 0) {
-      vscode11.window.showErrorMessage(
-        `No .tex file in ${path42.basename(folder)} declares a \\documentclass, so there is no document to compile on Overleaf.`
-      );
-      return;
+    const scanned = { ...state, files: preview.files, totalBytes: preview.totalBytes };
+    if (preview.nestedMirrors.length) {
+      return { ...scanned, blockedReason: `${folderName} contains another Overleaf mirror (${preview.nestedMirrors.join(", ")}); publish a folder that does not.` };
     }
-    const rootDocPath = roots.length === 1 ? roots[0] : await vscode11.window.showQuickPick(roots, {
-      title: "Publish to Overleaf: Main Document",
-      placeHolder: "Several files declare a \\documentclass. Which one should Overleaf compile?"
-    });
-    if (!rootDocPath) return;
-    const projectName = await vscode11.window.showInputBox({
-      title: "Publish to Overleaf: Project Name",
-      value: path42.basename(folder),
-      validateInput: (value) => value.trim() ? void 0 : "Project name is required."
-    });
-    if (!projectName?.trim()) return;
-    const confirm = await vscode11.window.showWarningMessage(
-      `Upload ${preview.files.length} file(s), ${formatBytes(preview.totalBytes)}, from ${path42.basename(folder)} to a new Overleaf project "${projectName.trim()}"? The folder itself becomes the mirror, so a .overleaf-codex folder will be added to it.`,
-      { modal: true, detail: listForConfirmation(preview.files.map((file) => file.path)) },
-      "Publish"
-    );
-    if (confirm !== "Publish") return;
+    const roots = await detectRootDocuments(folder, preview.files.map((file) => file.path));
+    if (!roots.length) {
+      return { ...scanned, blockedReason: `No .tex file in ${folderName} declares a \\documentclass, so there is nothing for Overleaf to compile.` };
+    }
+    return { ...scanned, roots };
+  }
+  /** Runs a publish the form asked for. publishLocalFolder re-checks the folder, which may have changed since. */
+  async publishFromForm(payload) {
+    const folder = typeof payload.folder === "string" ? payload.folder : "";
+    const projectName = typeof payload.projectName === "string" ? payload.projectName.trim() : "";
+    const rootDocPath = typeof payload.rootDocPath === "string" ? payload.rootDocPath : "";
+    const nameError = projectNameError(projectName);
+    if (nameError) throw new Error(nameError);
+    if (!(await detectRootDocuments(folder, [rootDocPath])).length) {
+      throw new Error(`${rootDocPath || "The main document"} does not declare a \\documentclass.`);
+    }
+    const folderName = path42.basename(folder);
+    let result;
     try {
-      const result = await vscode11.window.withProgress(
-        { location: vscode11.ProgressLocation.Notification, title: `Publishing ${path42.basename(folder)} to Overleaf`, cancellable: false },
-        () => this.publishFolderToOverleaf(folder, projectName.trim(), rootDocPath)
+      result = await vscode11.window.withProgress(
+        { location: vscode11.ProgressLocation.Notification, title: `Publishing ${folderName} to Overleaf`, cancellable: false },
+        () => this.publishFolderToOverleaf(folder, projectName, rootDocPath, stringList(payload.excluded))
       );
-      this.onChanged();
-      const kept = result.keptFiles.length ? ` Kept your existing ${result.keptFiles.join(", ")}; merge the toolkit's settings by hand if you want its local build.` : "";
-      if (!result.published) {
-        this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] PUBLISH FOLDER UPLOAD FAILED: ${result.publishError?.message ?? "unknown"}`);
-        vscode11.window.showWarningMessage(
-          `Created the Overleaf project, but not every file finished uploading. The folder is now a mirror, so running a sync will retry.${kept}`
-        );
-        return;
-      }
-      vscode11.window.showInformationMessage(`Published ${path42.basename(folder)} to Overleaf.${kept}`);
     } catch (error) {
       this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] PUBLISH FOLDER FAILED: ${formatUnknownError(error)}`);
-      vscode11.window.showErrorMessage(`Could not publish to Overleaf: ${formatUnknownError(error)}`);
+      throw error;
     }
+    this.onChanged();
+    const syncingHere = this.isWorkspaceRoot(result.root);
+    const kept = result.keptFiles.length ? ` Kept your existing ${result.keptFiles.join(", ")}; merge the toolkit's settings by hand if you want its local build.` : "";
+    const openAction = syncingHere ? [] : ["Open Folder"];
+    const followUp = (choice) => {
+      if (choice === "Open Folder") void vscode11.commands.executeCommand("vscode.openFolder", vscode11.Uri.file(result.root), { forceNewWindow: true });
+    };
+    if (!result.published) {
+      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] PUBLISH FOLDER UPLOAD FAILED: ${result.publishError?.message ?? "unknown"}`);
+      void vscode11.window.showWarningMessage(
+        `Created the Overleaf project, but not every file finished uploading. The folder is now a mirror, so syncing it will retry.${kept}`,
+        ...openAction
+      ).then(followUp);
+    } else {
+      const where = syncingHere ? "" : " Open the folder to keep it in sync.";
+      void vscode11.window.showInformationMessage(`Published ${folderName} to Overleaf.${where}${kept}`, ...openAction).then(followUp);
+    }
+    return { root: result.root, published: result.published, keptFiles: result.keptFiles, syncingHere };
   }
-  async pickFolderToPublish(candidate) {
-    if (candidate instanceof vscode11.Uri && candidate.scheme === "file") return candidate.fsPath;
-    const folders = (vscode11.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
-    if (folders.length === 1) return folders[0].uri.fsPath;
+  async pickFolderForPublishForm(current) {
     const picked = await vscode11.window.showOpenDialog({
+      title: "Publish to Overleaf",
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
-      openLabel: "Publish to Overleaf"
+      openLabel: "Select Folder",
+      defaultUri: typeof current === "string" && current ? vscode11.Uri.file(current) : void 0
     });
-    return picked?.[0]?.fsPath;
+    return picked?.[0]?.scheme === "file" ? this.publishForm(picked[0].fsPath) : null;
   }
   /**
    * Resolves the account a new project should be created under. The configured server wins when
    * we are signed in to it, so the common single-account case asks nothing mid-flow.
    */
   async clientForNewProject(pickerTitle) {
-    const state = await this.state();
-    if (!state.available) throw new Error("Overleaf support is unavailable in this environment.");
-    if (!state.authenticated) throw new Error("Sign in to Overleaf before creating a project.");
     const known = await this.secrets.listServers();
+    if (!known.length) throw new Error("Sign in to Overleaf before creating a project.");
     const configured = normalizeServerUrl(this.getConfiguredServerUrl());
     const serverUrl = known.includes(configured) ? configured : known.length === 1 ? known[0] : await this.pickServerUrl(pickerTitle);
     if (!serverUrl) throw new Error("No Overleaf server was selected.");
@@ -33665,16 +33754,33 @@ var OverleafService = class {
    * Issued explicitly rather than left to the reconcile's automatic push, which is gated on the
    * autoPushLocalAhead and syncBinaryFiles settings - a user who turned either off would otherwise
    * get an empty project and no error.
+   *
+   * A window syncs one project at a time, so the upload borrows this window's sync through the
+   * normal start path, which claims ownership of the new mirror. A mirror that is not one of this
+   * window's workspace folders is let go afterwards - otherwise it would keep syncing invisibly,
+   * alongside whichever window opens it - and the project that was syncing before resumes.
    */
   async uploadEverythingLocal(root, client) {
-    await this.realtimeSync.start(root, client);
-    const report = await this.realtimeSync.checkSyncStatus(root, client, void 0, {
-      mode: "full",
-      reason: "initial-publish"
-    });
-    for (const item of report.items) {
-      if (item.entityType === "folder" || item.status !== "local only") continue;
-      await this.realtimeSync.pushLocalFile(item.path, false);
+    const previousRoot = this.ownerCoordinator.currentRoot ?? (this.realtimeSync.running ? this.realtimeSync.currentRoot : void 0);
+    try {
+      await this.startRealtimeSync(root);
+      const report = await this.realtimeSync.checkSyncStatus(root, client, void 0, {
+        mode: "full",
+        reason: "initial-publish"
+      });
+      for (const item of report.items) {
+        if (item.entityType === "folder" || item.status !== "local only") continue;
+        await this.realtimeSync.pushLocalFile(item.path, false);
+      }
+    } finally {
+      if (!this.isWorkspaceRoot(root)) {
+        await this.stopRealtimeSync(root).catch(() => void 0);
+        if (previousRoot && previousRoot !== root) {
+          await this.startRealtimeSync(previousRoot).catch((error) => this.output.appendLine(
+            `[${(/* @__PURE__ */ new Date()).toISOString()}] Could not resume sync for ${previousRoot}: ${formatUnknownError(error)}`
+          ));
+        }
+      }
     }
   }
   async listMirrors() {
@@ -33698,6 +33804,12 @@ var OverleafService = class {
       case "overleaf-open-project":
         await this.openProjectLocally(payload.workspacePath);
         return this.state(payload.workspacePath);
+      case "overleaf-publish-form":
+        return this.publishForm(String(payload.folder ?? payload.workspacePath ?? ""));
+      case "overleaf-publish-pick-folder":
+        return this.pickFolderForPublishForm(payload.folder);
+      case "overleaf-publish":
+        return this.publishFromForm(payload);
       case "overleaf-start-sync":
         await this.startRealtimeSync(payload.workspacePath);
         return this.state(payload.workspacePath);
@@ -34147,6 +34259,19 @@ var OverleafService = class {
       vscode11.window.showWarningMessage("This Overleaf mirror is not available. Use Forget or Clear Missing Mirrors instead.");
       return;
     }
+    if (await isPublishedInPlace(mirror.root)) {
+      const choice2 = await vscode11.window.showWarningMessage(
+        `"${mirror.name}" is a folder you published to Overleaf, so it will not be deleted. Stop syncing it and remove its .overleaf-codex metadata instead?`,
+        { modal: true, detail: "Your files stay where they are, and the Overleaf cloud project is not deleted." },
+        "Remove Sync Metadata"
+      );
+      if (choice2 !== "Remove Sync Metadata") return;
+      if (this.realtimeSync.currentRoot === mirror.root) await this.realtimeSync.stop();
+      await vscode11.workspace.fs.delete(vscode11.Uri.file(metadataPath(mirror.root)), { recursive: true, useTrash: true });
+      await this.mirrorManager.forgetLocalMirror(mirror.root);
+      this.onChanged();
+      return;
+    }
     const choice = await vscode11.window.showWarningMessage(`Delete only the local mirror "${mirror.name}"? The Overleaf cloud project will not be deleted.`, { modal: true }, "Delete Local Mirror");
     if (choice !== "Delete Local Mirror") return;
     if (this.realtimeSync.currentRoot === mirror.root) await this.realtimeSync.stop();
@@ -34262,6 +34387,9 @@ var OverleafService = class {
   }
   workspaceFileRoots() {
     return (vscode11.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => folder.uri.fsPath);
+  }
+  isWorkspaceRoot(root) {
+    return this.workspaceFileRoots().some((folder) => path42.resolve(folder) === path42.resolve(root));
   }
   isMirrorRootOpen(root) {
     return Boolean(root && existsSync6(manifestPath(root)) && workspaceContainsPath(root, this.workspaceFileRoots()));
@@ -34985,6 +35113,16 @@ function activate(context) {
       if (!folder) return;
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
       await activePanel.openSection("sync");
+    }),
+    command("overleafCodex.publishFolder", async (candidate) => {
+      const target = candidate instanceof vscode13.Uri && candidate.scheme === "file" ? candidate : void 0;
+      const folder = target ? vscode13.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
+      if (!folder) {
+        if (target) vscode13.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
+        return;
+      }
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
+      await activePanel.openPublishForm((target ?? folder.uri).fsPath);
     }),
     command("hsnips.openSnippetManager", async (folderUri) => {
       const folder = folderUri instanceof vscode13.Uri ? vscode13.workspace.getWorkspaceFolder(folderUri) : vscode13.window.activeTextEditor ? vscode13.workspace.getWorkspaceFolder(vscode13.window.activeTextEditor.document.uri) : vscode13.workspace.workspaceFolders?.[0];
@@ -35869,6 +36007,7 @@ var ToolkitTreeProvider = class {
     }
     const mirrors = await overleafService.listMirrors().catch(() => []);
     const currentRoot = overleafService.realtimeSync.currentRoot;
+    const publishNode = this.actionNode("overleaf-publish-folder", "Publish Folder to Overleaf", "new project from local files", "cloud-upload", "overleafCodex.publishFolder", []);
     const children = mirrors.length ? [
       ...await Promise.all(mirrors.map(async (mirror) => {
         if (mirror.missing) {
@@ -35896,8 +36035,9 @@ var ToolkitTreeProvider = class {
           contextValue: "overleafMirror"
         });
       })),
-      ...mirrors.some((mirror) => mirror.missing) ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])] : []
-    ] : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud")];
+      ...mirrors.some((mirror) => mirror.missing) ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])] : [],
+      publishNode
+    ] : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud"), publishNode];
     return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode13.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : void 0);
   }
   async localNotesNode() {
@@ -36243,6 +36383,10 @@ var ToolkitPanel = class _ToolkitPanel {
   async openSection(section) {
     this.panel.reveal(vscode13.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
+  }
+  async openPublishForm(folder) {
+    this.panel.reveal(vscode13.ViewColumn.One);
+    await this.panel.webview.postMessage({ type: "toolkit-open-publish", folder });
   }
   async handleMessage(message) {
     const request = message;

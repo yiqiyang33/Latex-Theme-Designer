@@ -14557,7 +14557,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve9, reject) {
+      return new Body.Promise(function(resolve10, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14591,7 +14591,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve9(Buffer.concat(accum, accumBytes));
+            resolve10(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -15266,7 +15266,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve9, reject) {
+      return new fetch2.Promise(function(resolve10, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15399,7 +15399,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve9(fetch2(new Request(locationURL, requestOpts)));
+                resolve10(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15420,7 +15420,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve9(response);
+            resolve10(response);
             return;
           }
           const zlibOptions = {
@@ -15430,7 +15430,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve9(response);
+            resolve10(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15442,12 +15442,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve9(response);
+              resolve10(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve9(response);
+                resolve10(response);
               }
             });
             return;
@@ -15455,11 +15455,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve9(response);
+            resolve10(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve9(response);
+          resolve10(response);
         });
         writeToStream(req, request);
       });
@@ -16383,7 +16383,7 @@ var NodeFsHandler = class {
         this._addToNodeFs(path19, initialAdd, wh, depth + 1);
       }
     }).on(EV.ERROR, this._boundHandleError);
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve10, reject) => {
       if (!stream)
         return reject();
       stream.once(STR_END, () => {
@@ -16392,7 +16392,7 @@ var NodeFsHandler = class {
           return;
         }
         const wasThrottled = throttler ? throttler.clear() : false;
-        resolve9(void 0);
+        resolve10(void 0);
         previous.getChildren().filter((item) => {
           return item !== directory && !current.has(item);
         }).forEach((item) => {
@@ -19290,9 +19290,11 @@ async function readManifest(root) {
     throw new Error(`Overleaf manifest failed schema validation at ${validationError} and was quarantined at ${target}.`);
   }
   const manifest = migrateManifest(parsed);
-  const ignoreContent = await ensureLocalIgnoreFile(root);
-  localIgnoreRules.set(manifest, (0, import_ignore.default)().add(ignoreContent));
+  setLocalIgnoreRules(manifest, await ensureLocalIgnoreFile(root));
   return manifest;
+}
+function setLocalIgnoreRules(manifest, content) {
+  localIgnoreRules.set(manifest, (0, import_ignore.default)().add(content));
 }
 async function ensureLocalIgnoreFile(root) {
   const target = path3.join(root, LOCAL_IGNORE_NAME);
@@ -19915,8 +19917,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve9, reject) => {
-      pending.push(() => task().then(resolve9, reject).finally(() => {
+    return new Promise((resolve10, reject) => {
+      pending.push(() => task().then(resolve10, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -19939,11 +19941,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash = (0, import_fs3.createReadStream)(filePath);
-    const digest = await new Promise((resolve9, reject) => {
+    const digest = await new Promise((resolve10, reject) => {
       const state = (0, import_crypto.createHash)("sha1");
       hash.on("data", (chunk) => state.update(chunk));
       hash.on("error", reject);
-      hash.on("end", () => resolve9(state.digest("hex")));
+      hash.on("end", () => resolve10(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -20233,7 +20235,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve9) => resolve9());
+  const wake = () => waiters.splice(0).forEach((resolve10) => resolve10());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -20245,7 +20247,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve9) => waiters.push(resolve9));
+            await new Promise((resolve10) => waiters.push(resolve10));
           }
           reservedBytes += amount;
         }
@@ -20653,14 +20655,14 @@ async function hashFileDigests(filePath) {
   const sha12 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
   git.update(`blob ${stat13.size}\0`);
-  await new Promise((resolve9, reject) => {
+  await new Promise((resolve10, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha12.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve9);
+    input.on("end", resolve10);
   });
   return { size: stat13.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
@@ -20872,7 +20874,7 @@ var OverleafSyncEngine = class {
         this.scheduleSync(`local:${event}`);
       });
     }
-    await new Promise((resolve9) => this.events.once("stop", resolve9));
+    await new Promise((resolve10) => this.events.once("stop", resolve10));
   }
   requestStop() {
     this.events.emit("stop");
@@ -21873,7 +21875,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve9) => setTimeout(resolve9, ms));
+  return new Promise((resolve10) => setTimeout(resolve10, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -22137,7 +22139,7 @@ async function writePrivateJson(target, value) {
   }
 }
 function runCommand(command, args, stdin) {
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     const child = (0, import_child_process2.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -22146,7 +22148,7 @@ function runCommand(command, args, stdin) {
     child.once("error", (error) => reject(error));
     child.once("close", (code) => {
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve9(output);
+      if (code === 0) resolve10(output);
       else {
         const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
@@ -22297,7 +22299,7 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve9) => setTimeout(resolve9, 50));
+      await new Promise((resolve10) => setTimeout(resolve10, 50));
     }
   }
 }
@@ -22388,6 +22390,7 @@ var os5 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
 var import_util18 = require("util");
+var import_ignore2 = __toESM(require_ignore());
 
 // src/schema.ts
 var TOGGLE_SCHEMA = [
@@ -23473,7 +23476,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve10, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23486,7 +23489,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve9();
+        error ? reject(error) : resolve10();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -23501,7 +23504,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve10, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -23509,7 +23512,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve9(project);
+        error ? reject(error) : resolve10(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
@@ -23520,7 +23523,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve10, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23532,7 +23535,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve9(project);
+        error ? reject(error) : resolve10(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -23590,7 +23593,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve9, reject) => {
+    return new Promise((resolve10, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -23600,7 +23603,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve9(values ?? []);
+        error ? reject(error) : resolve10(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -23888,7 +23891,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve9) => setTimeout(resolve9, 250 * 2 ** attempt));
+      await new Promise((resolve10) => setTimeout(resolve10, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -23920,7 +23923,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -23948,7 +23951,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve9({
+            resolve10({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -24148,11 +24151,11 @@ var SyncOwnerCoordinator = class {
 `, { mode: 384 });
       await fs16.rm(paths.socketPath, { force: true });
       this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve9, reject) => {
+      await new Promise((resolve10, reject) => {
         this.server.once("error", reject);
         this.server.listen(paths.socketPath, () => {
           this.server.removeListener("error", reject);
-          resolve9();
+          resolve10();
         });
       });
       await fs16.chmod(paths.socketPath, 384);
@@ -24164,7 +24167,7 @@ var SyncOwnerCoordinator = class {
     } catch (error) {
       const server = this.server;
       this.server = void 0;
-      if (server?.listening) await new Promise((resolve9) => server.close(() => resolve9()));
+      if (server?.listening) await new Promise((resolve10) => server.close(() => resolve10()));
       await fs16.rm(paths.lockPath, { recursive: true, force: true });
       await fs16.rm(paths.socketPath, { force: true });
       throw error;
@@ -24215,7 +24218,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve9, reject) => {
+    const subscribed = new Promise((resolve10, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -24227,7 +24230,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve9();
+        error ? reject(error) : resolve10();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -24269,7 +24272,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve9) => server.close(() => resolve9()));
+      await new Promise((resolve10) => server.close(() => resolve10()));
     }
     if (this.metadata && this.root) {
       const paths = runtimePaths(this.root);
@@ -24375,7 +24378,7 @@ async function inspectOwner(root) {
   return { reachable: await canConnect(paths.socketPath), metadata: await readMetadata(paths.metadataPath) };
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -24384,7 +24387,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve9(result);
+      error ? reject(error) : resolve10(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -24489,7 +24492,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -24497,7 +24500,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve9();
+      error ? reject(error) : resolve10();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -24525,7 +24528,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -24534,7 +24537,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve9();
+      error ? reject(error) : resolve10();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -24543,7 +24546,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -24552,14 +24555,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve9(value);
+      resolve10(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve9) => setTimeout(resolve9, ms));
+  return new Promise((resolve10) => setTimeout(resolve10, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -24901,13 +24904,13 @@ async function watchWithTakeover(root, policy, credentials, output) {
         await owner.runWatchAsOwner();
       } else {
         activeSocket = await owner.subscribe((event) => output.event(event.event, event.root, event.data));
-        await new Promise((resolve9) => {
-          activeSocket.once("close", resolve9);
-          activeSocket.once("error", resolve9);
+        await new Promise((resolve10) => {
+          activeSocket.once("close", resolve10);
+          activeSocket.once("error", resolve10);
           const interval = setInterval(() => {
             if (stopping) {
               clearInterval(interval);
-              resolve9();
+              resolve10();
             }
           }, 250);
         });
@@ -25071,7 +25074,7 @@ async function readSecret(prompt) {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding("utf8");
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     let value = "";
     const onData = (chunk) => {
       if (chunk === "\r" || chunk === "\n") {
@@ -25079,7 +25082,7 @@ async function readSecret(prompt) {
         process.stdin.setRawMode(false);
         process.stdin.pause();
         process.stderr.write("\n");
-        resolve9(value);
+        resolve10(value);
       } else if (chunk === "") {
         process.stdin.off("data", onData);
         process.stdin.setRawMode(false);
@@ -25110,9 +25113,9 @@ async function confirm(prompt) {
 }
 function question(prompt) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve9) => rl.question(prompt, (answer) => {
+  return new Promise((resolve10) => rl.question(prompt, (answer) => {
     rl.close();
-    resolve9(answer);
+    resolve10(answer);
   }));
 }
 function blockingExitCode(result) {
@@ -25143,7 +25146,7 @@ function toPosix(value) {
   return value.replace(/[\\/]+/g, "/").replace(/^\/+/, "");
 }
 function delay3(ms) {
-  return new Promise((resolve9) => setTimeout(resolve9, ms));
+  return new Promise((resolve10) => setTimeout(resolve10, ms));
 }
 function exists4(target) {
   return fs17.stat(target).then(() => true, () => false);

@@ -899,6 +899,13 @@
           "group": "navigation@2"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "overleafCodex.publishFolder",
+          "when": "explorerResourceIsFolder && resourceScheme == file",
+          "group": "latexEditingToolkit@1"
+        }
+      ],
       "view/item/context": [
         {
           "command": "overleafCodex.forgetLocalMirror",

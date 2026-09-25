@@ -85,6 +85,18 @@ export function activate(context: vscode.ExtensionContext): void {
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
       await activePanel.openSection("sync");
     }),
+    command("overleafCodex.publishFolder", async (candidate?: unknown) => {
+      // The Explorer passes the folder it was invoked on, which may sit anywhere inside a workspace
+      // folder; every other entry point publishes a workspace folder.
+      const target = candidate instanceof vscode.Uri && candidate.scheme === "file" ? candidate : undefined;
+      const folder = target ? vscode.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
+      if (!folder) {
+        if (target) vscode.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
+        return;
+      }
+      activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles!, () => treeProvider.refresh());
+      await activePanel.openPublishForm((target ?? folder.uri).fsPath);
+    }),
     command("hsnips.openSnippetManager", async (folderUri?: vscode.Uri) => {
       const folder = folderUri instanceof vscode.Uri
         ? vscode.workspace.getWorkspaceFolder(folderUri)
@@ -1097,6 +1109,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     }
     const mirrors = await overleafService.listMirrors().catch(() => []);
     const currentRoot = overleafService.realtimeSync.currentRoot;
+    const publishNode = this.actionNode("overleaf-publish-folder", "Publish Folder to Overleaf", "new project from local files", "cloud-upload", "overleafCodex.publishFolder", []);
     const children = mirrors.length
       ? [
           ...await Promise.all(mirrors.map(async mirror => {
@@ -1127,9 +1140,10 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
           })),
           ...(mirrors.some(mirror => mirror.missing)
             ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])]
-            : [])
+            : []),
+          publishNode
         ]
-      : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud")];
+      : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud"), publishNode];
     return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : undefined);
   }
 
@@ -1528,6 +1542,11 @@ class ToolkitPanel {
   async openSection(section: "snippets" | "sync"): Promise<void> {
     this.panel.reveal(vscode.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
+  }
+
+  async openPublishForm(folder: string): Promise<void> {
+    this.panel.reveal(vscode.ViewColumn.One);
+    await this.panel.webview.postMessage({ type: "toolkit-open-publish", folder });
   }
 
   private async handleMessage(message: unknown): Promise<void> {

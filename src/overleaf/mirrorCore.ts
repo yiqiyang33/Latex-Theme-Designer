@@ -3,9 +3,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import createIgnore from 'ignore';
 import { buildProjectTreeIndex } from './tree';
 import {
   DEFAULT_IGNORE_PATTERNS,
+  DEFAULT_LOCAL_IGNORE_CONTENT,
   ensureLocalIgnoreFile,
   isAlwaysLocal,
   LOCAL_IGNORE_NAME,
@@ -13,6 +15,7 @@ import {
   MAX_METADATA_JSON_BYTES,
   metadataPath,
   readTextFileBounded,
+  setLocalIgnoreRules,
   writeBaseDoc,
   writeManifest
 } from './manifest';
@@ -283,13 +286,6 @@ export async function createRemoteProjectMirror(
   return { root: targetRoot, projectId, published: true };
 }
 
-/**
- * Writes the editor, latexmk and agent files a mirror relies on. Returns the paths it left alone.
- *
- * A mirror created from scratch owns its folder, so overwriting is right there. A folder published
- * in place already belongs to the user and may carry its own versions of every one of these files;
- * `overwriteExisting: false` keeps theirs and reports what was kept, so they can merge by hand.
- */
 /** A manifest with nothing tracked, used to ask scanLocalProject what a folder would sync. */
 function untrackedManifest(): OverleafCodexManifest {
   return {
@@ -307,23 +303,68 @@ function untrackedManifest(): OverleafCodexManifest {
 export interface LocalPublishPreview {
   files: Array<{ path: string; size: number }>;
   totalBytes: number;
+  /** Folders below root that are already mirrors. Publishing would upload their files a second time. */
+  nestedMirrors: string[];
 }
 
 /**
  * Lists what publishing `root` would upload, applying the same rules a sync would: the manifest
- * ignore patterns, the toolkit exclusions, the default local-ignore list for untracked paths, and
- * isAlwaysLocal. Build output, PDFs, `.git` and editor state therefore never appear here.
+ * ignore patterns, the toolkit exclusions, the folder's .overleaf-codexignore (or the default list
+ * when it has none) for untracked paths, and isAlwaysLocal. Build output, PDFs, `.git` and editor
+ * state therefore never appear here.
  */
 export async function previewLocalPublish(
   root: string,
   isExcluded: (relPath: string) => boolean = () => false
 ): Promise<LocalPublishPreview> {
-  const scan = await scanLocalProject(root, untrackedManifest());
+  const manifest = untrackedManifest();
+  // Publishing keeps an existing ignore file, so the sync will apply it; the preview must too.
+  setLocalIgnoreRules(manifest, await readTextFileBounded(path.join(root, LOCAL_IGNORE_NAME), MAX_METADATA_JSON_BYTES)
+    .catch(() => DEFAULT_LOCAL_IGNORE_CONTENT));
+  const scan = await scanLocalProject(root, manifest);
   const files = scan.files
     .filter(relPath => !isAlwaysLocal(relPath) && !isExcluded(relPath))
     .map(relPath => ({ path: relPath, size: scan.fileMetadata.get(relPath)?.size ?? 0 }))
     .sort((a, b) => a.path.localeCompare(b.path));
-  return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0) };
+  const nestedMirrors = (await Promise.all(scan.folders.map(async folder =>
+    await exists(manifestPath(path.join(root, folder))) ? folder : undefined
+  ))).filter((folder): folder is string => folder !== undefined);
+  return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0), nestedMirrors };
+}
+
+/** The nearest folder above `root` that is a mirror, if any. */
+export async function findEnclosingMirror(root: string): Promise<string | undefined> {
+  let current = path.resolve(root);
+  while (path.dirname(current) !== current) {
+    current = path.dirname(current);
+    if (await exists(manifestPath(current))) return current;
+  }
+  return undefined;
+}
+
+/**
+ * Renders paths as anchored .overleaf-codexignore entries that leave exactly those files out.
+ *
+ * The ignore library has no escape for `?`, which stays a one-character wildcard, so the entries
+ * are checked against every candidate and rejected if they would also catch a file nobody asked
+ * to leave out.
+ */
+export function localIgnoreEntries(excluded: string[], candidates: string[]): string[] {
+  const entries = excluded.map(relPath => {
+    if (/[\r\n]/.test(relPath)) throw new Error(`Cannot leave out ${JSON.stringify(relPath)}: its name contains a line break.`);
+    return `/${relPath.replace(/[\\*[]/g, match => `\\${match}`).replace(/ +$/, spaces => spaces.replace(/ /g, '\\ '))}`;
+  });
+  const matcher = createIgnore().add(entries);
+  const wanted = new Set(excluded);
+  const collateral = candidates.filter(relPath => !wanted.has(relPath) && matcher.ignores(relPath));
+  const missed = excluded.filter(relPath => !matcher.ignores(relPath));
+  if (collateral.length || missed.length) {
+    throw new Error(
+      `The selected files cannot be left out exactly (${[...missed, ...collateral].join(', ')}). `
+        + `Add them to ${LOCAL_IGNORE_NAME} by hand instead.`
+    );
+  }
+  return entries;
 }
 
 /**
@@ -346,10 +387,29 @@ export async function detectRootDocuments(root: string, candidatePaths: string[]
   });
 }
 
+const PUBLISHED_IN_PLACE_MARKER = 'origin.json';
+
+/**
+ * True when `root` became a mirror by being published in place, i.e. the folder was the user's
+ * before it was ever a mirror. Deleting such a mirror must never delete the folder.
+ */
+export async function isPublishedInPlace(root: string): Promise<boolean> {
+  const raw = await readTextFileBounded(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), MAX_METADATA_JSON_BYTES).catch(() => undefined);
+  if (raw === undefined) return false;
+  try {
+    return (JSON.parse(raw) as { kind?: unknown }).kind === 'published-in-place';
+  } catch {
+    // Unreadable but present: err on the side of keeping the user's folder.
+    return true;
+  }
+}
+
 export interface PublishLocalFolderOptions {
   /** Uploads the folder's content. Runs after the manifest exists, so failures do not roll back. */
   publish(root: string, client: OverleafClient, projectId: string): Promise<void>;
   register?(root: string): Promise<unknown>;
+  /** Files to keep out of the project. They go into .overleaf-codexignore, so later syncs skip them too. */
+  excludedPaths?: string[];
 }
 
 export interface PublishLocalFolderResult {
@@ -367,8 +427,9 @@ export interface PublishLocalFolderResult {
  *
  * Unlike createRemoteProjectMirror, this function does not own `root`: it belongs to the user and
  * may hold years of work. So rollback removes only what this call created - the metadata folder,
- * the ignore file if it was new, and the remote project - and never the folder itself. Support
- * files the user already has are kept rather than overwritten.
+ * the ignore file or the lines appended to it, and the remote project - and never the folder
+ * itself. Support files the user already has are kept rather than overwritten. Everything that
+ * can be checked locally is checked before the remote project exists.
  */
 export async function publishLocalFolder(
   client: OverleafClient,
@@ -380,12 +441,29 @@ export async function publishLocalFolder(
   if (await exists(manifestPath(root))) {
     throw new Error('This folder is already an Overleaf mirror.');
   }
+  const enclosing = await findEnclosingMirror(root);
+  if (enclosing) {
+    throw new Error(`This folder is inside the Overleaf mirror at ${enclosing}; its files already sync with that project.`);
+  }
+  const preview = await previewLocalPublish(root);
+  if (preview.nestedMirrors.length) {
+    throw new Error(`This folder contains another Overleaf mirror (${preview.nestedMirrors.join(', ')}); publish a folder that does not.`);
+  }
+  const candidates = preview.files.map(file => file.path);
+  if (!candidates.includes(rootDocPath)) {
+    throw new Error(`The main document ${rootDocPath} is not among the files that would be uploaded.`);
+  }
+  // Paths the folder no longer has would not be uploaded anyway, so they need no entry.
+  const excluded = [...new Set(options.excludedPaths ?? [])].filter(relPath => candidates.includes(relPath));
+  if (excluded.includes(rootDocPath)) throw new Error('The main document cannot be left out of the project.');
+  const ignoreEntries = excluded.length ? localIgnoreEntries(excluded, candidates) : [];
 
   // Record what exists before touching anything, so rollback can tell ours from theirs.
   const metadataRoot = metadataPath(root);
   const ignoreFile = path.join(root, LOCAL_IGNORE_NAME);
   const metadataExisted = await exists(metadataRoot);
-  const ignoreExisted = await exists(ignoreFile);
+  // Only ever appended to, so truncating back to this size undoes exactly what was added.
+  const ignoreSizeBefore = await fs.stat(ignoreFile).then(stat => stat.size, () => undefined);
 
   const projectId = await client.createProject(projectName);
   let manifestWritten = false;
@@ -395,14 +473,26 @@ export async function publishLocalFolder(
     // The root doc has no remote entity yet, so only the path is known; the id arrives with it.
     manifest.rootDocPath = rootDocPath;
     await createMetadataDirectories(root);
+    // Written before the manifest so no moment exists where this is a mirror that looks disposable.
+    await fs.writeFile(
+      metadataPath(root, PUBLISHED_IN_PLACE_MARKER),
+      `${JSON.stringify({ kind: 'published-in-place', at: new Date().toISOString() }, null, 2)}\n`,
+      'utf8'
+    );
     await ensureLocalIgnoreFile(root);
+    // Before the manifest: once it exists a sync may run, and it must already skip these.
+    if (ignoreEntries.length) {
+      await fs.appendFile(ignoreFile, `\n# Left out when this folder was published to Overleaf.\n${ignoreEntries.join('\n')}\n`, 'utf8');
+    }
     await writeManifest(root, manifest);
     manifestWritten = true;
     keptFiles = await writeMirrorSupportFiles(root, rootDocPath, manifest.compiler, { overwriteExisting: false });
   } catch (error) {
     if (!manifestWritten) {
       if (!metadataExisted) await fs.rm(metadataRoot, { recursive: true, force: true }).catch(() => undefined);
-      if (!ignoreExisted) await fs.rm(ignoreFile, { force: true }).catch(() => undefined);
+      else await fs.rm(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), { force: true }).catch(() => undefined);
+      if (ignoreSizeBefore === undefined) await fs.rm(ignoreFile, { force: true }).catch(() => undefined);
+      else await fs.truncate(ignoreFile, ignoreSizeBefore).catch(() => undefined);
       await client.deleteProject(projectId).catch(() => undefined);
     }
     throw error;
@@ -418,6 +508,13 @@ export async function publishLocalFolder(
   return { root, projectId, published: true, keptFiles };
 }
 
+/**
+ * Writes the editor, latexmk and agent files a mirror relies on. Returns the paths it left alone.
+ *
+ * A mirror created from scratch owns its folder, so overwriting is right there. A folder published
+ * in place already belongs to the user and may carry its own versions of every one of these files;
+ * `overwriteExisting: false` keeps theirs and reports what was kept, so they can merge by hand.
+ */
 export async function writeMirrorSupportFiles(
   root: string,
   rootDocPath?: string,
