@@ -216,6 +216,25 @@ describe("Overleaf integration primitives", () => {
       schemaVersion: 2, checkedAt: "new", projectId: "project", projectName: "Project",
       hasBlocking: false, completeness: "complete", items: [{ path: "retry.tex", status: "synced", blocking: false }]
     };
+    const staleFolders: SyncStatusReport = {
+      schemaVersion: 2, checkedAt: "old", projectId: "project", projectName: "Project", hasBlocking: true, completeness: "complete",
+      items: [
+        { path: "Fig", entityType: "folder", status: "local only", blocking: true },
+        // Written before local-only folders carried a type; above a requested path, it is a folder anyway.
+        { path: "templates", status: "local only", blocking: true },
+        { path: "unrelated", entityType: "folder", status: "local only", blocking: true },
+        { path: "other.tex", status: "diverged", blocking: true }
+      ]
+    };
+    const pushed: SyncStatusReport = {
+      schemaVersion: 2, checkedAt: "new", projectId: "project", projectName: "Project", hasBlocking: false, completeness: "complete",
+      items: [{ path: "Fig/cover.png", status: "synced", blocking: false }, { path: "templates/a.tex", status: "synced", blocking: false }]
+    };
+    // The folders were created by pushing the files inside them, so the check finds them in sync
+    // and reports nothing for them; their old "local only" items must not survive the merge.
+    expect(mergeTargetedSyncStatusReport(staleFolders, pushed, ["Fig/cover.png", "templates/a.tex"]).items.map(item => item.path))
+      .toEqual(["Fig/cover.png", "other.tex", "templates/a.tex", "unrelated"]);
+
     const merged = mergeTargetedSyncStatusReport(previous, targeted, ["retry.tex"]);
     expect(merged.items.map(item => [item.path, item.status])).toEqual([["other.tex", "diverged"], ["retry.tex", "synced"]]);
     expect(merged.globalBlockReason).toBe("tree unavailable");
@@ -476,6 +495,16 @@ describe("Overleaf integration primitives", () => {
     expect(retried).toMatchObject({ content: "Hello!", changed: true });
     expect(beforeApply.content).toBe("Hello!");
     expect(beforeApply.applyCount).toBe(2);
+  });
+
+  it("treats an update the document already reflects as nothing to apply", async () => {
+    // Overleaf echoes a client's own submission back as a bare {doc, v} at the pre-submit version.
+    const transport = new AmbiguousAckTransport("Hello", 1);
+    const session = makeOtSession(transport);
+    await session.submitLocal("Hello!");
+    expect(await session.applyRemote({ doc: "doc-1", v: 1 })).toBeUndefined();
+    expect(session.state).toMatchObject({ version: 2, remoteCache: "Hello!" });
+    expect(await session.applyRemote({ doc: "doc-1", v: 2, op: [{ p: 6, i: "?" }] })).toBe("Hello!?");
   });
 
   it("falls back to legacy Overleaf settings unless the new Toolkit key is explicit", () => {

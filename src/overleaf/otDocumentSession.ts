@@ -119,9 +119,10 @@ export class OtDocumentSession {
     return { content: intended, changed: true };
   }
 
-  applyRemote(update: OtUpdate): Promise<string> {
+  /** Applies a remote update and returns the new content, or undefined if the document already reflects it. */
+  applyRemote(update: OtUpdate): Promise<string | undefined> {
     return this.run(async () => {
-      if (update.v < this.state.version) return this.state.remoteCache;
+      if (update.v < this.state.version) return undefined;
       if (update.v !== this.state.version) {
         throw new Error('Remote version changed unexpectedly.');
       }

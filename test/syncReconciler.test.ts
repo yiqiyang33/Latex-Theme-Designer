@@ -6,6 +6,7 @@ import { classifyProjectPaths, fetchRemoteSnapshot, reconcileProject, type Remot
 import { scanLocalProject } from '../src/overleaf/syncStatus';
 import { SyncHealthService } from '../src/overleaf/syncHealthService';
 import type { OverleafCodexManifest } from '../src/overleaf/types';
+import { sha1 } from '../src/overleaf/util';
 
 /**
  * The realtime service and the CLI engine used to carry separate copies of this read. These cover
@@ -287,6 +288,49 @@ describe('reconcileProject', () => {
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
+  });
+
+  describe('repairs a wrongly recorded base once both sides agree', () => {
+    // A push race once stored an empty-content base for a document both sides held in full; the
+    // next edit would then have looked like a change on both sides - a false conflict.
+    const tracked = () => ({
+      path: 'main.tex', entityId: 'doc-main', entityType: 'doc' as const, parentFolderId: 'root',
+      version: 3, sha1: sha1('shared'), baseHash: sha1('')
+    });
+
+    it('from the content a full check read', async () => {
+      const root = await fixture({ 'main.tex': 'shared' });
+      try {
+        const target = manifest();
+        target.files['main.tex'] = tracked();
+        const remote = remoteSnapshot();
+        remote.manifest.files['main.tex'] = tracked();
+        remote.contents.set('main.tex', 'shared');
+        const result = await reconcileProject({
+          root, manifest: target, remote, localScan: await scanLocalProject(root, target), mode: 'full'
+        });
+        expect(result.report.items.find(item => item.path === 'main.tex')?.status).toBe('synced');
+        expect(target.files['main.tex'].baseHash).toBe(sha1('shared'));
+        await expect(fs.readFile(path.join(root, '.overleaf-codex', 'base', 'docs', 'doc-main.tex'), 'utf8')).resolves.toBe('shared');
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it('from the stored base copy when an incremental check reused the remote', async () => {
+      const root = await fixture({ 'main.tex': 'shared', '.overleaf-codex/base/docs/doc-main.tex': 'shared' });
+      try {
+        const target = manifest();
+        target.files['main.tex'] = tracked();
+        const remote = remoteSnapshot();
+        remote.manifest.files['main.tex'] = tracked();
+        remote.reused.add('main.tex');
+        await reconcileProject({ root, manifest: target, remote, localScan: await scanLocalProject(root, target), mode: 'incremental' });
+        expect(target.files['main.tex'].baseHash).toBe(sha1('shared'));
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
   });
 
   it('marks the report partial when a remote read failed', async () => {

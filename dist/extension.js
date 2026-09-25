@@ -26572,6 +26572,9 @@ function classifySyncStatus(input) {
 function isBlockingStatus(status) {
   return status !== "synced";
 }
+function folderInTargetedScope(folderPath, requested) {
+  return requested.some((item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`));
+}
 function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPaths) {
   const localRoot = manifest.folders[""];
   const remoteRoot = remote.folders[""];
@@ -26590,9 +26593,7 @@ function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPa
   const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath2)) : void 0;
   const items = [];
   for (const folderPath of paths) {
-    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !requested.some(
-      (item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`)
-    )) continue;
+    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !folderInTargetedScope(folderPath, requested)) continue;
     const localFolder = manifest.folders[folderPath];
     const remoteFolder = remote.folders[folderPath];
     const localExists = localPaths ? localPaths.has(folderPath) : true;
@@ -26728,13 +26729,16 @@ function mergeTargetedSyncStatusReport(previous, targeted, requestedPaths) {
   if (!previous || previous.projectId !== targeted.projectId) {
     return targeted;
   }
-  const requested = new Set([...requestedPaths].map(toPosixPath2));
+  const requested = [...requestedPaths].map(toPosixPath2);
+  const requestedSet = new Set(requested);
   const replacements = new Set(targeted.items.map((item) => toPosixPath2(item.path)));
+  const superseded = (item) => {
+    const itemPath = toPosixPath2(item.path);
+    if (requestedSet.has(itemPath) || replacements.has(itemPath)) return true;
+    return requested.some((relPath) => relPath.startsWith(`${itemPath}/`)) || item.entityType === "folder" && folderInTargetedScope(itemPath, requested);
+  };
   const items = [
-    ...previous.items.filter((item) => {
-      const itemPath = toPosixPath2(item.path);
-      return !requested.has(itemPath) && !replacements.has(itemPath);
-    }),
+    ...previous.items.filter((item) => !superseded(item)),
     ...targeted.items
   ].sort((a, b) => a.path.localeCompare(b.path));
   return {
@@ -29127,6 +29131,18 @@ async function classifyProjectPaths(deps) {
         if (remoteHash !== void 0) manifestFile.sha1 = remoteHash;
         manifestChanged = true;
       }
+      if (remoteFile.entityType === "doc" && remoteHash !== void 0 && manifestFile.baseHash !== remoteHash) {
+        if (typeof remoteContent === "string") {
+          manifestFile.baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+          manifestChanged = true;
+        } else {
+          const stored = await readBaseDoc(root, remoteFile.entityId);
+          if (stored !== void 0 && sha1(stored) === remoteHash) {
+            manifestFile.baseHash = remoteHash;
+            manifestChanged = true;
+          }
+        }
+      }
     }
     if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {
       addOrUpdateFile(manifest, remoteFile, remoteContent);
@@ -29411,9 +29427,10 @@ var OtDocumentSession = class {
     this.state.localCache = intended;
     return { content: intended, changed: true };
   }
+  /** Applies a remote update and returns the new content, or undefined if the document already reflects it. */
   applyRemote(update) {
     return this.run(async () => {
-      if (update.v < this.state.version) return this.state.remoteCache;
+      if (update.v < this.state.version) return void 0;
       if (update.v !== this.state.version) {
         throw new Error("Remote version changed unexpectedly.");
       }
@@ -31908,14 +31925,17 @@ var RealtimeSyncService = class {
       this.scheduleSyncStatusCheck(5e3, [relPath]);
       return;
     }
+    const alreadyJoined = this.docStates.has(relPath);
     const state = await this.ensureDocState(relPath);
-    let remoteNext;
+    let applied;
     try {
-      remoteNext = await this.documentSessionFor(state).applyRemote(update);
+      applied = await this.documentSessionFor(state).applyRemote(update);
     } catch {
       await this.resyncOrConflict(relPath, "Remote version changed unexpectedly.");
       return;
     }
+    if (applied === void 0 && alreadyJoined) return;
+    const remoteNext = applied ?? state.remoteCache;
     const localPath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
     const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => state.localCache) : state.localCache;
     if (this.manifest.files[relPath]?.entityId !== state.docId) {
@@ -32126,7 +32146,10 @@ var RealtimeSyncService = class {
         relPath,
         docId: file.entityId,
         version: joined.version,
-        localCache: joined.content,
+        // Local edits and remote changes are both measured from what the two sides last agreed on.
+        // Starting from the joined content instead passes off every remote change made since then
+        // as already in the local file, and the next push reverts it on Overleaf.
+        localCache: await this.agreedBaseContent(file) ?? joined.content,
         remoteCache: joined.content
       };
       this.docStates.set(relPath, state);
@@ -32139,6 +32162,13 @@ var RealtimeSyncService = class {
     } finally {
       this.pendingDocJoins.delete(relPath);
     }
+  }
+  /** The content local and remote last agreed on, if the stored copy is the one the manifest recorded. */
+  async agreedBaseContent(file) {
+    const expected = file.baseHash ?? file.sha1;
+    if (!expected) return void 0;
+    const base = await readBaseDoc(this.root, file.entityId);
+    return base !== void 0 && sha1(base) === expected ? base : void 0;
   }
   documentSessionFor(state) {
     const existing = this.documentSessions.get(state.docId);
@@ -32359,18 +32389,19 @@ var RealtimeSyncService = class {
     });
     this.log(`Moved ${relPath} to local trash: ${target}`);
   }
+  /**
+   * Records what a push just left on Overleaf as the document's base. It is taken from the
+   * session's acknowledged content rather than by re-reading the file, which may already hold
+   * newer edits - or be mid-write - and would then be recorded as synced when it is not.
+   */
   async refreshBaseAfterLocalPush(relPath) {
     const entry = this.manifest.files[relPath];
-    if (!entry || entry.entityType !== "doc") {
+    const state = this.docStates.get(relPath);
+    if (!entry || entry.entityType !== "doc" || !state || state.paused || state.docId !== entry.entityId) {
       return;
     }
-    const localPath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
-    const content = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => void 0) : void 0;
-    if (content === void 0) {
-      return;
-    }
-    entry.baseHash = await writeBaseDoc(this.root, entry.entityId, content);
-    addOrUpdateFile(this.manifest, entry, content);
+    entry.baseHash = await writeBaseDoc(this.root, entry.entityId, state.remoteCache);
+    addOrUpdateFile(this.manifest, entry, state.remoteCache);
     await this.persistManifest();
   }
   async writeLocalFile(relPath, content, bypass) {

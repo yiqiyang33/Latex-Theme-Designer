@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -311,6 +312,83 @@ describe('startup auto-push', () => {
     await expect(internals.autoPushLocalAhead(localOnly(['a.tex', 'b.tex']))).rejects.toThrow('Forbidden');
     expect(internals.pushLocalFile).toHaveBeenCalledTimes(1);
     await flushActivityLog(internals);
+  });
+});
+
+describe('pushing a new document', () => {
+  function joinedDoc(internals: Record<string, any>, relPath: string, content: string) {
+    internals.root = tmpRoot;
+    internals.session = {};
+    internals.manifest = {
+      ...makeManifest(tmpRoot),
+      files: { [relPath]: { path: relPath, entityId: 'doc-new', entityType: 'doc', parentFolderId: 'f0', binary: false, version: 1 } }
+    };
+    const state = { relPath, docId: 'doc-new', version: 1, localCache: content, remoteCache: content };
+    internals.docStates.set(relPath, state);
+    internals.persistManifest = vi.fn(async () => undefined);
+    return state;
+  }
+
+  it('ignores Overleaf echoing our own update back, instead of rewriting the file', async () => {
+    const { internals } = makeService();
+    joinedDoc(internals, 'theme.sty', 'pushed');
+    await fs.writeFile(path.join(tmpRoot, 'theme.sty'), 'pushed');
+    internals.syncGate.setProject('ready');
+    internals.writeLocalFile = vi.fn();
+
+    // The ack arrives as a bare {doc, v} carrying the version the push was applied at.
+    await internals.handleRemoteUpdate({ doc: 'doc-new', v: 0 });
+
+    expect(internals.writeLocalFile).not.toHaveBeenCalled();
+    expect(internals.persistManifest).not.toHaveBeenCalled();
+  });
+
+  it('records the acknowledged content as the base, not whatever the file holds afterwards', async () => {
+    const { internals } = makeService();
+    joinedDoc(internals, 'theme.sty', 'pushed');
+    await fs.mkdir(path.join(tmpRoot, '.overleaf-codex', 'base', 'docs'), { recursive: true });
+    // Mid-write (or already edited again): the file no longer holds what was pushed.
+    await fs.writeFile(path.join(tmpRoot, 'theme.sty'), '');
+
+    await internals.refreshBaseAfterLocalPush('theme.sty');
+
+    const entry = internals.manifest.files['theme.sty'];
+    const pushedHash = createHash('sha1').update('pushed').digest('hex');
+    expect(entry.baseHash).toBe(pushedHash);
+    expect(entry.sha1).toBe(pushedHash);
+  });
+});
+
+describe('remote update on a document joined on demand', () => {
+  it('brings the remote edit down instead of pushing the stale local copy back over it', async () => {
+    // A health check joins documents without leaving them, so their updates arrive with no state
+    // held for them yet. Joining on demand used to treat the joined content as already agreed,
+    // which made the untouched local file look like a local edit - and the sync reverted the
+    // collaborator's change on Overleaf.
+    const { internals } = makeService();
+    await fs.mkdir(path.join(tmpRoot, '.overleaf-codex', 'base', 'docs'), { recursive: true });
+    await fs.writeFile(path.join(tmpRoot, '.overleaf-codex', 'base', 'docs', 'd1.tex'), 'hello');
+    await fs.writeFile(path.join(tmpRoot, 'a.tex'), 'hello');
+    internals.root = tmpRoot;
+    internals.manifest = {
+      ...makeManifest(tmpRoot),
+      files: { 'a.tex': {
+        path: 'a.tex', entityId: 'd1', entityType: 'doc', parentFolderId: 'f0', binary: false, version: 1,
+        sha1: createHash('sha1').update('hello').digest('hex'), baseHash: createHash('sha1').update('hello').digest('hex')
+      } }
+    };
+    const submitted: unknown[] = [];
+    internals.session = {
+      joinDoc: vi.fn(async () => ({ content: 'hello world', version: 2 })),
+      applyOtUpdate: vi.fn(async (_doc: string, update: unknown) => { submitted.push(update); })
+    };
+    internals.persistManifest = vi.fn(async () => undefined);
+    internals.syncGate.setProject('ready');
+
+    await internals.handleRemoteUpdate({ doc: 'd1', v: 1, op: [{ p: 5, i: ' world' }] });
+
+    expect(submitted).toEqual([]);
+    await expect(fs.readFile(path.join(tmpRoot, 'a.tex'), 'utf8')).resolves.toBe('hello world');
   });
 });
 

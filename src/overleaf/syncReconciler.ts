@@ -292,6 +292,20 @@ export async function classifyProjectPaths(deps: ClassifyPathsDeps): Promise<Cla
         if (remoteHash !== undefined) manifestFile.sha1 = remoteHash;
         manifestChanged = true;
       }
+      // Content both sides hold is the agreed base by definition. A base recorded wrong would
+      // otherwise turn the next edit of this document into a false conflict.
+      if (remoteFile.entityType === 'doc' && remoteHash !== undefined && manifestFile.baseHash !== remoteHash) {
+        if (typeof remoteContent === 'string') {
+          manifestFile.baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+          manifestChanged = true;
+        } else {
+          const stored = await readBaseDoc(root, remoteFile.entityId);
+          if (stored !== undefined && sha1(stored) === remoteHash) {
+            manifestFile.baseHash = remoteHash;
+            manifestChanged = true;
+          }
+        }
+      }
     }
 
     if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== undefined) {

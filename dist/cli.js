@@ -19698,6 +19698,9 @@ function classifySyncStatus(input) {
 function isBlockingStatus(status) {
   return status !== "synced";
 }
+function folderInTargetedScope(folderPath, requested) {
+  return requested.some((item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`));
+}
 function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPaths) {
   const localRoot = manifest.folders[""];
   const remoteRoot = remote.folders[""];
@@ -19716,9 +19719,7 @@ function classifyFolderStructure(manifest, remote, requestedPaths, localFolderPa
   const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath)) : void 0;
   const items = [];
   for (const folderPath of paths) {
-    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !requested.some(
-      (item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`)
-    )) continue;
+    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !folderInTargetedScope(folderPath, requested)) continue;
     const localFolder = manifest.folders[folderPath];
     const remoteFolder = remote.folders[folderPath];
     const localExists = localPaths ? localPaths.has(folderPath) : true;
@@ -19854,13 +19855,16 @@ function mergeTargetedSyncStatusReport(previous, targeted, requestedPaths) {
   if (!previous || previous.projectId !== targeted.projectId) {
     return targeted;
   }
-  const requested = new Set([...requestedPaths].map(toPosixPath));
+  const requested = [...requestedPaths].map(toPosixPath);
+  const requestedSet = new Set(requested);
   const replacements = new Set(targeted.items.map((item) => toPosixPath(item.path)));
+  const superseded = (item) => {
+    const itemPath = toPosixPath(item.path);
+    if (requestedSet.has(itemPath) || replacements.has(itemPath)) return true;
+    return requested.some((relPath) => relPath.startsWith(`${itemPath}/`)) || item.entityType === "folder" && folderInTargetedScope(itemPath, requested);
+  };
   const items = [
-    ...previous.items.filter((item) => {
-      const itemPath = toPosixPath(item.path);
-      return !requested.has(itemPath) && !replacements.has(itemPath);
-    }),
+    ...previous.items.filter((item) => !superseded(item)),
     ...targeted.items
   ].sort((a, b) => a.path.localeCompare(b.path));
   return {
@@ -20434,6 +20438,18 @@ async function classifyProjectPaths(deps) {
         manifestFile.remoteSize = remoteFile.remoteSize;
         if (remoteHash !== void 0) manifestFile.sha1 = remoteHash;
         manifestChanged = true;
+      }
+      if (remoteFile.entityType === "doc" && remoteHash !== void 0 && manifestFile.baseHash !== remoteHash) {
+        if (typeof remoteContent === "string") {
+          manifestFile.baseHash = await writeBaseDoc(root, remoteFile.entityId, remoteContent);
+          manifestChanged = true;
+        } else {
+          const stored = await readBaseDoc(root, remoteFile.entityId);
+          if (stored !== void 0 && sha1(stored) === remoteHash) {
+            manifestFile.baseHash = remoteHash;
+            manifestChanged = true;
+          }
+        }
       }
     }
     if (!manifestFile && remoteFile && localHash === remoteHash && remoteHash !== void 0) {

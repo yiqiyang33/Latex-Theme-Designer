@@ -30,6 +30,7 @@ import {
   isAlwaysLocal,
   shouldIgnoreUntrackedLocalPath,
   writeBaseDoc,
+  readBaseDoc,
   readTextFileBounded,
   MAX_METADATA_JSON_BYTES
 } from './manifest';
@@ -2344,14 +2345,20 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
+    const alreadyJoined = this.docStates.has(relPath);
     const state = await this.ensureDocState(relPath);
-    let remoteNext: string;
+    let applied: string | undefined;
     try {
-      remoteNext = await this.documentSessionFor(state).applyRemote(update);
+      applied = await this.documentSessionFor(state).applyRemote(update);
     } catch {
       await this.resyncOrConflict(relPath, 'Remote version changed unexpectedly.');
       return;
     }
+    // Overleaf echoes a client's own update back to it as a bare {doc, v}; like any version the
+    // joined document already holds, it changes nothing. Rewriting the file for it anyway raced
+    // with a push reading that file, and once recorded a just-pushed document's base as empty.
+    if (applied === undefined && alreadyJoined) return;
+    const remoteNext = applied ?? state.remoteCache;
     const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
     const localContent = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => state.localCache) : state.localCache;
 
@@ -2586,7 +2593,10 @@ export class RealtimeSyncService implements vscode.Disposable {
         relPath,
         docId: file.entityId,
         version: joined.version,
-        localCache: joined.content,
+        // Local edits and remote changes are both measured from what the two sides last agreed on.
+        // Starting from the joined content instead passes off every remote change made since then
+        // as already in the local file, and the next push reverts it on Overleaf.
+        localCache: await this.agreedBaseContent(file) ?? joined.content,
         remoteCache: joined.content
       };
       this.docStates.set(relPath, state);
@@ -2599,6 +2609,14 @@ export class RealtimeSyncService implements vscode.Disposable {
     } finally {
       this.pendingDocJoins.delete(relPath);
     }
+  }
+
+  /** The content local and remote last agreed on, if the stored copy is the one the manifest recorded. */
+  private async agreedBaseContent(file: ManifestFile): Promise<string | undefined> {
+    const expected = file.baseHash ?? file.sha1;
+    if (!expected) return undefined;
+    const base = await readBaseDoc(this.root!, file.entityId);
+    return base !== undefined && sha1(base) === expected ? base : undefined;
   }
 
   private documentSessionFor(state: DocState): OtDocumentSession {
@@ -2840,18 +2858,19 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.log(`Moved ${relPath} to local trash: ${target}`);
   }
 
+  /**
+   * Records what a push just left on Overleaf as the document's base. It is taken from the
+   * session's acknowledged content rather than by re-reading the file, which may already hold
+   * newer edits - or be mid-write - and would then be recorded as synced when it is not.
+   */
   private async refreshBaseAfterLocalPush(relPath: string): Promise<void> {
     const entry = this.manifest!.files[relPath];
-    if (!entry || entry.entityType !== 'doc') {
+    const state = this.docStates.get(relPath);
+    if (!entry || entry.entityType !== 'doc' || !state || state.paused || state.docId !== entry.entityId) {
       return;
     }
-    const localPath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
-    const content = localPath ? await readTextFileBounded(localPath, MAX_METADATA_JSON_BYTES).catch(() => undefined) : undefined;
-    if (content === undefined) {
-      return;
-    }
-    entry.baseHash = await writeBaseDoc(this.root!, entry.entityId, content);
-    addOrUpdateFile(this.manifest!, entry, content);
+    entry.baseHash = await writeBaseDoc(this.root!, entry.entityId, state.remoteCache);
+    addOrUpdateFile(this.manifest!, entry, state.remoteCache);
     await this.persistManifest();
   }
 

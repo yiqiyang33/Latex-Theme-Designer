@@ -120,6 +120,14 @@ export function isBlockingStatus(status: SyncStatusKind): boolean {
   return status !== 'synced';
 }
 
+/**
+ * Whether a check targeted at `requested` re-evaluates the folder at `folderPath`: the folder
+ * itself, any folder above a requested path, and any folder below a requested folder.
+ */
+export function folderInTargetedScope(folderPath: string, requested: readonly string[]): boolean {
+  return requested.some(item => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`));
+}
+
 export function classifyFolderStructure(
   manifest: OverleafCodexManifest,
   remote: OverleafCodexManifest,
@@ -143,9 +151,7 @@ export function classifyFolderStructure(
   const localPaths = localFolderPaths ? new Set([...localFolderPaths].map(toPosixPath)) : undefined;
   const items: SyncStatusItem[] = [];
   for (const folderPath of paths) {
-    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !requested.some(item =>
-      item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`)
-    )) continue;
+    if (!folderPath || shouldIgnore(manifest, folderPath) || requested && !folderInTargetedScope(folderPath, requested)) continue;
     const localFolder = manifest.folders[folderPath];
     const remoteFolder = remote.folders[folderPath];
     const localExists = localPaths ? localPaths.has(folderPath) : true;
@@ -304,13 +310,20 @@ export function mergeTargetedSyncStatusReport(
   if (!previous || previous.projectId !== targeted.projectId) {
     return targeted;
   }
-  const requested = new Set([...requestedPaths].map(toPosixPath));
+  const requested = [...requestedPaths].map(toPosixPath);
+  const requestedSet = new Set(requested);
   const replacements = new Set(targeted.items.map(item => toPosixPath(item.path)));
+  const superseded = (item: SyncStatusItem): boolean => {
+    const itemPath = toPosixPath(item.path);
+    if (requestedSet.has(itemPath) || replacements.has(itemPath)) return true;
+    // The check also re-evaluated the folders around the requested paths, and a folder it found in
+    // sync has no item in the new report, so its old item must go rather than be carried forward.
+    // Anything above a requested path is a folder, whatever an older report recorded for it.
+    return requested.some(relPath => relPath.startsWith(`${itemPath}/`))
+      || (item.entityType === 'folder' && folderInTargetedScope(itemPath, requested));
+  };
   const items = [
-    ...previous.items.filter(item => {
-      const itemPath = toPosixPath(item.path);
-      return !requested.has(itemPath) && !replacements.has(itemPath);
-    }),
+    ...previous.items.filter(item => !superseded(item)),
     ...targeted.items
   ].sort((a, b) => a.path.localeCompare(b.path));
   return {
