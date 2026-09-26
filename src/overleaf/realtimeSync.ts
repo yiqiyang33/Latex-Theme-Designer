@@ -160,6 +160,8 @@ export class RealtimeSyncService implements vscode.Disposable {
   private readonly healthChecks = new Set<Promise<unknown>>();
   private readonly localMutationIds = new Map<string, number[]>();
   private readonly pendingLocalCreates = new Set<string>();
+  /** Paths whose local change arrived while the path was held, and so was recorded but not sent. */
+  private readonly heldLocalChanges = new Set<string>();
   private readonly pendingFolderRenameRoots = new Set<string>();
   private readonly renameDetector = new RenameDetector(5000);
   private readonly output: vscode.OutputChannel;
@@ -444,6 +446,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.syncStatusReport = report;
       this.syncGate.applyReport(report);
       this.manifest = manifest;
+      this.retryHeldLocalChanges();
       this.updateSyncStatusBar();
       this.syncStatusChanged.fire();
       this.statusChanged.fire();
@@ -785,6 +788,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.inFlight.clear();
     this.localMutationIds.clear();
     this.pendingLocalCreates.clear();
+    this.heldLocalChanges.clear();
     this.pendingFolderRenameRoots.clear();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -1333,6 +1337,7 @@ export class RealtimeSyncService implements vscode.Disposable {
           return;
         }
         this.log(`Sync is paused for ${relPath}; recorded local ${kind} without uploading.`);
+        this.heldLocalChanges.add(relPath);
         this.scheduleSyncStatusCheck(undefined, [relPath]);
         return;
       }
@@ -1340,6 +1345,20 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.runPathOperation(relPath, () => this.handleLocalChange(relPath, kind));
     }, delayMs);
     this.timers.set(relPath, timer);
+  }
+
+  /**
+   * Sends local changes that were recorded while their path was held, now that a check has
+   * reopened it. They go back through the normal change path, which re-reads the file and
+   * pushes only what differs. Without this a file deleted and rewritten by a tool - held while the
+   * delete awaited confirmation - stayed "local ahead" until it happened to be saved again.
+   */
+  private retryHeldLocalChanges(): void {
+    for (const relPath of this.heldLocalChanges) {
+      if (!this.syncGate.canSync(relPath)) continue;
+      this.heldLocalChanges.delete(relPath);
+      this.scheduleLocalChange(relPath, 'change', 0);
+    }
   }
 
   /**

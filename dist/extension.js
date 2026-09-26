@@ -29960,6 +29960,8 @@ var RealtimeSyncService = class {
   healthChecks = /* @__PURE__ */ new Set();
   localMutationIds = /* @__PURE__ */ new Map();
   pendingLocalCreates = /* @__PURE__ */ new Set();
+  /** Paths whose local change arrived while the path was held, and so was recorded but not sent. */
+  heldLocalChanges = /* @__PURE__ */ new Set();
   pendingFolderRenameRoots = /* @__PURE__ */ new Set();
   renameDetector = new RenameDetector(5e3);
   output;
@@ -30205,6 +30207,7 @@ var RealtimeSyncService = class {
       this.syncStatusReport = report;
       this.syncGate.applyReport(report);
       this.manifest = manifest;
+      this.retryHeldLocalChanges();
       this.updateSyncStatusBar();
       this.syncStatusChanged.fire();
       this.statusChanged.fire();
@@ -30507,6 +30510,7 @@ var RealtimeSyncService = class {
     this.inFlight.clear();
     this.localMutationIds.clear();
     this.pendingLocalCreates.clear();
+    this.heldLocalChanges.clear();
     this.pendingFolderRenameRoots.clear();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -31023,6 +31027,7 @@ var RealtimeSyncService = class {
           return;
         }
         this.log(`Sync is paused for ${relPath}; recorded local ${kind} without uploading.`);
+        this.heldLocalChanges.add(relPath);
         this.scheduleSyncStatusCheck(void 0, [relPath]);
         return;
       }
@@ -31030,6 +31035,19 @@ var RealtimeSyncService = class {
       this.runPathOperation(relPath, () => this.handleLocalChange(relPath, kind));
     }, delayMs);
     this.timers.set(relPath, timer);
+  }
+  /**
+   * Sends local changes that were recorded while their path was held, now that a check has
+   * reopened it. They go back through the normal change path, which re-reads the file and
+   * pushes only what differs. Without this a file deleted and rewritten by a tool - held while the
+   * delete awaited confirmation - stayed "local ahead" until it happened to be saved again.
+   */
+  retryHeldLocalChanges() {
+    for (const relPath of this.heldLocalChanges) {
+      if (!this.syncGate.canSync(relPath)) continue;
+      this.heldLocalChanges.delete(relPath);
+      this.scheduleLocalChange(relPath, "change", 0);
+    }
   }
   /**
    * Re-queues a local change that lost the gate only to a reconnect or an in-flight check.

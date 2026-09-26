@@ -392,6 +392,74 @@ describe('remote update on a document joined on demand', () => {
   });
 });
 
+describe('local change recorded while its path was held', () => {
+  it('is sent once a check reopens the path, instead of sitting as local ahead', async () => {
+    // What an-idea's log showed: a tool deleted a tracked file and rewrote it 82s later. The
+    // delete was held for confirmation, so the rewrite arrived to a held path and was only
+    // recorded; the next check found it local ahead, and nothing sent it until the next save.
+    vi.useFakeTimers();
+    try {
+      const { internals } = makeService();
+      internals.root = tmpRoot;
+      internals.client = {};
+      internals.session = {};
+      internals.manifest = makeManifest(tmpRoot);
+      internals.scheduleSyncStatusCheck = vi.fn();
+      internals.runPathOperation = vi.fn((_relPath: string, operation: () => Promise<void>) => operation());
+      internals.handleLocalChange = vi.fn(async () => undefined);
+      internals.syncGate.setProject('ready');
+      internals.syncGate.setPath('main.tex', 'pending', 'Local deletion is waiting for explicit confirmation.');
+
+      internals.scheduleLocalChange('main.tex', 'create', 0);
+      await vi.runOnlyPendingTimersAsync();
+      expect(internals.handleLocalChange).not.toHaveBeenCalled();
+
+      // The check finds the rewritten file local ahead, which does not hold the path.
+      internals.syncGate.applyReport({
+        schemaVersion: 2, checkedAt: 'now', projectId: 'p1', projectName: 'p', hasBlocking: true, completeness: 'complete',
+        items: [{ path: 'main.tex', entityType: 'doc', status: 'local ahead', blocking: true }]
+      });
+      internals.retryHeldLocalChanges();
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(internals.handleLocalChange).toHaveBeenCalledWith('main.tex', 'change');
+      // Sent once; a later check must not queue it again.
+      internals.retryHeldLocalChanges();
+      await vi.runOnlyPendingTimersAsync();
+      expect(internals.handleLocalChange).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stays held while the path is still blocked for a reason of its own', async () => {
+    vi.useFakeTimers();
+    try {
+      const { internals } = makeService();
+      internals.root = tmpRoot;
+      internals.client = {};
+      internals.session = {};
+      internals.manifest = makeManifest(tmpRoot);
+      internals.scheduleSyncStatusCheck = vi.fn();
+      internals.handleLocalChange = vi.fn(async () => undefined);
+      internals.syncGate.setProject('ready');
+      internals.syncGate.setPath('main.tex', 'conflict', 'diverged');
+
+      internals.scheduleLocalChange('main.tex', 'change', 0);
+      await vi.runOnlyPendingTimersAsync();
+      internals.retryHeldLocalChanges();
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(internals.handleLocalChange).not.toHaveBeenCalled();
+      expect(internals.heldLocalChanges.has('main.tex')).toBe(true);
+      // Re-queuing it anyway would pause it again and schedule another check - after every check.
+      expect(internals.scheduleSyncStatusCheck).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('activity log write coalescing', () => {
   it('writes once for a burst instead of once per line', async () => {
     const { internals } = makeService();
