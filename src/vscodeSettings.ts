@@ -22,7 +22,8 @@ export function toolkitVscodeSettingsTemplate(): Record<string, unknown> {
       {
         name: "latexmk",
         command: "latexmk",
-        args: ["-synctex=1", "-interaction=nonstopmode", "-file-line-error", "-xelatex", "-outdir=%OUTDIR%", "%DOCFILE%"]
+        // -g: compile for real on every build, not only when latexmk sees a tracked source change.
+        args: ["-g", "-synctex=1", "-interaction=nonstopmode", "-file-line-error", "-xelatex", "-outdir=%OUTDIR%", "%DOCFILE%"]
       },
       {
         name: "biber",

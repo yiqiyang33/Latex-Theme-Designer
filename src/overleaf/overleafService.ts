@@ -646,7 +646,7 @@ export class OverleafService implements vscode.Disposable {
     try {
       const manifest = await readManifest(root);
       if (await upgradeGeneratedLatexmkRc(root, manifest.rootDocPath).catch(() => false)) {
-        this.output.appendLine(`[${new Date().toISOString()}] Updated the generated .latexmkrc in ${root} to always write SyncTeX.`);
+        this.output.appendLine(`[${new Date().toISOString()}] Updated the generated .latexmkrc in ${root} with the current build settings.`);
       }
       const client = await this.makeClient(manifest.serverUrl);
       await vscode.window.withProgress(
