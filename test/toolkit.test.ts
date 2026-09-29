@@ -1060,7 +1060,6 @@ describe("TypeScript Toolkit migration", () => {
 
   it("reads generated Beamer settings without changing the slide source", async () => {
     const root = await tempWorkspace();
-    const state = new StateService(root);
     const service = new ToolkitService(root, repoRoot);
     await service.template.createStarter("beamer-gotham", "slides/main.tex", false);
     const before = await fs.readFile(path.join(root, "slides/main.tex"), "utf8");

@@ -30,7 +30,6 @@ import {
     formatTableArguments,
     isValidEnvironmentName,
     isTableLikeEnvironment,
-    SingleTextChange,
 } from './environmentConvert';
 import {
     discoverSnippetProfiles,

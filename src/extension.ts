@@ -1096,7 +1096,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
         contextValue: "openFolder"
       });
     } else {
-      nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
+      nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder))));
     }
     return nodes;
   }
@@ -1216,7 +1216,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     };
   }
 
-  private async workspaceNode(folder: vscode.WorkspaceFolder, isOnlyFolder: boolean): Promise<ToolkitTreeNode> {
+  private async workspaceNode(folder: vscode.WorkspaceFolder): Promise<ToolkitTreeNode> {
     const response = await this.loadWorkspaceState(folder);
     const description = response instanceof Error
       ? "Needs attention"
@@ -1416,11 +1416,6 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       iconId,
       contextValue: "info"
     };
-  }
-
-  private compileRecipeDescription(state: ToolkitState): string {
-    if (state.compile_use_internal_fallback) return "internal fallback";
-    return state.compile_recipe_name || state.compile_recipe || "not set";
   }
 
   private lastCompileDescription(state: ToolkitState): string {

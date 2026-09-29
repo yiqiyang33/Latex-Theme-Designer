@@ -1077,12 +1077,6 @@ function closePersonalStyleMenus(restoreFocus: boolean, except?: HTMLDetailsElem
   if (restoreFocus) lastPersonalStyleMenuTrigger = null;
 }
 
-function isCurrentStyleCustomized(): boolean {
-  const preset = currentPreset();
-  if (!preset?.colors) return false;
-  return Object.entries(preset.colors).some(([token, value]) => stateColor(token).toUpperCase() !== String(value).toUpperCase());
-}
-
 function currentPreset(): any {
   return (model.schema.style_presets || []).find((item: any) => item.id === model.state.style_preset)
     || (model.schema.style_presets || []).find((item: any) => item.id === model.state.style_base_preset);

@@ -124,9 +124,9 @@ describe('Overleaf CLI shared infrastructure', () => {
   it('migrates foreign platform project roots while preserving custom roots', async () => {
     const home = path.join(os.tmpdir(), 'latex-toolkit-test-home');
     expect(normalizeLocalProjectsRoot('/home/yangyike/Documents/OverleafCodex/projects', 'darwin', home))
-      .toBe(defaultLocalProjectsRoot('darwin', home));
+      .toBe(defaultLocalProjectsRoot(home));
     expect(normalizeLocalProjectsRoot('/Users/yangyike/Documents/OverleafCodex/projects', 'linux', home))
-      .toBe(defaultLocalProjectsRoot('linux', home));
+      .toBe(defaultLocalProjectsRoot(home));
     const custom = path.join(home, 'Research', 'overleaf-projects');
     expect(normalizeLocalProjectsRoot(custom, 'darwin', home)).toBe(custom);
   });

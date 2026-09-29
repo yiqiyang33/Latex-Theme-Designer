@@ -92,7 +92,7 @@ export function defaultSharedState(): SharedOverleafState {
   };
 }
 
-export function defaultLocalProjectsRoot(platform: NodeJS.Platform = process.platform, home = os.homedir()): string {
+export function defaultLocalProjectsRoot(home = os.homedir()): string {
   return path.join(home, 'Documents', 'OverleafCodex', 'projects');
 }
 
@@ -101,7 +101,7 @@ export function normalizeLocalProjectsRoot(
   platform: NodeJS.Platform = process.platform,
   home = os.homedir()
 ): string {
-  const fallback = defaultLocalProjectsRoot(platform, home);
+  const fallback = defaultLocalProjectsRoot(home);
   if (typeof value !== 'string' || !value.trim()) return fallback;
   const expanded = value.trim() === '~'
     ? home

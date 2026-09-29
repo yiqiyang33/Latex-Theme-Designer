@@ -8,6 +8,7 @@
       "DOM"
     ],
     "strict": true,
+    "noUnusedLocals": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,

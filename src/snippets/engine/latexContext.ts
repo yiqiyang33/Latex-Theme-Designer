@@ -482,9 +482,8 @@ function isInsideTextLikeCommandInSanitized(
   // Shared /g regex: reset explicitly so a previous call's lastIndex cannot skip the
   // beginning of this document.
   commandReg.lastIndex = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = commandReg.exec(sanitized)) !== null) {
+  while (commandReg.exec(sanitized) !== null) {
     let openBrace = commandReg.lastIndex - 1;
     let closeBrace = findMatchingBrace(sanitized, openBrace, sanitized.length);
     if (closeBrace == -1 || closeBrace >= sanitized.length) {

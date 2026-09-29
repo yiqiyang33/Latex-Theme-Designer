@@ -62,7 +62,7 @@ export function updateWorkspaceUiState(
   const root = record(value);
   const existing = record(root?.workspaces);
   const workspaces: ToolkitWebviewUiState["workspaces"] = {};
-  for (const [key, raw] of Object.entries(existing || {})) {
+  for (const key of Object.keys(existing || {})) {
     const normalized = readWorkspaceUiState(value, key);
     workspaces[key] = normalized;
   }
