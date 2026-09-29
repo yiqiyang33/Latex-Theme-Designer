@@ -121,6 +121,26 @@ export function isBlockingStatus(status: SyncStatusKind): boolean {
 }
 
 /**
+ * The only status under a locally deleted folder that is safe to fold into deleting the remote
+ * folder: the path is missing locally and nothing changed on Overleaf since the trusted base.
+ */
+const SAFE_FOLDER_DELETE_STATUSES: ReadonlySet<SyncStatusKind> = new Set<SyncStatusKind>(['local deleted']);
+
+/**
+ * Paths under `folderPath` that make deleting the remote folder unsafe. Deleting a folder removes
+ * everything in it on Overleaf, so anything the user has not seen blocks the delete rather than
+ * being swept up in it: a collaborator's edit ('remote ahead', 'diverged'), a file they added
+ * ('remote only'), or a read that failed so nothing can be ruled out ('error').
+ *
+ * `items` must come from a check that covered every descendant; a path absent from it is not
+ * examined here.
+ */
+export function findUnsafeFolderDescendants(items: readonly SyncStatusItem[], folderPath: string): SyncStatusItem[] {
+  const prefix = `${toPosixPath(folderPath)}/`;
+  return items.filter(item => item.path.startsWith(prefix) && !SAFE_FOLDER_DELETE_STATUSES.has(item.status));
+}
+
+/**
  * Whether a check targeted at `requested` re-evaluates the folder at `folderPath`: the folder
  * itself, any folder above a requested path, and any folder below a requested folder.
  */

@@ -423,6 +423,30 @@ export function addOrUpdateFolder(manifest: OverleafCodexManifest, folder: Manif
   manifestEntityIndexes.delete(manifest);
 }
 
+/**
+ * Removes a folder and everything beneath it from the manifest. Deleting only `folders[path]`, as
+ * several callers used to, left each descendant file and folder behind as an orphan pointing at an
+ * entity that no longer exists - and deleting entries directly also skipped invalidating the
+ * entity index, so filePathById could still resolve a removed id. Returns the removed file entries
+ * so a caller can drop runtime state keyed by them.
+ */
+export function removeManifestSubtree(manifest: OverleafCodexManifest, folderPath: string): ManifestFile[] {
+  const root = toPosixPath(folderPath);
+  if (!root) throw new Error('Refusing to remove the project root from the manifest.');
+  const prefix = `${root}/`;
+  const removedFiles: ManifestFile[] = [];
+  for (const key of Object.keys(manifest.files)) {
+    if (!key.startsWith(prefix)) continue;
+    removedFiles.push(manifest.files[key]);
+    delete manifest.files[key];
+  }
+  for (const key of Object.keys(manifest.folders)) {
+    if (key === root || key.startsWith(prefix)) delete manifest.folders[key];
+  }
+  manifestEntityIndexes.delete(manifest);
+  return removedFiles;
+}
+
 export function folderPathById(manifest: OverleafCodexManifest, folderId: string): string | undefined {
   return getManifestEntityIndex(manifest).folders.get(folderId);
 }
