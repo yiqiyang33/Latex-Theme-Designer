@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const vscodeMock = vi.hoisted(() => ({
   configuredRoot: "",
@@ -50,8 +50,23 @@ function manifest(projectId: string, projectName: string): OverleafCodexManifest
 }
 
 describe("MirrorManager local registry", () => {
-  afterEach(() => {
+  let isolation: string;
+
+  // Isolation is the default rather than something each test must remember. A test that left
+  // either knob unset fell back to the developer's real ~/Documents/OverleafCodex/projects and
+  // real shared registry: it read their actual mirrors, and registerLocalMirror wrote a record
+  // for its temp directory into that registry on every run and never removed it.
+  beforeEach(async () => {
+    isolation = await fs.mkdtemp(path.join(os.tmpdir(), "latex-toolkit-mirror-isolation-"));
+    vscodeMock.configuredRoot = path.join(isolation, "projects");
+    await fs.mkdir(vscodeMock.configuredRoot, { recursive: true });
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(isolation, "support");
+  });
+
+  afterEach(async () => {
     vscodeMock.configuredRoot = "";
+    delete process.env.LATEX_TOOLKIT_SUPPORT_HOME;
+    await fs.rm(isolation, { recursive: true, force: true });
   });
 
   it("discovers configured-root mirrors, honors forget tombstones, and restores on registration", async () => {
