@@ -430,6 +430,26 @@ export function addOrUpdateFolder(manifest: OverleafCodexManifest, folder: Manif
  * entity index, so filePathById could still resolve a removed id. Returns the removed file entries
  * so a caller can drop runtime state keyed by them.
  */
+/**
+ * Every file and folder path under `folderPath` known to either the local manifest or the remote
+ * tree. The remote side matters as much as the local one: a file a collaborator added exists only
+ * there, and it is exactly what a folder delete must not sweep away unseen.
+ */
+export function collectFolderDescendants(
+  folderPath: string,
+  local: OverleafCodexManifest,
+  remote: OverleafCodexManifest
+): string[] {
+  const prefix = `${toPosixPath(folderPath)}/`;
+  const paths = new Set<string>();
+  for (const entries of [local.files, local.folders, remote.files, remote.folders]) {
+    for (const relPath of Object.keys(entries)) {
+      if (relPath.startsWith(prefix)) paths.add(relPath);
+    }
+  }
+  return [...paths].sort();
+}
+
 export function removeManifestSubtree(manifest: OverleafCodexManifest, folderPath: string): ManifestFile[] {
   const root = toPosixPath(folderPath);
   if (!root) throw new Error('Refusing to remove the project root from the manifest.');

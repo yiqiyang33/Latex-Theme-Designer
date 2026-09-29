@@ -78,6 +78,18 @@ describe('findUnsafeFolderDescendants', () => {
     expect(findUnsafeFolderDescendants(items, 'Sections-legacy')).toEqual([]);
   });
 
+  // classifySyncStatus reports 'local deleted' for any tracked file missing locally and present
+  // remotely - including one a collaborator has since edited. Only the hashes tell them apart.
+  it('blocks a locally deleted file that a collaborator edited on Overleaf', () => {
+    const edited = { ...item('Sections-legacy/old.tex', 'local deleted'), baseHash: 'base', remoteHash: 'edited' };
+    expect(findUnsafeFolderDescendants([edited], 'Sections-legacy')).toEqual([edited]);
+  });
+
+  it('lets a locally deleted file go when its Overleaf copy still matches the base', () => {
+    const untouched = { ...item('Sections-legacy/old.tex', 'local deleted'), baseHash: 'base', remoteHash: 'base' };
+    expect(findUnsafeFolderDescendants([untouched], 'Sections-legacy')).toEqual([]);
+  });
+
   it.each(['remote ahead', 'diverged', 'remote only', 'error'] as const)(
     'blocks on a descendant that is %s',
     status => {

@@ -120,24 +120,50 @@ export function isBlockingStatus(status: SyncStatusKind): boolean {
   return status !== 'synced';
 }
 
-/**
- * The only status under a locally deleted folder that is safe to fold into deleting the remote
- * folder: the path is missing locally and nothing changed on Overleaf since the trusted base.
- */
+/** The only status under a locally deleted folder that can be safe to fold into deleting it. */
 const SAFE_FOLDER_DELETE_STATUSES: ReadonlySet<SyncStatusKind> = new Set<SyncStatusKind>(['local deleted']);
+
+/**
+ * True when Overleaf's copy moved on from the trusted base. The status alone cannot say this for a
+ * file that is missing locally: classifySyncStatus reports 'local deleted' for any tracked file
+ * that is gone locally and present remotely, whether or not a collaborator has edited it since.
+ */
+function remoteChangedSinceBase(item: SyncStatusItem): boolean {
+  return item.remoteHash !== undefined && item.baseHash !== undefined && item.remoteHash !== item.baseHash;
+}
 
 /**
  * Paths under `folderPath` that make deleting the remote folder unsafe. Deleting a folder removes
  * everything in it on Overleaf, so anything the user has not seen blocks the delete rather than
- * being swept up in it: a collaborator's edit ('remote ahead', 'diverged'), a file they added
- * ('remote only'), or a read that failed so nothing can be ruled out ('error').
+ * being swept up in it: a collaborator's edit to a file (a 'local deleted' whose remote copy left
+ * the base), a file they added ('remote only'), or a read that failed so nothing can be ruled out
+ * ('error').
  *
  * `items` must come from a check that covered every descendant; a path absent from it is not
  * examined here.
  */
 export function findUnsafeFolderDescendants(items: readonly SyncStatusItem[], folderPath: string): SyncStatusItem[] {
   const prefix = `${toPosixPath(folderPath)}/`;
-  return items.filter(item => item.path.startsWith(prefix) && !SAFE_FOLDER_DELETE_STATUSES.has(item.status));
+  return items.filter(item => item.path.startsWith(prefix)
+    && (!SAFE_FOLDER_DELETE_STATUSES.has(item.status) || remoteChangedSinceBase(item)));
+}
+
+const UNSAFE_FOLDER_DELETE_LISTED = 8;
+
+/** Why a descendant blocks a folder delete, in words rather than a status token. */
+function unsafeFolderDeleteReason(item: SyncStatusItem): string {
+  if (item.status === 'local deleted' && remoteChangedSinceBase(item)) return 'changed on Overleaf';
+  if (item.status === 'remote only') return 'added on Overleaf';
+  if (item.status === 'error') return 'could not be read from Overleaf';
+  return item.status;
+}
+
+/** Explains a refused folder delete precisely enough that the user knows what to look at. */
+export function unsafeFolderDeleteMessage(folderPath: string, unsafe: readonly SyncStatusItem[]): string {
+  const listed = unsafe.slice(0, UNSAFE_FOLDER_DELETE_LISTED).map(item => `${item.path} (${unsafeFolderDeleteReason(item)})`);
+  const more = unsafe.length > listed.length ? `, and ${unsafe.length - listed.length} more` : '';
+  return `Not deleting ${folderPath} from Overleaf: it still holds work that has not reached this computer - `
+    + `${listed.join(', ')}${more}. Pull or review those first.`;
 }
 
 /**

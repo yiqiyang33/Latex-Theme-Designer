@@ -515,8 +515,16 @@ describe('folders', () => {
     return target;
   }
 
+  type StatusFixture = SyncStatusKind | { status: SyncStatusKind; baseHash?: string; remoteHash?: string };
+
+  /**
+   * What classifySyncStatus actually reports for a tracked file that was deleted locally after a
+   * collaborator edited it on Overleaf: still 'local deleted', with only the hashes disagreeing.
+   */
+  const editedOnOverleaf: StatusFixture = { status: 'local deleted', baseHash: 'base', remoteHash: 'edited' };
+
   /** A running service whose next status check reports `statuses` for the given paths. */
-  function harness(statuses: Record<string, SyncStatusKind>, withLegacyRemotely = true) {
+  function harness(statuses: Record<string, StatusFixture>, withLegacyRemotely = true) {
     const { service, internals } = makeService();
     internals.root = tmpRoot;
     internals.manifest = manifestWithLegacy(tmpRoot);
@@ -526,12 +534,16 @@ describe('folders', () => {
     internals.syncGate.setProject('ready');
     vi.spyOn(internals, 'persistManifest').mockResolvedValue(undefined);
     const checkTargeted = vi.spyOn(internals, 'checkTargeted').mockImplementation(async () => ({
-      items: Object.entries(statuses).map(([relPath, status]) => ({ path: relPath, status, blocking: true }))
+      items: Object.entries(statuses).map(([relPath, fixture]) => ({
+        path: relPath,
+        blocking: true,
+        ...(typeof fixture === 'string' ? { status: fixture } : fixture)
+      }))
     }));
     return { service, internals, deleteEntity, checkTargeted };
   }
 
-  const allLocallyDeleted: Record<string, SyncStatusKind> = {
+  const allLocallyDeleted: Record<string, StatusFixture> = {
     'Sections-legacy': 'local deleted',
     'Sections-legacy/old.tex': 'local deleted',
     'Sections-legacy/sub': 'local deleted',
@@ -556,18 +568,21 @@ describe('folders', () => {
       await internals.pushLocalFile('Sections-legacy', false, true);
       const checked = [...(checkTargeted.mock.calls[0][0] as Iterable<string>)].sort();
       expect(checked).toEqual(['Sections-legacy', 'Sections-legacy/old.tex', 'Sections-legacy/sub', 'Sections-legacy/sub/deep.tex']);
+      // Read fresh: an irreversible delete must not rest on cached version bookkeeping.
+      expect(checkTargeted.mock.calls[0][2]).toBe('full');
     });
 
     it('refuses when a collaborator changed a file inside it, and names the file', async () => {
-      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/sub/deep.tex': 'diverged' });
-      await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/Sections-legacy\/sub\/deep\.tex \(diverged\)/);
+      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/sub/deep.tex': editedOnOverleaf });
+      await expect(internals.pushLocalFile('Sections-legacy', false, true))
+        .rejects.toThrow(/Sections-legacy\/sub\/deep\.tex \(changed on Overleaf\)/);
       expect(deleteEntity).not.toHaveBeenCalled();
       expect(legacyKeys(internals.manifest)).toHaveLength(4);
     });
 
     it('refuses on a file a collaborator added, even though it was never local', async () => {
       const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/new.tex': 'remote only' });
-      await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/new\.tex \(remote only\)/);
+      await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/new\.tex \(added on Overleaf\)/);
       expect(deleteEntity).not.toHaveBeenCalled();
     });
 
@@ -638,12 +653,12 @@ describe('folders', () => {
     });
 
     it('holds an unsafe delete for review instead of sweeping a collaborator\'s edit away', async () => {
-      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/old.tex': 'remote ahead' });
+      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/old.tex': editedOnOverleaf });
       await internals.handleLocalDelete('Sections-legacy');
       expect(deleteEntity).not.toHaveBeenCalled();
       const held = internals.syncGate.findBlocking('Sections-legacy/sub/deep.tex');
       expect(held).toMatchObject({ path: 'Sections-legacy', state: 'pending', subtree: true });
-      expect(held.reason).toMatch(/old\.tex \(remote ahead\)/);
+      expect(held.reason).toMatch(/old\.tex \(changed on Overleaf\)/);
     });
 
     it('deletes a safe folder and clears its descendants, not just the folder entry', async () => {
