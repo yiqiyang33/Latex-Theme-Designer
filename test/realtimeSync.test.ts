@@ -647,6 +647,24 @@ describe('folders', () => {
     await expect(fs.stat(path.join(tmpRoot, 'Sections-legacy'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  describe('a folder deleted on Overleaf by someone else', () => {
+    it('clears its whole subtree, says so, and re-checks the paths it held', async () => {
+      const { internals } = harness({}, false);
+      await fs.mkdir(path.join(tmpRoot, 'Sections-legacy', 'sub'), { recursive: true });
+      await fs.writeFile(path.join(tmpRoot, 'Sections-legacy', 'old.tex'), 'old');
+      const scheduled = vi.spyOn(internals, 'scheduleSyncStatusCheck').mockImplementation(() => undefined);
+
+      await internals.handleRemoteRemoved('f-legacy');
+
+      expect(legacyKeys(internals.manifest)).toEqual([]);
+      expect(internals.getActivityLog().map((entry: { message: string }) => entry.message))
+        .toContain('Folder Sections-legacy was deleted on Overleaf; moved the local copy to Overleaf Codex trash.');
+      // Without this the report kept listing the folder long after it was gone on both sides.
+      const rechecked = [...(scheduled.mock.calls[0][1] as Iterable<string>)].sort();
+      expect(rechecked).toEqual(['Sections-legacy', 'Sections-legacy/old.tex', 'Sections-legacy/sub', 'Sections-legacy/sub/deep.tex']);
+    });
+  });
+
   describe('automatic folder delete with syncDestructiveChanges on', () => {
     beforeEach(() => {
       testState.configuration.set('overleafCodex', { syncDestructiveChanges: true });

@@ -2714,9 +2714,14 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     const folder = Object.values(this.manifest!.folders).find(item => item.entityId === entityId);
     if (folder && folder.path) {
-      delete this.manifest!.folders[folder.path];
+      // Gone on Overleaf, so its descendants can only be found in the manifest. Taken before the
+      // manifest changes, so the report drops them too rather than keep listing the folder.
+      const descendants = collectFolderDescendants(folder.path, this.manifest!, this.manifest!);
+      this.forgetRemovedFiles(removeManifestSubtree(this.manifest!, folder.path));
       await this.moveLocalToTrash(folder.path);
       await this.persistManifest();
+      this.log(`Folder ${folder.path} was deleted on Overleaf; moved the local copy to Overleaf Codex trash.`);
+      this.scheduleSyncStatusCheck(undefined, [folder.path, ...descendants]);
     }
   }
 
