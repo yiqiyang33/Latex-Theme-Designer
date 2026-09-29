@@ -2,6 +2,7 @@ import type { ConfirmAction, ConfirmActionResult, ToolkitNotice } from "../types
 import { readWorkspaceUiState, TOOLKIT_SECTIONS, updateWorkspaceUiState } from "./uiState";
 import type { StructureTask, ToolkitSection } from "./uiState";
 import { buildStructureSummary } from "./structureSummary";
+import { folderSyncActions } from "./syncActions";
 import { projectNameError } from "../overleaf/projectName";
 
 type ToolkitRequest = { id: string; command: string; payload?: Record<string, unknown> };
@@ -854,7 +855,7 @@ function syncItemMarkup(item: any): string {
   const selection = syncSelectionMode && isSelectableSyncItem(item)
     ? `<input type="checkbox" data-sync-select="${encodedPath}" ${selectedSyncPaths.has(item.path) ? "checked" : ""} aria-label="Select ${encodedPath} for bulk sync">`
     : "";
-  const actions = item.entityType === "folder" ? [] : [
+  const actions = item.entityType === "folder" ? folderSyncActions(item.status, encodedPath) : [
     `<button class="icon-button" data-sync-action="diff" data-sync-path="${encodedPath}" aria-label="Open diff for ${encodedPath}" title="Open diff"><i class="codicon codicon-diff"></i></button>`,
     `<button class="icon-button" data-sync-action="push" data-sync-path="${encodedPath}" aria-label="Push ${encodedPath}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button>`,
     `<button class="icon-button" data-sync-action="pull" data-sync-path="${encodedPath}" aria-label="Pull ${encodedPath}" title="Pull remote"><i class="codicon codicon-cloud-download"></i></button>`
