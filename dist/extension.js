@@ -32329,9 +32329,12 @@ var RealtimeSyncService = class {
     }
     const folder = Object.values(this.manifest.folders).find((item) => item.entityId === entityId);
     if (folder && folder.path) {
-      delete this.manifest.folders[folder.path];
+      const descendants = collectFolderDescendants(folder.path, this.manifest, this.manifest);
+      this.forgetRemovedFiles(removeManifestSubtree(this.manifest, folder.path));
       await this.moveLocalToTrash(folder.path);
       await this.persistManifest();
+      this.log(`Folder ${folder.path} was deleted on Overleaf; moved the local copy to Overleaf Codex trash.`);
+      this.scheduleSyncStatusCheck(void 0, [folder.path, ...descendants]);
     }
   }
   async ensureDocState(relPath) {
