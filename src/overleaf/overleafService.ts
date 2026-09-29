@@ -724,13 +724,20 @@ export class OverleafService implements vscode.Disposable {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "remote deleted", "diverged"]);
     if (!item) return;
-    if (this.isDestructive(item)) await this.confirmDestructive(`Push local deletion or conflict for ${item.path}?`);
+    const destructive = this.isDestructive(item);
+    if (destructive) {
+      await this.confirmDestructive(item.entityType === "folder"
+        ? `Delete the folder ${item.path} and everything in it from Overleaf? It is missing locally.`
+        : `Push local deletion or conflict for ${item.path}?`);
+    }
     if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
-      await this.ownerCoordinator.request("push", { path: item.path, force: this.isDestructive(item) });
+      await this.ownerCoordinator.request("push", { path: item.path, force: destructive });
       this.onChanged();
       return;
     }
-    await this.realtimeSync.pushLocalFile(item.path);
+    // Confirmed above (or waived by confirmDestructiveChanges), so the engine must not ask again -
+    // matching the owner request just above, which already passes force.
+    await this.realtimeSync.pushLocalFile(item.path, true, destructive);
     this.onChanged();
   }
 
@@ -738,7 +745,11 @@ export class OverleafService implements vscode.Disposable {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["remote ahead", "remote only", "local deleted", "diverged"]);
     if (!item) return;
-    if (this.isDestructive(item)) await this.confirmDestructive(`Replace local content with the remote version of ${item.path}?`);
+    if (this.isDestructive(item)) {
+      await this.confirmDestructive(item.entityType === "folder"
+        ? `Restore the folder ${item.path} and its files from Overleaf?`
+        : `Replace local content with the remote version of ${item.path}?`);
+    }
     if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
       await this.ownerCoordinator.request("pull", { path: item.path, force: this.isDestructive(item) });
       this.onChanged();

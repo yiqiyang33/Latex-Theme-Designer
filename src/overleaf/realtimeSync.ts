@@ -28,6 +28,7 @@ import {
   shouldIgnore,
   isToolkitOverridePath,
   isAlwaysLocal,
+  removeManifestSubtree,
   shouldIgnoreUntrackedLocalPath,
   writeBaseDoc,
   readBaseDoc,
@@ -50,6 +51,7 @@ import {
   SyncStatusReport
 } from './types';
 import {
+  findUnsafeFolderDescendants,
   scanLocalProject,
   trashPathFor
 } from './syncStatus';
@@ -142,6 +144,16 @@ const ACTIVITY_LOG_FLUSH_DELAY_MS = 1000;
  */
 const STALE_CHECK_MAX_RETRIES = 3;
 const STALE_CHECK_RETRY_BASE_DELAY_MS = 250;
+
+const UNSAFE_FOLDER_DELETE_LISTED = 8;
+
+/** Explains a refused folder delete precisely enough that the user knows what to look at. */
+function unsafeFolderDeleteMessage(folderPath: string, unsafe: readonly SyncStatusItem[]): string {
+  const listed = unsafe.slice(0, UNSAFE_FOLDER_DELETE_LISTED).map(item => `${item.path} (${item.status})`);
+  const more = unsafe.length > listed.length ? `, and ${unsafe.length - listed.length} more` : '';
+  return `Not deleting ${folderPath} from Overleaf: it still holds work that has not reached this computer - `
+    + `${listed.join(', ')}${more}. Pull or review those first.`;
+}
 
 export class RealtimeSyncService implements vscode.Disposable {
   private root?: string;
@@ -540,12 +552,37 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.saveOpenLocalDocument(normalized);
     const localPath = await assertNoSymlinkPath(this.root!, normalized);
     const localStat = await fs.stat(localPath).catch(() => undefined);
+    if (localStat?.isDirectory()) {
+      // Overleaf creates a folder when the first file inside it is pushed; the folder itself has no
+      // content to upload. Checked before the read below, which would fail on a directory.
+      throw new Error(`${normalized} is a folder. Push the files inside it; the folder is created on Overleaf with them.`);
+    }
     const binary = entry ? entry.entityType === 'file' : !isTextLike(normalized);
     const localContent = localStat && !binary ? await fs.readFile(localPath) : undefined;
 
     if (!localStat) {
+      const folder = entry ? undefined : this.manifest!.folders[normalized];
+      if (folder) {
+        const inspection = await this.inspectFolderDelete(normalized);
+        if (inspection.unsafe.length > 0) {
+          throw new Error(unsafeFolderDeleteMessage(normalized, inspection.unsafe));
+        }
+        if (!forceDestructive) {
+          const selection = await vscode.window.showWarningMessage(
+            `Delete the folder ${normalized} and the ${inspection.fileCount} file(s) in it from Overleaf? It is missing locally.`,
+            { modal: true },
+            'Delete Remote Folder'
+          );
+          if (selection !== 'Delete Remote Folder') return;
+        }
+        await this.executeFolderDelete(normalized, folder);
+        if (refreshStatus) {
+          await this.checkTargeted([normalized, ...inspection.descendants], 'post-delete');
+        }
+        return;
+      }
       if (!entry) {
-        throw new Error(`${normalized} does not exist locally or in the manifest.`);
+        throw new Error(`${normalized} is missing locally and is not tracked as a file or a folder.`);
       }
       if (!forceDestructive) {
         const selection = await vscode.window.showWarningMessage(
@@ -614,6 +651,12 @@ export class RealtimeSyncService implements vscode.Disposable {
     const normalized = normalizeProjectRelativePath(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === 'error') {
       throw new Error(`${normalized} has an unresolved remote read error. Retry its sync check before pulling.`);
+    }
+    // Decided from the live session's tree, so a folder pull does not open a socket just to learn
+    // that the path is a folder.
+    if (this.currentRemoteTree().folders[normalized]) {
+      await this.restoreRemoteFolder(normalized, refreshStatus);
+      return;
     }
     const remote = await this.fetchFreshRemoteSnapshot([normalized]);
     const remoteFile = remote.manifest.files[normalized];
@@ -695,11 +738,20 @@ export class RealtimeSyncService implements vscode.Disposable {
   async moveRemoteDeletedToTrash(relPath: string): Promise<void> {
     this.requireReady();
     const normalized = normalizeProjectRelativePath(relPath);
+    // Taken before the manifest changes: the descendants' items have to be re-checked afterwards,
+    // or the report keeps listing files that are now gone on both sides.
+    const descendants = this.manifest!.folders[normalized]
+      ? this.folderDescendantPaths(normalized, this.currentRemoteTree())
+      : [];
     await this.moveLocalToTrash(normalized);
-    delete this.manifest!.files[normalized];
-    this.docStates.delete(normalized);
+    if (this.manifest!.folders[normalized]) {
+      this.forgetRemovedFiles(removeManifestSubtree(this.manifest!, normalized));
+    } else {
+      delete this.manifest!.files[normalized];
+      this.docStates.delete(normalized);
+    }
     await this.persistManifest();
-    await this.checkTargeted([normalized], 'post-trash');
+    await this.checkTargeted([normalized, ...descendants], 'post-trash');
     vscode.window.showInformationMessage(`Moved ${normalized} to local Overleaf Codex trash.`);
   }
 
@@ -1613,6 +1665,96 @@ export class RealtimeSyncService implements vscode.Disposable {
     });
   }
 
+  /** The project tree as the live session sees it right now. Built in memory; joins nothing. */
+  private currentRemoteTree(): OverleafCodexManifest {
+    const project = this.session?.getProject();
+    if (!project) throw new Error('Overleaf realtime session does not have a project tree.');
+    return buildProjectTreeIndex(
+      this.manifest!.serverUrl,
+      this.manifest!.projectId,
+      this.manifest!.projectName,
+      project
+    ).manifest;
+  }
+
+  /**
+   * Every file and folder under `folderPath` that either side knows about. The remote tree matters
+   * as much as the manifest: a file a collaborator added exists only there.
+   */
+  private folderDescendantPaths(folderPath: string, remoteTree: OverleafCodexManifest): string[] {
+    const prefix = `${folderPath}/`;
+    const paths = new Set<string>();
+    for (const entries of [this.manifest!.files, this.manifest!.folders, remoteTree.files, remoteTree.folders]) {
+      for (const relPath of Object.keys(entries)) {
+        if (relPath.startsWith(prefix)) paths.add(relPath);
+      }
+    }
+    return [...paths].sort();
+  }
+
+  /** Drops in-memory state for files that have just left the manifest. */
+  private forgetRemovedFiles(removed: ManifestFile[]): void {
+    for (const file of removed) {
+      this.docStates.delete(file.path);
+      this.documentSessions.delete(file.entityId);
+    }
+  }
+
+  /**
+   * Re-checks everything under a folder and reports what would make deleting it on Overleaf unsafe.
+   * Deleting a folder takes its whole contents with it, so this must run against fresh status rather
+   * than whatever the last report happened to say.
+   */
+  private async inspectFolderDelete(folderPath: string): Promise<{ descendants: string[]; fileCount: number; unsafe: SyncStatusItem[] }> {
+    const remoteTree = this.currentRemoteTree();
+    const descendants = this.folderDescendantPaths(folderPath, remoteTree);
+    const report = await this.checkTargeted([folderPath, ...descendants], 'pre-folder-delete');
+    return {
+      descendants,
+      fileCount: descendants.filter(relPath => remoteTree.files[relPath]).length,
+      unsafe: findUnsafeFolderDescendants(report.items, folderPath)
+    };
+  }
+
+  private async executeFolderDelete(folderPath: string, folder: ManifestFolder): Promise<void> {
+    this.markLocalMutation(folder.entityId);
+    await this.client!.deleteEntity(this.manifest!.projectId, 'folder', folder.entityId);
+    this.forgetRemovedFiles(removeManifestSubtree(this.manifest!, folderPath));
+    await this.persistManifest();
+  }
+
+  /** Brings back a folder that was deleted locally but still exists on Overleaf. */
+  private async restoreRemoteFolder(folderPath: string, refreshStatus: boolean): Promise<void> {
+    const remoteTree = this.currentRemoteTree();
+    const descendants = this.folderDescendantPaths(folderPath, remoteTree);
+    // Folders first, so an empty one comes back too; each file recreates its own parents anyway.
+    for (const relPath of [folderPath, ...descendants.filter(candidate => remoteTree.folders[candidate])]) {
+      await fs.mkdir(await assertNoSymlinkPath(this.root!, relPath), { recursive: true });
+      addOrUpdateFolder(this.manifest!, remoteTree.folders[relPath]);
+    }
+    const files = descendants.filter(relPath => remoteTree.files[relPath]);
+    // Try every file rather than stopping at the first failure, so one unreadable file does not
+    // leave the rest of the folder missing; the failures are reported together at the end.
+    const failures: string[] = [];
+    for (const relPath of files) {
+      try {
+        await this.pullRemoteFile(relPath, false);
+      } catch (error) {
+        failures.push(`${relPath}: ${formatUnknownError(error)}`);
+      }
+    }
+    await this.persistManifest();
+    if (refreshStatus) {
+      await this.checkTargeted([folderPath, ...descendants], 'post-restore');
+    }
+    if (failures.length > 0) {
+      throw new Error(`Restored ${folderPath} except ${failures.length} of ${files.length} file(s): ${failures.join('; ')}`);
+    }
+    if (refreshStatus) {
+      vscode.window.showInformationMessage(`Restored ${folderPath} and ${files.length} file(s) from Overleaf.`);
+    }
+  }
+
   private async initializeDocStatesFromRemote(remote: RemoteSnapshot): Promise<void> {
     this.requireReady();
     for (const [relPath, remoteFile] of Object.entries(remote.manifest.files)) {
@@ -2138,10 +2280,16 @@ export class RealtimeSyncService implements vscode.Disposable {
 
     const folder = this.manifest!.folders[relPath];
     if (folder) {
-      this.markLocalMutation(folder.entityId);
-      await this.client!.deleteEntity(this.manifest!.projectId, 'folder', folder.entityId);
-      delete this.manifest!.folders[relPath];
-      await this.persistManifest();
+      // Automatic destructive sync still must not sweep a collaborator's work away with the folder.
+      // With no user action to fail back to, an unsafe delete is held for review instead.
+      const inspection = await this.inspectFolderDelete(relPath);
+      if (inspection.unsafe.length > 0) {
+        const reason = unsafeFolderDeleteMessage(relPath, inspection.unsafe);
+        this.log(reason);
+        this.syncGate.setPath(relPath, 'pending', reason, true);
+        return;
+      }
+      await this.executeFolderDelete(relPath, folder);
     }
   }
 

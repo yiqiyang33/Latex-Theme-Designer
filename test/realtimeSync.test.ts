@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OverleafHttpError } from '../src/overleaf/overleafClient';
 import { RealtimeSyncService } from '../src/overleaf/realtimeSync';
 import { SyncGate } from '../src/overleaf/syncGate';
-import { createExtensionContextMock, createOutputChannelMock, resetTestState } from './mocks/vscode';
+import { createExtensionContextMock, createOutputChannelMock, resetTestState, testState } from './mocks/vscode';
+import type { SyncStatusKind } from '../src/overleaf/types';
 
 /**
  * Regressions for the Overleaf sync faults observed in real activity logs: a delete event for an
@@ -477,5 +478,179 @@ describe('activity log write coalescing', () => {
     await internals.activityLogWrite.catch(() => undefined);
     const written = JSON.parse(await fs.readFile(path.join(tmpRoot, '.overleaf-codex', 'activity-log.json'), 'utf8'));
     expect(written).toHaveLength(50);
+  });
+});
+
+
+describe('folders', () => {
+  const doc = (id: string, name: string) => ({ _id: id, name, version: 1 });
+
+  /** Overleaf's view: Sections-legacy with a file and a nested folder holding another file. */
+  function projectTree(withLegacy = true) {
+    return {
+      rootFolder: {
+        _id: 'f0',
+        name: '',
+        docs: [doc('d1', 'main.tex')],
+        fileRefs: [],
+        folders: withLegacy ? [{
+          _id: 'f-legacy',
+          name: 'Sections-legacy',
+          docs: [doc('d-old', 'old.tex')],
+          fileRefs: [],
+          folders: [{ _id: 'f-sub', name: 'sub', docs: [doc('d-deep', 'deep.tex')], fileRefs: [], folders: [] }]
+        }] : []
+      }
+    };
+  }
+
+  function manifestWithLegacy(root: string) {
+    const target = makeManifest(root) as any;
+    const entry = (relPath: string, entityId: string, parentFolderId: string) =>
+      ({ path: relPath, entityId, entityType: 'doc', parentFolderId, binary: false });
+    target.files['Sections-legacy/old.tex'] = entry('Sections-legacy/old.tex', 'd-old', 'f-legacy');
+    target.files['Sections-legacy/sub/deep.tex'] = entry('Sections-legacy/sub/deep.tex', 'd-deep', 'f-sub');
+    target.folders['Sections-legacy'] = { path: 'Sections-legacy', entityId: 'f-legacy', parentFolderId: 'f0' };
+    target.folders['Sections-legacy/sub'] = { path: 'Sections-legacy/sub', entityId: 'f-sub', parentFolderId: 'f-legacy' };
+    return target;
+  }
+
+  /** A running service whose next status check reports `statuses` for the given paths. */
+  function harness(statuses: Record<string, SyncStatusKind>, withLegacyRemotely = true) {
+    const { service, internals } = makeService();
+    internals.root = tmpRoot;
+    internals.manifest = manifestWithLegacy(tmpRoot);
+    const deleteEntity = vi.fn(async () => undefined);
+    internals.client = { deleteEntity };
+    internals.session = { getProject: () => projectTree(withLegacyRemotely) };
+    internals.syncGate.setProject('ready');
+    vi.spyOn(internals, 'persistManifest').mockResolvedValue(undefined);
+    const checkTargeted = vi.spyOn(internals, 'checkTargeted').mockImplementation(async () => ({
+      items: Object.entries(statuses).map(([relPath, status]) => ({ path: relPath, status, blocking: true }))
+    }));
+    return { service, internals, deleteEntity, checkTargeted };
+  }
+
+  const allLocallyDeleted: Record<string, SyncStatusKind> = {
+    'Sections-legacy': 'local deleted',
+    'Sections-legacy/old.tex': 'local deleted',
+    'Sections-legacy/sub': 'local deleted',
+    'Sections-legacy/sub/deep.tex': 'local deleted'
+  };
+
+  const legacyKeys = (manifest: any) =>
+    [...Object.keys(manifest.files), ...Object.keys(manifest.folders)].filter(key => key.startsWith('Sections-legacy'));
+
+  describe('pushing a folder that was deleted locally', () => {
+    it('deletes it on Overleaf and leaves no orphans in the manifest', async () => {
+      const { internals, deleteEntity } = harness(allLocallyDeleted);
+      await internals.pushLocalFile('Sections-legacy', false, true);
+      expect(deleteEntity).toHaveBeenCalledWith('p1', 'folder', 'f-legacy');
+      expect(deleteEntity).toHaveBeenCalledTimes(1);
+      expect(legacyKeys(internals.manifest)).toEqual([]);
+      expect(internals.manifest.files['main.tex']).toBeDefined();
+    });
+
+    it('checks every descendant, including one that exists only on Overleaf', async () => {
+      const { internals, checkTargeted } = harness(allLocallyDeleted);
+      await internals.pushLocalFile('Sections-legacy', false, true);
+      const checked = [...(checkTargeted.mock.calls[0][0] as Iterable<string>)].sort();
+      expect(checked).toEqual(['Sections-legacy', 'Sections-legacy/old.tex', 'Sections-legacy/sub', 'Sections-legacy/sub/deep.tex']);
+    });
+
+    it('refuses when a collaborator changed a file inside it, and names the file', async () => {
+      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/sub/deep.tex': 'diverged' });
+      await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/Sections-legacy\/sub\/deep\.tex \(diverged\)/);
+      expect(deleteEntity).not.toHaveBeenCalled();
+      expect(legacyKeys(internals.manifest)).toHaveLength(4);
+    });
+
+    it('refuses on a file a collaborator added, even though it was never local', async () => {
+      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/new.tex': 'remote only' });
+      await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/new\.tex \(remote only\)/);
+      expect(deleteEntity).not.toHaveBeenCalled();
+    });
+
+    it('asks first when the caller has not already confirmed, and does nothing if declined', async () => {
+      const { internals, deleteEntity } = harness(allLocallyDeleted);
+      await internals.pushLocalFile('Sections-legacy', false, false);
+      expect(testState.shownWarnings.some(message => /Delete the folder Sections-legacy and the 2 file\(s\)/.test(message))).toBe(true);
+      expect(deleteEntity).not.toHaveBeenCalled();
+    });
+
+    it('does not ask again when the caller already confirmed', async () => {
+      const { internals, deleteEntity } = harness(allLocallyDeleted);
+      await internals.pushLocalFile('Sections-legacy', false, true);
+      expect(testState.shownWarnings).toEqual([]);
+      expect(deleteEntity).toHaveBeenCalled();
+    });
+  });
+
+  it('rejects pushing a folder that still exists locally, instead of uploading it as a file', async () => {
+    const { internals, deleteEntity } = harness(allLocallyDeleted);
+    await fs.mkdir(path.join(tmpRoot, 'Sections-legacy'), { recursive: true });
+    await expect(internals.pushLocalFile('Sections-legacy', false, true)).rejects.toThrow(/is a folder\. Push the files inside it/);
+    expect(deleteEntity).not.toHaveBeenCalled();
+  });
+
+  describe('pulling a folder that was deleted locally', () => {
+    function recordChildPulls(internals: Record<string, any>, service: unknown, fail: string[] = []) {
+      const realPull = internals.pullRemoteFile.bind(service);
+      const pulled: string[] = [];
+      vi.spyOn(internals, 'pullRemoteFile').mockImplementation(async (...args: unknown[]) => {
+        const [relPath, refresh] = args as [string, boolean];
+        if (relPath === 'Sections-legacy') return realPull(relPath, refresh);
+        pulled.push(relPath);
+        if (fail.includes(relPath)) throw new Error('read failed');
+      });
+      return pulled;
+    }
+
+    it('recreates the folders, including an empty one, and pulls every file back', async () => {
+      const { service, internals } = harness(allLocallyDeleted);
+      const pulled = recordChildPulls(internals, service);
+      await internals.pullRemoteFile('Sections-legacy', false);
+      expect(pulled.sort()).toEqual(['Sections-legacy/old.tex', 'Sections-legacy/sub/deep.tex']);
+      await expect(fs.stat(path.join(tmpRoot, 'Sections-legacy', 'sub'))).resolves.toBeDefined();
+    });
+
+    it('keeps going past a file that fails, then reports it', async () => {
+      const { service, internals } = harness(allLocallyDeleted);
+      const pulled = recordChildPulls(internals, service, ['Sections-legacy/old.tex']);
+      await expect(internals.pullRemoteFile('Sections-legacy', false)).rejects.toThrow(/except 1 of 2 file\(s\): Sections-legacy\/old\.tex/);
+      // The file after the failing one was still attempted.
+      expect(pulled).toContain('Sections-legacy/sub/deep.tex');
+    });
+  });
+
+  it('moving a remotely deleted folder to trash removes its whole subtree from the manifest', async () => {
+    const { internals } = harness({}, false);
+    await fs.mkdir(path.join(tmpRoot, 'Sections-legacy', 'sub'), { recursive: true });
+    await fs.writeFile(path.join(tmpRoot, 'Sections-legacy', 'old.tex'), 'old');
+    await internals.moveRemoteDeletedToTrash('Sections-legacy');
+    expect(legacyKeys(internals.manifest)).toEqual([]);
+    await expect(fs.stat(path.join(tmpRoot, 'Sections-legacy'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  describe('automatic folder delete with syncDestructiveChanges on', () => {
+    beforeEach(() => {
+      testState.configuration.set('overleafCodex', { syncDestructiveChanges: true });
+    });
+
+    it('holds an unsafe delete for review instead of sweeping a collaborator\'s edit away', async () => {
+      const { internals, deleteEntity } = harness({ ...allLocallyDeleted, 'Sections-legacy/old.tex': 'remote ahead' });
+      await internals.handleLocalDelete('Sections-legacy');
+      expect(deleteEntity).not.toHaveBeenCalled();
+      const held = internals.syncGate.findBlocking('Sections-legacy/sub/deep.tex');
+      expect(held).toMatchObject({ path: 'Sections-legacy', state: 'pending', subtree: true });
+      expect(held.reason).toMatch(/old\.tex \(remote ahead\)/);
+    });
+
+    it('deletes a safe folder and clears its descendants, not just the folder entry', async () => {
+      const { internals, deleteEntity } = harness(allLocallyDeleted);
+      await internals.handleLocalDelete('Sections-legacy');
+      expect(deleteEntity).toHaveBeenCalledWith('p1', 'folder', 'f-legacy');
+      expect(legacyKeys(internals.manifest)).toEqual([]);
+    });
   });
 });
