@@ -24,7 +24,7 @@
     const root = record(value);
     const existing = record(root?.workspaces);
     const workspaces = {};
-    for (const [key, raw] of Object.entries(existing || {})) {
+    for (const key of Object.keys(existing || {})) {
       const normalized = readWorkspaceUiState(value, key);
       workspaces[key] = normalized;
     }
@@ -60,6 +60,15 @@
   }
   function strings(value) {
     return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  }
+
+  // src/webview/syncActions.ts
+  function folderSyncActions(status, encodedPath) {
+    if (status !== "local deleted") return [];
+    return [
+      `<button class="icon-button danger" data-sync-action="push" data-sync-path="${encodedPath}" aria-label="Delete folder ${encodedPath} on Overleaf" title="Delete this folder on Overleaf too"><i class="codicon codicon-trash"></i></button>`,
+      `<button class="icon-button" data-sync-action="pull" data-sync-path="${encodedPath}" aria-label="Restore folder ${encodedPath} from Overleaf" title="Restore this folder from Overleaf"><i class="codicon codicon-cloud-download"></i></button>`
+    ];
   }
 
   // src/overleaf/projectName.ts
@@ -826,7 +835,7 @@
   function syncItemMarkup(item) {
     const encodedPath = escapeHtml(item.path);
     const selection = syncSelectionMode && isSelectableSyncItem(item) ? `<input type="checkbox" data-sync-select="${encodedPath}" ${selectedSyncPaths.has(item.path) ? "checked" : ""} aria-label="Select ${encodedPath} for bulk sync">` : "";
-    const actions = item.entityType === "folder" ? [] : [
+    const actions = item.entityType === "folder" ? folderSyncActions(item.status, encodedPath) : [
       `<button class="icon-button" data-sync-action="diff" data-sync-path="${encodedPath}" aria-label="Open diff for ${encodedPath}" title="Open diff"><i class="codicon codicon-diff"></i></button>`,
       `<button class="icon-button" data-sync-action="push" data-sync-path="${encodedPath}" aria-label="Push ${encodedPath}" title="Push local"><i class="codicon codicon-cloud-upload"></i></button>`,
       `<button class="icon-button" data-sync-action="pull" data-sync-path="${encodedPath}" aria-label="Pull ${encodedPath}" title="Pull remote"><i class="codicon codicon-cloud-download"></i></button>`

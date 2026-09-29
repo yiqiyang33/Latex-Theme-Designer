@@ -18829,8 +18829,7 @@ function isInsideTextLikeCommandInSanitized(sanitized, resolved) {
   }
   const commandReg = textLikeCommandRegExp(resolved);
   commandReg.lastIndex = 0;
-  let match2;
-  while ((match2 = commandReg.exec(sanitized)) !== null) {
+  while (commandReg.exec(sanitized) !== null) {
     let openBrace = commandReg.lastIndex - 1;
     let closeBrace = findMatchingBrace(sanitized, openBrace, sanitized.length);
     if (closeBrace == -1 || closeBrace >= sanitized.length) {
@@ -25683,6 +25682,32 @@ function addOrUpdateFolder(manifest, folder) {
   manifest.folders[folder.path] = folder;
   manifestEntityIndexes.delete(manifest);
 }
+function collectFolderDescendants(folderPath, local, remote) {
+  const prefix = `${toPosixPath2(folderPath)}/`;
+  const paths = /* @__PURE__ */ new Set();
+  for (const entries of [local.files, local.folders, remote.files, remote.folders]) {
+    for (const relPath of Object.keys(entries)) {
+      if (relPath.startsWith(prefix)) paths.add(relPath);
+    }
+  }
+  return [...paths].sort();
+}
+function removeManifestSubtree(manifest, folderPath) {
+  const root = toPosixPath2(folderPath);
+  if (!root) throw new Error("Refusing to remove the project root from the manifest.");
+  const prefix = `${root}/`;
+  const removedFiles = [];
+  for (const key of Object.keys(manifest.files)) {
+    if (!key.startsWith(prefix)) continue;
+    removedFiles.push(manifest.files[key]);
+    delete manifest.files[key];
+  }
+  for (const key of Object.keys(manifest.folders)) {
+    if (key === root || key.startsWith(prefix)) delete manifest.folders[key];
+  }
+  manifestEntityIndexes.delete(manifest);
+  return removedFiles;
+}
 function folderPathById(manifest, folderId) {
   return getManifestEntityIndex(manifest).folders.get(folderId);
 }
@@ -26063,11 +26088,11 @@ function defaultSharedState() {
     localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
-function defaultLocalProjectsRoot(platform3 = process.platform, home = os4.homedir()) {
+function defaultLocalProjectsRoot(home = os4.homedir()) {
   return path26.join(home, "Documents", "OverleafCodex", "projects");
 }
 function normalizeLocalProjectsRoot(value, platform3 = process.platform, home = os4.homedir()) {
-  const fallback = defaultLocalProjectsRoot(platform3, home);
+  const fallback = defaultLocalProjectsRoot(home);
   if (typeof value !== "string" || !value.trim()) return fallback;
   const expanded = value.trim() === "~" ? home : value.trim().startsWith("~/") ? path26.join(home, value.trim().slice(2)) : value.trim();
   const resolved = path26.resolve(expanded);
@@ -26572,6 +26597,26 @@ function classifySyncStatus(input) {
 }
 function isBlockingStatus(status) {
   return status !== "synced";
+}
+var SAFE_FOLDER_DELETE_STATUSES = /* @__PURE__ */ new Set(["local deleted"]);
+function remoteChangedSinceBase(item) {
+  return item.remoteHash !== void 0 && item.baseHash !== void 0 && item.remoteHash !== item.baseHash;
+}
+function findUnsafeFolderDescendants(items, folderPath) {
+  const prefix = `${toPosixPath2(folderPath)}/`;
+  return items.filter((item) => item.path.startsWith(prefix) && (!SAFE_FOLDER_DELETE_STATUSES.has(item.status) || remoteChangedSinceBase(item)));
+}
+var UNSAFE_FOLDER_DELETE_LISTED = 8;
+function unsafeFolderDeleteReason(item) {
+  if (item.status === "local deleted" && remoteChangedSinceBase(item)) return "changed on Overleaf";
+  if (item.status === "remote only") return "added on Overleaf";
+  if (item.status === "error") return "could not be read from Overleaf";
+  return item.status;
+}
+function unsafeFolderDeleteMessage(folderPath, unsafe) {
+  const listed = unsafe.slice(0, UNSAFE_FOLDER_DELETE_LISTED).map((item) => `${item.path} (${unsafeFolderDeleteReason(item)})`);
+  const more = unsafe.length > listed.length ? `, and ${unsafe.length - listed.length} more` : "";
+  return `Not deleting ${folderPath} from Overleaf: it still holds work that has not reached this computer - ${listed.join(", ")}${more}. Pull or review those first.`;
 }
 function folderInTargetedScope(folderPath, requested) {
   return requested.some((item) => item === folderPath || item.startsWith(`${folderPath}/`) || folderPath.startsWith(`${item}/`));
@@ -30327,11 +30372,34 @@ var RealtimeSyncService = class {
     await this.saveOpenLocalDocument(normalized);
     const localPath = await assertNoSymlinkPath(this.root, normalized);
     const localStat = await fs33.stat(localPath).catch(() => void 0);
+    if (localStat?.isDirectory()) {
+      throw new Error(`${normalized} is a folder. Push the files inside it; the folder is created on Overleaf with them.`);
+    }
     const binary = entry ? entry.entityType === "file" : !isTextLike(normalized);
     const localContent = localStat && !binary ? await fs33.readFile(localPath) : void 0;
     if (!localStat) {
+      const folder = entry ? void 0 : this.manifest.folders[normalized];
+      if (folder) {
+        const inspection = await this.inspectFolderDelete(normalized);
+        if (inspection.unsafe.length > 0) {
+          throw new Error(unsafeFolderDeleteMessage(normalized, inspection.unsafe));
+        }
+        if (!forceDestructive) {
+          const selection = await vscode10.window.showWarningMessage(
+            `Delete the folder ${normalized} and the ${inspection.fileCount} file(s) in it from Overleaf? It is missing locally.`,
+            { modal: true },
+            "Delete Remote Folder"
+          );
+          if (selection !== "Delete Remote Folder") return;
+        }
+        await this.executeFolderDelete(normalized, folder);
+        if (refreshStatus) {
+          await this.checkTargeted([normalized, ...inspection.descendants], "post-delete");
+        }
+        return;
+      }
       if (!entry) {
-        throw new Error(`${normalized} does not exist locally or in the manifest.`);
+        throw new Error(`${normalized} is missing locally and is not tracked as a file or a folder.`);
       }
       if (!forceDestructive) {
         const selection = await vscode10.window.showWarningMessage(
@@ -30392,6 +30460,10 @@ var RealtimeSyncService = class {
     const normalized = normalizeProjectRelativePath(relPath);
     if (this.syncGate.findBlocking(normalized)?.state === "error") {
       throw new Error(`${normalized} has an unresolved remote read error. Retry its sync check before pulling.`);
+    }
+    if (this.currentRemoteTree().folders[normalized]) {
+      await this.restoreRemoteFolder(normalized, refreshStatus);
+      return;
     }
     const remote = await this.fetchFreshRemoteSnapshot([normalized]);
     const remoteFile = remote.manifest.files[normalized];
@@ -30469,11 +30541,16 @@ var RealtimeSyncService = class {
   async moveRemoteDeletedToTrash(relPath) {
     this.requireReady();
     const normalized = normalizeProjectRelativePath(relPath);
+    const descendants = this.manifest.folders[normalized] ? collectFolderDescendants(normalized, this.manifest, this.currentRemoteTree()) : [];
     await this.moveLocalToTrash(normalized);
-    delete this.manifest.files[normalized];
-    this.docStates.delete(normalized);
+    if (this.manifest.folders[normalized]) {
+      this.forgetRemovedFiles(removeManifestSubtree(this.manifest, normalized));
+    } else {
+      delete this.manifest.files[normalized];
+      this.docStates.delete(normalized);
+    }
     await this.persistManifest();
-    await this.checkTargeted([normalized], "post-trash");
+    await this.checkTargeted([normalized, ...descendants], "post-trash");
     vscode10.window.showInformationMessage(`Moved ${normalized} to local Overleaf Codex trash.`);
   }
   async start(root, client, progress, signal) {
@@ -31304,12 +31381,79 @@ var RealtimeSyncService = class {
       session.disconnect();
     }
   }
-  checkTargeted(paths, reason) {
+  checkTargeted(paths, reason, mode = "incremental") {
     return this.checkSyncStatus(this.root, this.client, void 0, {
-      mode: "incremental",
+      mode,
       paths,
       reason
     });
+  }
+  /** The project tree as the live session sees it right now. Built in memory; joins nothing. */
+  currentRemoteTree() {
+    const project = this.session?.getProject();
+    if (!project) throw new Error("Overleaf realtime session does not have a project tree.");
+    return buildProjectTreeIndex(
+      this.manifest.serverUrl,
+      this.manifest.projectId,
+      this.manifest.projectName,
+      project
+    ).manifest;
+  }
+  /** Drops in-memory state for files that have just left the manifest. */
+  forgetRemovedFiles(removed) {
+    for (const file of removed) {
+      this.docStates.delete(file.path);
+      this.documentSessions.delete(file.entityId);
+    }
+  }
+  /**
+   * Re-checks everything under a folder and reports what would make deleting it on Overleaf unsafe.
+   * Deleting a folder takes its whole contents with it, so this must run against fresh status rather
+   * than whatever the last report happened to say.
+   */
+  async inspectFolderDelete(folderPath) {
+    const remoteTree = this.currentRemoteTree();
+    const descendants = collectFolderDescendants(folderPath, this.manifest, remoteTree);
+    const report = await this.checkTargeted([folderPath, ...descendants], "pre-folder-delete", "full");
+    return {
+      descendants,
+      fileCount: descendants.filter((relPath) => remoteTree.files[relPath]).length,
+      unsafe: findUnsafeFolderDescendants(report.items, folderPath)
+    };
+  }
+  async executeFolderDelete(folderPath, folder) {
+    this.markLocalMutation(folder.entityId);
+    await this.client.deleteEntity(this.manifest.projectId, "folder", folder.entityId);
+    this.forgetRemovedFiles(removeManifestSubtree(this.manifest, folderPath));
+    await this.persistManifest();
+  }
+  /** Brings back a folder that was deleted locally but still exists on Overleaf. */
+  async restoreRemoteFolder(folderPath, refreshStatus) {
+    const remoteTree = this.currentRemoteTree();
+    const descendants = collectFolderDescendants(folderPath, this.manifest, remoteTree);
+    for (const relPath of [folderPath, ...descendants.filter((candidate) => remoteTree.folders[candidate])]) {
+      await fs33.mkdir(await assertNoSymlinkPath(this.root, relPath), { recursive: true });
+      addOrUpdateFolder(this.manifest, remoteTree.folders[relPath]);
+    }
+    const files = descendants.filter((relPath) => remoteTree.files[relPath]);
+    const failures = [];
+    for (const relPath of files) {
+      try {
+        await this.pullRemoteFile(relPath, false);
+      } catch (error) {
+        failures.push(`${relPath}: ${formatUnknownError(error)}`);
+      }
+    }
+    await this.persistManifest();
+    if (refreshStatus) {
+      await this.checkTargeted([folderPath, ...descendants], "post-restore");
+    }
+    if (failures.length > 0) {
+      throw new Error(`Restored ${folderPath} except ${failures.length} of ${files.length} file(s): ${failures.join("; ")}`);
+    }
+    if (refreshStatus) {
+      vscode10.window.showInformationMessage(`Restored ${folderPath} and ${files.length} file(s) from Overleaf.`);
+    }
   }
   async initializeDocStatesFromRemote(remote) {
     this.requireReady();
@@ -31782,10 +31926,14 @@ var RealtimeSyncService = class {
     }
     const folder = this.manifest.folders[relPath];
     if (folder) {
-      this.markLocalMutation(folder.entityId);
-      await this.client.deleteEntity(this.manifest.projectId, "folder", folder.entityId);
-      delete this.manifest.folders[relPath];
-      await this.persistManifest();
+      const inspection = await this.inspectFolderDelete(relPath);
+      if (inspection.unsafe.length > 0) {
+        const reason = unsafeFolderDeleteMessage(relPath, inspection.unsafe);
+        this.log(reason);
+        this.syncGate.setPath(relPath, "pending", reason, true);
+        return;
+      }
+      await this.executeFolderDelete(relPath, folder);
     }
   }
   async replaceBinaryFile(relPath, sourcePath, digests, entry, manual = false) {
@@ -34179,20 +34327,25 @@ var OverleafService = class {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["local ahead", "local only", "local deleted", "remote deleted", "diverged"]);
     if (!item) return;
-    if (this.isDestructive(item)) await this.confirmDestructive(`Push local deletion or conflict for ${item.path}?`);
+    const destructive = this.isDestructive(item);
+    if (destructive) {
+      await this.confirmDestructive(item.entityType === "folder" ? `Delete the folder ${item.path} and everything in it from Overleaf? It is missing locally.` : `Push local deletion or conflict for ${item.path}?`);
+    }
     if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
-      await this.ownerCoordinator.request("push", { path: item.path, force: this.isDestructive(item) });
+      await this.ownerCoordinator.request("push", { path: item.path, force: destructive });
       this.onChanged();
       return;
     }
-    await this.realtimeSync.pushLocalFile(item.path);
+    await this.realtimeSync.pushLocalFile(item.path, true, destructive);
     this.onChanged();
   }
   async pullRemoteFile(candidate) {
     await this.ensureRunning(candidate);
     const item = this.statusFromArgument(candidate) ?? await this.pickStatus(["remote ahead", "remote only", "local deleted", "diverged"]);
     if (!item) return;
-    if (this.isDestructive(item)) await this.confirmDestructive(`Replace local content with the remote version of ${item.path}?`);
+    if (this.isDestructive(item)) {
+      await this.confirmDestructive(item.entityType === "folder" ? `Restore the folder ${item.path} and its files from Overleaf?` : `Replace local content with the remote version of ${item.path}?`);
+    }
     if (!this.ownerCoordinator.isOwner && this.ownerCoordinator.currentRoot) {
       await this.ownerCoordinator.request("pull", { path: item.path, force: this.isDestructive(item) });
       this.onChanged();
@@ -36102,7 +36255,7 @@ var ToolkitTreeProvider = class {
         contextValue: "openFolder"
       });
     } else {
-      nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder, localFolders.length === 1))));
+      nodes.push(...await Promise.all(localFolders.map((folder) => this.workspaceNode(folder))));
     }
     return nodes;
   }
@@ -36194,7 +36347,7 @@ var ToolkitTreeProvider = class {
       contextValue: options.contextValue
     };
   }
-  async workspaceNode(folder, isOnlyFolder) {
+  async workspaceNode(folder) {
     const response = await this.loadWorkspaceState(folder);
     const description = response instanceof Error ? "Needs attention" : `${this.presetLabel(response.schema.style_presets, response.state.style_preset)} \xB7 ${this.workspaceBuildSummary(response.state)}`;
     return {
@@ -36376,10 +36529,6 @@ var ToolkitTreeProvider = class {
       iconId,
       contextValue: "info"
     };
-  }
-  compileRecipeDescription(state) {
-    if (state.compile_use_internal_fallback) return "internal fallback";
-    return state.compile_recipe_name || state.compile_recipe || "not set";
   }
   lastCompileDescription(state) {
     if (state.compile_last_success === null) return "not run";
