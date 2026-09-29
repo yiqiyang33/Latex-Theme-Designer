@@ -46,3 +46,8 @@ _minted*
 
 # Typical local outputs in this repo
 main.pdf
+
+# Platform-specific native runtime, rebuilt by `package:darwin-*` for each target.
+# Tracking it made every release commit add the binary and the next plain build
+# delete it again.
+dist/vendor/keytar/
