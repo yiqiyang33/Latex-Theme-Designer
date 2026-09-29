@@ -1929,3 +1929,134 @@ function recordingBackend(): { backend: SyncCommandBackend; calls: string[] } {
     }
   };
 }
+
+describe('CLI folder push and pull, against the real classifier', () => {
+  // Only the socket is faked here: checkNow, the reconciler and classifySyncStatus all run for real,
+  // so these tests cannot pass on an assumption about which status a case produces.
+  const original = { 'd-old': 'original old\n', 'd-deep': 'original deep\n' } as const;
+  type DocId = keyof typeof original;
+
+  function tree(withLegacy: boolean, versions: Partial<Record<DocId, number>>) {
+    const doc = (id: DocId, name: string) => ({ _id: id, name, version: versions[id] ?? 1 });
+    return {
+      rootFolder: {
+        _id: 'root', name: 'root', docs: [], fileRefs: [],
+        folders: withLegacy ? [{
+          _id: 'f-legacy', name: 'Sections-legacy', fileRefs: [], docs: [doc('d-old', 'old.tex')],
+          folders: [{ _id: 'f-sub', name: 'sub', fileRefs: [], folders: [], docs: [doc('d-deep', 'deep.tex')] }]
+        }] : []
+      }
+    };
+  }
+
+  async function setup(options: {
+    remoteContent?: Partial<Record<DocId, string>>;
+    versions?: Partial<Record<DocId, number>>;
+    withLegacyRemotely?: boolean;
+    localPresent?: boolean;
+  } = {}) {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-cli-folder-'));
+    const remoteContent: Record<DocId, string> = { ...original, ...options.remoteContent };
+    const versions = options.versions ?? {};
+    const project = tree(options.withLegacyRemotely ?? true, versions);
+    const deleted: string[][] = [];
+    const session = {
+      getProject: () => project,
+      joinDoc: async (id: string) => ({ content: remoteContent[id as DocId], version: versions[id as DocId] ?? 1 }),
+      on: () => undefined,
+      disconnect: () => undefined
+    };
+    const client = {
+      connectSocket: async () => session,
+      deleteEntity: async (projectId: string, type: string, id: string) => { deleted.push([projectId, type, id]); }
+    };
+    const state = manifest();
+    const tracked = (relPath: string, id: DocId, parent: string) => ({
+      path: relPath, entityId: id, entityType: 'doc' as const, parentFolderId: parent,
+      version: 1, sha1: sha1(original[id]), baseHash: sha1(original[id])
+    });
+    state.files['Sections-legacy/old.tex'] = tracked('Sections-legacy/old.tex', 'd-old', 'f-legacy');
+    state.files['Sections-legacy/sub/deep.tex'] = tracked('Sections-legacy/sub/deep.tex', 'd-deep', 'f-sub');
+    state.folders['Sections-legacy'] = { path: 'Sections-legacy', entityId: 'f-legacy', parentFolderId: 'root' };
+    state.folders['Sections-legacy/sub'] = { path: 'Sections-legacy/sub', entityId: 'f-sub', parentFolderId: 'f-legacy' };
+    await writeManifest(temporary, state);
+    if (options.localPresent) {
+      await fs.mkdir(path.join(temporary, 'Sections-legacy', 'sub'), { recursive: true });
+      await fs.writeFile(path.join(temporary, 'Sections-legacy', 'old.tex'), original['d-old']);
+      await fs.writeFile(path.join(temporary, 'Sections-legacy', 'sub', 'deep.tex'), original['d-deep']);
+    }
+    const engine = new OverleafSyncEngine(
+      temporary,
+      client as never,
+      structuredClone(DEFAULT_SYNC_POLICY),
+      { log: () => undefined, progress: () => undefined, status: () => undefined, conflict: () => undefined }
+    );
+    const legacyKeys = async () => {
+      const current = await readManifest(temporary);
+      return [...Object.keys(current.files), ...Object.keys(current.folders)].filter(key => key.startsWith('Sections-legacy'));
+    };
+    return { temporary, engine, deleted, legacyKeys };
+  }
+
+  async function withSetup(options: Parameters<typeof setup>[0], body: (ctx: Awaited<ReturnType<typeof setup>>) => Promise<void>) {
+    const ctx = await setup(options);
+    try {
+      await body(ctx);
+    } finally {
+      await ctx.engine.stop();
+      await fs.rm(ctx.temporary, { recursive: true, force: true });
+    }
+  }
+
+  it('deletes a locally deleted folder on Overleaf and clears its whole subtree', () => withSetup({}, async ({ engine, deleted, legacyKeys }) => {
+    await engine.push('Sections-legacy', true);
+    expect(deleted).toEqual([['project', 'folder', 'f-legacy']]);
+    expect(await legacyKeys()).toEqual([]);
+  }));
+
+  it('refuses when a collaborator edited a file inside it', () => withSetup(
+    { remoteContent: { 'd-old': 'edited by a collaborator\n' }, versions: { 'd-old': 2 } },
+    async ({ engine, deleted }) => {
+      await expect(engine.push('Sections-legacy', true)).rejects.toThrow(/old\.tex \(changed on Overleaf\)/);
+      expect(deleted).toEqual([]);
+    }
+  ));
+
+  it('still refuses when the tree has not yet caught up with the edit\'s version', () => withSetup(
+    // The version Overleaf reports is still 1, so cached metadata would say nothing changed. Only
+    // reading the document again reveals the edit.
+    { remoteContent: { 'd-deep': 'edited by a collaborator\n' } },
+    async ({ engine, deleted }) => {
+      await expect(engine.push('Sections-legacy', true)).rejects.toThrow(/deep\.tex \(changed on Overleaf\)/);
+      expect(deleted).toEqual([]);
+    }
+  ));
+
+  it('requires --force for a safe delete, and deletes nothing without it', () => withSetup({}, async ({ engine, deleted }) => {
+    await expect(engine.push('Sections-legacy', false)).rejects.toThrow(/requires --force/);
+    expect(deleted).toEqual([]);
+  }));
+
+  it('restores a locally deleted folder from Overleaf', () => withSetup({}, async ({ engine, temporary }) => {
+    await engine.pull('Sections-legacy', true);
+    expect(await fs.readFile(path.join(temporary, 'Sections-legacy', 'old.tex'), 'utf8')).toBe(original['d-old']);
+    expect(await fs.readFile(path.join(temporary, 'Sections-legacy', 'sub', 'deep.tex'), 'utf8')).toBe(original['d-deep']);
+  }));
+
+  it('moves a folder deleted on Overleaf to trash and clears its whole subtree', () => withSetup(
+    { withLegacyRemotely: false, localPresent: true },
+    async ({ engine, temporary, legacyKeys }) => {
+      await engine.pull('Sections-legacy', true);
+      await expect(fs.stat(path.join(temporary, 'Sections-legacy'))).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await legacyKeys()).toEqual([]);
+    }
+  ));
+
+  it('rejects pushing a folder that still exists locally, instead of uploading it as a file', () => withSetup(
+    { localPresent: true },
+    async ({ engine, deleted }) => {
+      await expect(engine.push('Sections-legacy', true)).rejects.toThrow(/is a folder\. Push the files inside it/);
+      expect(deleted).toEqual([]);
+    }
+  ));
+});

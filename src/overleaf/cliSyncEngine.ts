@@ -8,10 +8,12 @@ import { OverleafClient, OverleafSocketSession } from './overleafClient';
 import {
   addOrUpdateFile,
   addOrUpdateFolder,
+  collectFolderDescendants,
   folderPathById,
   metadataPath,
   readManifest,
   readSyncStatus,
+  removeManifestSubtree,
   shouldIgnore,
   shouldIgnoreUntrackedLocalPath,
   writeBaseDoc,
@@ -27,8 +29,10 @@ import type {
 } from './types';
 import {
   cachedLocalFileHash,
+  findUnsafeFolderDescendants,
   scanLocalProject,
-  trashPathFor
+  trashPathFor,
+  unsafeFolderDeleteMessage
 } from './syncStatus';
 import { buildOtOperations } from './ot';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
@@ -307,6 +311,60 @@ export class OverleafSyncEngine {
       return report;
   }
 
+  /** The project tree as the live session sees it right now. Built in memory; joins nothing. */
+  private currentRemoteTree(): OverleafCodexManifest {
+    const project = this.session!.getProject();
+    if (!project) throw new Error('Overleaf realtime session does not contain a project tree.');
+    return buildProjectTreeIndex(
+      this.manifest!.serverUrl, this.manifest!.projectId, this.manifest!.projectName, project
+    ).manifest;
+  }
+
+  /**
+   * Deletes a locally removed folder from Overleaf. Overleaf deletes the contents with the folder,
+   * so this refuses first if anything under it has not reached this computer, and asks for --force
+   * only after that - --force cannot make an unsafe delete safe.
+   */
+  private async deleteRemoteFolder(folderPath: string, force: boolean): Promise<void> {
+    const descendants = collectFolderDescendants(folderPath, this.manifest!, this.currentRemoteTree());
+    // checkNow rather than check(): this already runs inside serial(), which check() would wait on.
+    // 'full' rather than incremental: the delete cannot be undone, so every descendant is read fresh
+    // instead of trusting cached version bookkeeping to have noticed an edit.
+    const report = await this.checkNow('full', { paths: [folderPath, ...descendants], reason: 'pre-folder-delete' });
+    const unsafe = findUnsafeFolderDescendants(report.items, folderPath);
+    if (unsafe.length > 0) throw new Error(unsafeFolderDeleteMessage(folderPath, unsafe));
+    if (!force) throw new Error(`Deleting the folder ${folderPath} and everything in it from Overleaf requires --force.`);
+    // checkNow reloaded the manifest, so look the folder up again rather than reuse a stale entry.
+    const folder = this.manifest!.folders[folderPath];
+    if (!folder) throw new Error(`${folderPath} is no longer tracked as a folder.`);
+    await this.client.deleteEntity(this.manifest!.projectId, 'folder', folder.entityId);
+    removeManifestSubtree(this.manifest!, folderPath);
+    await writeManifest(this.root, this.manifest!);
+  }
+
+  /** Brings back a folder that exists on Overleaf: folders first, then every file inside. */
+  private async restoreRemoteFolder(folderPath: string, remoteTree: OverleafCodexManifest, force: boolean): Promise<void> {
+    const descendants = collectFolderDescendants(folderPath, this.manifest!, remoteTree);
+    for (const relPath of [folderPath, ...descendants.filter(candidate => remoteTree.folders[candidate])]) {
+      await fs.mkdir(await assertNoSymlinkPath(this.root, relPath), { recursive: true });
+      addOrUpdateFolder(this.manifest!, remoteTree.folders[relPath]);
+    }
+    // Persisted now: each pullNow below reloads the manifest from disk and would drop these.
+    await writeManifest(this.root, this.manifest!);
+    const files = descendants.filter(relPath => remoteTree.files[relPath]);
+    const failures: string[] = [];
+    for (const relPath of files) {
+      try {
+        await this.pullNow(relPath, force);
+      } catch (error) {
+        failures.push(`${relPath}: ${formatUnknownError(error)}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`Restored ${folderPath} except ${failures.length} of ${files.length} file(s): ${failures.join('; ')}`);
+    }
+  }
+
   async push(relPath: string, force: boolean): Promise<void> {
     await this.serial(() => this.pushNow(relPath, force));
   }
@@ -317,9 +375,16 @@ export class OverleafSyncEngine {
       const normalized = this.validatePath(relPath);
       const sourcePath = await assertNoSymlinkPath(this.root, normalized);
       const localStat = await fs.stat(sourcePath).catch(() => undefined);
+      if (localStat?.isDirectory()) {
+        throw new Error(`${normalized} is a folder. Push the files inside it; the folder is created on Overleaf with them.`);
+      }
       const entry = this.manifest.files[normalized];
       if (!localStat) {
-        if (!entry) throw new Error(`${normalized} does not exist locally.`);
+        if (!entry && this.manifest.folders[normalized]) {
+          await this.deleteRemoteFolder(normalized, force);
+          return;
+        }
+        if (!entry) throw new Error(`${normalized} is missing locally and is not tracked as a file or a folder.`);
         if (!force) throw new Error(`Deleting ${normalized} from Overleaf requires --force.`);
         await this.client.deleteEntity(this.manifest.projectId, entry.entityType, entry.entityId);
         delete this.manifest.files[normalized];
@@ -401,10 +466,18 @@ export class OverleafSyncEngine {
       await this.start();
       this.manifest = await readManifest(this.root);
       const normalized = this.validatePath(relPath);
+      // remoteFile() only ever sees files, so a folder has to be recognised from the tree first.
+      const remoteTree = this.currentRemoteTree();
+      if (remoteTree.folders[normalized]) {
+        await this.restoreRemoteFolder(normalized, remoteTree, force);
+        return;
+      }
       const remote = await this.remoteFile(normalized);
       const entry = this.manifest.files[normalized];
+      // Past the restore above, a folder tracked here but absent remotely was deleted on Overleaf.
+      const trackedFolder = entry ? undefined : this.manifest.folders[normalized];
       if (!remote) {
-        if (!entry) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
+        if (!entry && !trackedFolder) throw new Error(`${normalized} does not exist on Overleaf or in the local manifest.`);
         if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
         const source = await assertNoSymlinkPath(this.root, normalized);
         const target = trashPathFor(this.root, normalized);
@@ -417,7 +490,8 @@ export class OverleafSyncEngine {
             await fs.rm(source, { recursive: stat.isDirectory(), force: true });
           });
         }
-        delete this.manifest.files[normalized];
+        if (trackedFolder) removeManifestSubtree(this.manifest, normalized);
+        else delete this.manifest.files[normalized];
         await writeManifest(this.root, this.manifest);
         this.emit('trashed', { path: normalized, trashPath: stat ? target : undefined });
         return;
