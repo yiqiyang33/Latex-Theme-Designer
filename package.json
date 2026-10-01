@@ -95,6 +95,7 @@
     "onCommand:overleafCodex.listProjects",
     "onCommand:overleafCodex.openProjectLocally",
     "onCommand:overleafCodex.startRealtimeSync",
+    "onCommand:overleafCodex.takeOverSync",
     "onCommand:overleafCodex.stopRealtimeSync",
     "onCommand:overleafCodex.checkSyncStatus",
     "onCommand:overleafCodex.runFullSyncAudit",
@@ -405,6 +406,11 @@
         "category": "LaTeX Editing Toolkit: Overleaf"
       },
       {
+        "command": "overleafCodex.takeOverSync",
+        "title": "LaTeX Editing Toolkit: Overleaf: Take Over Sync Here",
+        "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
         "command": "overleafCodex.stopRealtimeSync",
         "title": "LaTeX Editing Toolkit: Overleaf: Stop Realtime Sync",
         "category": "LaTeX Editing Toolkit: Overleaf"
@@ -604,8 +610,9 @@
         },
         "overleafCodex.localProjectsRoot": {
           "type": "string",
+          "scope": "machine",
           "default": "~/Documents/OverleafCodex/projects",
-          "description": "Default parent directory for local Overleaf mirrors."
+          "description": "Default parent directory for local Overleaf mirrors. Set per machine: a remote (Remote-SSH) host keeps its own value."
         },
         "overleafCodex.compileOnSave": {
           "type": "boolean",
@@ -712,6 +719,12 @@
           ],
           "default": "local",
           "description": "Preferred compile mode for the Toolkit Build section."
+        },
+        "latexEditingToolkit.overleaf.networkRescanSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "When a mirror is on a network filesystem (NFS, SMB, Lustre, GPFS), how often to look for edits made on other machines, which file watchers cannot see. 0 turns this off."
         }
       }
     },

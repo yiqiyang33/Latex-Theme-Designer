@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { atomicWriteText, CONFLICT_INDEX_NAME, MAX_METADATA_JSON_BYTES, metadataPath, readTextFileBounded } from './manifest';
+import { atomicWriteText, CONFLICT_INDEX_NAME, MAX_METADATA_JSON_BYTES, MetadataUnreadableError, metadataPath, readMetadataText } from './manifest';
 import { assertValidConflicts, validateConflictList } from './metadataValidation';
 
 export interface PersistedConflict {
@@ -19,16 +19,16 @@ export class ConflictStore {
   async list(): Promise<PersistedConflict[]> {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateConflictList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed as PersistedConflict[];
     } catch (error) {
+      // Unreadable is not corrupt: returning an empty list here would let the next write drop
+      // every record.
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
       console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];

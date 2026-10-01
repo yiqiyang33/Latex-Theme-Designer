@@ -572,7 +572,13 @@ function renderSyncPanel(): void {
   byId("syncMirror").textContent = state.mirrorRoot || "—";
   const status = syncProjectStatus(state);
   byId("syncStatus").textContent = status;
-  byId("syncRole").textContent = state.ownerRole === "owner" ? "Owner" : state.ownerRole === "client" ? "Client" : "—";
+  byId("syncRole").textContent = state.ownerRole === "owner" ? "Owner"
+    : state.ownerRole === "client" ? "Client"
+    : state.ownerRole === "standby" ? `Paused · ${state.syncHolder?.sameHost ? "another window" : state.syncHolder?.hostname || "elsewhere"}`
+    : "—";
+  // In standby an explicit start is a takeover: it asks the machine holding sync to hand it over.
+  const startLabel = byId("syncStartBtn").querySelector("span");
+  if (startLabel) startLabel.textContent = state.ownerRole === "standby" ? "Take Over Sync" : "Start Sync";
   byId("syncConnection").textContent = formatSyncConnection(state.connectionState);
   byId("syncReconnects").textContent = state.reconnectAttempts ? String(state.reconnectAttempts) : "—";
   byId("syncContextTitle").textContent = state.projectName || "Overleaf mirror";
@@ -635,6 +641,7 @@ function renderSyncPanel(): void {
 
 function syncProjectStatus(state: any): string {
   if (!state?.authenticated) return "Authentication required";
+  if (state.ownerRole === "standby") return "Paused on this machine";
   if (state.conflicts?.length || state.syncItems?.some((item: any) => item.status === "diverged")) return "Conflict";
   if (state.connectionState === "blocked-tree" || state.syncStatus?.globalBlockReason) return "Project tree blocked";
   if (state.connectionState === "reconnecting") return "Reconnecting";
@@ -646,6 +653,7 @@ function syncProjectStatus(state: any): string {
 
 function syncProjectAction(state: any): string {
   if (!state?.authenticated) return "Login is required before starting sync.";
+  if (state.ownerRole === "standby") return `${state.syncHolder?.description ?? "Sync is held elsewhere."} Take Over Sync moves it here.`;
   if (state.connectionState === "reconnecting") return "The connection will retry automatically.";
   if (state.connectionState === "blocked-tree") return "Run a full audit and resolve the project tree issue.";
   if (state.conflicts?.length) return "Review conflicts before continuing sync.";

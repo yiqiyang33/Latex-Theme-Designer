@@ -5,6 +5,8 @@
 *~
 .pytest_cache/
 node_modules/
+# The committed dist/ ships the vendored Socket.IO runtime, including its own dependencies.
+!dist/vendor/socket.io-client/node_modules/
 coverage/
 *.vsix
 

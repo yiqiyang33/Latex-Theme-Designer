@@ -30,17 +30,23 @@ export async function hashFileDigests(filePath: string): Promise<FileDigests> {
 
 export async function installStagedFile(stagedPath: string, targetPath: string): Promise<void> {
   const token = `${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`;
-  const backupPath = path.join(path.dirname(targetPath), `.${path.basename(targetPath)}.backup-${token}`);
+  const directory = path.dirname(targetPath);
+  const incomingPath = path.join(directory, `.${path.basename(targetPath)}.incoming-${token}`);
+  const backupPath = path.join(directory, `.${path.basename(targetPath)}.backup-${token}`);
   let backedUp = false;
   try {
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.mkdir(directory, { recursive: true });
+    // Bring the staged file next to the target first, so the swap below is two renames within one
+    // directory. Staging may sit on another filesystem (a local /tmp beside an NFS home), and a slow
+    // copy must not happen while the target is moved aside.
+    await moveOrCopy(stagedPath, incomingPath);
     try {
       await fs.rename(targetPath, backupPath);
       backedUp = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    await fs.rename(stagedPath, targetPath);
+    await fs.rename(incomingPath, targetPath);
     if (backedUp) await fs.rm(backupPath, { force: true });
   } catch (error) {
     if (backedUp) {
@@ -49,6 +55,16 @@ export async function installStagedFile(stagedPath: string, targetPath: string):
     }
     throw error;
   } finally {
+    await fs.rm(incomingPath, { force: true }).catch(() => undefined);
     await fs.rm(stagedPath, { force: true }).catch(() => undefined);
+  }
+}
+
+async function moveOrCopy(source: string, target: string): Promise<void> {
+  try {
+    await fs.rename(source, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    await fs.copyFile(source, target);
   }
 }

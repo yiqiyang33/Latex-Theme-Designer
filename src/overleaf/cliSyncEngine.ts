@@ -10,6 +10,7 @@ import {
   addOrUpdateFolder,
   collectFolderDescendants,
   folderPathById,
+  isFilesystemLeftover,
   metadataPath,
   readManifest,
   readSyncStatus,
@@ -45,6 +46,7 @@ import { SyncHealthService } from './syncHealthService';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
 import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
+import { DEFAULT_NETWORK_RESCAN_MS, NetworkRescanner } from './networkRescan';
 
 const REMOTE_EVENTS = [
   'otUpdateApplied', 'reciveNewDoc', 'reciveNewFile', 'reciveNewFolder',
@@ -70,6 +72,7 @@ export class OverleafSyncEngine {
   private manifest?: OverleafCodexManifest;
   private session?: OverleafSocketSession;
   private watcher?: FSWatcher;
+  private networkRescanner?: NetworkRescanner;
   private timer?: NodeJS.Timeout;
   private running = false;
   private stopping = false;
@@ -95,6 +98,17 @@ export class OverleafSyncEngine {
       });
     }
     return this.startPromise;
+  }
+
+  /**
+   * Stops at once because another process now owns this mirror: the socket is dropped before
+   * in-flight work drains, so nothing further is sent to Overleaf from here.
+   */
+  async fence(): Promise<void> {
+    this.stopping = true;
+    this.session?.disconnect();
+    this.requestStop();
+    await this.stop();
   }
 
   async stop(): Promise<void> {
@@ -129,6 +143,8 @@ export class OverleafSyncEngine {
     this.timer = undefined;
     await this.watcher?.close();
     this.watcher = undefined;
+    this.networkRescanner?.stop();
+    this.networkRescanner = undefined;
     await this.startPromise?.catch(() => undefined);
     await this.operation.catch(() => undefined);
     this.running = false;
@@ -187,6 +203,21 @@ export class OverleafSyncEngine {
         this.host.log(`Local ${event}: ${path.relative(this.root, changed)}`);
         this.scheduleSync(`local:${event}`);
       });
+    }
+    // chokidar uses inotify, which never reports edits made on other machines sharing an NFS mirror.
+    const rescanMs = Number(process.env.LATEX_TOOLKIT_NETWORK_RESCAN_MS ?? DEFAULT_NETWORK_RESCAN_MS);
+    this.networkRescanner = new NetworkRescanner(
+      this.root,
+      () => this.manifest,
+      changes => {
+        for (const change of changes) this.host.log(`Changed outside this machine (${change.kind}): ${change.relPath}`);
+        this.scheduleSync('network-rescan');
+      },
+      Number.isFinite(rescanMs) ? rescanMs : DEFAULT_NETWORK_RESCAN_MS,
+      error => this.host.log(`Network filesystem rescan failed: ${formatUnknownError(error)}`)
+    );
+    if (await this.networkRescanner.start()) {
+      this.host.log('The mirror is on a network filesystem; also checking for edits made on other machines.');
     }
     await new Promise<void>(resolve => this.events.once('stop', resolve));
   }
@@ -570,7 +601,11 @@ export class OverleafSyncEngine {
         dispose: async () => undefined
       };
     }
-    const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-pull-'));
+    // Stage inside the mirror, as the editor engine does: the file is later renamed into place, and
+    // a rename cannot cross filesystems (a local /tmp and an NFS home are different devices).
+    const cacheRoot = metadataPath(this.root, 'cache');
+    await fs.mkdir(cacheRoot, { recursive: true });
+    const temporaryRoot = await fs.mkdtemp(path.join(cacheRoot, 'pull-'));
     const sourcePath = path.join(temporaryRoot, remote.entityId);
     try {
       const digests = await this.client.downloadProjectFileToPath(this.manifest.projectId, remote.entityId, sourcePath);
@@ -910,7 +945,7 @@ export class OverleafSyncEngine {
   private ignoreAbsolutePath(candidate: string): boolean {
     const rel = toPosixPath(path.relative(this.root, candidate));
     if (!rel || rel.startsWith('..')) return false;
-    if (/(^|\/)(\.overleaf-codex|\.git|\.vscode)(\/|$)/.test(rel)) return true;
+    if (/(^|\/)(\.overleaf-codex|\.git|\.vscode)(\/|$)/.test(rel) || isFilesystemLeftover(rel)) return true;
     return this.manifest
       ? shouldIgnore(this.manifest, rel) || shouldIgnoreUntrackedLocalPath(this.manifest, rel)
       : false;

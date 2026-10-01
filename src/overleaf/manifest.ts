@@ -9,7 +9,7 @@ import {
   OverleafCodexManifest,
   SyncStatusReport
 } from './types';
-import { assertNoSymlinkPath, sha1, toPosixPath } from './util';
+import { assertNoSymlinkPath, formatUnknownError, isTransientFsError, sha1, sleep, toPosixPath } from './util';
 import { assertValidManifest, assertValidSyncStatus, validateManifest, validateSyncStatus } from './metadataValidation';
 
 export const METADATA_DIR = '.overleaf-codex';
@@ -64,7 +64,22 @@ export function isAlwaysLocal(relPath: string): boolean {
     || /(^|\/)\.git(\/|$)/.test(normalized)
     || /(^|\/)\.gitignore$/.test(normalized)
     || /(^|\/)\.latexmkrc$/.test(normalized)
-    || /(^|\/)\.DS_Store$/.test(normalized);
+    || isFilesystemLeftover(normalized);
+}
+
+/**
+ * Files that filesystems and tools leave behind and that are never project content: NFS keeps a
+ * deleted but still-open file as `.nfsXXXX` until it is closed, macOS writes `.DS_Store`, `._*`
+ * AppleDouble files and `__MACOSX/` folders (on non-Apple volumes and in zips), and staged
+ * downloads briefly sit beside their target as `.<name>.incoming-*` / `.<name>.backup-*`.
+ */
+export function isFilesystemLeftover(relPath: string): boolean {
+  const normalized = toPosixPath(relPath);
+  return /(^|\/)\.DS_Store$/.test(normalized)
+    || /(^|\/)\.nfs[0-9A-Fa-f]{8,}$/.test(normalized)
+    || /(^|\/)\._[^/]+$/.test(normalized)
+    || /(^|\/)__MACOSX(\/|$)/.test(normalized)
+    || /(^|\/)\.[^/]+\.(?:incoming|backup)-\d+-\d+-[0-9a-f]{8}$/.test(normalized);
 }
 
 export const TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
@@ -159,9 +174,22 @@ export function metadataPath(root: string, ...parts: string[]): string {
 
 export async function readManifest(root: string): Promise<OverleafCodexManifest> {
   const target = manifestPath(root);
+  let raw: string | undefined;
+  try {
+    raw = await readMetadataText(target, MAX_MANIFEST_JSON_BYTES);
+  } catch (error) {
+    // An I/O failure (an NFS stall, a file replaced by another host) says nothing about the
+    // content; quarantining would make a healthy mirror unrecognisable.
+    if (error instanceof MetadataUnreadableError) throw error;
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
+  }
+  if (raw === undefined) {
+    throw Object.assign(new Error(`No Overleaf manifest exists at ${target}.`), { code: 'ENOENT' });
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await readTextFileBounded(target, MAX_MANIFEST_JSON_BYTES));
+    parsed = JSON.parse(raw);
   } catch (error) {
     await quarantineCorruptFile(target);
     throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
@@ -233,16 +261,56 @@ export function syncStatusPath(root: string): string {
 
 export async function readSyncStatus(root: string): Promise<SyncStatusReport | undefined> {
   try {
-    const bounded = await readTextFileBounded(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
+    const bounded = await readMetadataText(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
     if (!bounded) return undefined;
     const parsed = JSON.parse(bounded) as SyncStatusReport;
     const validationError = validateSyncStatus(parsed);
     if (validationError) throw new Error(validationError);
     return parsed;
   } catch (error) {
+    // The status is derived data and is rewritten by the next check; an unreadable file is left
+    // alone and a corrupt one moved aside.
+    if (error instanceof MetadataUnreadableError) return undefined;
     await quarantineCorruptFile(syncStatusPath(root));
     console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
+  }
+}
+
+/**
+ * A metadata file that exists but could not be read for reasons unrelated to its content: an I/O
+ * error on a network filesystem that outlasted the retries, or a permission problem. Callers must
+ * neither quarantine the file nor replace it with defaults.
+ */
+export class MetadataUnreadableError extends Error {
+  readonly code = 'METADATA_UNREADABLE';
+
+  constructor(readonly target: string, cause: unknown) {
+    super(`Could not read ${target}: ${formatUnknownError(cause)}`, { cause });
+    this.name = 'MetadataUnreadableError';
+  }
+}
+
+const UNREADABLE_NOT_CORRUPT_CODES = new Set(['EACCES', 'EPERM', 'EMFILE', 'ENFILE']);
+
+/**
+ * Reads a metadata file, or undefined when it does not exist. Transient I/O errors (NFS soft
+ * mounts return EIO after a stall, readers on other hosts see ESTALE while a file is replaced) are
+ * retried, then reported as MetadataUnreadableError; other failures, such as the size limit, are
+ * thrown as they are and mean the content itself is bad.
+ */
+export async function readMetadataText(target: string, maxBytes: number, attempts = 3): Promise<string | undefined> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readTextFileBounded(target, maxBytes);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') return undefined;
+      if (typeof code === 'string' && UNREADABLE_NOT_CORRUPT_CODES.has(code)) throw new MetadataUnreadableError(target, error);
+      if (!isTransientFsError(error)) throw error;
+      if (attempt >= attempts) throw new MetadataUnreadableError(target, error);
+      await sleep(50 * 2 ** (attempt - 1));
+    }
   }
 }
 

@@ -1,5 +1,4 @@
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -575,11 +574,10 @@ async function writeLocalVsCodeSettings(root: string, rootDocPath?: string, comp
   const outputDir = '.overleaf-codex/local-build';
   const outputDirFromRootDoc = path.posix.relative(rootDir, outputDir) || '.';
   const workspaceFromRootDoc = path.posix.relative(rootDir, '.') || '.';
-  const biberCacheDir = path.join(os.tmpdir(), 'overleaf-codex-biber', sha1(root).slice(0, 12));
   const searchPrefix = rootDir === '.' ? '.:src/source//:' : `.:${workspaceFromRootDoc}//:src/source//:`;
   const compileCommand = [
     `mkdir -p ${shellQuote(outputDir)}`,
-    `mkdir -p ${shellQuote(biberCacheDir)}`,
+    biberCacheShell(root),
     `cd ${shellQuote(rootDir)}`,
     [
       'find . -type d',
@@ -610,9 +608,7 @@ async function writeLocalVsCodeSettings(root: string, rootDocPath?: string, comp
       env: {
         TEXINPUTS: searchPrefix,
         GINPUTS: searchPrefix,
-        BIBINPUTS: searchPrefix,
-        PAR_GLOBAL_TEMP: biberCacheDir,
-        PAR_TEMP: biberCacheDir
+        BIBINPUTS: searchPrefix
       }
     }],
     'latex-workshop.latex.recipes': [{ name: 'latexmk (local mirror)', tools: ['latexmk-local-mirror'] }]
@@ -662,11 +658,73 @@ export async function upgradeGeneratedLatexmkRc(root: string, rootDocPath?: stri
   const rcPath = latexmkRcPath(root, rootDocPath);
   const existing = await fs.readFile(rcPath, 'utf8').catch(() => undefined);
   if (!existing?.startsWith(LATEXMKRC_HEADER)) return false;
-  const missing = LATEXMKRC_BLOCKS.filter(block => !existing.includes(block.marker));
-  if (!missing.length) return false;
-  const appended = missing.flatMap(block => block.lines).join('\n');
-  await fs.writeFile(rcPath, `${existing.endsWith('\n') ? existing : `${existing}\n`}${appended}\n`, 'utf8');
+  // Older files fixed the biber cache to one path in the system temp directory, which on Linux is
+  // shared by every user of the machine.
+  const current = existing.replace(LEGACY_BIBER_CACHE_PERL, () => biberCachePerl(root).join('\n'));
+  const missing = LATEXMKRC_BLOCKS.filter(block => !current.includes(block.marker));
+  if (current === existing && !missing.length) return false;
+  const appended = missing.map(block => `${block.lines.join('\n')}\n`).join('');
+  await fs.writeFile(rcPath, `${current.endsWith('\n') ? current : `${current}\n`}${appended}`, 'utf8');
   return true;
+}
+
+const LEGACY_BIBER_CACHE_PERL = /^my \$overleaf_codex_biber_cache = '[^'\n]*';$/m;
+const LEGACY_BIBER_CACHE_SHELL = /mkdir -p '[^']*overleaf-codex-biber[^']*'/;
+
+/**
+ * Brings the LaTeX Workshop tool in a generated .vscode/settings.json up to date: older versions
+ * fixed its biber cache to a path in the shared system temp directory. Anything that does not look
+ * exactly like the generated entry is left alone.
+ */
+export async function upgradeGeneratedVsCodeSettings(root: string): Promise<boolean> {
+  const settingsPath = path.join(root, '.vscode', 'settings.json');
+  const raw = await fs.readFile(settingsPath, 'utf8').catch(() => undefined);
+  if (!raw) return false;
+  let settings: Record<string, unknown>;
+  try { settings = JSON.parse(raw) as Record<string, unknown>; } catch { return false; }
+  const tools = settings['latex-workshop.latex.tools'];
+  const tool = Array.isArray(tools)
+    ? tools.find(candidate => (candidate as { name?: unknown })?.name === 'latexmk-local-mirror') as
+      { args?: unknown[]; env?: Record<string, unknown> } | undefined
+    : undefined;
+  const command = tool?.args?.[1];
+  if (!tool || typeof command !== 'string' || !LEGACY_BIBER_CACHE_SHELL.test(command)) return false;
+  tool.args![1] = command.replace(LEGACY_BIBER_CACHE_SHELL, () => biberCacheShell(root));
+  if (tool.env) {
+    delete tool.env.PAR_GLOBAL_TEMP;
+    delete tool.env.PAR_TEMP;
+  }
+  await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  return true;
+}
+
+/**
+ * Biber is a PAR-packed program that unpacks itself into PAR_TEMP. That cache belongs in a
+ * directory only this user can write: $XDG_RUNTIME_DIR on Linux, the per-user TMPDIR on macOS, or
+ * a per-user /tmp directory owned by this user - and the build directory if even that fails.
+ * Worked out when the build runs, so the generated files hold no machine-specific path.
+ */
+function biberCacheShell(root: string): string {
+  const hash = sha1(root).slice(0, 12);
+  return [
+    '{ biber_root="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/latex-toolkit-$(id -u)"',
+    'mkdir -p "$biber_root" 2>/dev/null',
+    'chmod 700 "$biber_root" 2>/dev/null',
+    `if [ -d "$biber_root" ] && [ -O "$biber_root" ] && [ ! -L "$biber_root" ]; then biber_cache="$biber_root/biber/${hash}"; `
+      + 'else biber_cache="$PWD/.overleaf-codex/local-build/.biber-cache"; fi',
+    'mkdir -p "$biber_cache" && export PAR_GLOBAL_TEMP="$biber_cache" PAR_TEMP="$biber_cache"; }'
+  ].join('; ');
+}
+
+function biberCachePerl(root: string): string[] {
+  const hash = sha1(root).slice(0, 12);
+  return [
+    "my $overleaf_codex_biber_root = ($ENV{'XDG_RUNTIME_DIR'} || $ENV{'TMPDIR'} || '/tmp') . \"/latex-toolkit-$<\";",
+    'make_path($overleaf_codex_biber_root, { error => \\my $overleaf_codex_biber_error });',
+    'chmod 0700, $overleaf_codex_biber_root;',
+    'my $overleaf_codex_biber_cache = (-d $overleaf_codex_biber_root && -O _ && ! -l $overleaf_codex_biber_root)',
+    `  ? "$overleaf_codex_biber_root/biber/${hash}" : "$overleaf_codex_build_dir/.biber-cache";`
+  ];
 }
 
 async function writeLocalLatexmkRc(root: string, rootDocPath?: string): Promise<void> {
@@ -676,14 +734,13 @@ async function writeLocalLatexmkRc(root: string, rootDocPath?: string): Promise<
   const outputDirFromRootDoc = path.posix.relative(rootDir, outputDir) || '.';
   const workspaceFromRootDoc = path.posix.relative(rootDir, '.') || '.';
   const searchPrefix = rootDir === '.' ? '.:src/source//:' : `.:${workspaceFromRootDoc}//:src/source//:`;
-  const biberCacheDir = path.join(os.tmpdir(), 'overleaf-codex-biber', sha1(root).slice(0, 12));
   const content = [
     LATEXMKRC_HEADER,
     '# This file is local-only and should not be synced back to Overleaf.',
     "if (-f 'latexmkrc') {", "  do './latexmkrc';", '}',
     'use File::Find;', 'use File::Path qw(make_path);',
     `my $overleaf_codex_build_dir = ${perlSingleQuote(outputDirFromRootDoc)};`,
-    `my $overleaf_codex_biber_cache = ${perlSingleQuote(biberCacheDir)};`,
+    ...biberCachePerl(root),
     'make_path($overleaf_codex_build_dir);', 'make_path($overleaf_codex_biber_cache);',
     'find({', '  wanted => sub {', '    return unless -d $_;',
     '    my $rel = $File::Find::name;', "    return if $rel eq '.';", "    $rel =~ s#^\\./##;",

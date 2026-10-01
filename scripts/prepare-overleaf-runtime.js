@@ -1,4 +1,5 @@
 const { copyFileSync, mkdirSync, rmSync, readdirSync } = require("node:fs");
+const { createRequire } = require("node:module");
 const { dirname, join } = require("node:path");
 
 const targetRoot = join("dist", "vendor", "socket.io-client");
@@ -42,6 +43,16 @@ if (!runtime.parser || !runtime.Transport || typeof runtime.parser.encodePacket 
 const packet = runtime.parser.decodePacket(runtime.parser.encodePacket({ type: "message", data: "ok" }));
 if (packet.type !== "message" || packet.data !== "ok") {
   throw new Error("Prepared Overleaf Socket.IO parser failed its round-trip smoke test.");
+}
+// Socket.IO loads its transports lazily on connect, so load them here: a missing ws/lib file would
+// otherwise surface only as a realtime-sync failure on the user's machine.
+const runtimeRequire = createRequire(require.resolve(`../${join(targetRoot, "lib", "io.js")}`));
+const WebSocket = runtimeRequire("ws");
+if (typeof WebSocket !== "function" || typeof WebSocket.Server !== "function") {
+  throw new Error("Prepared ws runtime failed its CommonJS smoke test.");
+}
+if (typeof runtimeRequire("xmlhttprequest").XMLHttpRequest !== "function") {
+  throw new Error("Prepared xmlhttprequest runtime failed its CommonJS smoke test.");
 }
 
 console.log("Prepared Overleaf Socket.IO runtime.");

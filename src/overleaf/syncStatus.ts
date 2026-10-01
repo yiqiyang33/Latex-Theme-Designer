@@ -9,7 +9,7 @@ import {
   SyncStatusKind,
   SyncStatusReport
 } from './types';
-import { shouldIgnore, shouldIgnoreUntrackedLocalPath } from './manifest';
+import { isFilesystemLeftover, shouldIgnore, shouldIgnoreUntrackedLocalPath } from './manifest';
 import { toPosixPath } from './util';
 
 export interface SyncStatusDecisionInput {
@@ -531,5 +531,5 @@ export function trashPathFor(root: string, relPath: string): string {
 }
 
 function shouldSkip(relPath: string): boolean {
-  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
+  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath) || isFilesystemLeftover(relPath);
 }

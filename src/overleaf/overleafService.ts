@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { Socket } from "node:net";
 import * as vscode from "vscode";
@@ -15,6 +16,7 @@ import {
   previewLocalPublish,
   publishLocalFolder,
   upgradeGeneratedLatexmkRc,
+  upgradeGeneratedVsCodeSettings,
   type CreateRemoteProjectResult,
   type PublishLocalFolderResult
 } from "./mirrorCore";
@@ -26,7 +28,7 @@ import { getWithLegacyFallback } from "./config";
 import { firstWorkspaceMirrorRoot, pathIsWithin, resolveMirrorRootForPath, workspaceContainsPath } from "./mirrorRoots";
 import type { NetworkTimeouts, ProjectSummary, SyncStatusItem, SyncStatusReport } from "./types";
 import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from "./util";
-import { SyncOwnerCoordinator } from "./syncOwnerCoordinator";
+import { describeSyncHolder, SyncOwnerCoordinator, SyncStandbyError, type SyncDemotion, type SyncHolder } from "./syncOwnerCoordinator";
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
 import type { ProjectSyncGate } from "./syncGate";
 
@@ -46,7 +48,9 @@ export interface OverleafState {
   lastSyncAt?: string;
   error?: string;
   compileMode: "local" | "overleaf";
-  ownerRole: "owner" | "client" | "none";
+  ownerRole: "owner" | "client" | "standby" | "none";
+  /** Set while sync is paused here because another machine (or window) holds it. */
+  syncHolder?: SyncHolder & { description: string };
   connectionState: ProjectSyncGate;
   connectionReason?: string;
   reconnectAttempts: number;
@@ -101,9 +105,10 @@ export class OverleafService implements vscode.Disposable {
   readonly realtimeSync: RealtimeSyncService;
   readonly diagnostics: CompileDiagnosticProvider;
   readonly compileService: CompileService;
-  private readonly ownerCoordinator = new SyncOwnerCoordinator();
+  private readonly ownerCoordinator: SyncOwnerCoordinator;
   private ownerSubscription?: Socket;
   private takeoverTimer?: NodeJS.Timeout;
+  private standbyTimer?: NodeJS.Timeout;
   private takeoverEnabled = false;
   private externalSyncStatus?: SyncStatusReport;
   private externalConflicts: ConflictInfo[] = [];
@@ -115,6 +120,7 @@ export class OverleafService implements vscode.Disposable {
   private compileOnSaveTimer?: NodeJS.Timeout;
   private compileOnSaveDocument?: vscode.TextDocument;
   private compileOnSaveInFlight?: Promise<void>;
+  private fileCredentialNoticeShown = false;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -125,6 +131,11 @@ export class OverleafService implements vscode.Disposable {
     migrateLegacyMirrors = false
   ) {
     this.secrets = new SecretStore(context);
+    this.ownerCoordinator = new SyncOwnerCoordinator({
+      log: message => this.output.appendLine(`[${new Date().toISOString()}] ${message}`)
+    });
+    const stopDemotionListener = this.ownerCoordinator.onDidDemote(event => this.handleOwnerDemoted(event));
+    this.disposables.push({ dispose: stopDemotionListener });
     this.mirrorManager = new MirrorManager(context, scope, migrateLegacyMirrors);
     this.realtimeSync = new RealtimeSyncService(context, output);
     this.diagnostics = new CompileDiagnosticProvider("LaTeX Editing Toolkit");
@@ -153,7 +164,10 @@ export class OverleafService implements vscode.Disposable {
       ["overleafCodex.loginWithCookie", (candidate?: unknown) => this.loginWithCookie(candidate)],
       ["overleafCodex.listProjects", (candidate?: unknown) => this.listProjects(candidate)],
       ["overleafCodex.openProjectLocally", (candidate?: unknown) => this.openProjectLocally(candidate)],
-      ["overleafCodex.startRealtimeSync", (candidate?: unknown) => this.startRealtimeSync(candidate)],
+      // An explicit start - from a command, a button, or auto-start when a window opens the mirror -
+      // takes sync over from another machine that still holds it.
+      ["overleafCodex.startRealtimeSync", (candidate?: unknown) => this.startRealtimeSync(candidate, { takeover: true })],
+      ["overleafCodex.takeOverSync", (candidate?: unknown) => this.takeOverSync(candidate)],
       ["overleafCodex.stopRealtimeSync", (candidate?: unknown) => this.stopRealtimeSync(candidate)],
       ["overleafCodex.checkSyncStatus", (candidate?: unknown) => this.checkSyncStatus("incremental", candidate)],
       ["overleafCodex.runFullSyncAudit", (candidate?: unknown) => this.checkSyncStatus("full", candidate)],
@@ -213,7 +227,7 @@ export class OverleafService implements vscode.Disposable {
         mirrorRoot,
         rootDocument: manifest.rootDocPath,
         running: (this.realtimeSync.running && this.realtimeSync.currentRoot === mirrorRoot)
-          || this.ownerCoordinator.currentRoot === mirrorRoot,
+          || (this.ownerCoordinator.currentRoot === mirrorRoot && this.ownerCoordinator.role !== "standby"),
         syncStatus: this.realtimeSync.currentRoot === mirrorRoot
           ? this.realtimeSync.getSyncStatusReport()
           : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus : undefined,
@@ -227,9 +241,8 @@ export class OverleafService implements vscode.Disposable {
         lastSyncAt: manifest.lastSyncAt,
         lastRemoteCompile: manifest.lastRemoteCompile,
         compileMode: this.compileMode(),
-        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
-          ? this.ownerCoordinator.isOwner ? "owner" : "client"
-          : "none",
+        ownerRole: this.ownerRoleForRoot(mirrorRoot),
+        ...this.syncHolderForRoot(mirrorRoot),
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
@@ -246,9 +259,8 @@ export class OverleafService implements vscode.Disposable {
         collaborators: [],
         error: sanitizeDiagnosticText(formatUnknownError(error)),
         compileMode: this.compileMode(),
-        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot
-          ? this.ownerCoordinator.isOwner ? "owner" : "client"
-          : "none",
+        ownerRole: this.ownerRoleForRoot(mirrorRoot),
+        ...this.syncHolderForRoot(mirrorRoot),
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
@@ -271,6 +283,7 @@ export class OverleafService implements vscode.Disposable {
       // callback does not re-check takeoverEnabled.
       if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
       this.takeoverTimer = undefined;
+      this.clearStandbyTimer();
       this.ownerSubscription = undefined;
       this.clearExternalSnapshot();
       await this.ownerCoordinator.release();
@@ -279,7 +292,7 @@ export class OverleafService implements vscode.Disposable {
     const state = await this.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
     if (!vscode.workspace.getConfiguration("latexEditingToolkit.overleaf").get<boolean>("autoSync", true)) return;
-    if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
+    if (!state.running) await this.startRealtimeSync(state.mirrorRoot, { takeover: true });
   }
 
   /**
@@ -491,7 +504,8 @@ export class OverleafService implements vscode.Disposable {
       case "overleaf-publish-form": return this.publishForm(String(payload.folder ?? payload.workspacePath ?? ""));
       case "overleaf-publish-pick-folder": return this.pickFolderForPublishForm(payload.folder);
       case "overleaf-publish": return this.publishFromForm(payload);
-      case "overleaf-start-sync": await this.startRealtimeSync(payload.workspacePath); return this.state(payload.workspacePath);
+      case "overleaf-start-sync": await this.startRealtimeSync(payload.workspacePath, { takeover: true }); return this.state(payload.workspacePath);
+      case "overleaf-takeover-sync": await this.takeOverSync(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-stop-sync": await this.stopRealtimeSync(payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-check-sync": await this.checkSyncStatus(payload.mode === "full" ? "full" : "incremental", payload.workspacePath); return this.state(payload.workspacePath);
       case "overleaf-full-audit": await this.checkSyncStatus("full", payload.workspacePath); return this.state(payload.workspacePath);
@@ -534,6 +548,7 @@ export class OverleafService implements vscode.Disposable {
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = undefined;
+    this.clearStandbyTimer();
     this.ownerSubscription = undefined;
     this.cancelCompileOnSave();
     await this.realtimeSync.stop().catch(() => undefined);
@@ -544,6 +559,7 @@ export class OverleafService implements vscode.Disposable {
   dispose(): void {
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.clearStandbyTimer();
     this.ownerSubscription = undefined;
     this.cancelCompileOnSave();
     void this.ownerCoordinator.release();
@@ -568,8 +584,18 @@ export class OverleafService implements vscode.Disposable {
       () => client.loginWithCookie(cookie)
     );
     await this.secrets.saveIdentity(serverUrl, identity);
-    this.output.appendLine(`[${new Date().toISOString()}] Overleaf login succeeded for ${serverUrl}`);
+    const backend = this.secrets.describe();
+    const storedAt = backend ? `; credential store ${backend.kind}${backend.location ? ` at ${backend.location}` : ""}` : "";
+    this.output.appendLine(`[${new Date().toISOString()}] Overleaf login succeeded for ${serverUrl}${storedAt}`);
+    if (backend?.warning) this.output.appendLine(`[${new Date().toISOString()}] ${backend.warning}`);
     vscode.window.setStatusBarMessage(`Overleaf login succeeded${identity.userEmail ? ` as ${identity.userEmail}` : ""}.`, 3000);
+    if (backend?.kind === "restricted-file" && !this.fileCredentialNoticeShown) {
+      this.fileCredentialNoticeShown = true;
+      void vscode.window.showInformationMessage(
+        `No usable system keyring on ${os.hostname()}, so the Overleaf cookie was saved to ${backend.location ?? "a private credentials file"}, readable only by your account. `
+        + "Backups or NFS snapshots of your home directory may keep copies; logging out deletes the file."
+      );
+    }
     this.onChanged();
   }
 
@@ -629,14 +655,22 @@ export class OverleafService implements vscode.Disposable {
     this.onChanged();
   }
 
-  private async startRealtimeSync(candidate?: unknown): Promise<void> {
+  private async startRealtimeSync(
+    candidate?: unknown,
+    options: { takeover?: boolean; forceLegacy?: boolean } = {}
+  ): Promise<void> {
     const root = await this.requireMirrorRoot(candidate);
     if (this.realtimeSync.running && this.realtimeSync.currentRoot === root && this.ownerCoordinator.isOwner) return;
-    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner && this.ownerSubscription) return;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "client" && this.ownerSubscription) return;
     this.takeoverEnabled = true;
     this.ownerSubscription = undefined;
+    this.clearStandbyTimer();
     this.clearExternalSnapshot();
-    const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    const role = await this.claimOwnership(root, options);
+    if (role === "standby") {
+      this.enterStandby(root, options.takeover === true);
+      return;
+    }
     if (role === "client") {
       this.output.appendLine(`[${new Date().toISOString()}] Using existing sync owner for ${root}.`);
       await this.connectToExistingOwner(root);
@@ -647,6 +681,9 @@ export class OverleafService implements vscode.Disposable {
       const manifest = await readManifest(root);
       if (await upgradeGeneratedLatexmkRc(root, manifest.rootDocPath).catch(() => false)) {
         this.output.appendLine(`[${new Date().toISOString()}] Updated the generated .latexmkrc in ${root} with the current build settings.`);
+      }
+      if (await upgradeGeneratedVsCodeSettings(root).catch(() => false)) {
+        this.output.appendLine(`[${new Date().toISOString()}] Updated the local build task in ${path.join(root, ".vscode", "settings.json")} to keep biber's cache private.`);
       }
       const client = await this.makeClient(manifest.serverUrl);
       await vscode.window.withProgress(
@@ -666,7 +703,7 @@ export class OverleafService implements vscode.Disposable {
           );
           if (action === "Login again") {
             await this.loginWithCookie({ serverUrl });
-            await this.startRealtimeSync(root);
+            await this.startRealtimeSync(root, options);
             return;
           }
         }
@@ -676,12 +713,128 @@ export class OverleafService implements vscode.Disposable {
     this.onChanged();
   }
 
+  /**
+   * Claims sync ownership for `root`. With `takeover`, an owner on another machine is asked to hand
+   * over (it stops and releases within a heartbeat, or its lease runs out if it hangs). An owner from
+   * an older version cannot be asked, so displacing it needs `forceLegacy`, which only the
+   * confirmed Take Over Sync command passes.
+   */
+  private async claimOwnership(
+    root: string,
+    options: { takeover?: boolean; forceLegacy?: boolean }
+  ): Promise<"owner" | "client" | "standby"> {
+    const handler = (command: string, args: Record<string, unknown>) => this.handleOwnerCommand(command, args);
+    const role = await this.ownerCoordinator.claim(root, handler);
+    if (role !== "standby" || !options.takeover) return role;
+    const holder = this.ownerCoordinator.holder;
+    const askable = holder?.reason === "foreign-owner";
+    const forced = holder?.reason === "legacy-owner" && options.forceLegacy === true;
+    if (!askable && !forced) return role;
+    const from = holder?.hostname ?? "another machine";
+    this.output.appendLine(`[${new Date().toISOString()}] Taking over Overleaf sync for ${root} from ${from}.`);
+    return vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Taking over Overleaf sync from ${from}`, cancellable: true },
+      (_progress, token) => this.ownerCoordinator.claim(root, handler, {
+        takeover: true,
+        forceLegacy: forced,
+        signal: abortSignalFromToken(token)
+      })
+    );
+  }
+
+  /** Sync is held elsewhere: show why, and look again later in case that owner goes away. */
+  private enterStandby(root: string, explicit: boolean): void {
+    const holder = this.ownerCoordinator.holder;
+    const description = describeSyncHolder(holder);
+    this.output.appendLine(`[${new Date().toISOString()}] ${description}`);
+    this.scheduleStandbyRecheck(root);
+    this.onChanged();
+    // A takeover that could not happen is worth a notice; an automatic recheck is not.
+    if (explicit && holder && holder.reason !== "foreign-owner") this.offerTakeover(root, description);
+  }
+
+  private offerTakeover(root: string, description: string): void {
+    const action = "Take Over Sync Here";
+    void vscode.window.showWarningMessage(description, action).then(choice => {
+      if (choice !== action) return;
+      void this.takeOverSync(root).catch(error => {
+        this.output.appendLine(`[${new Date().toISOString()}] Overleaf sync takeover failed: ${formatUnknownError(error)}`);
+        void vscode.window.showErrorMessage(`Overleaf sync takeover failed: ${formatUnknownError(error)}`);
+      });
+    });
+  }
+
+  private async takeOverSync(candidate?: unknown): Promise<void> {
+    const root = await this.requireMirrorRoot(candidate);
+    const role = this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.role : "none";
+    if (role === "owner" || role === "client") {
+      vscode.window.setStatusBarMessage("Overleaf sync for this mirror already runs on this machine.", 3000);
+      return;
+    }
+    // Not yet claimed: a start with takeover asks a remote owner to hand over, and comes back in
+    // standby (with a notice) if the holder is an older version that needs confirmation below.
+    if (role === "none") {
+      await this.startRealtimeSync(root, { takeover: true });
+      return;
+    }
+    const holder = this.ownerCoordinator.holder;
+    if (holder?.legacy) {
+      const confirm = "Take Over";
+      const choice = await vscode.window.showWarningMessage(
+        `${describeSyncHolder(holder)} It cannot be asked to stop, so if that window is still open it may keep syncing until it is closed or reloaded.`,
+        { modal: true },
+        confirm
+      );
+      if (choice !== confirm) return;
+      await this.startRealtimeSync(root, { takeover: true, forceLegacy: true });
+      return;
+    }
+    await this.startRealtimeSync(root, { takeover: true });
+  }
+
+  /**
+   * This owner lost ownership (taken over from another machine, or its lock could not be renewed).
+   * The engine must be stopped before this resolves: the coordinator hands the lock over only then.
+   */
+  private async handleOwnerDemoted(event: SyncDemotion): Promise<void> {
+    const description = describeSyncHolder(event.holder);
+    if (this.realtimeSync.currentRoot === event.root) await this.realtimeSync.fence(description);
+    this.ownerSubscription = undefined;
+    this.clearExternalSnapshot();
+    this.output.appendLine(`[${new Date().toISOString()}] ${description}`);
+    this.scheduleStandbyRecheck(event.root);
+    this.onChanged();
+    this.offerTakeover(event.root, description);
+  }
+
+  private scheduleStandbyRecheck(root: string): void {
+    this.clearStandbyTimer();
+    if (!this.takeoverEnabled || !this.isMirrorRootOpen(root)) return;
+    // Jittered, so windows on several machines do not poll the shared lock in lockstep.
+    const delayMs = Math.round(15_000 * (0.8 + Math.random() * 0.4));
+    this.standbyTimer = setTimeout(() => {
+      this.standbyTimer = undefined;
+      if (this.ownerCoordinator.currentRoot !== root || this.ownerCoordinator.role !== "standby") return;
+      // A plain claim: rechecks never take over, so two windows cannot keep taking sync from each other.
+      void this.startRealtimeSync(root).catch(error => {
+        this.output.appendLine(`[${new Date().toISOString()}] Overleaf sync recheck failed: ${formatUnknownError(error)}`);
+        this.onChanged();
+      });
+    }, delayMs);
+  }
+
+  private clearStandbyTimer(): void {
+    if (this.standbyTimer) clearTimeout(this.standbyTimer);
+    this.standbyTimer = undefined;
+  }
+
   private async stopRealtimeSync(candidate?: unknown): Promise<void> {
     const root = this.resolveMirrorRoot(candidate);
     if (root && this.realtimeSync.currentRoot && this.realtimeSync.currentRoot !== root) return;
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = undefined;
+    this.clearStandbyTimer();
     this.ownerSubscription = undefined;
     this.clearExternalSnapshot();
     await this.realtimeSync.stop();
@@ -1038,11 +1191,15 @@ export class OverleafService implements vscode.Disposable {
 
   private async copyDiagnostics(candidate?: unknown): Promise<void> {
     const state = await this.state(candidate);
+    const credentialStore = this.secrets.describe();
     const lines = [
       "LaTeX Editing Toolkit Overleaf diagnostics",
+      `host=${os.hostname()} platform=${process.platform}-${process.arch} remote=${vscode.env.remoteName ?? "local"}`,
+      `credentialStore=${credentialStore?.kind ?? "unknown"} location=${credentialStore?.location ?? ""}`,
       `server=${state.serverUrl ?? ""}`,
       `project=${state.projectId ?? ""}`,
       `role=${state.ownerRole}`,
+      ...(state.syncHolder ? [`holder=${state.syncHolder.hostname ?? ""} pid=${state.syncHolder.pid ?? ""} reason=${state.syncHolder.reason}`] : []),
       `connection=${state.connectionState}`,
       `connectionReason=${state.connectionReason ?? ""}`,
       `reconnectAttempts=${state.reconnectAttempts}`,
@@ -1102,13 +1259,22 @@ export class OverleafService implements vscode.Disposable {
     const root = await this.requireMirrorRoot(candidate);
     if (this.realtimeSync.running && this.realtimeSync.currentRoot === root) return;
     this.takeoverEnabled = true;
-    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+    // Sync is held on another machine; only an explicit takeover moves it here.
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") {
+      throw new SyncStandbyError(this.ownerCoordinator.holder);
+    }
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "client") {
       if (!this.ownerSubscription) await this.connectToExistingOwner(root);
       return;
     }
     this.ownerSubscription = undefined;
+    this.clearStandbyTimer();
     this.clearExternalSnapshot();
     const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    if (role === "standby") {
+      this.enterStandby(root, false);
+      throw new SyncStandbyError(this.ownerCoordinator.holder);
+    }
     if (role === "client") {
       await this.connectToExistingOwner(root);
       return;
@@ -1272,14 +1438,27 @@ export class OverleafService implements vscode.Disposable {
     this.externalActivityLog = [];
   }
 
+  private ownerRoleForRoot(root: string): OverleafState["ownerRole"] {
+    return this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.role : "none";
+  }
+
+  private syncHolderForRoot(root: string): Pick<OverleafState, "syncHolder"> {
+    const holder = this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.holder : undefined;
+    return holder ? { syncHolder: { ...holder, description: describeSyncHolder(holder) } } : {};
+  }
+
   private connectionStateForRoot(root: string): ProjectSyncGate {
     if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncState;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") return "stopped";
     if (this.ownerCoordinator.currentRoot === root) return this.externalConnectionState ?? "checking";
     return "stopped";
   }
 
   private connectionReasonForRoot(root: string): string | undefined {
     if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncReason;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") {
+      return describeSyncHolder(this.ownerCoordinator.holder);
+    }
     return this.ownerCoordinator.currentRoot === root ? this.externalConnectionReason : undefined;
   }
 

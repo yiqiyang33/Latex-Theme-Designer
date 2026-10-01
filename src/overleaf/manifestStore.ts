@@ -6,7 +6,8 @@ import {
   metadataPath,
   readManifest,
   MAX_METADATA_JSON_BYTES,
-  readTextFileBounded,
+  MetadataUnreadableError,
+  readMetadataText,
   syncStatusPath,
   writeBaseDoc,
   writeManifest,
@@ -38,13 +39,11 @@ export class ManifestStore {
   async readJson<T>(name: string, fallback: T): Promise<T> {
     const target = metadataPath(this.root, name);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return fallback;
       return JSON.parse(raw) as T;
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
       console.warn(`Overleaf metadata at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return fallback;

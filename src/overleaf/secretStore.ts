@@ -2,7 +2,7 @@ import type * as vscode from 'vscode';
 import type { Identity } from './types';
 import { normalizeServerUrl } from './util';
 import { createCredentialStore } from './keychainStore';
-import type { CredentialStore } from './coreInterfaces';
+import type { CredentialBackendInfo, CredentialStore } from './coreInterfaces';
 import { readSharedState } from './sharedState';
 
 const SECRET_PREFIX = 'overleafCodex.identity.';
@@ -50,6 +50,11 @@ export class SecretStore {
     for (const server of await this.legacyServers()) await this.getIdentity(server);
     await this.context.secrets.delete(SERVERS_KEY);
     return this.keychain.listServers();
+  }
+
+  /** The backend that served or stored the most recent credential. */
+  describe(): CredentialBackendInfo | undefined {
+    return this.keychain.describe?.();
   }
 
   private key(serverUrl: string): string {

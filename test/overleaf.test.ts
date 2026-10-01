@@ -49,6 +49,7 @@ import {
   addProjectTreeEntity,
   buildProjectTreeIndex,
   moveProjectTreeEntity,
+  projectPathKey,
   removeProjectTreeEntity,
   renameProjectTreeEntity,
   updateProjectTreeDocVersion
@@ -113,6 +114,15 @@ describe("Overleaf integration primitives", () => {
       }
     } as unknown as OverleafProject;
     expect(() => buildProjectTreeIndex("https://example.test/", "p", "P", duplicate)).toThrow(/duplicate path/);
+  });
+
+  it("lets names differing only by case coexist where the local filesystem keeps them apart", () => {
+    expect(projectPathKey("Main.tex", "linux")).not.toBe(projectPathKey("main.tex", "linux"));
+    expect(projectPathKey("x\u00b2.tex", "linux")).not.toBe(projectPathKey("x2.tex", "linux"));
+    expect(projectPathKey("Main.tex", "darwin")).toBe(projectPathKey("main.tex", "darwin"));
+    expect(projectPathKey("Main.tex", "win32")).toBe(projectPathKey("main.tex", "win32"));
+    // Composed and decomposed forms are one name everywhere.
+    expect(projectPathKey("caf\u00e9.tex", "linux")).toBe(projectPathKey("cafe\u0301.tex", "linux"));
   });
 
   it("validates realtime event payloads before they enter sync state", () => {

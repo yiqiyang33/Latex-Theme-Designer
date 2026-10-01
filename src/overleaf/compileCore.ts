@@ -4,7 +4,8 @@ import * as path from 'path';
 import { metadataPath, OUTPUT_DIR, readManifest, readTextFileBounded } from './manifest';
 import type { CompileOutputFile } from './types';
 import { OverleafClient } from './overleafClient';
-import { assertNoSymlinkPath, assertPathWithin, processAlive, processStartSignature, validateProjectPathSegment } from './util';
+import { assertNoSymlinkPath, assertPathWithin, processStartSignature, validateProjectPathSegment } from './util';
+import { hostRecordFields, shortLockIsStale } from './hostIdentity';
 
 export interface RemoteCompileResult {
   rootDocPath?: string;
@@ -17,6 +18,8 @@ export interface RemoteCompileResult {
 export interface CompileOptions {
   lockWaitMs?: number;
   lockMissingOwnerGraceMs?: number;
+  /** How long a compile lock held by another machine counts as live (default: twice lockWaitMs). */
+  lockForeignStaleMs?: number;
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
 }
@@ -86,7 +89,9 @@ async function cleanupInterruptedCompileArtifacts(root: string): Promise<void> {
   await Promise.all(entries
     .filter(entry => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`))
     .filter(entry => entry.name !== retainedBackup)
-    .map(entry => fs.rm(path.join(dir, entry.name), { recursive: true, force: true })));
+    // Best effort: on NFS a file still open elsewhere (a PDF viewer, latexmk) survives as .nfsXXXX
+    // and makes rm fail with EBUSY/ENOTEMPTY; a leftover must not block the next compile.
+    .map(entry => fs.rm(path.join(dir, entry.name), { recursive: true, force: true }).catch(() => undefined)));
 }
 
 async function acquireCompileLock(outputRoot: string, options: CompileOptions = {}): Promise<() => Promise<void>> {
@@ -94,6 +99,7 @@ async function acquireCompileLock(outputRoot: string, options: CompileOptions = 
   const owner = path.join(lock, 'owner.json');
   const deadline = Date.now() + Math.max(1, options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS);
   const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
+  const foreignStaleMs = Math.max(1, options.lockForeignStaleMs ?? 2 * (options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS));
   for (;;) {
     try {
       await fs.mkdir(lock, { recursive: false });
@@ -102,7 +108,8 @@ async function acquireCompileLock(outputRoot: string, options: CompileOptions = 
         pid: process.pid,
         startedAt: Date.now(),
         processStart: await processStartSignature(process.pid),
-        nonce
+        nonce,
+        ...hostRecordFields()
       }));
       return async () => {
         const current = await readTextFileBounded(owner, 64 * 1024).catch(() => undefined);
@@ -113,14 +120,14 @@ async function acquireCompileLock(outputRoot: string, options: CompileOptions = 
       const raw = await readTextFileBounded(owner, 64 * 1024).catch(() => undefined);
       let stale = false;
       try {
-        const value = JSON.parse(raw ?? '') as { pid?: number; startedAt?: number; processStart?: string };
+        const value = JSON.parse(raw ?? '') as { pid?: number; startedAt?: number; processStart?: string; hostname?: string; bootId?: string };
         if (typeof value.pid !== 'number' || typeof value.startedAt !== 'number') {
           stale = await lockAge(lock) >= missingOwnerGraceMs;
-        } else if (!processAlive(value.pid)) {
-          stale = true;
-        } else if (value.processStart) {
-          const currentStart = await processStartSignature(value.pid);
-          stale = Boolean(currentStart && currentStart !== value.processStart);
+        } else {
+          // The mirror (and this lock) may sit on an NFS home shared with other machines, where a
+          // PID only means something on the host that recorded it.
+          const age = Math.min(Math.max(0, Date.now() - value.startedAt), await lockAge(lock));
+          stale = await shortLockIsStale(value, age, foreignStaleMs);
         }
       } catch {
         stale = await lockAge(lock) >= missingOwnerGraceMs;

@@ -17,6 +17,7 @@ import { formatUnknownError } from "./overleaf/util";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
 import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
+import { SyncStandbyError } from "./overleaf/syncOwnerCoordinator";
 
 let activePanel: ToolkitPanel | undefined;
 const toolkitServices = new Map<string, ToolkitService>();
@@ -71,7 +72,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const pruned = result.removedVersions.length > 0
         ? ` Removed ${result.removedVersions.length} superseded install(s).`
         : "";
-      vscode.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${pruned}`);
+      const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
+      vscode.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();
@@ -585,6 +587,16 @@ function registerToolkitCommand<T extends unknown[]>(
     } catch (err) {
       if (isUserCancellation(err)) return undefined;
       const workspacePath = workspacePathFromArguments(args);
+      if (err instanceof SyncStandbyError) {
+        // Not a failure: another machine holds sync for this mirror. Offer to move it here.
+        output.appendLine(`[${new Date().toISOString()}] ${commandId}: ${err.message}`);
+        const takeOver = "Take Over Sync Here";
+        const action = await vscode.window.showWarningMessage(err.message, takeOver);
+        if (action === takeOver) {
+          await vscode.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
+        }
+        return undefined;
+      }
       logToolkitError(output, commandId, workspacePath, err);
       const message = err instanceof Error ? err.message : String(err);
       const action = await vscode.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");

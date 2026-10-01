@@ -8,13 +8,13 @@ The former Overleaf Codex workflow is now part of the same `yiqiyang33.latex-edi
 
 Toolkit source and configuration files can be synchronized by default, including `.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `commands.tex`, `theorems.tex`, `theme.sty`, `theme.colors.tex`, `theme.ui.json`, and `theme.overrides.tex`. Project assets such as images and input PDFs also synchronize by default; generated `main.pdf`, `output.pdf`, auxiliary files, and paths listed in `.overleaf-codexignore` remain local. The `latexEditingToolkit.overleaf.syncToolkitOverrides` setting controls the Toolkit-managed override files; source files remain governed by the normal manifest and ignore rules. Sync metadata, `.vscode`, build outputs, logs, conflict copies, and machine caches remain local. Destructive deletes and conflict replacement still require explicit confirmation, and binary synchronization can be disabled with `latexEditingToolkit.overleaf.syncBinaryFiles`.
 
-On macOS, identities are stored in Keychain under service `yiqiyang33.latex-editing-toolkit.overleaf`. If a generic or damaged installation is missing the native Keychain runtime, authentication falls back to a local credentials directory protected by `0700`/`0600` filesystem permissions instead of failing. On Linux, the CLI and extension use `secret-tool`/libsecret when available and use the same restricted-file fallback otherwise. The extension migrates its existing SecretStorage identity once and a logout tombstone prevents an old secret from being imported again. The legacy Socket.IO client is shipped as a small native-loaded runtime under `dist/vendor/socket.io-client`; it is intentionally kept out of the esbuild bundle because its CommonJS circular-module contract depends on Node's real `module.parent.exports` behavior.
+On macOS, identities are stored in Keychain under service `yiqiyang33.latex-editing-toolkit.overleaf`. If a generic or damaged installation is missing the native Keychain runtime, authentication falls back to a local credentials directory protected by `0700`/`0600` filesystem permissions instead of failing. On Linux, the CLI and extension use `secret-tool`/libsecret when the keyring actually works, and the same restricted-file fallback otherwise: a headless SSH session usually has no unlocked keyring, and any `secret-tool` failure (no login collection, a locked collection, no D-Bus session, or a call that hangs past its timeout) switches to the file store instead of failing the login. Set `LATEX_TOOLKIT_CREDENTIAL_STORE=file` to always use the file store, or `=system` to use only the platform keyring and see its errors. The extension migrates its existing SecretStorage identity once and a logout tombstone prevents an old secret from being imported again. The legacy Socket.IO client is shipped as a small native-loaded runtime under `dist/vendor/socket.io-client`; it is intentionally kept out of the esbuild bundle because its CommonJS circular-module contract depends on Node's real `module.parent.exports` behavior.
 
 Existing `.overleaf-codex` mirrors are migrated in place: schema and ignore defaults are upgraded while local files, base snapshots, sync status, and conflict records are preserved. If the remote project root identity is no longer trusted, outbound writes are frozen until a sync audit succeeds.
 
 ### macOS/Linux Overleaf CLI
 
-Run `LaTeX Editing Toolkit: Install/Update CLI` from the command palette, then ensure `~/.local/bin` is on `PATH`. The managed command requires Node.js 20 or newer and can run while VS Code/Cursor is closed:
+Run `LaTeX Editing Toolkit: Install/Update CLI` from the command palette, then ensure `~/.local/bin` is on `PATH`. The managed command is a small launcher that runs the CLI on Node.js 20 or newer: `$LATEX_TOOLKIT_NODE` if set, else `node` on `PATH`, else the runtime bundled with a VS Code/Cursor server installation (`~/.vscode-server`, ...), so it also works on a remote host without a Node.js install. It can run while VS Code/Cursor is closed:
 
 ```bash
 latex-toolkit overleaf auth login
@@ -30,9 +30,19 @@ latex-toolkit overleaf pdf open --root /path/to/mirror
 
 Use `--json` for a stable JSON envelope; `sync --watch --json` emits NDJSON on stdout and sends logs to stderr. For automation, pipe a Cookie request header to `auth login --cookie-stdin`; cookies are never accepted as an argv option. Conflict replacement, overwrite, and deletion remain blocked unless explicitly authorized with `--force` or `conflicts resolve PATH --use local|remote`.
 
-The CLI and extension share credentials, configuration, mirror metadata, and sync status. On macOS the shared configuration is under `~/Library/Application Support/latex-editing-toolkit`; on Linux it follows XDG (`${XDG_CONFIG_HOME:-~/.config}/latex-editing-toolkit`). Linux credential files, when libsecret is unavailable, live under `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/credentials` and are kept at mode `0600`. A per-mirror Unix socket and atomic owner lock guarantee one manifest writer. A later process forwards work to the current owner; `sync --watch` takes ownership automatically when that owner exits.
+The CLI and extension share credentials, configuration, mirror metadata, and sync status. On macOS the shared configuration is under `~/Library/Application Support/latex-editing-toolkit`; on Linux it follows XDG (`${XDG_CONFIG_HOME:-~/.config}/latex-editing-toolkit`). Linux credential files, when libsecret is unavailable, live under `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/credentials`, readable only by your account. An owner lock with a heartbeat lease guarantees one manifest writer per mirror, even when several machines share the home directory (see below); a later process on the same machine forwards work to the current owner over a Unix socket, and `sync --watch` takes ownership automatically when that owner exits. When another machine holds a mirror, owner commands exit with code 5 (`owner_remote`); pass `--takeover` to move sync to this machine (`sync --takeover --force` also displaces an owner from an older extension version, which cannot be asked to hand over).
 
-The CLI runtime uses the macOS Application Support directory or `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/cli` on Linux. Add `~/.local/bin` to `PATH` after installing the managed command. Remote PDF opening uses `open` on macOS and `xdg-open` on Linux.
+The CLI runtime uses the macOS Application Support directory or `${XDG_DATA_HOME:-~/.local/share}/latex-editing-toolkit/cli` on Linux. Add `~/.local/bin` to `PATH` after installing the managed command. Remote PDF opening uses `open` on macOS and `xdg-open` on Linux; on a host without a display (an SSH session) it opens the PDF in the editor through `code` when run from the editor's integrated terminal.
+
+### Linux and Remote-SSH
+
+The extension runs where the workspace is, so in a Remote-SSH window the Overleaf features run on the remote host. Install the generic `latex-editing-toolkit-<version>.vsix` there; the `-darwin-*` packages carry a macOS-only Keychain runtime and are meant for a local Mac.
+
+- **Login**: with no usable keyring, the Cookie is saved in the restricted credentials file on the remote host and the extension says so once. Backups or NFS snapshots of the home directory may keep copies; logging out deletes the file and signing out of Overleaf in the browser invalidates the Cookie.
+- **Several machines, one home directory** (cluster login nodes behind one address): the owner lock records its host and renews a heartbeat, so a window or CLI on another machine never takes a live owner's place by mistake. A window that opens or starts sync asks the other machine's owner to hand over, which stops cleanly within seconds (or, if it hangs, once its lease runs out after about a minute); the window it took over from shows the change and offers **Take Over Sync Here**. Owner sockets live in `$XDG_RUNTIME_DIR`.
+- **Edits from other machines**: file watchers only see changes made on this machine, so for a mirror on a network filesystem (NFS, SMB, Lustre, GPFS) the extension and `sync --watch` also look for changed files every 30 seconds (`latexEditingToolkit.overleaf.networkRescanSeconds`, `0` disables).
+- **Local builds**: the generated LaTeX Workshop task runs `bash -lc`, so a TeX distribution loaded from your login profile (for example `module load texlive`) is found. Biber's cache goes to a private per-user directory under `$XDG_RUNTIME_DIR`, never a shared `/tmp` path.
+- **Settings**: `overleafCodex.localProjectsRoot` is machine-scoped, so the remote host keeps its own projects folder.
 
 ## Build
 
@@ -40,7 +50,10 @@ The CLI runtime uses the macOS Application Support directory or `${XDG_DATA_HOME
 npm install
 npm test
 npm run package
+npm run verify:vsix
 ```
+
+`npm run package` builds the generic VSIX, for Linux, Windows and Remote-SSH hosts; on a Mac, `npm run package:darwin-arm64` (or `-x64`) builds one with the native Keychain runtime. `verify:vsix` checks the archive itself: no keytar in the generic package, the matching architecture in a macOS one, and a loadable Socket.IO/WebSocket runtime.
 
 Install the generated `latex-editing-toolkit-*.vsix` in VS Code or Cursor, then run:
 

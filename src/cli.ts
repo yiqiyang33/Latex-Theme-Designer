@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { statSync } from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -17,9 +18,13 @@ import {
   updateSharedState
 } from './overleaf/sharedState';
 import {
+  describeSyncHolder,
   inspectOwner,
   SyncOwnerCoordinator,
-  type OwnerEvent
+  type ClaimOptions,
+  type OwnerEvent,
+  type SyncDemotion,
+  type SyncHolder
 } from './overleaf/syncOwnerCoordinator';
 import type { Identity, SyncStatusReport } from './overleaf/types';
 import type { SharedOverleafState } from './overleaf/sharedState';
@@ -139,6 +144,11 @@ async function dispatch(
   const credentials = createCredentialStore();
   const shared = await readSharedState();
   const server = normalizeServerUrl(stringOption(parsed, 'server') ?? shared.serverUrl);
+  // --takeover asks an owner on another machine to hand sync over; `sync --takeover --force` also
+  // displaces an older version's owner, which cannot be asked.
+  const claimOptions: ClaimOptions = boolOption(parsed, 'takeover')
+    ? { takeover: true, forceLegacy: group === 'sync' && boolOption(parsed, 'force') }
+    : {};
 
   if (group === 'auth') {
     if (action === 'login') {
@@ -147,7 +157,7 @@ async function dispatch(
       const client = new OverleafClient(server, undefined, shared.policy.networkTimeouts.httpMs / 1000, shared.policy.networkTimeouts);
       const identity = await client.loginWithCookie(cookie);
       await credentials.saveIdentity(server, identity);
-      return { server, authenticated: true, userEmail: identity.userEmail };
+      return { server, authenticated: true, userEmail: identity.userEmail, credentialStore: credentials.describe?.() };
     }
     if (action === 'logout') {
       await credentials.deleteIdentity(server);
@@ -155,7 +165,12 @@ async function dispatch(
     }
     if (action === 'status') {
       const identity = await credentials.getIdentity(server);
-      return { server, authenticated: Boolean(identity), userEmail: identity?.userEmail };
+      return {
+        server,
+        authenticated: Boolean(identity),
+        userEmail: identity?.userEmail,
+        credentialStore: credentials.describe?.()
+      };
     }
     throw usageError('Use auth login, auth logout, or auth status.');
   }
@@ -210,26 +225,27 @@ async function dispatch(
     if (!pdf) throw dataError('No downloaded remote PDF exists. Run compile first.');
     if (action === 'path') return { path: pdf };
     if (action === 'open') {
-      await execFileAsync(openCommand(), [pdf]);
-      return { path: pdf, opened: true };
+      const opener = pdfOpenCommand(pdf);
+      await execFileAsync(opener.command, opener.args);
+      return { path: pdf, opened: true, via: opener.command };
     }
     throw usageError('Use pdf path or pdf open.');
   }
 
   if (group === 'status') {
     if (!boolOption(parsed, 'refresh') && !boolOption(parsed, 'full')) return readSyncStatus(root!);
-    return withOwner(root!, shared.policy, credentials, output, owner => owner.command('status', {
+    return withOwner(root!, shared.policy, credentials, output, claimOptions, owner => owner.command('status', {
       refresh: true, full: boolOption(parsed, 'full')
     }));
   }
 
   if (group === 'sync') {
     if (boolOption(parsed, 'watch')) {
-      await watchWithTakeover(root!, shared.policy, credentials, output);
+      await watchWithTakeover(root!, shared.policy, credentials, output, claimOptions);
       return WATCH_RESULT;
     }
     if (!boolOption(parsed, 'once')) throw usageError('Use sync --once or sync --watch.');
-    return withOwner(root!, shared.policy, credentials, output, owner => owner.command('sync-once'));
+    return withOwner(root!, shared.policy, credentials, output, claimOptions, owner => owner.command('sync-once'));
   }
 
   if (group === 'push' || group === 'pull') {
@@ -240,16 +256,16 @@ async function dispatch(
       if (!process.stdin.isTTY || output.json) throw usageError(`This ${group} may overwrite or delete data; pass --force.`);
       if (!await confirm(`Proceed with ${group} ${action}?`)) throw usageError('Operation cancelled.');
     }
-    return withOwner(root!, shared.policy, credentials, output, owner => owner.command(group, { path: action, force }));
+    return withOwner(root!, shared.policy, credentials, output, claimOptions, owner => owner.command(group, { path: action, force }));
   }
 
   if (group === 'conflicts') {
-    if (action === 'list') return withOwner(root!, shared.policy, credentials, output, owner => owner.command('conflicts-list'));
+    if (action === 'list') return withOwner(root!, shared.policy, credentials, output, claimOptions, owner => owner.command('conflicts-list'));
     if (action === 'resolve') {
       if (!operand) throw usageError('Use conflicts resolve <path> --use local|remote.');
       const use = stringOption(parsed, 'use');
       if (use !== 'local' && use !== 'remote') throw usageError('--use must be local or remote.');
-      return withOwner(root!, shared.policy, credentials, output, owner => owner.command('conflicts-resolve', { path: operand, use }));
+      return withOwner(root!, shared.policy, credentials, output, claimOptions, owner => owner.command('conflicts-resolve', { path: operand, use }));
     }
     throw usageError('Use conflicts list or conflicts resolve <path> --use local|remote.');
   }
@@ -259,17 +275,30 @@ async function dispatch(
 
 class OwnerFacade {
   private engine?: OverleafSyncEngine;
-  private readonly coordinator = new SyncOwnerCoordinator();
+  private readonly stopDemotionListener: () => void;
+  /** Set when ownership was lost to another process while this facade owned the mirror. */
+  demotion?: SyncDemotion;
 
   constructor(
     private readonly root: string,
     private readonly policy: SyncPolicy,
     private readonly credentials: CredentialStore,
-    private readonly output: Output
-  ) {}
+    private readonly output: Output,
+    private readonly coordinator = new SyncOwnerCoordinator({ log: message => output.log(message) })
+  ) {
+    // The engine must stop before the coordinator lets the lock go to the new owner.
+    this.stopDemotionListener = coordinator.onDidDemote(async event => {
+      this.demotion = event;
+      await this.engine?.fence();
+    });
+  }
 
-  async start(): Promise<'owner' | 'client'> {
-    return this.coordinator.claim(this.root, (command, args) => this.handle(command, args));
+  get holder(): SyncHolder | undefined {
+    return this.coordinator.holder;
+  }
+
+  async start(options: ClaimOptions = {}): Promise<'owner' | 'client' | 'standby'> {
+    return this.coordinator.claim(this.root, (command, args) => this.handle(command, args), options);
   }
 
   command(command: string, args: Record<string, unknown> = {}): Promise<unknown> {
@@ -290,7 +319,9 @@ class OwnerFacade {
 
   async close(): Promise<void> {
     await this.engine?.stop();
+    this.engine = undefined;
     await this.coordinator.release();
+    this.stopDemotionListener();
   }
 
   private async handle(command: string, args: Record<string, unknown>): Promise<unknown> {
@@ -327,38 +358,94 @@ async function withOwner<T>(
   policy: SyncPolicy,
   credentials: CredentialStore,
   output: Output,
+  claimOptions: ClaimOptions,
   run: (owner: OwnerFacade) => Promise<T>
 ): Promise<T> {
   const owner = new OwnerFacade(root, policy, credentials, output);
-  await owner.start();
-  try { return await run(owner); } finally { await owner.close(); }
+  try {
+    if (await owner.start(claimOptions) === 'standby') throw standbyError(owner.holder);
+    return await run(owner);
+  } finally {
+    await owner.close();
+  }
 }
+
+/** Sync for the mirror is held by another machine (or an older version) and was not taken over. */
+function standbyError(holder: SyncHolder | undefined): CliError {
+  const hint = holder?.legacy
+    ? ' Run sync --takeover --force to displace it.'
+    : holder?.reason === 'foreign-owner' || holder?.reason === 'takeover-timeout' ? ' Pass --takeover to move sync here.' : '';
+  return new CliError(`${describeSyncHolder(holder)}${hint}`, 5, 'owner_remote');
+}
+
+const STANDBY_RECHECK_MS = 15_000;
 
 async function watchWithTakeover(
   root: string,
   policy: SyncPolicy,
   credentials: CredentialStore,
-  output: Output
+  output: Output,
+  claimOptions: ClaimOptions
 ): Promise<void> {
   let stopping = false;
   let interrupted = false;
   let activeOwner: OwnerFacade | undefined;
   let activeSocket: Awaited<ReturnType<OwnerFacade['subscribe']>> | undefined;
+  let wake: (() => void) | undefined;
+  const aborter = new AbortController();
   const stop = (): void => {
     interrupted = true;
     stopping = true;
+    aborter.abort(new CliError('Interrupted.', 130, 'interrupted'));
     activeSocket?.destroy();
     activeOwner?.requestStop();
+    wake?.();
   };
   const disposeSignalHandlers = installStopSignalHandlers(stop);
+  // One coordinator for the whole watch: judging another machine's owner dead takes watching its
+  // heartbeat across attempts.
+  const coordinator = new SyncOwnerCoordinator({ log: message => output.log(message) });
+  let pendingTakeover: ClaimOptions = claimOptions;
+  let reportedStandby: string | undefined;
   try {
     while (!stopping) {
-      const owner = new OwnerFacade(root, policy, credentials, output);
+      const owner = new OwnerFacade(root, policy, credentials, output, coordinator);
       activeOwner = owner;
-      const role = await owner.start();
+      const role = await owner.start({ ...pendingTakeover, signal: aborter.signal }).catch(error => {
+        if (stopping) return undefined;
+        throw error;
+      });
+      if (!role) break;
+      // Only the first attempt takes over; later ones wait, so this never fights a window that
+      // took sync back on purpose.
+      pendingTakeover = {};
+      if (role === 'standby') {
+        const holder = owner.holder;
+        const key = `${holder?.reason}:${holder?.hostname ?? ''}:${holder?.pid ?? ''}`;
+        if (key !== reportedStandby) {
+          reportedStandby = key;
+          output.event('owner-standby', root, { ...holder, message: describeSyncHolder(holder) });
+        }
+        await owner.close();
+        activeOwner = undefined;
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, Math.round(STANDBY_RECHECK_MS * (0.8 + Math.random() * 0.4)));
+          wake = () => { clearTimeout(timer); resolve(); };
+        });
+        wake = undefined;
+        continue;
+      }
+      reportedStandby = undefined;
       output.event(role === 'owner' ? 'owner-acquired' : 'owner-connected', root);
       if (role === 'owner') {
         await owner.runWatchAsOwner();
+        if (owner.demotion) {
+          output.event('owner-demoted', root, {
+            reason: owner.demotion.reason,
+            holder: owner.demotion.holder,
+            message: describeSyncHolder(owner.demotion.holder)
+          });
+        }
       } else {
         activeSocket = await owner.subscribe(event => output.event(event.event, event.root, event.data));
         await new Promise<void>(resolve => {
@@ -455,7 +542,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const options = new Map<string, string | boolean>();
   const valueOptions = new Set(['root', 'server', 'parent', 'use', 'root-doc']);
   const booleanOptions = new Set([
-    'json', 'no-color', 'cookie-stdin', 'refresh', 'full', 'once', 'watch', 'force', 'help'
+    'json', 'no-color', 'cookie-stdin', 'refresh', 'full', 'once', 'watch', 'force', 'takeover', 'help'
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -516,7 +603,8 @@ function helpText(): string {
     + `Commands: auth login|logout|status, projects list, mirrors list, mirror create,\n`
     + `config list|get|set, status, doctor, sync --once|--watch, push, pull,\n`
     + `conflicts list|resolve, compile, pdf path|open\n\n`
-    + `Global options: --root <path> --server <url> --json --no-color`;
+    + `Global options: --root <path> --server <url> --json --no-color\n`
+    + `--takeover moves sync here from another machine that holds it (exit code 5 otherwise).`;
 }
 
 function commandName(positionals: string[]): string {
@@ -610,6 +698,35 @@ function openCommand(): string {
   throw new Error(`Opening files is not supported on ${process.platform}.`);
 }
 
+/**
+ * How to show a PDF. A Linux host without a display (an SSH session on a remote server) cannot run
+ * a desktop viewer, but an editor's integrated terminal there provides its CLI, which opens the
+ * file in the editor window on the user's machine.
+ */
+function pdfOpenCommand(
+  pdf: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): { command: string; args: string[] } {
+  if (platform === 'linux' && !env.DISPLAY && !env.WAYLAND_DISPLAY) {
+    const editor = env.VSCODE_IPC_HOOK_CLI ? ['code', 'cursor'].find(name => onPath(name, env)) : undefined;
+    if (editor) return { command: editor, args: [pdf] };
+    throw dataError(`No display is available to open ${pdf}. Run this in the editor's integrated terminal, or open the file from the editor.`);
+  }
+  return { command: openCommand(), args: [pdf] };
+}
+
+function onPath(command: string, env: NodeJS.ProcessEnv): boolean {
+  return (env.PATH ?? '').split(path.delimiter).filter(Boolean).some(directory => {
+    try {
+      const stat = statSync(path.join(directory, command));
+      return stat.isFile() && (stat.mode & 0o111) !== 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
 function installStopSignalHandlers(stop: () => void): () => void {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -623,4 +740,4 @@ if (require.main === module) {
   void main().then(code => { process.exitCode = code; });
 }
 
-export { main, parseArgs, blockingExitCode, makeSuccessEnvelope, openCommand, installStopSignalHandlers };
+export { main, parseArgs, blockingExitCode, makeSuccessEnvelope, openCommand, pdfOpenCommand, installStopSignalHandlers };

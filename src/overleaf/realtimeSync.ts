@@ -65,6 +65,7 @@ import { ManifestStore } from './manifestStore';
 import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
+import { DEFAULT_NETWORK_RESCAN_MS, NetworkRescanner } from './networkRescan';
 import { SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
@@ -153,6 +154,7 @@ export class RealtimeSyncService implements vscode.Disposable {
   private manifest?: OverleafCodexManifest;
   private session?: OverleafSocketSession;
   private watcher?: vscode.FileSystemWatcher;
+  private networkRescanner?: NetworkRescanner;
   private renameDisposable?: vscode.Disposable;
   private readonly docStates = new Map<string, DocState>();
   private readonly pendingDocJoins = new Map<string, Promise<DocState>>();
@@ -793,6 +795,7 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.reconcileOnStart(progress, signal);
     this.assertGeneration(generation, signal);
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, '**/*'));
+    this.startNetworkRescan(root);
     // These listeners are re-registered on every start(), including each reconnect, so they are
     // tracked per run and disposed in stop(). Handing them to context.subscriptions would leave a
     // dead entry per reconnect for the lifetime of the extension host.
@@ -809,6 +812,46 @@ export class RealtimeSyncService implements vscode.Disposable {
     await this.loadConnectedUsers();
     this.statusChanged.fire();
     this.log(`Realtime sync started for ${this.manifest.projectName}.`);
+  }
+
+  /**
+   * The file watcher only sees changes made through this machine. A mirror on a network filesystem
+   * is also edited from other machines (another login node, a cluster job), so there a periodic
+   * stat pass feeds what it finds into the same local-change queue.
+   */
+  private startNetworkRescan(root: string): void {
+    const seconds = vscode.workspace.getConfiguration('latexEditingToolkit.overleaf').get<number>('networkRescanSeconds', 30);
+    const intervalMs = typeof seconds === 'number' && Number.isFinite(seconds) ? Math.max(0, seconds) * 1000 : DEFAULT_NETWORK_RESCAN_MS;
+    const rescanner = new NetworkRescanner(
+      root,
+      () => (this.root === root ? this.manifest : undefined),
+      changes => {
+        if (this.root !== root) return;
+        this.log(`Found ${changes.length} change(s) made outside this machine.`);
+        for (const change of changes) this.queueLocal(vscode.Uri.file(path.join(root, change.relPath)), change.kind);
+      },
+      intervalMs,
+      error => this.log(`Network filesystem rescan failed: ${formatUnknownError(error)}`)
+    );
+    this.networkRescanner = rescanner;
+    void rescanner.start().then(started => {
+      if (started && this.networkRescanner === rescanner) {
+        this.log(`The mirror is on a network filesystem; checking for edits from other machines every ${Math.round(intervalMs / 1000)} s.`);
+      }
+    });
+  }
+
+  /**
+   * Stops at once because another process now owns this mirror. The socket goes first, so no edit
+   * from here reaches Overleaf while in-flight work drains; then the usual teardown runs.
+   */
+  async fence(reason: string): Promise<void> {
+    this.generation += 1;
+    this.stopping = true;
+    this.shouldReconnect = false;
+    this.session?.disconnect();
+    this.log(`Sync stopped on this machine: ${reason}`);
+    await this.stop();
   }
 
   async stop(): Promise<void> {
@@ -853,6 +896,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.clearCollaborators();
     this.watcher?.dispose();
     this.watcher = undefined;
+    this.networkRescanner?.stop();
+    this.networkRescanner = undefined;
     this.renameDisposable?.dispose();
     this.renameDisposable = undefined;
     this.session?.disconnect();
@@ -1431,6 +1476,9 @@ export class RealtimeSyncService implements vscode.Disposable {
   }
 
   private async registerPotentialRenameCreate(relPath: string): Promise<void> {
+    // Timestamp the create before hashing it: reading a large file or folder over NFS can take
+    // longer than the rename window, which would turn a move into an upload plus a delete.
+    const observedAt = Date.now();
     const safePath = await assertNoSymlinkPath(this.root!, relPath).catch(() => undefined);
     if (!safePath) return;
     const stat = await fs.stat(safePath).catch(() => undefined);
@@ -1444,7 +1492,8 @@ export class RealtimeSyncService implements vscode.Disposable {
       const detection = this.renameDetector.registerCreate({
         path: relPath,
         hash: await this.folderFingerprintFromLocal(relPath),
-        entityType: 'folder'
+        entityType: 'folder',
+        observedAt
       });
       if (detection.kind !== 'none') {
         this.handleRenameDetection(detection);
@@ -1460,7 +1509,8 @@ export class RealtimeSyncService implements vscode.Disposable {
     const detection = this.renameDetector.registerCreate({
       path: relPath,
       hash,
-      entityType: isTextLike(relPath) ? 'doc' : 'file'
+      entityType: isTextLike(relPath) ? 'doc' : 'file',
+      observedAt
     });
     if (detection.kind !== 'none') {
       this.handleRenameDetection(detection);

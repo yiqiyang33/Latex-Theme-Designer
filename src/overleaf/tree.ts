@@ -174,7 +174,18 @@ export function buildProjectTreeIndex(
 }
 
 function canonicalPathKey(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase('en-US');
+  return projectPathKey(value);
+}
+
+/**
+ * When two Overleaf paths would land on the same local file. macOS and Windows filesystems ignore
+ * case (and macOS Unicode normalization), so a mirror there cannot hold both `Main.tex` and
+ * `main.tex`; Linux filesystems keep names byte for byte, so only identical names collide.
+ */
+export function projectPathKey(value: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'darwin' || platform === 'win32'
+    ? value.normalize('NFKC').toLocaleLowerCase('en-US')
+    : value.normalize('NFC');
 }
 
 function walkFolder(

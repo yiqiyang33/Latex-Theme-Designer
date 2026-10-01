@@ -5,8 +5,9 @@ import * as path from 'path';
 import { existsSync } from 'fs';
 import type { NetworkTimeouts } from './types';
 import type { SyncPolicy } from './coreInterfaces';
-import { atomicWriteText, manifestPath, readManifest, readTextFileBounded, MAX_METADATA_JSON_BYTES } from './manifest';
-import { normalizeServerUrl, processAlive, processStartSignature } from './util';
+import { atomicWriteText, manifestPath, MetadataUnreadableError, readManifest, readMetadataText, readTextFileBounded, MAX_METADATA_JSON_BYTES } from './manifest';
+import { normalizeServerUrl, processStartSignature } from './util';
+import { describeHost, hostRecordFields, hostRelation, lockAgeMs, shortLockIsStale, type HostIdentity } from './hostIdentity';
 import { mapWithConcurrency } from './syncHealthService';
 
 export interface SharedMirrorRecord {
@@ -121,7 +122,13 @@ export function normalizeLocalProjectsRoot(
 
 export async function readSharedState(persistMigration = true): Promise<SharedOverleafState> {
   await migrateLegacyLinuxPaths();
-  const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => undefined);
+  const raw = await readMetadataText(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(async (error: unknown) => {
+    // Never answer an unreadable file (NFS stall, permissions) with defaults: the next update
+    // would write them over the real mirrors, servers and logout markers.
+    if (error instanceof MetadataUnreadableError) throw error;
+    await fs.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => undefined);
+    return undefined;
+  });
   if (!raw) return defaultSharedState();
   let parsed: Partial<SharedOverleafState>;
   try { parsed = JSON.parse(raw) as Partial<SharedOverleafState>; }
@@ -174,10 +181,8 @@ export async function migrateLegacyLinuxPaths(): Promise<void> {
   if (process.platform !== 'linux') return;
   if (process.env.LATEX_TOOLKIT_SUPPORT_HOME || process.env.LATEX_TOOLKIT_DATA_HOME || process.env.LATEX_TOOLKIT_CACHE_HOME) return;
   const legacySupport = path.join(os.homedir(), 'Library', 'Application Support', 'latex-editing-toolkit');
-  const legacyCache = path.join(os.homedir(), 'Library', 'Caches', 'latex-editing-toolkit');
   const configRoot = applicationSupportRoot();
   const dataRoot = applicationDataRoot();
-  const cacheRoot = runtimeRoot();
   const marker = path.join(configRoot, '.legacy-migration-v1');
   if (await exists(marker)) return;
 
@@ -187,7 +192,8 @@ export async function migrateLegacyLinuxPaths(): Promise<void> {
     await fs.copyFile(legacyState, sharedStatePath());
   }
   await copyDirectoryIfMissing(path.join(legacySupport, 'cli'), path.join(dataRoot, 'cli'));
-  await copyDirectoryIfMissing(path.join(legacyCache, 'runtime'), cacheRoot);
+  // The legacy runtime directory holds only locks and sockets of processes that no longer exist;
+  // copying it would resurrect dead locks (and fs.cp refuses socket files outright).
   await fs.mkdir(configRoot, { recursive: true, mode: 0o700 });
   await fs.writeFile(marker, `${new Date().toISOString()}\n`, { mode: 0o600 });
 }
@@ -288,7 +294,7 @@ function dedupeMirrors(records: SharedMirrorRecord[]): SharedMirrorRecord[] {
   return [...result.values()];
 }
 
-interface SharedStateLockMetadata {
+interface SharedStateLockMetadata extends Partial<HostIdentity> {
   pid: number;
   nonce: string;
   createdAt: string;
@@ -297,6 +303,9 @@ interface SharedStateLockMetadata {
 
 const SHARED_STATE_LOCK_TIMEOUT_MS = 15_000;
 const SHARED_STATE_STALE_GRACE_MS = 5_000;
+// A holder on another machine cannot be checked by PID, so its lock counts as abandoned only once
+// it has outlived any real hold, which lasts a read-modify-write of one small file.
+const SHARED_STATE_FOREIGN_STALE_MS = SHARED_STATE_LOCK_TIMEOUT_MS * 2;
 
 function normalizeSharedState(state: SharedOverleafState): SharedOverleafState {
   return {
@@ -341,14 +350,16 @@ async function writeSharedStateUnlocked(state: SharedOverleafState): Promise<voi
 async function acquireSharedStateLock(): Promise<() => Promise<void>> {
   const lockPath = sharedStateLockPath();
   const metadataPath = path.join(lockPath, 'owner.json');
-  const deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadlineExtended = false;
   await fs.mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
   while (true) {
     const metadata: SharedStateLockMetadata = {
       pid: process.pid,
       nonce: crypto.randomBytes(16).toString('hex'),
-      createdAt: new Date().toISOString()
-      ,processStart: await processStartSignature(process.pid)
+      createdAt: new Date().toISOString(),
+      processStart: await processStartSignature(process.pid),
+      ...hostRecordFields()
     };
     try {
       await fs.mkdir(lockPath, { mode: 0o700 });
@@ -372,7 +383,18 @@ async function acquireSharedStateLock(): Promise<() => Promise<void>> {
       continue;
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}`);
+      const holder = await readSharedStateLockMetadata(metadataPath);
+      const relation = holder ? hostRelation(holder) : undefined;
+      // A lock left by a crashed process on another machine becomes reclaimable only after
+      // SHARED_STATE_FOREIGN_STALE_MS; wait that out once rather than fail just before it does.
+      if (holder && !deadlineExtended && (relation === 'foreign' || relation === 'rebooted')) {
+        const stat = await fs.stat(lockPath).catch(() => undefined);
+        deadline = Date.now() + Math.max(0, SHARED_STATE_FOREIGN_STALE_MS - lockAgeMs(holder.createdAt, stat)) + 1_000;
+        deadlineExtended = true;
+        continue;
+      }
+      const heldBy = holder ? ` (held by ${describeHost(holder)}, pid ${holder.pid})` : '';
+      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}${heldBy}`);
     }
     await delay(25 + Math.floor(Math.random() * 25));
   }
@@ -411,12 +433,8 @@ async function acquireReclaimGuard(guardPath: string, staleMs = SHARED_STATE_LOC
 
 async function sharedStateLockIsStale(lockPath: string, metadataPath: string): Promise<boolean> {
   const metadata = await readSharedStateLockMetadata(metadataPath);
-  if (metadata) {
-    if (!processAlive(metadata.pid)) return true;
-    const currentStart = await processStartSignature(metadata.pid);
-    return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
-  }
   const stat = await fs.stat(lockPath).catch(() => undefined);
+  if (metadata) return shortLockIsStale(metadata, lockAgeMs(metadata.createdAt, stat), SHARED_STATE_FOREIGN_STALE_MS);
   return Boolean(stat && Date.now() - stat.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 

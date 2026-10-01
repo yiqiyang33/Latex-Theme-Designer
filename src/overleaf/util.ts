@@ -188,6 +188,52 @@ export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const TRANSIENT_FS_ERROR_CODES = new Set([
+  'EIO', 'ESTALE', 'ETIMEDOUT', 'EAGAIN', 'EINTR', 'EBUSY', 'ENOTCONN', 'EHOSTDOWN', 'ENETUNREACH', 'ECONNRESET'
+]);
+
+/**
+ * Errors a network filesystem returns while its server is slow or a file is being replaced by
+ * another client (NFS soft mounts return EIO after a stall, ESTALE across hosts). They say nothing
+ * about the file's content, so a reader must retry rather than treat the file as missing or corrupt.
+ */
+export function isTransientFsError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return typeof code === 'string' && TRANSIENT_FS_ERROR_CODES.has(code);
+}
+
+// Linux statfs(2) f_type values of network and cluster filesystems (linux/magic.h).
+const NETWORK_FILESYSTEM_TYPES = new Set([
+  0x6969, // NFS
+  0x517b, // SMB
+  0xff534d42, // CIFS
+  0xfe534d42, // SMB2
+  0x0bd00bd0, // Lustre
+  0x47504653, // GPFS
+  0x00c36400, // Ceph
+  0x65735546, // FUSE (sshfs, rclone, ...)
+  0x5346414f, // AFS
+  0x6b414653, // kAFS
+  0x01021997, // 9P (WSL, VM shares)
+  0x19830326, // BeeGFS
+  0x01161970, // GFS2
+  0x7461636f // OCFS2
+]);
+
+/**
+ * Whether `target` lives on a filesystem other machines can also mount, where host-local
+ * mechanisms (inotify, PIDs, Unix sockets) see only this machine's view.
+ */
+export async function isNetworkFileSystem(target: string): Promise<boolean> {
+  if (process.platform !== 'linux') return false;
+  try {
+    const stats = await fs.statfs(target);
+    return NETWORK_FILESYSTEM_TYPES.has(Number(stats.type) >>> 0);
+  } catch {
+    return false;
+  }
+}
+
 export function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

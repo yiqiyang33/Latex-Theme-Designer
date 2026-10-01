@@ -1,5 +1,5 @@
 import * as fs from 'fs/promises';
-import { atomicWriteText, MAX_METADATA_JSON_BYTES, metadataPath, readTextFileBounded, TRANSACTIONS_NAME } from './manifest';
+import { atomicWriteText, MAX_METADATA_JSON_BYTES, MetadataUnreadableError, metadataPath, readMetadataText, TRANSACTIONS_NAME } from './manifest';
 import { assertValidTransactions, validateTransactionList } from './metadataValidation';
 
 export type BinaryTransactionStage = 'temp-uploaded' | 'original-backed-up' | 'promoted';
@@ -27,16 +27,16 @@ export class BinaryTransactionStore {
   async list(): Promise<BinaryTransaction[]> {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch(error => {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateTransactionList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed as BinaryTransaction[];
     } catch (error) {
+      // Unreadable is not corrupt: returning an empty list here would let the next write drop
+      // every record.
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => undefined);
       console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];

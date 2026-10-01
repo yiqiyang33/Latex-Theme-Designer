@@ -1,12 +1,17 @@
+import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as net from 'node:net';
 import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { blockingExitCode, installStopSignalHandlers, makeSuccessEnvelope, openCommand, parseArgs } from '../src/cli';
-import { installCli, uninstallCli } from '../src/overleaf/cliInstaller';
+import { promisify } from 'node:util';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const execFileAsync = promisify(execFile);
+import { blockingExitCode, installStopSignalHandlers, makeSuccessEnvelope, openCommand, parseArgs, pdfOpenCommand } from '../src/cli';
+import { installCli, launcherScript, uninstallCli } from '../src/overleaf/cliInstaller';
 import {
+  createCredentialStore,
   FallbackCredentialStore,
   FileCredentialStore,
   KEYCHAIN_SERVICE,
@@ -36,8 +41,10 @@ import {
   addOrUpdateFolder,
   filePathById,
   folderPathById,
+  isAlwaysLocal,
   metadataPath,
   MAX_METADATA_JSON_BYTES,
+  MetadataUnreadableError,
   OUTPUT_DIR,
   readManifest,
   readSyncStatus,
@@ -56,7 +63,8 @@ import { recoverBinaryTransactions, type RemoteBinaryEntityState } from '../src/
 import { fileHash, scanLocalProject } from '../src/overleaf/syncStatus';
 import { mapWithByteConcurrency, mapWithDynamicByteConcurrency } from '../src/overleaf/syncHealthService';
 import { OverleafClient } from '../src/overleaf/overleafClient';
-import { hashFileDigests } from '../src/overleaf/binaryTransfer';
+import { hashFileDigests, installStagedFile } from '../src/overleaf/binaryTransfer';
+import { NetworkRescanner, type RescanChange } from '../src/overleaf/networkRescan';
 import {
   executeSyncCommand,
   planSafeSyncActions,
@@ -382,8 +390,158 @@ describe('Overleaf CLI shared infrastructure', () => {
     }
   });
 
+  it('treats a bare secret-tool exit status 1 as a missing credential, not an error', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-miss-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const store = new SecretToolCredentialStore(new MemorySecretToolRunner());
+    try {
+      expect(await store.getIdentity('https://example.test')).toBeUndefined();
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['a missing login collection', 'secret-tool: No such interface “org.freedesktop.Secret.Collection” on object at path /org/freedesktop/secrets/collection/login'],
+    ['a locked collection', 'secret-tool: Cannot create an item in a locked collection'],
+    ['no D-Bus session', 'secret-tool: Cannot autolaunch D-Bus without X11 $DISPLAY'],
+    ['a bare non-zero exit', '']
+  ])('falls back to the private file when secret-tool fails with %s', async (_label, stderr) => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-broken-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const runner = new MemorySecretToolRunner(stderr);
+    const store = new FallbackCredentialStore(
+      new SecretToolCredentialStore(runner),
+      new FileCredentialStore(credentialsRoot)
+    );
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await store.saveIdentity('https://example.test', identity);
+      expect(await fs.readdir(credentialsRoot)).toHaveLength(1);
+      const callsAfterSave = runner.calls.length;
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(await store.getIdentity('https://example.test/')).toEqual(identity);
+      // Once the keyring is known to be broken, status refreshes no longer spawn secret-tool.
+      expect(runner.calls).toHaveLength(callsAfterSave);
+      const backend = store.describe();
+      expect(backend.kind).toBe('restricted-file');
+      expect(backend.warning).toContain('The system keyring is unavailable');
+      await store.deleteIdentity('https://example.test');
+      expect(await fs.readdir(credentialsRoot)).toEqual([]);
+      expect(await store.getIdentity('https://example.test')).toBeUndefined();
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('reads an existing file credential in a new process and tries the broken keyring only once', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-restart-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const file = new FileCredentialStore(credentialsRoot);
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    const runner = new MemorySecretToolRunner('secret-tool: Cannot create an item in a locked collection');
+    try {
+      await file.saveIdentity('https://example.test', identity);
+      const store = new FallbackCredentialStore(new SecretToolCredentialStore(runner), file);
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(runner.calls.map(call => call[0])).toEqual(['lookup', 'store']);
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(runner.calls).toHaveLength(2);
+      expect(await fs.readdir(credentialsRoot)).toHaveLength(1);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('gives up on a secret-tool call that never returns and uses the private file', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-hang-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const hanging: SecurityRunner = { run: () => new Promise<string>(() => undefined) };
+    const store = new FallbackCredentialStore(
+      new SecretToolCredentialStore(hanging, { lookupMs: 20, storeMs: 20 }),
+      new FileCredentialStore(credentialsRoot)
+    );
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await store.saveIdentity('https://example.test', identity);
+      expect(await fs.readdir(credentialsRoot)).toHaveLength(1);
+      expect(store.describe().warning).toMatch(/timed out/);
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the file credential when the keyring accepts a write it cannot read back', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-blind-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const file = new FileCredentialStore(credentialsRoot);
+    const identity: Identity = { cookies: 'session=private', csrfToken: 'csrf' };
+    try {
+      await file.saveIdentity('https://example.test', identity);
+      const store = new FallbackCredentialStore(
+        new SecretToolCredentialStore(new MemorySecretToolRunner(undefined, false)),
+        file
+      );
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(await fs.readdir(credentialsRoot)).toHaveLength(1);
+      expect(store.describe().kind).toBe('restricted-file');
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('drops a stale fallback file once the keyring stores the credential', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-secret-stale-file-'));
+    process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'config');
+    const credentialsRoot = path.join(temporary, 'credentials');
+    const file = new FileCredentialStore(credentialsRoot);
+    const runner = new MemorySecretToolRunner();
+    try {
+      await file.saveIdentity('https://example.test', { cookies: 'session=old', csrfToken: 'old' });
+      const store = new FallbackCredentialStore(new SecretToolCredentialStore(runner), file);
+      const identity: Identity = { cookies: 'session=new', csrfToken: 'new' };
+      await store.saveIdentity('https://example.test', identity);
+      expect(await fs.readdir(credentialsRoot)).toEqual([]);
+      expect(await store.getIdentity('https://example.test')).toEqual(identity);
+      expect(store.describe().kind).toBe('secret-tool');
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('lets LATEX_TOOLKIT_CREDENTIAL_STORE pick the credential backend', () => {
+    expect(createCredentialStore('linux', {})).toBeInstanceOf(FallbackCredentialStore);
+    expect(createCredentialStore('linux', { LATEX_TOOLKIT_CREDENTIAL_STORE: 'auto' })).toBeInstanceOf(FallbackCredentialStore);
+    expect(createCredentialStore('linux', { LATEX_TOOLKIT_CREDENTIAL_STORE: ' File ' })).toBeInstanceOf(FileCredentialStore);
+    expect(createCredentialStore('linux', { LATEX_TOOLKIT_CREDENTIAL_STORE: 'system' })).toBeInstanceOf(SecretToolCredentialStore);
+    expect(createCredentialStore('darwin', { LATEX_TOOLKIT_CREDENTIAL_STORE: 'system' })).toBeInstanceOf(MacKeychainCredentialStore);
+    expect(createCredentialStore('win32', {})).toBeInstanceOf(FileCredentialStore);
+    expect(() => createCredentialStore('win32', { LATEX_TOOLKIT_CREDENTIAL_STORE: 'system' })).toThrow(/not supported/);
+  });
+
   it('uses the platform PDF opener', () => {
     expect(openCommand()).toBe(process.platform === 'darwin' ? '/usr/bin/open' : 'xdg-open');
+  });
+
+  it('opens PDFs through the editor CLI on a server without a display', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-pdf-open-'));
+    try {
+      await fs.writeFile(path.join(temporary, 'code'), '#!/bin/sh\n', { mode: 0o755 });
+      const remoteTerminal = { PATH: temporary, VSCODE_IPC_HOOK_CLI: '/run/user/1/vscode-ipc.sock' };
+      expect(pdfOpenCommand('/m/output.pdf', remoteTerminal, 'linux')).toEqual({ command: 'code', args: ['/m/output.pdf'] });
+      expect(() => pdfOpenCommand('/m/output.pdf', { PATH: temporary }, 'linux')).toThrow(/No display/);
+      expect(pdfOpenCommand('/m/output.pdf', { DISPLAY: ':0' }, 'linux')).toEqual({
+        command: process.platform === 'darwin' ? '/usr/bin/open' : 'xdg-open',
+        args: ['/m/output.pdf']
+      });
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
   });
 
   it('elects one owner, forwards commands and events, then allows takeover', async () => {
@@ -906,6 +1064,7 @@ describe('Overleaf CLI parser and managed installation', () => {
     expect(parsed.options.get('root')).toBe('/tmp/mirror');
     expect(parsed.options.get('once')).toBe(true);
     expect(() => parseArgs(['auth', 'login', '--cookie=secret'])).toThrow(/must not be passed in argv/);
+    expect(parseArgs(['sync', '--watch', '--takeover']).options.get('takeover')).toBe(true);
     const report = { ...syncReport(), hasBlocking: true };
     expect(blockingExitCode(report)).toBe(2);
     expect(blockingExitCode({ ok: true })).toBe(0);
@@ -923,7 +1082,11 @@ describe('Overleaf CLI parser and managed installation', () => {
     await fs.writeFile(path.join(extensionRoot, 'dist', 'vendor', 'socket.io-client', 'lib', 'io.js'), 'module.exports = {}\n');
     try {
       const installed = await installCli(extensionRoot, '1.0.0');
-      expect((await fs.lstat(installed.commandPath)).isSymbolicLink()).toBe(true);
+      const launcher = await fs.lstat(installed.commandPath);
+      expect(launcher.isFile()).toBe(true);
+      expect(launcher.mode & 0o111).not.toBe(0);
+      expect(await fs.readFile(installed.commandPath, 'utf8')).toContain(JSON.stringify(path.join(installed.installRoot, 'cli.js')));
+      expect((await execFileAsync(installed.commandPath, [])).stdout).toContain('one');
       expect((await fs.stat(path.join(installed.installRoot, 'cli.js'))).mode & 0o111).not.toBe(0);
       expect(await fs.readFile(path.join(installed.installRoot, 'vendor', 'socket.io-client', 'lib', 'io.js'), 'utf8'))
         .toContain('module.exports');
@@ -972,11 +1135,64 @@ describe('Overleaf CLI parser and managed installation', () => {
       const remaining = (await fs.readdir(supportRoot)).sort();
       expect(remaining).toEqual(['1.0.2', 'not-ours', theirs].sort());
       expect(result.removedVersions.sort()).toEqual([mine, '1.0.1'].sort());
-      // The live command still resolves after the prune.
-      expect(await fs.realpath(result.commandPath)).toBe(
-        await fs.realpath(path.join(supportRoot, '1.0.2', 'cli.js'))
-      );
+      // The live command still points at an install that exists after the prune.
+      expect(await fs.readFile(result.commandPath, 'utf8')).toContain(JSON.stringify(path.join(supportRoot, '1.0.2', 'cli.js')));
+      await expect(fs.stat(path.join(supportRoot, '1.0.2', 'cli.js'))).resolves.toBeTruthy();
       expect(await fs.readFile(path.join(supportRoot, 'not-ours', 'keep.txt'), 'utf8')).toBe('keep me');
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('replaces a symlink installed by an older version with the launcher', async () => {
+    if (Number(process.versions.node.split('.')[0]) < 20) return;
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-upgrade-link-'));
+    const extensionRoot = path.join(temporary, 'extension');
+    const supportRoot = path.join(temporary, 'support', 'cli');
+    const binRoot = path.join(temporary, 'bin');
+    process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME = supportRoot;
+    process.env.LATEX_TOOLKIT_BIN_HOME = binRoot;
+    await fs.mkdir(path.join(extensionRoot, 'dist', 'vendor'), { recursive: true });
+    await fs.writeFile(path.join(extensionRoot, 'dist', 'cli.js'), '#!/usr/bin/env node\nconsole.log("new")\n');
+    try {
+      await fs.mkdir(path.join(supportRoot, '1.0.0'), { recursive: true });
+      await fs.writeFile(path.join(supportRoot, '1.0.0', 'cli.js'), 'old');
+      await fs.writeFile(path.join(supportRoot, '1.0.0', '.latex-editing-toolkit-cli.json'), '{"managed":true,"version":"1.0.0"}');
+      await fs.mkdir(binRoot, { recursive: true });
+      await fs.symlink(path.join(supportRoot, '1.0.0', 'cli.js'), path.join(binRoot, 'latex-toolkit'));
+      const result = await installCli(extensionRoot, '1.0.1');
+      expect((await fs.lstat(result.commandPath)).isSymbolicLink()).toBe(false);
+      expect((await execFileAsync(result.commandPath, [])).stdout).toContain('new');
+      expect(result.removedVersions).toEqual(['1.0.0']);
+      expect((await uninstallCli()).removed).toBe(true);
+      await expect(fs.lstat(result.commandPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the CLI on an editor server\'s bundled Node.js when none is on PATH', async () => {
+    if (Number(process.versions.node.split('.')[0]) < 20) return;
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-launcher-'));
+    const cli = path.join(temporary, 'it\'s here', 'cli.js');
+    await fs.mkdir(path.dirname(cli), { recursive: true });
+    await fs.writeFile(cli, 'console.log(`ran with ${process.argv.slice(2).join(" ")}`)\n');
+    const launcher = path.join(temporary, 'latex-toolkit');
+    await fs.writeFile(launcher, launcherScript(cli), { mode: 0o755 });
+    const home = path.join(temporary, 'home');
+    const serverNode = path.join(home, '.vscode-server', 'cli', 'servers', 'Stable-0123', 'server', 'node');
+    await fs.mkdir(path.dirname(serverNode), { recursive: true });
+    await fs.symlink(process.execPath, serverNode);
+    // An empty PATH: the launcher itself needs only sh builtins, and no node can be found there.
+    const emptyBin = path.join(temporary, 'empty-bin');
+    await fs.mkdir(emptyBin);
+    try {
+      const env = { HOME: home, PATH: emptyBin };
+      expect((await execFileAsync(launcher, ['a', 'b c'], { env })).stdout).toContain('ran with a b c');
+      await expect(execFileAsync(launcher, [], { env: { HOME: path.join(temporary, 'nobody'), PATH: emptyBin } }))
+        .rejects.toMatchObject({ code: 127 });
+      const explicit = await execFileAsync(launcher, ['x'], { env: { HOME: path.join(temporary, 'nobody'), PATH: emptyBin, LATEX_TOOLKIT_NODE: process.execPath } });
+      expect(explicit.stdout).toContain('ran with x');
     } finally {
       await fs.rm(temporary, { recursive: true, force: true });
     }
@@ -1454,6 +1670,68 @@ describe('Binary replacement crash recovery', () => {
   });
 });
 
+describe('Filesystem leftovers', () => {
+  it('keeps NFS, macOS and staging leftovers local, and nothing that only looks similar', () => {
+    for (const leftover of [
+      '.nfs000000000123abcd00000001', 'figures/.nfs8a2b3c4d5e6f', '._main.tex', 'figures/._plot.png',
+      '__MACOSX/main.tex', 'chapters/__MACOSX', 'figures/.plot.png.incoming-123-1700000000000-0a1b2c3d',
+      '.main.tex.backup-9-1700000000000-deadbeef', 'figures/.DS_Store'
+    ]) expect(isAlwaysLocal(leftover), leftover).toBe(true);
+    for (const content of ['nfs.tex', '.nfsrc', 'figures/_plot.png', 'MACOSX/notes.tex', 'main.tex.backup', 'my.backup-notes.tex']) {
+      expect(isAlwaysLocal(content), content).toBe(false);
+    }
+  });
+});
+
+describe('Network filesystem rescan', () => {
+  it('reports files created, changed and deleted since the previous pass, ignoring NFS leftovers', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-rescan-'));
+    const state = manifest();
+    await fs.writeFile(path.join(temporary, 'main.tex'), 'a');
+    await fs.writeFile(path.join(temporary, 'old.tex'), 'x');
+    const reported: RescanChange[][] = [];
+    const rescanner = new NetworkRescanner(temporary, () => state, changes => { reported.push(changes); }, 60_000);
+    try {
+      expect(await rescanner.start(true)).toBe(true);
+      await fs.writeFile(path.join(temporary, 'main.tex'), 'a longer body');
+      await fs.writeFile(path.join(temporary, 'new.tex'), 'n');
+      await fs.rm(path.join(temporary, 'old.tex'));
+      await fs.writeFile(path.join(temporary, '.nfs0000000000abcdef00000001'), 'deleted but still open');
+      const changes = (await rescanner.poll()).sort((a, b) => a.relPath.localeCompare(b.relPath));
+      expect(changes).toEqual([
+        { relPath: 'main.tex', kind: 'change' },
+        { relPath: 'new.tex', kind: 'create' },
+        { relPath: 'old.tex', kind: 'delete' }
+      ]);
+      expect(reported).toHaveLength(1);
+      expect(await rescanner.poll()).toEqual([]);
+    } finally {
+      rescanner.stop();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Staged binary installs', () => {
+  it.runIf(process.platform === 'linux')('installs a download staged on another filesystem without a cross-device rename', async () => {
+    // /dev/shm (tmpfs) and the temp directory are different devices here, like a local /tmp and an NFS home.
+    const staged = await fs.mkdtemp('/dev/shm/lt-staged-').catch(() => undefined);
+    if (!staged) return;
+    const target = await fs.mkdtemp(path.join(os.tmpdir(), 'lt-target-'));
+    try {
+      await fs.writeFile(path.join(staged, 'figure.png'), 'new bytes');
+      await fs.writeFile(path.join(target, 'figure.png'), 'old bytes');
+      await installStagedFile(path.join(staged, 'figure.png'), path.join(target, 'figure.png'));
+      expect(await fs.readFile(path.join(target, 'figure.png'), 'utf8')).toBe('new bytes');
+      expect(await fs.readdir(target)).toEqual(['figure.png']);
+      expect(await fs.readdir(staged)).toEqual([]);
+    } finally {
+      await fs.rm(staged, { recursive: true, force: true });
+      await fs.rm(target, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Large mirror performance regressions', () => {
   it('scans a large tree once, hashes a large binary incrementally, and bounds bytes in flight', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-large-mirror-'));
@@ -1754,6 +2032,55 @@ describe('P1 resource and persistence regressions', () => {
     }
   });
 
+  it.runIf(typeof process.getuid === 'function' && process.getuid() !== 0)(
+    'leaves metadata it cannot read in place instead of quarantining or resetting it',
+    async () => {
+      const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-unreadable-'));
+      process.env.LATEX_TOOLKIT_SUPPORT_HOME = path.join(temporary, 'support');
+      const unreadable = async (target: string, content: string): Promise<void> => {
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.writeFile(target, content);
+        // Stands in for an NFS read that keeps failing (EIO, ESTALE): the file is fine, just unreadable now.
+        await fs.chmod(target, 0o000);
+      };
+      try {
+        await unreadable(metadataPath(temporary, 'manifest.json'), JSON.stringify(manifest()));
+        await unreadable(metadataPath(temporary, 'conflicts.json'), '[]');
+        await unreadable(metadataPath(temporary, 'transactions.json'), '[]');
+        await unreadable(metadataPath(temporary, 'sync-status.json'), '{}');
+        await unreadable(sharedStatePath(), JSON.stringify(defaultSharedState()));
+        await expect(readManifest(temporary)).rejects.toBeInstanceOf(MetadataUnreadableError);
+        await expect(new ConflictStore(temporary).list()).rejects.toBeInstanceOf(MetadataUnreadableError);
+        await expect(new BinaryTransactionStore(temporary).list()).rejects.toBeInstanceOf(MetadataUnreadableError);
+        expect(await readSyncStatus(temporary)).toBeUndefined();
+        await expect(readSharedState()).rejects.toBeInstanceOf(MetadataUnreadableError);
+        await expect(updateSharedState(state => { state.servers = []; })).rejects.toBeInstanceOf(MetadataUnreadableError);
+        expect((await fs.readdir(metadataPath(temporary))).filter(name => name.includes('.corrupt-'))).toEqual([]);
+        expect((await fs.readdir(path.dirname(sharedStatePath()))).filter(name => name.includes('.corrupt-'))).toEqual([]);
+      } finally {
+        for (const name of ['manifest.json', 'conflicts.json', 'transactions.json', 'sync-status.json']) {
+          await fs.chmod(metadataPath(temporary, name), 0o600).catch(() => undefined);
+        }
+        await fs.chmod(sharedStatePath(), 0o600).catch(() => undefined);
+        await fs.rm(temporary, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it('reads a missing sync status as absent without quarantining anything', async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-missing-status-'));
+    const warn = vi.spyOn(console, 'warn');
+    try {
+      await fs.mkdir(metadataPath(temporary), { recursive: true });
+      expect(await readSyncStatus(temporary)).toBeUndefined();
+      expect(warn).not.toHaveBeenCalled();
+      await expect(readManifest(temporary)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      warn.mockRestore();
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('bounds metadata JSON reads and quarantines oversized status files', async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'latex-toolkit-metadata-limit-'));
     try {
@@ -1857,22 +2184,37 @@ class MemoryKeychainApi implements KeychainApi {
   }
 }
 
+/** The error runCommand produces for a non-zero secret-tool exit. */
+function secretToolFailure(exitCode: number, stderr: string): Error {
+  return Object.assign(new Error(stderr || `secret-tool exited with code ${exitCode}.`), {
+    code: String(exitCode),
+    exitCode,
+    stderr
+  });
+}
+
 class MemorySecretToolRunner implements SecurityRunner {
   readonly items = new Map<string, string>();
+  readonly calls: string[][] = [];
   lastArgs?: string[];
   lastStdin?: string;
 
+  constructor(private readonly storeFailure?: string, private readonly readable = true) {}
+
   async run(args: string[], stdin?: string): Promise<string> {
+    this.calls.push([...args]);
     this.lastArgs = [...args];
     this.lastStdin = stdin;
     const account = args[args.indexOf('account') + 1];
     if (args[0] === 'store') {
+      if (this.storeFailure !== undefined) throw secretToolFailure(1, this.storeFailure);
       this.items.set(account, stdin ?? '');
       return '';
     }
     if (args[0] === 'lookup') {
-      const value = this.items.get(account);
-      if (value === undefined) throw new Error('No such secret.');
+      const value = this.readable ? this.items.get(account) : undefined;
+      // Like the real tool: a miss prints nothing and exits 1.
+      if (value === undefined) throw secretToolFailure(1, '');
       return value;
     }
     if (args[0] === 'clear') {
