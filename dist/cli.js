@@ -12191,7 +12191,7 @@ var require_form_data = __commonJS({
     var parseUrl = require("url").parse;
     var fs18 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto7 = require("crypto");
+    var crypto8 = require("crypto");
     var mime2 = require_mime_types();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -12256,12 +12256,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs18.stat(value.path, function(err, stat13) {
+          fs18.stat(value.path, function(err, stat14) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat13.size - (value.start ? value.start : 0);
+            var fileSize = stat14.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -12397,7 +12397,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData2.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto7.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto8.randomBytes(12).toString("hex");
     };
     FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -15514,13 +15514,15 @@ __export(cli_exports, {
   main: () => main,
   makeSuccessEnvelope: () => makeSuccessEnvelope,
   openCommand: () => openCommand,
-  parseArgs: () => parseArgs
+  parseArgs: () => parseArgs,
+  pdfOpenCommand: () => pdfOpenCommand
 });
 module.exports = __toCommonJS(cli_exports);
 var fs17 = __toESM(require("fs/promises"));
+var import_fs9 = require("fs");
 var path18 = __toESM(require("path"));
 var import_child_process4 = require("child_process");
-var import_util22 = require("util");
+var import_util24 = require("util");
 var readline = __toESM(require("readline"));
 
 // src/overleaf/cliSyncEngine.ts
@@ -15682,10 +15684,10 @@ var ReaddirpStream = class extends import_node_stream.Readable {
   }
   async _formatEntry(dirent, path19) {
     let entry;
-    const basename7 = this._isDirent ? dirent.name : dirent;
+    const basename8 = this._isDirent ? dirent.name : dirent;
     try {
-      const fullPath = (0, import_node_path.resolve)((0, import_node_path.join)(path19, basename7));
-      entry = { path: (0, import_node_path.relative)(this._root, fullPath), fullPath, basename: basename7 };
+      const fullPath = (0, import_node_path.resolve)((0, import_node_path.join)(path19, basename8));
+      entry = { path: (0, import_node_path.relative)(this._root, fullPath), fullPath, basename: basename8 };
       entry[this._statsProp] = this._isDirent ? dirent : await this._stat(fullPath);
     } catch (err) {
       this._onError(err);
@@ -16224,9 +16226,9 @@ var NodeFsHandler = class {
   _watchWithNodeFs(path19, listener) {
     const opts = this.fsw.options;
     const directory = sysPath.dirname(path19);
-    const basename7 = sysPath.basename(path19);
+    const basename8 = sysPath.basename(path19);
     const parent = this.fsw._getWatchedDir(directory);
-    parent.add(basename7);
+    parent.add(basename8);
     const absolutePath = sysPath.resolve(path19);
     const options = {
       persistent: opts.persistent
@@ -16236,7 +16238,7 @@ var NodeFsHandler = class {
     let closer;
     if (opts.usePolling) {
       const enableBin = opts.interval !== opts.binaryInterval;
-      options.interval = enableBin && isBinaryPath(basename7) ? opts.binaryInterval : opts.interval;
+      options.interval = enableBin && isBinaryPath(basename8) ? opts.binaryInterval : opts.interval;
       closer = setFsWatchFileListener(path19, absolutePath, options, {
         listener,
         rawEmitter: this.fsw._emitRaw
@@ -16259,10 +16261,10 @@ var NodeFsHandler = class {
       return;
     }
     const dirname13 = sysPath.dirname(file);
-    const basename7 = sysPath.basename(file);
+    const basename8 = sysPath.basename(file);
     const parent = this.fsw._getWatchedDir(dirname13);
     let prevStats = stats;
-    if (parent.has(basename7))
+    if (parent.has(basename8))
       return;
     const listener = async (path19, newStats) => {
       if (!this.fsw._throttle(THROTTLE_MODE_WATCH, file, 5))
@@ -16287,9 +16289,9 @@ var NodeFsHandler = class {
             prevStats = newStats2;
           }
         } catch (error) {
-          this.fsw._remove(dirname13, basename7);
+          this.fsw._remove(dirname13, basename8);
         }
-      } else if (parent.has(basename7)) {
+      } else if (parent.has(basename8)) {
         const at = newStats.atimeMs;
         const mt = newStats.mtimeMs;
         if (!at || at <= mt || mt !== prevStats.mtimeMs) {
@@ -17095,8 +17097,8 @@ var FSWatcher = class extends import_events.EventEmitter {
     }
     return this._userIgnored(path19, stats);
   }
-  _isntIgnored(path19, stat13) {
-    return !this._isIgnored(path19, stat13);
+  _isntIgnored(path19, stat14) {
+    return !this._isIgnored(path19, stat14);
   }
   /**
    * Provides a set of common helpers and properties relating to symlink handling.
@@ -18860,15 +18862,15 @@ async function assertNoSymlinkPath(root, relativePath) {
   let current = absoluteRoot;
   for (const segment of normalized.split("/")) {
     current = path2.join(current, segment);
-    const stat13 = await fs.lstat(current).catch((error) => {
+    const stat14 = await fs.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (!stat13) break;
-    if (stat13.isSymbolicLink()) {
+    if (!stat14) break;
+    if (stat14.isSymbolicLink()) {
       throw new Error(`Refusing to access symlinked mirror path: ${relativePath}`);
     }
-    if (!stat13.isDirectory() && current !== path2.join(absoluteRoot, ...normalized.split("/"))) {
+    if (!stat14.isDirectory() && current !== path2.join(absoluteRoot, ...normalized.split("/"))) {
       throw new Error(`Mirror path component is not a directory: ${relativePath}`);
     }
   }
@@ -18907,6 +18909,64 @@ function processAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
+  } catch {
+    return false;
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve10) => setTimeout(resolve10, ms));
+}
+var TRANSIENT_FS_ERROR_CODES = /* @__PURE__ */ new Set([
+  "EIO",
+  "ESTALE",
+  "ETIMEDOUT",
+  "EAGAIN",
+  "EINTR",
+  "EBUSY",
+  "ENOTCONN",
+  "EHOSTDOWN",
+  "ENETUNREACH",
+  "ECONNRESET"
+]);
+function isTransientFsError(error) {
+  const code = error?.code;
+  return typeof code === "string" && TRANSIENT_FS_ERROR_CODES.has(code);
+}
+var NETWORK_FILESYSTEM_TYPES = /* @__PURE__ */ new Set([
+  26985,
+  // NFS
+  20859,
+  // SMB
+  4283649346,
+  // CIFS
+  4266872130,
+  // SMB2
+  198183888,
+  // Lustre
+  1196443219,
+  // GPFS
+  12805120,
+  // Ceph
+  1702057286,
+  // FUSE (sshfs, rclone, ...)
+  1397113167,
+  // AFS
+  1799439955,
+  // kAFS
+  16914839,
+  // 9P (WSL, VM shares)
+  428016422,
+  // BeeGFS
+  18225520,
+  // GFS2
+  1952539503
+  // OCFS2
+]);
+async function isNetworkFileSystem(target) {
+  if (process.platform !== "linux") return false;
+  try {
+    const stats = await fs.statfs(target);
+    return NETWORK_FILESYSTEM_TYPES.has(Number(stats.type) >>> 0);
   } catch {
     return false;
   }
@@ -19182,7 +19242,11 @@ var DEFAULT_IGNORE_PATTERNS = [
 ];
 function isAlwaysLocal(relPath) {
   const normalized = toPosixPath(relPath);
-  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || /(^|\/)\.DS_Store$/.test(normalized);
+  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || isFilesystemLeftover(normalized);
+}
+function isFilesystemLeftover(relPath) {
+  const normalized = toPosixPath(relPath);
+  return /(^|\/)\.DS_Store$/.test(normalized) || /(^|\/)\.nfs[0-9A-Fa-f]{8,}$/.test(normalized) || /(^|\/)\._[^/]+$/.test(normalized) || /(^|\/)__MACOSX(\/|$)/.test(normalized) || /(^|\/)\.[^/]+\.(?:incoming|backup)-\d+-\d+-[0-9a-f]{8}$/.test(normalized);
 }
 var TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   ".overleaf-codex/**",
@@ -19277,9 +19341,20 @@ function metadataPath(root, ...parts) {
 }
 async function readManifest(root) {
   const target = manifestPath(root);
+  let raw;
+  try {
+    raw = await readMetadataText(target, MAX_MANIFEST_JSON_BYTES);
+  } catch (error) {
+    if (error instanceof MetadataUnreadableError) throw error;
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
+  }
+  if (raw === void 0) {
+    throw Object.assign(new Error(`No Overleaf manifest exists at ${target}.`), { code: "ENOENT" });
+  }
   let parsed;
   try {
-    parsed = JSON.parse(await readTextFileBounded(target, MAX_MANIFEST_JSON_BYTES));
+    parsed = JSON.parse(raw);
   } catch (error) {
     await quarantineCorruptFile(target);
     throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
@@ -19342,16 +19417,41 @@ function syncStatusPath(root) {
 }
 async function readSyncStatus(root) {
   try {
-    const bounded = await readTextFileBounded(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
+    const bounded = await readMetadataText(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
     if (!bounded) return void 0;
     const parsed = JSON.parse(bounded);
     const validationError = validateSyncStatus(parsed);
     if (validationError) throw new Error(validationError);
     return parsed;
   } catch (error) {
+    if (error instanceof MetadataUnreadableError) return void 0;
     await quarantineCorruptFile(syncStatusPath(root));
     console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return void 0;
+  }
+}
+var MetadataUnreadableError = class extends Error {
+  constructor(target, cause) {
+    super(`Could not read ${target}: ${formatUnknownError(cause)}`, { cause });
+    this.target = target;
+    this.name = "MetadataUnreadableError";
+  }
+  target;
+  code = "METADATA_UNREADABLE";
+};
+var UNREADABLE_NOT_CORRUPT_CODES = /* @__PURE__ */ new Set(["EACCES", "EPERM", "EMFILE", "ENFILE"]);
+async function readMetadataText(target, maxBytes, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readTextFileBounded(target, maxBytes);
+    } catch (error) {
+      const code = error?.code;
+      if (code === "ENOENT") return void 0;
+      if (typeof code === "string" && UNREADABLE_NOT_CORRUPT_CODES.has(code)) throw new MetadataUnreadableError(target, error);
+      if (!isTransientFsError(error)) throw error;
+      if (attempt >= attempts) throw new MetadataUnreadableError(target, error);
+      await sleep(50 * 2 ** (attempt - 1));
+    }
   }
 }
 async function readTextFileBounded(target, maxBytes) {
@@ -19610,7 +19710,10 @@ function buildProjectTreeIndex(serverUrl, projectId, projectName, project) {
   return { manifest, folders, files };
 }
 function canonicalPathKey(value) {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US");
+  return projectPathKey(value);
+}
+function projectPathKey(value, platform = process.platform) {
+  return platform === "darwin" || platform === "win32" ? value.normalize("NFKC").toLocaleLowerCase("en-US") : value.normalize("NFC");
 }
 function walkFolder(folder, folderPath, parentFolderId, folders, files) {
   folders.push({
@@ -19944,13 +20047,13 @@ async function scanLocalProject(root, manifest) {
         childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat13 = await runFs(() => fs3.stat(absPath).catch(() => void 0));
-        if (stat13) {
+        const stat14 = await runFs(() => fs3.stat(absPath).catch(() => void 0));
+        if (stat14) {
           fileMetadata.set(relPath, {
-            size: stat13.size,
-            mtimeMs: stat13.mtimeMs,
-            ctimeMs: stat13.ctimeMs,
-            inode: Number(stat13.ino)
+            size: stat14.size,
+            mtimeMs: stat14.mtimeMs,
+            ctimeMs: stat14.ctimeMs,
+            inode: Number(stat14.ino)
           });
         }
       }
@@ -20004,14 +20107,14 @@ async function fileHash(filePath) {
   }
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false, knownMetadata) {
-  const stat13 = knownMetadata ? {
+  const stat14 = knownMetadata ? {
     isFile: () => true,
     size: knownMetadata.size,
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
   } : await fs3.stat(filePath).catch(() => void 0);
-  if (!stat13?.isFile()) {
+  if (!stat14?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -20023,17 +20126,17 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat13.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat13.size && manifestFile.localMtimeMs === stat13.mtimeMs && manifestFile.localCtimeMs === stat13.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat14.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat14.size && manifestFile.localMtimeMs === stat14.mtimeMs && manifestFile.localCtimeMs === stat14.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash = await fileHash(filePath);
   if (!manifestFile) return { hash, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash || manifestFile.localSize !== stat13.size || manifestFile.localMtimeMs !== stat13.mtimeMs || manifestFile.localCtimeMs !== stat13.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash || manifestFile.localSize !== stat14.size || manifestFile.localMtimeMs !== stat14.mtimeMs || manifestFile.localCtimeMs !== stat14.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash;
-  manifestFile.localSize = stat13.size;
-  manifestFile.localMtimeMs = stat13.mtimeMs;
-  manifestFile.localCtimeMs = stat13.ctimeMs;
+  manifestFile.localSize = stat14.size;
+  manifestFile.localMtimeMs = stat14.mtimeMs;
+  manifestFile.localCtimeMs = stat14.ctimeMs;
   manifestFile.localInode = inode;
   return { hash, cacheChanged, reused: false };
 }
@@ -20042,7 +20145,7 @@ function trashPathFor(root, relPath) {
   return path5.join(root, ".overleaf-codex", "trash", stamp, relPath);
 }
 function shouldSkip(relPath) {
-  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
+  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath) || isFilesystemLeftover(relPath);
 }
 
 // src/overleaf/ot.ts
@@ -20075,16 +20178,14 @@ var ConflictStore = class {
   async list() {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
-        if (error.code === "ENOENT") return void 0;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateConflictList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs4.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
@@ -20138,16 +20239,14 @@ var BinaryTransactionStore = class {
   async list() {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
-        if (error.code === "ENOENT") return void 0;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateTransactionList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs5.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
@@ -20713,11 +20812,11 @@ var fs8 = __toESM(require("fs/promises"));
 var path9 = __toESM(require("path"));
 var import_crypto3 = require("crypto");
 async function hashFileDigests(filePath) {
-  const stat13 = await fs8.stat(filePath);
-  if (!stat13.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
+  const stat14 = await fs8.stat(filePath);
+  if (!stat14.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
   const sha12 = (0, import_crypto2.createHash)("sha1");
   const git = (0, import_crypto2.createHash)("sha1");
-  git.update(`blob ${stat13.size}\0`);
+  git.update(`blob ${stat14.size}\0`);
   await new Promise((resolve10, reject) => {
     const input = (0, import_fs4.createReadStream)(filePath);
     input.on("data", (chunk) => {
@@ -20727,21 +20826,24 @@ async function hashFileDigests(filePath) {
     input.on("error", reject);
     input.on("end", resolve10);
   });
-  return { size: stat13.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
+  return { size: stat14.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
   const token = `${process.pid}-${Date.now()}-${(0, import_crypto3.randomBytes)(4).toString("hex")}`;
-  const backupPath = path9.join(path9.dirname(targetPath), `.${path9.basename(targetPath)}.backup-${token}`);
+  const directory = path9.dirname(targetPath);
+  const incomingPath = path9.join(directory, `.${path9.basename(targetPath)}.incoming-${token}`);
+  const backupPath = path9.join(directory, `.${path9.basename(targetPath)}.backup-${token}`);
   let backedUp = false;
   try {
-    await fs8.mkdir(path9.dirname(targetPath), { recursive: true });
+    await fs8.mkdir(directory, { recursive: true });
+    await moveOrCopy(stagedPath, incomingPath);
     try {
       await fs8.rename(targetPath, backupPath);
       backedUp = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    await fs8.rename(stagedPath, targetPath);
+    await fs8.rename(incomingPath, targetPath);
     if (backedUp) await fs8.rm(backupPath, { force: true });
   } catch (error) {
     if (backedUp) {
@@ -20750,7 +20852,16 @@ async function installStagedFile(stagedPath, targetPath) {
     }
     throw error;
   } finally {
+    await fs8.rm(incomingPath, { force: true }).catch(() => void 0);
     await fs8.rm(stagedPath, { force: true }).catch(() => void 0);
+  }
+}
+async function moveOrCopy(source, target) {
+  try {
+    await fs8.rename(source, target);
+  } catch (error) {
+    if (error.code !== "EXDEV") throw error;
+    await fs8.copyFile(source, target);
   }
 }
 
@@ -20814,6 +20925,88 @@ async function folderFingerprintFromLocal(root, relPath, manifest, concurrency =
   return sha1(`folder\0${parts.sort().join("\n")}`);
 }
 
+// src/overleaf/networkRescan.ts
+var DEFAULT_NETWORK_RESCAN_MS = 3e4;
+var NetworkRescanner = class {
+  constructor(root, manifest, onChanges, intervalMs = DEFAULT_NETWORK_RESCAN_MS, onError = () => void 0) {
+    this.root = root;
+    this.manifest = manifest;
+    this.onChanges = onChanges;
+    this.intervalMs = intervalMs;
+    this.onError = onError;
+  }
+  root;
+  manifest;
+  onChanges;
+  intervalMs;
+  onError;
+  timer;
+  previous;
+  scanning = false;
+  stopped = true;
+  /** Starts polling when the mirror is on a network filesystem (or when forced); returns whether it did. */
+  async start(force = false) {
+    if (this.intervalMs <= 0) return false;
+    if (!force && !await isNetworkFileSystem(this.root)) return false;
+    this.stopped = false;
+    this.previous = await this.snapshot().catch((error) => {
+      this.onError(error);
+      return void 0;
+    });
+    this.schedule();
+    return true;
+  }
+  stop() {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = void 0;
+  }
+  /** One comparison pass; reports and returns the differences from the previous pass. */
+  async poll() {
+    if (this.scanning) return [];
+    this.scanning = true;
+    try {
+      const current = await this.snapshot();
+      if (!current) return [];
+      const previous = this.previous;
+      this.previous = current;
+      if (!previous) return [];
+      const changes = [];
+      for (const [relPath, stamp] of current) {
+        const before = previous.get(relPath);
+        if (before === void 0) changes.push({ relPath, kind: "create" });
+        else if (before !== stamp) changes.push({ relPath, kind: "change" });
+      }
+      for (const relPath of previous.keys()) {
+        if (!current.has(relPath)) changes.push({ relPath, kind: "delete" });
+      }
+      if (changes.length && !this.stopped) this.onChanges(changes);
+      return changes;
+    } finally {
+      this.scanning = false;
+    }
+  }
+  schedule() {
+    if (this.stopped) return;
+    this.timer = setTimeout(() => {
+      this.timer = void 0;
+      void this.poll().catch((error) => this.onError(error)).finally(() => this.schedule());
+    }, this.intervalMs);
+    this.timer.unref?.();
+  }
+  async snapshot() {
+    const manifest = this.manifest();
+    if (!manifest) return void 0;
+    const scan = await scanLocalProject(this.root, manifest);
+    const stamps = /* @__PURE__ */ new Map();
+    for (const relPath of scan.files) {
+      const metadata = scan.fileMetadata.get(relPath);
+      stamps.set(relPath, metadata ? `${metadata.size}:${metadata.mtimeMs}:${metadata.inode}` : "unknown");
+    }
+    return stamps;
+  }
+};
+
 // src/overleaf/cliSyncEngine.ts
 var REMOTE_EVENTS = [
   "otUpdateApplied",
@@ -20839,6 +21032,7 @@ var OverleafSyncEngine = class {
   manifest;
   session;
   watcher;
+  networkRescanner;
   timer;
   running = false;
   stopping = false;
@@ -20856,6 +21050,16 @@ var OverleafSyncEngine = class {
       });
     }
     return this.startPromise;
+  }
+  /**
+   * Stops at once because another process now owns this mirror: the socket is dropped before
+   * in-flight work drains, so nothing further is sent to Overleaf from here.
+   */
+  async fence() {
+    this.stopping = true;
+    this.session?.disconnect();
+    this.requestStop();
+    await this.stop();
   }
   async stop() {
     if (!this.stopPromise) {
@@ -20887,6 +21091,8 @@ var OverleafSyncEngine = class {
     this.timer = void 0;
     await this.watcher?.close();
     this.watcher = void 0;
+    this.networkRescanner?.stop();
+    this.networkRescanner = void 0;
     await this.startPromise?.catch(() => void 0);
     await this.operation.catch(() => void 0);
     this.running = false;
@@ -20936,6 +21142,20 @@ var OverleafSyncEngine = class {
         this.host.log(`Local ${event}: ${path11.relative(this.root, changed)}`);
         this.scheduleSync(`local:${event}`);
       });
+    }
+    const rescanMs = Number(process.env.LATEX_TOOLKIT_NETWORK_RESCAN_MS ?? DEFAULT_NETWORK_RESCAN_MS);
+    this.networkRescanner = new NetworkRescanner(
+      this.root,
+      () => this.manifest,
+      (changes) => {
+        for (const change of changes) this.host.log(`Changed outside this machine (${change.kind}): ${change.relPath}`);
+        this.scheduleSync("network-rescan");
+      },
+      Number.isFinite(rescanMs) ? rescanMs : DEFAULT_NETWORK_RESCAN_MS,
+      (error) => this.host.log(`Network filesystem rescan failed: ${formatUnknownError(error)}`)
+    );
+    if (await this.networkRescanner.start()) {
+      this.host.log("The mirror is on a network filesystem; also checking for edits made on other machines.");
     }
     await new Promise((resolve10) => this.events.once("stop", resolve10));
   }
@@ -21204,19 +21424,19 @@ var OverleafSyncEngine = class {
       if (!force) throw new Error(`${normalized} was deleted on Overleaf; pass --force to move the local copy to trash.`);
       const source = await assertNoSymlinkPath(this.root, normalized);
       const target = trashPathFor(this.root, normalized);
-      const stat13 = await fs10.stat(source).catch(() => void 0);
-      if (stat13) {
+      const stat14 = await fs10.stat(source).catch(() => void 0);
+      if (stat14) {
         await fs10.mkdir(path11.dirname(target), { recursive: true });
         await fs10.rename(source, target).catch(async () => {
-          if (stat13.isDirectory()) await fs10.cp(source, target, { recursive: true });
+          if (stat14.isDirectory()) await fs10.cp(source, target, { recursive: true });
           else await fs10.copyFile(source, target);
-          await fs10.rm(source, { recursive: stat13.isDirectory(), force: true });
+          await fs10.rm(source, { recursive: stat14.isDirectory(), force: true });
         });
       }
       if (trackedFolder) removeManifestSubtree(this.manifest, normalized);
       else delete this.manifest.files[normalized];
       await writeManifest(this.root, this.manifest);
-      this.emit("trashed", { path: normalized, trashPath: stat13 ? target : void 0 });
+      this.emit("trashed", { path: normalized, trashPath: stat14 ? target : void 0 });
       return;
     }
     try {
@@ -21291,7 +21511,9 @@ var OverleafSyncEngine = class {
         dispose: async () => void 0
       };
     }
-    const temporaryRoot = await fs10.mkdtemp(path11.join(os3.tmpdir(), "latex-toolkit-pull-"));
+    const cacheRoot = metadataPath(this.root, "cache");
+    await fs10.mkdir(cacheRoot, { recursive: true });
+    const temporaryRoot = await fs10.mkdtemp(path11.join(cacheRoot, "pull-"));
     const sourcePath = path11.join(temporaryRoot, remote.entityId);
     try {
       const digests = await this.client.downloadProjectFileToPath(this.manifest.projectId, remote.entityId, sourcePath);
@@ -21616,7 +21838,7 @@ var OverleafSyncEngine = class {
   ignoreAbsolutePath(candidate) {
     const rel = toPosixPath(path11.relative(this.root, candidate));
     if (!rel || rel.startsWith("..")) return false;
-    if (/(^|\/)(\.overleaf-codex|\.git|\.vscode)(\/|$)/.test(rel)) return true;
+    if (/(^|\/)(\.overleaf-codex|\.git|\.vscode)(\/|$)/.test(rel) || isFilesystemLeftover(rel)) return true;
     return this.manifest ? shouldIgnore(this.manifest, rel) || shouldIgnoreUntrackedLocalPath(this.manifest, rel) : false;
   }
   validatePath(relPath) {
@@ -21652,19 +21874,98 @@ async function mapWithConcurrencyResult(items, concurrency, handler) {
 }
 
 // src/overleaf/keychainStore.ts
-var crypto4 = __toESM(require("crypto"));
-var import_fs6 = require("fs");
+var crypto5 = __toESM(require("crypto"));
+var import_fs7 = require("fs");
 var fs12 = __toESM(require("fs/promises"));
 var path13 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
 var import_module = require("module");
 
 // src/overleaf/sharedState.ts
-var crypto3 = __toESM(require("crypto"));
+var crypto4 = __toESM(require("crypto"));
 var fs11 = __toESM(require("fs/promises"));
-var os4 = __toESM(require("os"));
+var os5 = __toESM(require("os"));
 var path12 = __toESM(require("path"));
+var import_fs6 = require("fs");
+
+// src/overleaf/hostIdentity.ts
+var crypto3 = __toESM(require("crypto"));
 var import_fs5 = require("fs");
+var os4 = __toESM(require("os"));
+var currentIdentity;
+function currentHostIdentity() {
+  if (!currentIdentity) {
+    const bootId = readProcText("/proc/sys/kernel/random/boot_id");
+    const pidNamespace = readProcLink("/proc/self/ns/pid");
+    currentIdentity = {
+      hostname: os4.hostname(),
+      ...bootId ? { bootId } : {},
+      ...pidNamespace ? { pidNamespace } : {}
+    };
+  }
+  return currentIdentity;
+}
+function hostRecordFields(host = currentHostIdentity()) {
+  return {
+    hostname: host.hostname,
+    ...host.bootId ? { bootId: host.bootId } : {},
+    ...host.pidNamespace ? { pidNamespace: host.pidNamespace } : {}
+  };
+}
+function hostRelation(record, self = currentHostIdentity()) {
+  const hostname2 = typeof record.hostname === "string" ? record.hostname : void 0;
+  const bootId = typeof record.bootId === "string" ? record.bootId : void 0;
+  if (!hostname2 && !bootId) return "legacy";
+  if (bootId && self.bootId) {
+    if (bootId !== self.bootId) return hostname2 === self.hostname ? "rebooted" : "foreign";
+    const pidNamespace = typeof record.pidNamespace === "string" ? record.pidNamespace : void 0;
+    return pidNamespace && self.pidNamespace && pidNamespace !== self.pidNamespace ? "foreign" : "same";
+  }
+  return hostname2 === self.hostname ? "same" : "foreign";
+}
+async function localProcessMatches(pid, processStart) {
+  if (!processAlive(pid)) return false;
+  if (!processStart) return true;
+  const currentStart = await processStartSignature(pid);
+  return !currentStart || currentStart === processStart;
+}
+async function shortLockIsStale(record, lockAgeMs2, foreignStaleMs, self = currentHostIdentity()) {
+  const relation = hostRelation(record, self);
+  if (relation === "same" || relation === "legacy") {
+    return typeof record.pid !== "number" || !await localProcessMatches(record.pid, record.processStart);
+  }
+  return lockAgeMs2 >= foreignStaleMs;
+}
+function lockAgeMs(createdAt, stat14, now = Date.now()) {
+  const created = typeof createdAt === "number" ? createdAt : Date.parse(createdAt ?? "");
+  const ages = [
+    ...Number.isFinite(created) ? [now - created] : [],
+    ...stat14 ? [now - stat14.mtimeMs] : []
+  ];
+  return ages.length ? Math.max(0, Math.min(...ages)) : 0;
+}
+function hostTag(host = currentHostIdentity()) {
+  return crypto3.createHash("sha256").update(`${host.hostname}\0${host.bootId ?? ""}\0${host.pidNamespace ?? ""}`).digest("hex").slice(0, 8);
+}
+function describeHost(host) {
+  return typeof host?.hostname === "string" && host.hostname ? host.hostname : "another machine";
+}
+function readProcText(target) {
+  try {
+    return (0, import_fs5.readFileSync)(target, "utf8").trim() || void 0;
+  } catch {
+    return void 0;
+  }
+}
+function readProcLink(target) {
+  try {
+    return (0, import_fs5.readlinkSync)(target) || void 0;
+  } catch {
+    return void 0;
+  }
+}
+
+// src/overleaf/sharedState.ts
 var DEFAULT_NETWORK_TIMEOUTS = {
   connectMs: 2e4,
   projectJoinMs: 3e4,
@@ -21679,16 +21980,16 @@ var DEFAULT_SYNC_POLICY = {
   networkTimeouts: DEFAULT_NETWORK_TIMEOUTS
 };
 function applicationSupportRoot() {
-  return process.env.LATEX_TOOLKIT_SUPPORT_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_SUPPORT_HOME) : process.platform === "darwin" ? path12.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path12.join(process.env.XDG_CONFIG_HOME || path12.join(os4.homedir(), ".config"), "latex-editing-toolkit");
+  return process.env.LATEX_TOOLKIT_SUPPORT_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_SUPPORT_HOME) : process.platform === "darwin" ? path12.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path12.join(process.env.XDG_CONFIG_HOME || path12.join(os5.homedir(), ".config"), "latex-editing-toolkit");
 }
 function applicationDataRoot() {
-  return process.env.LATEX_TOOLKIT_DATA_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_DATA_HOME) : process.platform === "darwin" ? path12.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path12.join(process.env.XDG_DATA_HOME || path12.join(os4.homedir(), ".local", "share"), "latex-editing-toolkit");
+  return process.env.LATEX_TOOLKIT_DATA_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_DATA_HOME) : process.platform === "darwin" ? path12.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path12.join(process.env.XDG_DATA_HOME || path12.join(os5.homedir(), ".local", "share"), "latex-editing-toolkit");
 }
 function credentialRoot() {
   return path12.join(applicationDataRoot(), "credentials");
 }
 function runtimeRoot() {
-  return process.env.LATEX_TOOLKIT_CACHE_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_CACHE_HOME) : process.platform === "darwin" ? path12.join(os4.homedir(), "Library", "Caches", "latex-editing-toolkit", "runtime") : path12.join(process.env.XDG_CACHE_HOME || path12.join(os4.homedir(), ".cache"), "latex-editing-toolkit", "runtime");
+  return process.env.LATEX_TOOLKIT_CACHE_HOME ? path12.resolve(process.env.LATEX_TOOLKIT_CACHE_HOME) : process.platform === "darwin" ? path12.join(os5.homedir(), "Library", "Caches", "latex-editing-toolkit", "runtime") : path12.join(process.env.XDG_CACHE_HOME || path12.join(os5.homedir(), ".cache"), "latex-editing-toolkit", "runtime");
 }
 function sharedStatePath() {
   return path12.join(applicationSupportRoot(), "overleaf.json");
@@ -21708,10 +22009,10 @@ function defaultSharedState() {
     localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
-function defaultLocalProjectsRoot(home = os4.homedir()) {
+function defaultLocalProjectsRoot(home = os5.homedir()) {
   return path12.join(home, "Documents", "OverleafCodex", "projects");
 }
-function normalizeLocalProjectsRoot(value, platform = process.platform, home = os4.homedir()) {
+function normalizeLocalProjectsRoot(value, platform = process.platform, home = os5.homedir()) {
   const fallback = defaultLocalProjectsRoot(home);
   if (typeof value !== "string" || !value.trim()) return fallback;
   const expanded = value.trim() === "~" ? home : value.trim().startsWith("~/") ? path12.join(home, value.trim().slice(2)) : value.trim();
@@ -21719,12 +22020,16 @@ function normalizeLocalProjectsRoot(value, platform = process.platform, home = o
   const foreignPrefix = platform === "darwin" ? [/^\/home(?:\/|$)/, /^\/root(?:\/|$)/, /^\/mnt(?:\/|$)/, /^\/media(?:\/|$)/] : platform === "linux" ? [/^\/Users(?:\/|$)/, /^\/Volumes(?:\/|$)/] : [];
   if (foreignPrefix.some((pattern) => pattern.test(resolved))) return fallback;
   const suffix = `${path12.sep}Documents${path12.sep}OverleafCodex${path12.sep}projects`;
-  if (resolved.endsWith(suffix) && resolved !== path12.resolve(fallback) && !(0, import_fs5.existsSync)(resolved)) return fallback;
+  if (resolved.endsWith(suffix) && resolved !== path12.resolve(fallback) && !(0, import_fs6.existsSync)(resolved)) return fallback;
   return resolved;
 }
 async function readSharedState(persistMigration = true) {
   await migrateLegacyLinuxPaths();
-  const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => void 0);
+  const raw = await readMetadataText(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(async (error) => {
+    if (error instanceof MetadataUnreadableError) throw error;
+    await fs11.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => void 0);
+    return void 0;
+  });
   if (!raw) return defaultSharedState();
   let parsed;
   try {
@@ -21768,11 +22073,9 @@ async function readSharedState(persistMigration = true) {
 async function migrateLegacyLinuxPaths() {
   if (process.platform !== "linux") return;
   if (process.env.LATEX_TOOLKIT_SUPPORT_HOME || process.env.LATEX_TOOLKIT_DATA_HOME || process.env.LATEX_TOOLKIT_CACHE_HOME) return;
-  const legacySupport = path12.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit");
-  const legacyCache = path12.join(os4.homedir(), "Library", "Caches", "latex-editing-toolkit");
+  const legacySupport = path12.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit");
   const configRoot = applicationSupportRoot();
   const dataRoot = applicationDataRoot();
-  const cacheRoot = runtimeRoot();
   const marker = path12.join(configRoot, ".legacy-migration-v1");
   if (await exists(marker)) return;
   const legacyState = path12.join(legacySupport, "overleaf.json");
@@ -21781,7 +22084,6 @@ async function migrateLegacyLinuxPaths() {
     await fs11.copyFile(legacyState, sharedStatePath());
   }
   await copyDirectoryIfMissing(path12.join(legacySupport, "cli"), path12.join(dataRoot, "cli"));
-  await copyDirectoryIfMissing(path12.join(legacyCache, "runtime"), cacheRoot);
   await fs11.mkdir(configRoot, { recursive: true, mode: 448 });
   await fs11.writeFile(marker, `${(/* @__PURE__ */ new Date()).toISOString()}
 `, { mode: 384 });
@@ -21871,6 +22173,7 @@ function dedupeMirrors(records) {
 }
 var SHARED_STATE_LOCK_TIMEOUT_MS = 15e3;
 var SHARED_STATE_STALE_GRACE_MS = 5e3;
+var SHARED_STATE_FOREIGN_STALE_MS = SHARED_STATE_LOCK_TIMEOUT_MS * 2;
 function normalizeSharedState(state) {
   return {
     ...state,
@@ -21915,14 +22218,16 @@ async function writeSharedStateUnlocked(state) {
 async function acquireSharedStateLock() {
   const lockPath = sharedStateLockPath();
   const metadataPath2 = path12.join(lockPath, "owner.json");
-  const deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadlineExtended = false;
   await fs11.mkdir(path12.dirname(lockPath), { recursive: true, mode: 448 });
   while (true) {
     const metadata = {
       pid: process.pid,
-      nonce: crypto3.randomBytes(16).toString("hex"),
+      nonce: crypto4.randomBytes(16).toString("hex"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature(process.pid)
+      processStart: await processStartSignature(process.pid),
+      ...hostRecordFields()
     };
     try {
       await fs11.mkdir(lockPath, { mode: 448 });
@@ -21946,7 +22251,16 @@ async function acquireSharedStateLock() {
       continue;
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}`);
+      const holder = await readSharedStateLockMetadata(metadataPath2);
+      const relation = holder ? hostRelation(holder) : void 0;
+      if (holder && !deadlineExtended && (relation === "foreign" || relation === "rebooted")) {
+        const stat14 = await fs11.stat(lockPath).catch(() => void 0);
+        deadline = Date.now() + Math.max(0, SHARED_STATE_FOREIGN_STALE_MS - lockAgeMs(holder.createdAt, stat14)) + 1e3;
+        deadlineExtended = true;
+        continue;
+      }
+      const heldBy = holder ? ` (held by ${describeHost(holder)}, pid ${holder.pid})` : "";
+      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}${heldBy}`);
     }
     await delay(25 + Math.floor(Math.random() * 25));
   }
@@ -21969,8 +22283,8 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs11.stat(guardPath).catch(() => void 0);
-  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
+  const stat14 = await fs11.stat(guardPath).catch(() => void 0);
+  if (!stat14 || Date.now() - stat14.mtimeMs < staleMs) return false;
   await fs11.rm(guardPath, { recursive: true, force: true });
   try {
     await fs11.mkdir(guardPath, { mode: 448 });
@@ -21982,13 +22296,9 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
 }
 async function sharedStateLockIsStale(lockPath, metadataPath2) {
   const metadata = await readSharedStateLockMetadata(metadataPath2);
-  if (metadata) {
-    if (!processAlive(metadata.pid)) return true;
-    const currentStart = await processStartSignature(metadata.pid);
-    return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
-  }
-  const stat13 = await fs11.stat(lockPath).catch(() => void 0);
-  return Boolean(stat13 && Date.now() - stat13.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+  const stat14 = await fs11.stat(lockPath).catch(() => void 0);
+  if (metadata) return shortLockIsStale(metadata, lockAgeMs(metadata.createdAt, stat14), SHARED_STATE_FOREIGN_STALE_MS);
+  return Boolean(stat14 && Date.now() - stat14.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
   const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
@@ -22014,7 +22324,23 @@ async function exists(target) {
 
 // src/overleaf/keychainStore.ts
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
-var systemSecretTool = { run: (args, stdin) => runCommand("secret-tool", args, stdin) };
+var CredentialBackendUnavailableError = class extends Error {
+  code = "CREDENTIAL_BACKEND_UNAVAILABLE";
+  constructor(message, options) {
+    super(message, options);
+    this.name = "CredentialBackendUnavailableError";
+  }
+};
+var DEFAULT_SECRET_TOOL_TIMEOUTS = { lookupMs: 5e3, storeMs: 1e4 };
+var systemSecretTool = {
+  run: (args, stdin) => runCommand(
+    "secret-tool",
+    args,
+    stdin,
+    args[0] === "store" ? DEFAULT_SECRET_TOOL_TIMEOUTS.storeMs : DEFAULT_SECRET_TOOL_TIMEOUTS.lookupMs
+  )
+};
+var PRIMARY_RETRY_MS = 10 * 6e4;
 var MacKeychainCredentialStore = class {
   constructor(keychain, runtimeRoot2 = path13.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`)) {
     this.keychain = keychain;
@@ -22065,13 +22391,15 @@ var MacKeychainCredentialStore = class {
   }
 };
 var SecretToolCredentialStore = class {
-  constructor(secretTool = systemSecretTool) {
+  constructor(secretTool = systemSecretTool, timeouts = DEFAULT_SECRET_TOOL_TIMEOUTS) {
     this.secretTool = secretTool;
+    this.timeouts = timeouts;
   }
   secretTool;
+  timeouts;
   async saveIdentity(serverUrl, identity) {
     const account = normalizeServerUrl(serverUrl);
-    await this.secretTool.run(
+    await this.invoke(
       ["store", "--label", "LaTeX Editing Toolkit Overleaf", "service", KEYCHAIN_SERVICE, "account", account],
       JSON.stringify(identity)
     );
@@ -22082,7 +22410,7 @@ var SecretToolCredentialStore = class {
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
     try {
-      const raw = await this.secretTool.run(["lookup", "service", KEYCHAIN_SERVICE, "account", account]);
+      const raw = await this.invoke(["lookup", "service", KEYCHAIN_SERVICE, "account", account]);
       return raw ? parseIdentity(raw) : void 0;
     } catch (error) {
       if (isMissingCredential(error)) return void 0;
@@ -22091,10 +22419,33 @@ var SecretToolCredentialStore = class {
   }
   async deleteIdentity(serverUrl) {
     const account = normalizeServerUrl(serverUrl);
-    await this.secretTool.run(["clear", "service", KEYCHAIN_SERVICE, "account", account]).catch((error) => {
+    await this.invoke(["clear", "service", KEYCHAIN_SERVICE, "account", account]).catch((error) => {
       if (!isMissingCredential(error)) throw error;
     });
     await markCredentialDeleted(account);
+  }
+  /**
+   * Runs one secret-tool operation under a deadline. A miss stays a miss, and every other failure
+   * becomes CredentialBackendUnavailableError: on a headless host the keyring fails in many ways
+   * (no login collection, locked collection, no D-Bus session), and none of them is fixable here.
+   */
+  async invoke(args, stdin) {
+    const operation = args[0];
+    const timeoutMs = operation === "store" ? this.timeouts.storeMs : this.timeouts.lookupMs;
+    try {
+      return await withTimeout(
+        this.secretTool.run(args, stdin),
+        timeoutMs,
+        `secret-tool ${operation} timed out after ${timeoutMs} ms`
+      );
+    } catch (error) {
+      if ((operation === "lookup" || operation === "clear") && isBareExitOne(error)) return "";
+      if (isMissingCredential(error)) throw error;
+      throw new CredentialBackendUnavailableError(
+        `secret-tool ${operation} failed: ${errorMessage(error)}`,
+        { cause: error }
+      );
+    }
   }
   async listServers() {
     return (await readSharedState()).servers;
@@ -22152,58 +22503,67 @@ var FileCredentialStore = class {
     };
   }
   filePath(account) {
-    const digest = crypto4.createHash("sha256").update(account).digest("hex");
+    const digest = crypto5.createHash("sha256").update(account).digest("hex");
     return path13.join(this.root, `${digest}.json`);
   }
 };
 var FallbackCredentialStore = class {
-  constructor(primary, fallback) {
+  constructor(primary, fallback, now = Date.now) {
     this.primary = primary;
     this.fallback = fallback;
+    this.now = now;
     this.fallbackActive = !(primary.describe?.()?.available ?? true);
   }
   primary;
   fallback;
+  now;
   fallbackActive;
+  primaryUnavailableUntil = 0;
+  primaryUnavailableReason;
   async saveIdentity(serverUrl, identity) {
-    try {
-      await this.primary.saveIdentity(serverUrl, identity);
-      this.fallbackActive = false;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      await this.fallback.saveIdentity(serverUrl, identity);
-      this.fallbackActive = true;
-    }
-  }
-  async getIdentity(serverUrl) {
-    let primaryValue;
-    try {
-      primaryValue = await this.primary.getIdentity(serverUrl);
-      this.fallbackActive = false;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      this.fallbackActive = true;
-    }
-    if (primaryValue) return primaryValue;
-    const fallbackValue = await this.fallback.getIdentity(serverUrl);
-    if (fallbackValue && !this.fallbackActive) {
+    if (this.primaryUsable()) {
       try {
-        await this.primary.saveIdentity(serverUrl, fallbackValue);
+        await this.primary.saveIdentity(serverUrl, identity);
+        this.fallbackActive = false;
         await this.fallback.clearIdentity(serverUrl);
+        return;
       } catch (error) {
         if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
       }
     }
+    await this.fallback.saveIdentity(serverUrl, identity);
+    this.fallbackActive = true;
+  }
+  async getIdentity(serverUrl) {
+    if (this.primaryUsable()) {
+      try {
+        const primaryValue = await this.primary.getIdentity(serverUrl);
+        if (primaryValue) {
+          this.fallbackActive = false;
+          return primaryValue;
+        }
+      } catch (error) {
+        if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
+      }
+    }
+    const fallbackValue = await this.fallback.getIdentity(serverUrl);
+    if (!fallbackValue) return void 0;
+    this.fallbackActive = true;
+    if (this.primaryUsable()) await this.migrateToPrimary(serverUrl, fallbackValue);
     return fallbackValue;
   }
   async deleteIdentity(serverUrl) {
     let deletedByPrimary = false;
-    try {
-      await this.primary.deleteIdentity(serverUrl);
-      deletedByPrimary = true;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      this.fallbackActive = true;
+    if (this.primaryUsable()) {
+      try {
+        await this.primary.deleteIdentity(serverUrl);
+        deletedByPrimary = true;
+      } catch (error) {
+        if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
+      }
     }
     await this.fallback.clearIdentity(serverUrl);
     if (!deletedByPrimary) await markCredentialDeleted(normalizeServerUrl(serverUrl));
@@ -22212,14 +22572,48 @@ var FallbackCredentialStore = class {
     return (await readSharedState()).servers;
   }
   describe() {
-    if (!this.fallbackActive) return this.primary.describe?.() ?? { kind: "secret-tool", available: true };
-    return this.fallback.describe();
+    if (!this.fallbackActive && this.primaryUsable()) {
+      return this.primary.describe?.() ?? { kind: "secret-tool", available: true };
+    }
+    const info = this.fallback.describe();
+    return this.primaryUnavailableReason ? { ...info, warning: `${info.warning} The system keyring is unavailable: ${this.primaryUnavailableReason}` } : info;
+  }
+  /**
+   * Moves a file credential into the system keyring once the keyring works, and deletes the file
+   * only after reading the credential back: a keyring that accepts writes into a volatile session
+   * collection would otherwise lose the login on its next restart.
+   */
+  async migrateToPrimary(serverUrl, identity) {
+    try {
+      await this.primary.saveIdentity(serverUrl, identity);
+      const stored = await this.primary.getIdentity(serverUrl);
+      if (!stored || JSON.stringify(stored) !== JSON.stringify(identity)) return;
+      await this.fallback.clearIdentity(serverUrl);
+      this.fallbackActive = false;
+    } catch (error) {
+      if (!isBackendUnavailable(error)) throw error;
+      this.markPrimaryUnavailable(error);
+    }
+  }
+  primaryUsable() {
+    return this.now() >= this.primaryUnavailableUntil;
+  }
+  /** Skips the keyring for a while, so status refreshes don't spawn a failing process each time. */
+  markPrimaryUnavailable(error) {
+    this.primaryUnavailableUntil = this.now() + PRIMARY_RETRY_MS;
+    this.primaryUnavailableReason = errorMessage(error);
+    this.fallbackActive = true;
   }
 };
-function createCredentialStore(platform = process.platform) {
-  if (platform === "darwin") return new FallbackCredentialStore(new MacKeychainCredentialStore(), new FileCredentialStore());
-  if (platform === "linux") return new FallbackCredentialStore(new SecretToolCredentialStore(), new FileCredentialStore());
-  return new FileCredentialStore();
+function createCredentialStore(platform = process.platform, env = process.env) {
+  const mode = env.LATEX_TOOLKIT_CREDENTIAL_STORE?.trim().toLowerCase();
+  if (mode === "file") return new FileCredentialStore();
+  const system = platform === "darwin" ? new MacKeychainCredentialStore() : platform === "linux" ? new SecretToolCredentialStore() : void 0;
+  if (mode === "system") {
+    if (!system) throw new Error(`LATEX_TOOLKIT_CREDENTIAL_STORE=system is not supported on ${platform}.`);
+    return system;
+  }
+  return system ? new FallbackCredentialStore(system, new FileCredentialStore()) : new FileCredentialStore();
 }
 async function markCredentialSaved(account) {
   await updateSharedState((state) => {
@@ -22257,27 +22651,56 @@ async function writePrivateJson(target, value) {
   try {
     await fs12.writeFile(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-    await fs12.chmod(temporary, 384);
+    await restrictToOwner(temporary);
     await fs12.rename(temporary, target);
-    await fs12.chmod(target, 384);
+    await fs12.chmod(target, 384).catch(() => void 0);
   } finally {
     await fs12.rm(temporary, { force: true }).catch(() => void 0);
   }
 }
-function runCommand(command, args, stdin) {
+async function restrictToOwner(target) {
+  const chmodError = await fs12.chmod(target, 384).then(() => void 0, (error) => error);
+  const mode = (await fs12.stat(target)).mode & 511;
+  if ((mode & 63) !== 0) {
+    throw new Error(
+      `Refusing to store the Overleaf credential in ${target}: other users could read it (mode ${mode.toString(8)})${chmodError ? `, and chmod failed: ${errorMessage(chmodError)}` : ""}.`
+    );
+  }
+}
+function runCommand(command, args, stdin, timeoutMs) {
   return new Promise((resolve10, reject) => {
     const child = (0, import_child_process2.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
+    let settled = false;
+    const timer = timeoutMs === void 0 ? void 0 : setTimeout(() => {
+      settled = true;
+      child.kill("SIGKILL");
+      const error = new Error(`${command} ${args[0] ?? ""} timed out after ${timeoutMs} ms.`);
+      error.code = "ETIMEDOUT";
+      reject(error);
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-    child.once("error", (error) => reject(error));
+    child.stdin.on("error", () => void 0);
+    child.once("error", (error) => {
+      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
     child.once("close", (code) => {
+      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       const output = Buffer.concat(stdout).toString("utf8").trim();
       if (code === 0) resolve10(output);
       else {
-        const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
+        const errorText = Buffer.concat(stderr).toString("utf8").trim();
+        const error = new Error(errorText || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
+        error.exitCode = code;
+        error.stderr = errorText;
         reject(error);
       }
     });
@@ -22285,8 +22708,34 @@ function runCommand(command, args, stdin) {
 `);
   });
 }
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve10, reject) => {
+    const timer = setTimeout(() => {
+      const error = new Error(message);
+      error.code = "ETIMEDOUT";
+      reject(error);
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve10(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+function isBareExitOne(error) {
+  const failure = error;
+  return failure?.exitCode === 1 && !failure.stderr?.trim();
+}
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 function hasKeytarRuntime(root) {
-  return (0, import_fs6.existsSync)(path13.join(root, "lib", "keytar.js")) && (0, import_fs6.existsSync)(path13.join(root, "build", "Release", "keytar.node"));
+  return (0, import_fs7.existsSync)(path13.join(root, "lib", "keytar.js")) && (0, import_fs7.existsSync)(path13.join(root, "build", "Release", "keytar.node"));
 }
 function loadMacKeychainApi(root) {
   const target = `${process.platform}-${process.arch}`;
@@ -22307,16 +22756,17 @@ function isMissingCredential(error) {
   return /could not be found|no such secret|not found in collection|SecKeychainSearchCopyNext|specified item could not be found/i.test(message);
 }
 function isBackendUnavailable(error) {
+  if (error instanceof CredentialBackendUnavailableError) return true;
   const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
+  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets?|\/org\/freedesktop\/secrets|locked collection|timed out|no such file or directory/i.test(message);
 }
 function findExecutable(command) {
   const entries = (process.env.PATH ?? "").split(path13.delimiter).filter(Boolean);
   for (const entry of entries) {
     const candidate = path13.join(entry, command);
     try {
-      const stat13 = require("fs").statSync(candidate);
-      if (stat13.isFile() && (stat13.mode & 73) !== 0) return candidate;
+      const stat14 = require("fs").statSync(candidate);
+      if (stat14.isFile() && (stat14.mode & 73) !== 0) return candidate;
     } catch {
     }
   }
@@ -22324,7 +22774,7 @@ function findExecutable(command) {
 }
 
 // src/overleaf/compileCore.ts
-var crypto5 = __toESM(require("crypto"));
+var crypto6 = __toESM(require("crypto"));
 var fs13 = __toESM(require("fs/promises"));
 var path14 = __toESM(require("path"));
 var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
@@ -22339,7 +22789,7 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
   const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
     await cleanupInterruptedCompileArtifacts(root);
-    const token = `${process.pid}-${Date.now()}-${crypto5.randomBytes(6).toString("hex")}`;
+    const token = `${process.pid}-${Date.now()}-${crypto6.randomBytes(6).toString("hex")}`;
     const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
     const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
     const stagedFiles = [];
@@ -22380,22 +22830,24 @@ async function cleanupInterruptedCompileArtifacts(root) {
     retainedBackup = backups[0].name;
     await fs13.rename(path14.join(dir, retainedBackup), outputRoot).catch(() => void 0);
   }
-  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).filter((entry) => entry.name !== retainedBackup).map((entry) => fs13.rm(path14.join(dir, entry.name), { recursive: true, force: true })));
+  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).filter((entry) => entry.name !== retainedBackup).map((entry) => fs13.rm(path14.join(dir, entry.name), { recursive: true, force: true }).catch(() => void 0)));
 }
 async function acquireCompileLock(outputRoot, options = {}) {
   const lock = `${outputRoot}.lock`;
   const owner = path14.join(lock, "owner.json");
   const deadline = Date.now() + Math.max(1, options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS);
   const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
+  const foreignStaleMs = Math.max(1, options.lockForeignStaleMs ?? 2 * (options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS));
   for (; ; ) {
     try {
       await fs13.mkdir(lock, { recursive: false });
-      const nonce = crypto5.randomBytes(8).toString("hex");
+      const nonce = crypto6.randomBytes(8).toString("hex");
       await fs13.writeFile(owner, JSON.stringify({
         pid: process.pid,
         startedAt: Date.now(),
         processStart: await processStartSignature(process.pid),
-        nonce
+        nonce,
+        ...hostRecordFields()
       }));
       return async () => {
         const current = await readTextFileBounded(owner, 64 * 1024).catch(() => void 0);
@@ -22409,11 +22861,9 @@ async function acquireCompileLock(outputRoot, options = {}) {
         const value = JSON.parse(raw ?? "");
         if (typeof value.pid !== "number" || typeof value.startedAt !== "number") {
           stale = await lockAge(lock) >= missingOwnerGraceMs;
-        } else if (!processAlive(value.pid)) {
-          stale = true;
-        } else if (value.processStart) {
-          const currentStart = await processStartSignature(value.pid);
-          stale = Boolean(currentStart && currentStart !== value.processStart);
+        } else {
+          const age = Math.min(Math.max(0, Date.now() - value.startedAt), await lockAge(lock));
+          stale = await shortLockIsStale(value, age, foreignStaleMs);
         }
       } catch {
         stale = await lockAge(lock) >= missingOwnerGraceMs;
@@ -22430,8 +22880,8 @@ async function acquireCompileLock(outputRoot, options = {}) {
   }
 }
 async function lockAge(lock) {
-  const stat13 = await fs13.stat(lock).catch(() => void 0);
-  return stat13 ? Math.max(0, Date.now() - stat13.mtimeMs) : Number.POSITIVE_INFINITY;
+  const stat14 = await fs13.stat(lock).catch(() => void 0);
+  return stat14 ? Math.max(0, Date.now() - stat14.mtimeMs) : Number.POSITIVE_INFINITY;
 }
 async function latestRemotePdf(root) {
   const outputRoot = metadataPath(root, OUTPUT_DIR);
@@ -22512,10 +22962,9 @@ async function exists2(target) {
 
 // src/overleaf/mirrorCore.ts
 var fs14 = __toESM(require("fs/promises"));
-var os5 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
-var import_util18 = require("util");
+var import_util20 = require("util");
 var import_ignore2 = __toESM(require_ignore());
 
 // src/schema.ts
@@ -22681,7 +23130,7 @@ var CLASS_CONFIG_DEFAULTS = Object.fromEntries(CLASS_CONFIG_SCHEMA.map((item) =>
 var CLASS_CONFIG_VALID_OPTIONS = Object.fromEntries(CLASS_CONFIG_SCHEMA.map((item) => [item.id, new Set(item.options.map((opt) => opt.value))]));
 
 // src/overleaf/mirrorCore.ts
-var execFileAsync2 = (0, import_util18.promisify)(import_child_process3.execFile);
+var execFileAsync2 = (0, import_util20.promisify)(import_child_process3.execFile);
 var AGENTS_CONTENT = `# AGENTS.md
 
 This folder is a real local mirror of an Overleaf project.
@@ -22853,11 +23302,10 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
   const outputDir = ".overleaf-codex/local-build";
   const outputDirFromRootDoc = path15.posix.relative(rootDir, outputDir) || ".";
   const workspaceFromRootDoc = path15.posix.relative(rootDir, ".") || ".";
-  const biberCacheDir = path15.join(os5.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
   const compileCommand = [
     `mkdir -p ${shellQuote(outputDir)}`,
-    `mkdir -p ${shellQuote(biberCacheDir)}`,
+    biberCacheShell(root),
     `cd ${shellQuote(rootDir)}`,
     [
       "find . -type d",
@@ -22894,9 +23342,7 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
       env: {
         TEXINPUTS: searchPrefix,
         GINPUTS: searchPrefix,
-        BIBINPUTS: searchPrefix,
-        PAR_GLOBAL_TEMP: biberCacheDir,
-        PAR_TEMP: biberCacheDir
+        BIBINPUTS: searchPrefix
       }
     }],
     "latex-workshop.latex.recipes": [{ name: "latexmk (local mirror)", tools: ["latexmk-local-mirror"] }]
@@ -22931,6 +23377,26 @@ var LATEXMKRC_BLOCKS = [
 function latexmkRcPath(root, rootDocPath) {
   return path15.join(root, rootDocPath ? path15.posix.dirname(rootDocPath) : ".", ".latexmkrc");
 }
+function biberCacheShell(root) {
+  const hash = sha1(root).slice(0, 12);
+  return [
+    '{ biber_root="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/latex-toolkit-$(id -u)"',
+    'mkdir -p "$biber_root" 2>/dev/null',
+    'chmod 700 "$biber_root" 2>/dev/null',
+    `if [ -d "$biber_root" ] && [ -O "$biber_root" ] && [ ! -L "$biber_root" ]; then biber_cache="$biber_root/biber/${hash}"; else biber_cache="$PWD/.overleaf-codex/local-build/.biber-cache"; fi`,
+    'mkdir -p "$biber_cache" && export PAR_GLOBAL_TEMP="$biber_cache" PAR_TEMP="$biber_cache"; }'
+  ].join("; ");
+}
+function biberCachePerl(root) {
+  const hash = sha1(root).slice(0, 12);
+  return [
+    `my $overleaf_codex_biber_root = ($ENV{'XDG_RUNTIME_DIR'} || $ENV{'TMPDIR'} || '/tmp') . "/latex-toolkit-$<";`,
+    "make_path($overleaf_codex_biber_root, { error => \\my $overleaf_codex_biber_error });",
+    "chmod 0700, $overleaf_codex_biber_root;",
+    "my $overleaf_codex_biber_cache = (-d $overleaf_codex_biber_root && -O _ && ! -l $overleaf_codex_biber_root)",
+    `  ? "$overleaf_codex_biber_root/biber/${hash}" : "$overleaf_codex_build_dir/.biber-cache";`
+  ];
+}
 async function writeLocalLatexmkRc(root, rootDocPath) {
   const rootDir = rootDocPath ? path15.posix.dirname(rootDocPath) : ".";
   const rcPath = latexmkRcPath(root, rootDocPath);
@@ -22938,7 +23404,6 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
   const outputDirFromRootDoc = path15.posix.relative(rootDir, outputDir) || ".";
   const workspaceFromRootDoc = path15.posix.relative(rootDir, ".") || ".";
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
-  const biberCacheDir = path15.join(os5.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
   const content = [
     LATEXMKRC_HEADER,
     "# This file is local-only and should not be synced back to Overleaf.",
@@ -22948,7 +23413,7 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
     "use File::Find;",
     "use File::Path qw(make_path);",
     `my $overleaf_codex_build_dir = ${perlSingleQuote(outputDirFromRootDoc)};`,
-    `my $overleaf_codex_biber_cache = ${perlSingleQuote(biberCacheDir)};`,
+    ...biberCachePerl(root),
     "make_path($overleaf_codex_build_dir);",
     "make_path($overleaf_codex_biber_cache);",
     "find({",
@@ -22999,7 +23464,7 @@ var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path16 = __toESM(require("path"));
 var fs15 = __toESM(require("fs/promises"));
-var import_fs7 = require("fs");
+var import_fs8 = require("fs");
 var import_module2 = require("module");
 var import_stream = require("stream");
 var import_promises4 = require("stream/promises");
@@ -23200,13 +23665,13 @@ var OverleafClient = class {
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadFileFromPath(projectId, parentFolderId, filename, sourcePath) {
-    const stat13 = await fs15.stat(sourcePath);
-    if (!stat13.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
+    const stat14 = await fs15.stat(sourcePath);
+    if (!stat14.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
     const form = new import_form_data.default();
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs7.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
+    form.append("qqfile", (0, import_fs8.createReadStream)(sourcePath), { filename, knownLength: stat14.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -23502,7 +23967,7 @@ var OverleafClient = class {
             }
           }
         });
-        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs7.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        await (0, import_promises4.pipeline)(res.body, limiter, (0, import_fs8.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
         const actualSize = (await fs15.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
@@ -24226,121 +24691,191 @@ async function readResponseTextLimited(response, maxBytes) {
 }
 
 // src/overleaf/syncOwnerCoordinator.ts
-var crypto6 = __toESM(require("crypto"));
+var crypto7 = __toESM(require("crypto"));
 var fs16 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path17 = __toESM(require("path"));
+var import_perf_hooks = require("perf_hooks");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
 var MAX_ACTIVE_IPC_CHUNKS = 64;
 var IPC_CHUNK_BYTES = 512 * 1024;
+var MAX_LOCK_RECORD_BYTES = 64 * 1024;
+var DEFAULT_HEARTBEAT_MS = 5e3;
+var DEFAULT_LEASE_MS = 6e4;
+var DEFAULT_FENCE_MARGIN_MS = 15e3;
+var DEFAULT_IO_TIMEOUT_MS = 5e3;
+var DEFAULT_ASSUME_DEAD_AFTER_MS = 10 * 6e4;
+var DEFAULT_LEGACY_STALE_MS = 3 * 60 * 6e4 + 10 * 6e4;
+var DEFAULT_MISSING_METADATA_STALE_MS = 1e4;
+var DEFAULT_TAKEOVER_POLL_MS = 1e3;
+var CLAIM_WRITE_BUDGET_MS = 5e3;
+var DEMOTE_LISTENER_TIMEOUT_MS = 1e4;
+var LIVE_OWNER_NONCES = /* @__PURE__ */ new Set();
+var SyncStandbyError = class extends Error {
+  constructor(holder) {
+    super(describeSyncHolder(holder));
+    this.holder = holder;
+    this.name = "SyncStandbyError";
+  }
+  holder;
+  code = "SYNC_STANDBY";
+};
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
     this.options = options;
+    this.host = options.host ?? currentHostIdentity();
+    this.heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    this.leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
+    this.fenceMarginMs = options.fenceMarginMs ?? DEFAULT_FENCE_MARGIN_MS;
+    this.ioTimeoutMs = options.ioTimeoutMs ?? DEFAULT_IO_TIMEOUT_MS;
+    this.takeoverTimeoutMs = options.takeoverTimeoutMs ?? this.leaseMs + 2 * this.heartbeatMs + 5e3;
+    if (3 * this.heartbeatMs > this.leaseMs - this.fenceMarginMs || this.ioTimeoutMs >= this.fenceMarginMs) {
+      throw new Error("Sync owner lease timing is inconsistent: need 3 x heartbeat <= lease - margin and I/O timeout < margin.");
+    }
   }
   options;
+  /** The mirror's real path: what the lock is keyed by and what IPC messages carry. */
   root;
+  /** The mirror path as the caller named it, which may go through a symlink. */
+  requestedRoot;
   metadata;
   server;
   handler;
+  mode = "none";
+  standbyHolder;
+  ownerSocketPath;
+  lease;
+  demoting;
+  legacyIsLocal;
+  observations = /* @__PURE__ */ new Map();
+  demoteListeners = /* @__PURE__ */ new Set();
   clientSockets = /* @__PURE__ */ new Set();
   subscriberSockets = /* @__PURE__ */ new Set();
   eventSockets = /* @__PURE__ */ new Set();
   writeQueues = /* @__PURE__ */ new WeakMap();
   commandQueue = Promise.resolve();
   releasing = false;
+  host;
+  heartbeatMs;
+  leaseMs;
+  fenceMarginMs;
+  ioTimeoutMs;
+  takeoverTimeoutMs;
   get isOwner() {
-    return Boolean(this.server);
+    return this.mode === "owner";
   }
+  /** The selected mirror, as the caller named it in claim(). */
   get currentRoot() {
-    return this.root;
+    return this.root ? this.requestedRoot : void 0;
   }
-  async claim(root, handler) {
+  get role() {
+    return this.mode;
+  }
+  /** Who holds ownership while this coordinator is in standby. */
+  get holder() {
+    return this.mode === "standby" ? this.standbyHolder : void 0;
+  }
+  /**
+   * Called when this owner loses ownership on its own: superseded, asked to hand over, or unable to
+   * renew its lease. Listeners must stop syncing before they resolve; the lock is handed over only
+   * after they finish (or after a bounded wait).
+   */
+  onDidDemote(listener) {
+    this.demoteListeners.add(listener);
+    return () => this.demoteListeners.delete(listener);
+  }
+  async claim(root, handler, options = {}) {
     await this.release();
     try {
-      return await this.claimInner(root, handler);
+      return await this.claimInner(root, handler, options);
     } catch (error) {
       this.handler = void 0;
       this.root = void 0;
+      this.requestedRoot = void 0;
+      this.mode = "none";
+      this.standbyHolder = void 0;
+      this.ownerSocketPath = void 0;
       throw error;
     }
   }
-  async claimInner(root, handler) {
-    this.root = await fs16.realpath(path17.resolve(root)).catch(() => path17.resolve(root));
+  async claimInner(root, handler, options) {
+    this.requestedRoot = path17.resolve(root);
+    this.root = await fs16.realpath(this.requestedRoot).catch(() => this.requestedRoot);
     this.handler = handler;
-    const paths = runtimePaths(this.root);
-    for (const directory of /* @__PURE__ */ new Set([runtimeRoot(), path17.dirname(paths.socketPath)])) {
-      await fs16.mkdir(directory, { recursive: true, mode: 448 });
-      await fs16.chmod(directory, 448).catch(() => void 0);
-    }
-    const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3e3);
-    while (true) {
-      if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return "client";
-      try {
-        await fs16.mkdir(paths.lockPath, { mode: 448 });
-        break;
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-      }
-      if (await this.clearStaleLock(paths)) {
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for the sync owner socket for ${this.root}.`);
-      }
-      await delay2(this.options.retryDelayMs ?? 50);
-    }
-    const metadata = {
-      version: 1,
-      pid: process.pid,
-      root: this.root,
-      socketPath: paths.socketPath,
-      nonce: crypto6.randomBytes(16).toString("hex"),
-      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature(process.pid)
-    };
+    const paths = runtimePaths(this.root, { socketDirectory: this.options.socketDirectory, host: this.host });
+    await fs16.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
+    await fs16.chmod(runtimeRoot(), 448).catch(() => void 0);
+    const socketPath = await this.prepareSocketPath(paths.hash);
+    this.legacyIsLocal ??= this.options.runtimeRootIsShared !== void 0 ? !this.options.runtimeRootIsShared : !await isNetworkFileSystem(runtimeRoot());
+    const connectTimeoutMs = this.options.connectTimeoutMs ?? 200;
+    const deadline = this.mono() + (options.takeover ? this.takeoverTimeoutMs : this.options.ownerStartupTimeoutMs ?? 3e3);
+    let reservation;
+    let last;
+    let lastLiveness = "unknown";
     try {
-      await fs16.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
-`, { mode: 384 });
-      await fs16.rm(paths.socketPath, { force: true });
-      this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve10, reject) => {
-        this.server.once("error", reject);
-        this.server.listen(paths.socketPath, () => {
-          this.server.removeListener("error", reject);
-          resolve10();
-        });
-      });
-      await fs16.chmod(paths.socketPath, 384);
-      if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
-        throw new Error("Sync owner socket did not become reachable after startup.");
+      while (true) {
+        throwIfAborted(options.signal);
+        if (await canConnect(socketPath, connectTimeoutMs)) return this.becomeClient(socketPath);
+        const takeover = await this.readTakeover(paths);
+        if (takeover && this.takeoverIsFresh(takeover) && takeover.requester.token !== reservation?.token) {
+          return this.enterStandby(this.holderFromTakeover(takeover, "takeover-pending"));
+        }
+        if (await tryCreateDirectory(paths.lockPath)) {
+          await this.publish(paths, socketPath);
+          return "owner";
+        }
+        const state = await this.readLockState(paths);
+        if (!state.exists) continue;
+        const liveness = await this.classify(paths.lockPath, state);
+        last = state;
+        lastLiveness = liveness;
+        if (liveness === "stale") {
+          if (await this.reclaim(paths, state.metadata?.nonce)) continue;
+        } else if (liveness === "live-local") {
+          const recorded = state.metadata?.socketPath;
+          if (recorded && recorded !== socketPath && path17.basename(recorded).startsWith(paths.hash) && await canConnect(recorded, connectTimeoutMs)) {
+            return this.becomeClient(recorded);
+          }
+        } else if (liveness === "live-foreign" || liveness === "live-legacy") {
+          const legacy = liveness === "live-legacy";
+          if (!options.takeover || legacy && !options.forceLegacy) {
+            return this.enterStandby(this.holderFrom(state, legacy ? "legacy-owner" : "foreign-owner"));
+          }
+          if (legacy) {
+            if (await this.reclaim(paths, state.metadata?.nonce, true)) continue;
+          } else if (state.metadata && reservation?.targetNonce !== state.metadata.nonce) {
+            if (reservation) await this.withdrawTakeover(paths, reservation.token).catch(() => void 0);
+            reservation = { token: await this.requestTakeover(paths, state.metadata.nonce), targetNonce: state.metadata.nonce };
+            this.options.log?.(`Asked ${describeHolderLocation(this.holderFrom(state, "foreign-owner"))} to hand over Overleaf sync for ${this.root}.`);
+          }
+        }
+        if (this.mono() >= deadline) {
+          const reason = options.takeover ? "takeover-timeout" : lastLiveness === "live-local" ? "unreachable" : "unknown";
+          return this.enterStandby(last ? this.holderFrom(last, reason) : { reason, sameHost: false, legacy: false });
+        }
+        await delay2(options.takeover ? this.options.takeoverPollMs ?? DEFAULT_TAKEOVER_POLL_MS : this.options.retryDelayMs ?? 50);
       }
-      this.metadata = metadata;
-      return "owner";
-    } catch (error) {
-      const server = this.server;
-      this.server = void 0;
-      if (server?.listening) await new Promise((resolve10) => server.close(() => resolve10()));
-      await fs16.rm(paths.lockPath, { recursive: true, force: true });
-      await fs16.rm(paths.socketPath, { force: true });
-      throw error;
+    } finally {
+      if (reservation) await this.withdrawTakeover(paths, reservation.token).catch(() => void 0);
     }
   }
   async request(command, args = {}, timeoutMs = 12e4) {
     if (!this.root) throw new Error("No sync root is selected.");
-    if (this.server && this.handler) {
+    if (this.mode === "standby") throw new SyncStandbyError(this.standbyHolder);
+    if (this.mode === "owner" && this.handler) {
       if (this.releasing) throw new Error("Sync owner is shutting down.");
       return this.runCommand(() => this.handler?.(command, args));
     }
     const request = {
       version: 1,
-      id: crypto6.randomUUID(),
+      id: crypto7.randomUUID(),
       command,
       root: this.root,
       args
     };
-    return sendRequest(runtimePaths(this.root).socketPath, request, timeoutMs);
+    return sendRequest(this.clientSocketPath(), request, timeoutMs);
   }
   emit(event, data) {
     if (!this.root) return;
@@ -24362,7 +24897,8 @@ var SyncOwnerCoordinator = class {
   }
   async subscribe(onEvent, timeoutMs = this.options.subscriptionTimeoutMs ?? 5e3) {
     if (!this.root) throw new Error("No sync root is selected.");
-    const socket = net.createConnection(runtimePaths(this.root).socketPath);
+    if (this.mode === "standby") throw new SyncStandbyError(this.standbyHolder);
+    const socket = net.createConnection(this.clientSocketPath());
     socket.on("error", () => void 0);
     try {
       await onceConnected(socket, timeoutMs);
@@ -24401,7 +24937,7 @@ var SyncOwnerCoordinator = class {
     try {
       await this.enqueueMessage(socket, {
         version: 1,
-        id: crypto6.randomUUID(),
+        id: crypto7.randomUUID(),
         command: "subscribe",
         root: this.root,
         args: {}
@@ -24416,6 +24952,9 @@ var SyncOwnerCoordinator = class {
   }
   async release() {
     this.releasing = true;
+    await this.demoting?.catch(() => void 0);
+    const lease = this.lease;
+    this.stopLease();
     await this.commandQueue.catch(() => void 0);
     await Promise.all([...this.clientSockets].map((socket) => this.writeQueues.get(socket)?.catch(() => void 0)));
     for (const socket of this.subscriberSockets) socket.destroy();
@@ -24428,18 +24967,38 @@ var SyncOwnerCoordinator = class {
       this.server = void 0;
       await new Promise((resolve10) => server.close(() => resolve10()));
     }
-    if (this.metadata && this.root) {
-      const paths = runtimePaths(this.root);
-      const current = await readMetadata(paths.metadataPath);
-      if (current?.nonce === this.metadata.nonce) {
-        await fs16.rm(paths.socketPath, { force: true });
-        await fs16.rm(paths.lockPath, { recursive: true, force: true });
+    if (this.metadata && lease) {
+      LIVE_OWNER_NONCES.delete(this.metadata.nonce);
+      if (this.leaseElapsedMs(lease) < this.leaseMs - this.fenceMarginMs) {
+        const current = await withTimeout2(readJsonFile(lease.paths.metadataPath), this.ioTimeoutMs, "owner record read").catch(() => void 0);
+        if (current?.status === "ok" && current.value.nonce === this.metadata.nonce) {
+          await fs16.rm(this.metadata.socketPath, { force: true }).catch(() => void 0);
+          await retireLockDirectory(lease.paths.lockPath).catch(() => void 0);
+        }
       }
     }
     this.metadata = void 0;
     this.handler = void 0;
     this.root = void 0;
+    this.requestedRoot = void 0;
+    this.mode = "none";
+    this.standbyHolder = void 0;
+    this.ownerSocketPath = void 0;
     this.releasing = false;
+  }
+  becomeClient(socketPath) {
+    this.ownerSocketPath = socketPath;
+    this.mode = "client";
+    return "client";
+  }
+  enterStandby(holder) {
+    this.mode = "standby";
+    this.standbyHolder = holder;
+    this.ownerSocketPath = void 0;
+    return "standby";
+  }
+  clientSocketPath() {
+    return this.ownerSocketPath ?? runtimePaths(this.root, { socketDirectory: this.options.socketDirectory, host: this.host }).socketPath;
   }
   accept(socket) {
     this.clientSockets.add(socket);
@@ -24462,7 +25021,7 @@ var SyncOwnerCoordinator = class {
       await this.enqueueMessage(socket, { version: 1, event: "subscribed", root: this.root });
       return;
     }
-    if (this.releasing) {
+    if (this.releasing || this.mode !== "owner") {
       await this.enqueueMessage(socket, errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."));
       return;
     }
@@ -24484,52 +25043,531 @@ var SyncOwnerCoordinator = class {
     this.writeQueues.set(socket, current);
     return current;
   }
-  async lockIsStale(paths) {
-    const metadata = await readMetadata(paths.metadataPath);
-    if (!metadata) {
-      const stat13 = await fs16.stat(paths.lockPath).catch(() => void 0);
-      return Boolean(stat13 && Date.now() - stat13.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
+  async prepareSocketPath(hash) {
+    for (const candidate of socketDirectoryCandidates(this.options.socketDirectory)) {
+      const socketPath = socketPathFor(hash, candidate, this.host);
+      if (await ensurePrivateDirectory(path17.dirname(socketPath))) return socketPath;
     }
-    if (processAlive(metadata.pid)) {
-      const currentStart = await processStartSignature(metadata.pid);
-      if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
-    }
-    return true;
+    throw new Error("No private directory is available for the Overleaf sync owner socket.");
   }
-  async clearStaleLock(paths) {
+  /** Creates the owner record, starts the heartbeat, and opens the socket for this host's clients. */
+  async publish(paths, socketPath) {
+    const startedMono = this.mono();
+    const metadata = {
+      version: 2,
+      pid: process.pid,
+      root: this.root,
+      socketPath,
+      nonce: crypto7.randomBytes(16).toString("hex"),
+      startedAt: new Date(this.now()).toISOString(),
+      processStart: await processStartSignature(process.pid),
+      ...hostRecordFields(this.host),
+      heartbeatMs: this.heartbeatMs,
+      leaseMs: this.leaseMs
+    };
+    let server;
+    try {
+      await withTimeout2(
+        fs16.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
+`, { mode: 384, flag: "wx" }),
+        this.ioTimeoutMs,
+        "Writing the sync owner record timed out"
+      );
+      const renewedMono = this.mono();
+      const renewedWall = this.now();
+      await withTimeout2(writeHeartbeat(paths.lockPath, metadata.nonce, 0, renewedWall), this.ioTimeoutMs, "Writing the sync owner heartbeat timed out");
+      if (this.mono() - startedMono > CLAIM_WRITE_BUDGET_MS) {
+        const current = await readJsonFile(paths.metadataPath);
+        if (current.status !== "ok" || current.value.nonce !== metadata.nonce) {
+          throw new Error("Lost the sync owner lock while publishing it.");
+        }
+      }
+      await fs16.rm(socketPath, { force: true });
+      server = net.createServer((socket) => this.accept(socket));
+      await listen(server, socketPath);
+      await fs16.chmod(socketPath, 384).catch(() => void 0);
+      if (!await canConnect(socketPath, this.options.connectTimeoutMs ?? 200)) {
+        throw new Error("Sync owner socket did not become reachable after startup.");
+      }
+      this.server = server;
+      this.metadata = metadata;
+      this.mode = "owner";
+      LIVE_OWNER_NONCES.add(metadata.nonce);
+      this.lease = { paths, nonce: metadata.nonce, seq: 0, renewedMono, renewedWall, failures: 0, lockMissing: 0 };
+      this.scheduleTick(this.heartbeatMs);
+    } catch (error) {
+      if (server?.listening) await new Promise((resolve10) => server.close(() => resolve10()));
+      const current = await readJsonFile(paths.metadataPath).catch(() => void 0);
+      if (!current || current.status !== "ok" || current.value.nonce === metadata.nonce) {
+        await retireLockDirectory(paths.lockPath).catch(() => void 0);
+      }
+      await fs16.rm(socketPath, { force: true }).catch(() => void 0);
+      throw error;
+    }
+  }
+  scheduleTick(delayMs) {
+    const lease = this.lease;
+    if (!lease) return;
+    if (lease.timer) clearTimeout(lease.timer);
+    lease.timer = setTimeout(() => this.tick(lease), delayMs);
+    lease.timer.unref?.();
+  }
+  /**
+   * One heartbeat. The fence check runs on every tick, even while an earlier renewal is stuck on a
+   * hung NFS call; a new renewal starts only once the previous one has settled, so stuck calls
+   * never pile up on the I/O thread pool.
+   */
+  tick(lease) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    if (this.leaseElapsedMs(lease) >= this.leaseMs - this.fenceMarginMs) {
+      void this.demote("lease-lost");
+      return;
+    }
+    if (!lease.pending) {
+      const startedMono = this.mono();
+      const startedWall = this.now();
+      const operation = this.renew(lease, startedWall);
+      const settled = operation.then(() => void 0, () => void 0);
+      lease.pending = settled;
+      void settled.then(() => {
+        if (lease.pending === settled) lease.pending = void 0;
+      });
+      void withTimeout2(operation, this.ioTimeoutMs, "Sync owner heartbeat timed out").then(
+        (outcome) => this.onRenewal(lease, outcome, startedMono, startedWall),
+        (error) => this.onRenewalFailure(lease, error)
+      );
+    }
+    this.scheduleTick(this.heartbeatMs);
+  }
+  async renew(lease, at) {
+    const owner = await readJsonFile(lease.paths.metadataPath);
+    if (owner.status === "missing") {
+      const lockExists = await fs16.stat(lease.paths.lockPath).then(() => true, (error) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      });
+      if (!lockExists) return { kind: "lock-missing" };
+      throw new Error("The sync owner record is missing from its lock.");
+    }
+    if (owner.status === "error") throw owner.error;
+    if (owner.status === "invalid" || !isOwnerMetadata(owner.value)) throw new Error("The sync owner record is unreadable.");
+    if (owner.value.nonce !== lease.nonce) {
+      return { kind: "demote", reason: "superseded", holder: this.holderFrom({ exists: true, metadata: owner.value }, "superseded") };
+    }
+    const takeover = await this.readTakeover(lease.paths);
+    if (takeover && takeover.targetNonce === lease.nonce && this.takeoverIsFresh(takeover)) {
+      return { kind: "demote", reason: "takeover-requested", holder: this.holderFromTakeover(takeover, "takeover-requested") };
+    }
+    await (this.options.heartbeatWrite ?? writeHeartbeat)(lease.paths.lockPath, lease.nonce, lease.seq + 1, at);
+    return { kind: "renewed" };
+  }
+  onRenewal(lease, outcome, startedMono, startedWall) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    if (outcome.kind === "renewed") {
+      lease.seq += 1;
+      lease.renewedMono = startedMono;
+      lease.renewedWall = startedWall;
+      if (lease.failures) this.options.log?.(`Sync owner heartbeat recovered after ${lease.failures} failed attempt(s).`);
+      lease.failures = 0;
+      lease.lockMissing = 0;
+      return;
+    }
+    if (outcome.kind === "lock-missing") {
+      lease.lockMissing += 1;
+      if (lease.lockMissing >= 2) void this.demote("lock-lost");
+      else this.scheduleTick(Math.min(250, this.heartbeatMs));
+      return;
+    }
+    void this.demote(outcome.reason, outcome.holder);
+  }
+  onRenewalFailure(lease, error) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    lease.failures += 1;
+    if (lease.failures === 1 || lease.failures % 3 === 0) {
+      this.options.log?.(`Sync owner heartbeat failed (attempt ${lease.failures}): ${formatUnknownError(error)}`);
+    }
+    this.scheduleTick(Math.min(this.heartbeatMs, 1e3 * 2 ** Math.min(lease.failures - 1, 2)));
+  }
+  stopLease() {
+    if (this.lease?.timer) clearTimeout(this.lease.timer);
+    this.lease = void 0;
+  }
+  leaseElapsedMs(lease) {
+    return Math.max(this.mono() - lease.renewedMono, this.now() - lease.renewedWall);
+  }
+  /** Stops acting as owner: listeners stop the sync engine first, then the lock is let go. */
+  demote(reason, holder) {
+    if (this.demoting) return this.demoting;
+    const lease = this.lease;
+    const metadata = this.metadata;
+    const root = this.requestedRoot ?? this.root;
+    if (this.mode !== "owner" || !lease || !metadata || !root) return Promise.resolve();
+    this.demoting = (async () => {
+      this.stopLease();
+      LIVE_OWNER_NONCES.delete(metadata.nonce);
+      const standby = { ...holder ?? { sameHost: false, legacy: false }, reason };
+      this.mode = "standby";
+      this.standbyHolder = standby;
+      this.options.log?.(`Sync owner for ${root} stepped down: ${describeSyncHolder(standby)}`);
+      const event = { root, reason, holder: standby };
+      await Promise.race([
+        Promise.allSettled([...this.demoteListeners].map((listener) => Promise.resolve().then(() => listener(event)))),
+        delay2(DEMOTE_LISTENER_TIMEOUT_MS)
+      ]);
+      const notices = [...this.eventSockets].map((socket) => this.enqueueMessage(socket, {
+        version: 1,
+        event: "owner-demoted",
+        root,
+        data: { reason, holder: standby }
+      }).catch(() => void 0));
+      await Promise.race([Promise.allSettled(notices), delay2(200)]);
+      const server = this.server;
+      this.server = void 0;
+      for (const socket of this.clientSockets) socket.destroy();
+      this.clientSockets.clear();
+      this.eventSockets.clear();
+      if (server) await new Promise((resolve10) => server.close(() => resolve10()));
+      if (reason === "takeover-requested" && this.leaseElapsedMs(lease) < this.leaseMs - this.fenceMarginMs) {
+        const current = await withTimeout2(readJsonFile(lease.paths.metadataPath), this.ioTimeoutMs, "owner record read").catch(() => void 0);
+        if (current?.status === "ok" && current.value.nonce === metadata.nonce) {
+          await retireLockDirectory(lease.paths.lockPath).catch(() => void 0);
+        }
+      }
+      this.metadata = void 0;
+    })().finally(() => {
+      this.demoting = void 0;
+    });
+    return this.demoting;
+  }
+  async readLockState(paths) {
+    const io = (operation) => withTimeout2(operation, this.ioTimeoutMs, "Reading the sync owner lock timed out");
+    let lockMtimeMs;
+    try {
+      lockMtimeMs = (await io(fs16.stat(paths.lockPath))).mtimeMs;
+    } catch (error) {
+      return error.code === "ENOENT" ? { exists: false } : { exists: true, unreadable: true };
+    }
+    const owner = await io(readJsonFile(paths.metadataPath)).catch((error) => ({ status: "error", error }));
+    if (owner.status === "error") return { exists: true, lockMtimeMs, unreadable: true };
+    if (owner.status !== "ok" || !isOwnerMetadata(owner.value)) return { exists: true, lockMtimeMs };
+    const metadata = owner.value;
+    if (metadata.version < 2) return { exists: true, lockMtimeMs, metadata };
+    const beat = await io(readJsonFile(heartbeatPath(paths.lockPath, metadata.nonce))).catch((error) => ({ status: "error", error }));
+    if (beat.status === "error") return { exists: true, lockMtimeMs, metadata, unreadable: true };
+    return beat.status === "ok" && isHeartbeat(beat.value, metadata.nonce) ? { exists: true, lockMtimeMs, metadata, heartbeat: beat.value } : { exists: true, lockMtimeMs, metadata };
+  }
+  async classify(lockPath, state) {
+    if (state.unreadable) return "unknown";
+    const metadata = state.metadata;
+    if (!metadata) {
+      const age2 = state.lockMtimeMs === void 0 ? 0 : this.now() - state.lockMtimeMs;
+      return age2 >= (this.options.missingMetadataStaleMs ?? DEFAULT_MISSING_METADATA_STALE_MS) ? "stale" : "unknown";
+    }
+    const relation = hostRelation(metadata, this.host);
+    if (relation === "same" || relation === "legacy" && this.legacyIsLocal) {
+      if (metadata.pid === process.pid) return LIVE_OWNER_NONCES.has(metadata.nonce) ? "live-local" : "stale";
+      return await localProcessMatches(metadata.pid, metadata.processStart) ? "live-local" : "stale";
+    }
+    if (relation === "legacy") {
+      if (await localProcessMatches(metadata.pid, metadata.processStart)) return "live-local";
+      return this.observedUnchanged(lockPath, `legacy:${metadata.nonce}`, this.options.legacyStaleMs ?? DEFAULT_LEGACY_STALE_MS) ? "stale" : "live-legacy";
+    }
+    const beatAt = Date.parse(state.heartbeat?.at ?? metadata.startedAt);
+    const age = Number.isFinite(beatAt) ? this.now() - beatAt : Number.POSITIVE_INFINITY;
+    const lease = Math.max(typeof metadata.leaseMs === "number" ? metadata.leaseMs : 0, this.leaseMs);
+    if (relation === "rebooted") return age > lease ? "stale" : "live-foreign";
+    const unchangedMs = this.unchangedFor(lockPath, `${metadata.nonce}:${state.heartbeat?.seq ?? -1}`);
+    if (unchangedMs >= lease) return "stale";
+    const beat = typeof metadata.heartbeatMs === "number" ? metadata.heartbeatMs : this.heartbeatMs;
+    return age > (this.options.assumeDeadAfterMs ?? DEFAULT_ASSUME_DEAD_AFTER_MS) && unchangedMs >= 2 * beat ? "stale" : "live-foreign";
+  }
+  /** Whether `key` has stayed the same for `windowMs` of this process's own monotonic time. */
+  observedUnchanged(lockPath, key, windowMs) {
+    return this.unchangedFor(lockPath, key) >= windowMs;
+  }
+  /** How long this process has seen `key` for the lock unchanged, on its own monotonic clock. */
+  unchangedFor(lockPath, key) {
+    const now = this.mono();
+    const seen = this.observations.get(lockPath);
+    if (!seen || seen.key !== key) {
+      this.observations.set(lockPath, { key, since: now });
+      return 0;
+    }
+    return now - seen.since;
+  }
+  async reclaim(paths, expectedNonce, force = false) {
     const guardPath = `${paths.lockPath}.reclaim`;
     if (!await acquireReclaimGuard2(
       guardPath,
       Math.max((this.options.ownerStartupTimeoutMs ?? 3e3) * 2, 1e4)
     )) return false;
     try {
-      if (!await this.lockIsStale(paths)) return false;
-      await fs16.rm(paths.lockPath, { recursive: true, force: true });
-      await fs16.rm(paths.socketPath, { force: true });
+      const state = await this.readLockState(paths);
+      if (!state.exists) return true;
+      if (state.unreadable || state.metadata?.nonce !== expectedNonce) return false;
+      if (!force && await this.classify(paths.lockPath, state) !== "stale") return false;
+      await retireLockDirectory(paths.lockPath);
+      this.observations.delete(paths.lockPath);
       return true;
     } finally {
       await fs16.rm(guardPath, { recursive: true, force: true });
     }
   }
+  async readTakeover(paths) {
+    const read = await withTimeout2(readJsonFile(paths.takeoverPath), this.ioTimeoutMs, "takeover read").catch(() => void 0);
+    return read?.status === "ok" && isTakeoverRecord(read.value) ? read.value : void 0;
+  }
+  takeoverIsFresh(record) {
+    const requestedAt = Date.parse(record.requestedAt);
+    return Number.isFinite(requestedAt) && this.now() - requestedAt < this.takeoverTimeoutMs + this.heartbeatMs;
+  }
+  async requestTakeover(paths, targetNonce) {
+    const token = crypto7.randomBytes(16).toString("hex");
+    const record = {
+      version: 1,
+      root: this.root,
+      targetNonce,
+      requestedAt: new Date(this.now()).toISOString(),
+      requester: { ...hostRecordFields(this.host), pid: process.pid, token }
+    };
+    const temporary = `${paths.takeoverPath}.${crypto7.randomBytes(4).toString("hex")}.tmp`;
+    await fs16.writeFile(temporary, `${JSON.stringify(record, null, 2)}
+`, { mode: 384, flag: "wx" });
+    try {
+      await fs16.rename(temporary, paths.takeoverPath);
+    } catch (error) {
+      await fs16.rm(temporary, { force: true }).catch(() => void 0);
+      throw error;
+    }
+    return token;
+  }
+  async withdrawTakeover(paths, token) {
+    const record = await this.readTakeover(paths);
+    if (record?.requester.token === token) await fs16.rm(paths.takeoverPath, { force: true });
+  }
+  holderFrom(state, reason) {
+    const metadata = state.metadata;
+    if (!metadata) return { reason, sameHost: false, legacy: false };
+    const relation = hostRelation(metadata, this.host);
+    const beatAt = Date.parse(state.heartbeat?.at ?? metadata.startedAt);
+    return {
+      reason,
+      ...metadata.hostname ? { hostname: metadata.hostname } : relation === "same" ? { hostname: this.host.hostname } : {},
+      pid: metadata.pid,
+      startedAt: metadata.startedAt,
+      ...Number.isFinite(beatAt) ? { heartbeatAgeMs: Math.max(0, this.now() - beatAt) } : {},
+      sameHost: relation === "same",
+      legacy: relation === "legacy"
+    };
+  }
+  holderFromTakeover(record, reason) {
+    return {
+      reason,
+      hostname: record.requester.hostname,
+      pid: record.requester.pid,
+      sameHost: hostRelation(record.requester, this.host) === "same",
+      legacy: false
+    };
+  }
+  now() {
+    return this.options.now?.() ?? Date.now();
+  }
+  mono() {
+    return this.options.monotonicNow?.() ?? import_perf_hooks.performance.now();
+  }
 };
-function runtimePaths(root) {
-  const hash = crypto6.createHash("sha256").update(path17.resolve(root)).digest("hex").slice(0, 32);
+function describeSyncHolder(holder) {
+  const where = describeHolderLocation(holder);
+  switch (holder?.reason) {
+    case "takeover-pending":
+      return `${where} is taking over Overleaf sync for this mirror; sync is paused here.`;
+    case "takeover-timeout":
+      return `${where} did not hand over Overleaf sync in time; sync is paused here.`;
+    case "legacy-owner":
+      return `An older version of the extension on ${where} is syncing this mirror; sync is paused here.`;
+    case "unreachable":
+      return `${where} holds Overleaf sync for this mirror but is not responding; sync is paused here.`;
+    case "superseded":
+    case "takeover-requested":
+      return `Overleaf sync for this mirror moved to ${where}; sync is paused here.`;
+    case "lease-lost":
+      return "Overleaf sync stopped here because its lock could not be renewed in time (is the home directory reachable?).";
+    case "lock-lost":
+      return "Overleaf sync stopped here because its lock was removed.";
+    case "unknown":
+      return "Overleaf sync for this mirror is held elsewhere and its lock could not be read; sync is paused here.";
+    default:
+      return `Overleaf sync for this mirror is running on ${where}; sync is paused here.`;
+  }
+}
+function describeHolderLocation(holder) {
+  if (holder?.sameHost) return "another window on this machine";
+  const host = holder?.hostname ?? "another machine";
+  return holder?.pid ? `${host} (pid ${holder.pid})` : host;
+}
+function socketDirectoryCandidates(explicit) {
+  if (explicit) return [{ directory: path17.resolve(explicit), shared: false }];
+  const candidates = [];
+  if (process.env.LATEX_TOOLKIT_SOCKET_HOME) {
+    candidates.push({ directory: path17.resolve(process.env.LATEX_TOOLKIT_SOCKET_HOME), shared: false });
+  }
+  const xdgRuntime = process.env.XDG_RUNTIME_DIR;
+  if (xdgRuntime && path17.isAbsolute(xdgRuntime)) {
+    candidates.push({ directory: path17.join(xdgRuntime, "latex-editing-toolkit"), shared: false });
+  }
+  candidates.push({ directory: runtimeRoot(), shared: process.platform !== "darwin" });
+  return candidates;
+}
+function socketPathFor(hash, candidate, host) {
+  const name = candidate.shared ? `${hash}.${hostTag(host)}` : hash;
+  const socketPath = path17.join(candidate.directory, name);
+  const limit = process.platform === "darwin" ? 103 : 107;
+  return Buffer.byteLength(socketPath) <= limit ? socketPath : path17.join("/tmp", `latex-toolkit-${process.getuid?.() ?? "user"}`, name);
+}
+function runtimePaths(root, options = {}) {
+  const hash = crypto7.createHash("sha256").update(path17.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path17.join(runtimeRoot(), `${hash}.lock`);
-  const normalSocketPath = path17.join(runtimeRoot(), hash);
-  const macSocketPathLimit = 104;
-  const socketPath = process.platform === "darwin" && Buffer.byteLength(normalSocketPath) >= macSocketPathLimit ? path17.join("/tmp", `latex-toolkit-${process.getuid?.() ?? "user"}`, hash) : normalSocketPath;
   return {
+    hash,
     lockPath,
     metadataPath: path17.join(lockPath, "owner.json"),
-    // macOS limits AF_UNIX paths to roughly 104 bytes. Keep metadata under the
-    // configured cache root, but move only an overlong socket into a private,
-    // per-user directory under /tmp.
-    socketPath
+    takeoverPath: path17.join(runtimeRoot(), `${hash}.takeover.json`),
+    socketPath: socketPathFor(hash, socketDirectoryCandidates(options.socketDirectory)[0], options.host ?? currentHostIdentity())
   };
 }
 async function inspectOwner(root) {
-  const paths = runtimePaths(root);
-  return { reachable: await canConnect(paths.socketPath), metadata: await readMetadata(paths.metadataPath) };
+  const resolved = await fs16.realpath(path17.resolve(root)).catch(() => path17.resolve(root));
+  const paths = runtimePaths(resolved);
+  const owner = await readJsonFile(paths.metadataPath).catch(() => void 0);
+  const metadata = owner?.status === "ok" && isOwnerMetadata(owner.value) ? owner.value : void 0;
+  const beat = metadata && metadata.version >= 2 ? await readJsonFile(heartbeatPath(paths.lockPath, metadata.nonce)).catch(() => void 0) : void 0;
+  const beatAt = Date.parse(beat?.status === "ok" ? beat.value.at : metadata?.startedAt ?? "");
+  const relation = metadata ? hostRelation(metadata) : void 0;
+  const takeover = await readJsonFile(paths.takeoverPath).catch(() => void 0);
+  const recordedSocket = metadata && relation !== "foreign" && relation !== "rebooted" ? metadata.socketPath : void 0;
+  return {
+    reachable: await canConnect(recordedSocket ?? paths.socketPath),
+    ...metadata ? { metadata } : {},
+    ...metadata && relation ? {
+      holder: {
+        ...metadata.hostname ? { hostname: metadata.hostname } : {},
+        pid: metadata.pid,
+        relation,
+        ...Number.isFinite(beatAt) ? { heartbeatAgeMs: Math.max(0, Date.now() - beatAt) } : {}
+      }
+    } : {},
+    takeoverRequested: takeover?.status === "ok" && isTakeoverRecord(takeover.value),
+    lockPath: paths.lockPath,
+    socketPath: paths.socketPath
+  };
+}
+function heartbeatPath(lockPath, nonce) {
+  return path17.join(lockPath, `heartbeat-${nonce}.json`);
+}
+async function writeHeartbeat(lockPath, nonce, seq, at) {
+  const target = heartbeatPath(lockPath, nonce);
+  const temporary = `${target}.${crypto7.randomBytes(4).toString("hex")}.tmp`;
+  const record = { version: 1, nonce, seq, at: new Date(at).toISOString() };
+  await fs16.writeFile(temporary, `${JSON.stringify(record)}
+`, { mode: 384, flag: "wx" });
+  try {
+    await fs16.rename(temporary, target);
+  } catch (error) {
+    await fs16.rm(temporary, { force: true }).catch(() => void 0);
+    throw error;
+  }
+}
+async function retireLockDirectory(lockPath) {
+  const retired = `${lockPath}.retired-${process.pid}-${crypto7.randomBytes(4).toString("hex")}`;
+  try {
+    await fs16.rename(lockPath, retired);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  await fs16.rm(retired, { recursive: true, force: true }).catch(() => void 0);
+}
+async function tryCreateDirectory(target) {
+  try {
+    await fs16.mkdir(target, { mode: 448 });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+}
+async function ensurePrivateDirectory(directory) {
+  try {
+    await fs16.mkdir(directory, { recursive: true, mode: 448 });
+    let stat14 = await fs16.lstat(directory);
+    if (!stat14.isDirectory() || stat14.isSymbolicLink()) return false;
+    const uid = process.getuid?.();
+    if (uid !== void 0 && stat14.uid !== uid) return false;
+    if ((stat14.mode & 63) !== 0) {
+      await fs16.chmod(directory, 448);
+      stat14 = await fs16.lstat(directory);
+      if ((stat14.mode & 63) !== 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function listen(server, socketPath) {
+  return new Promise((resolve10, reject) => {
+    server.once("error", reject);
+    server.listen(socketPath, () => {
+      server.removeListener("error", reject);
+      resolve10();
+    });
+  });
+}
+async function readJsonFile(target) {
+  let raw;
+  try {
+    raw = await readTextFileBounded(target, MAX_LOCK_RECORD_BYTES);
+  } catch (error) {
+    if (error.code === "ENOENT") return { status: "missing" };
+    return { status: "error", error };
+  }
+  try {
+    return { status: "ok", value: JSON.parse(raw) };
+  } catch {
+    return { status: "invalid" };
+  }
+}
+function withTimeout2(operation, timeoutMs, message) {
+  return new Promise((resolve10, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error(message), { code: "ETIMEDOUT" })), timeoutMs);
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve10(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw signal.reason ?? new Error("Operation cancelled.");
+}
+function isOwnerMetadata(value) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return (record.version === 1 || record.version === 2) && typeof record.pid === "number" && typeof record.nonce === "string" && typeof record.socketPath === "string" && typeof record.startedAt === "string";
+}
+function isHeartbeat(value, nonce) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return record.nonce === nonce && typeof record.seq === "number" && typeof record.at === "string";
+}
+function isTakeoverRecord(value) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return record.version === 1 && typeof record.targetNonce === "string" && typeof record.requestedAt === "string" && Boolean(record.requester) && typeof record.requester?.token === "string" && typeof record.requester?.hostname === "string" && typeof record.requester?.pid === "number";
 }
 function sendRequest(socketPath, request, timeoutMs) {
   return new Promise((resolve10, reject) => {
@@ -24626,7 +25664,7 @@ function writeMessageBounded(socket, value) {
     return Promise.reject(new Error("Sync IPC message exceeded its limit."));
   }
   const candidateId = value?.id;
-  const id = typeof candidateId === "string" ? candidateId : crypto6.randomUUID();
+  const id = typeof candidateId === "string" ? candidateId : crypto7.randomUUID();
   const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
   return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES)).reduce(
     (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({
@@ -24725,8 +25763,8 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs16.stat(guardPath).catch(() => void 0);
-  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
+  const stat14 = await fs16.stat(guardPath).catch(() => void 0);
+  if (!stat14 || Date.now() - stat14.mtimeMs < staleMs) return false;
   await fs16.rm(guardPath, { recursive: true, force: true });
   try {
     await fs16.mkdir(guardPath, { mode: 448 });
@@ -24734,15 +25772,6 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
-  }
-}
-async function readMetadata(target) {
-  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
-  if (!raw) return void 0;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return void 0;
   }
 }
 function isOwnerRequest(value) {
@@ -24760,7 +25789,7 @@ function errorResponse(id, code, message) {
 }
 
 // src/cli.ts
-var execFileAsync3 = (0, import_util22.promisify)(import_child_process4.execFile);
+var execFileAsync3 = (0, import_util24.promisify)(import_child_process4.execFile);
 var CliError = class extends Error {
   constructor(message, exitCode, code) {
     super(message);
@@ -24856,6 +25885,7 @@ async function dispatch(args, parsed, output, root) {
   const credentials = createCredentialStore();
   const shared = await readSharedState();
   const server = normalizeServerUrl(stringOption(parsed, "server") ?? shared.serverUrl);
+  const claimOptions = boolOption(parsed, "takeover") ? { takeover: true, forceLegacy: group === "sync" && boolOption(parsed, "force") } : {};
   if (group === "auth") {
     if (action === "login") {
       const cookie = boolOption(parsed, "cookie-stdin") ? (await readAllStdin()).trim() : await readSecret("Overleaf Cookie: ");
@@ -24863,7 +25893,7 @@ async function dispatch(args, parsed, output, root) {
       const client = new OverleafClient(server, void 0, shared.policy.networkTimeouts.httpMs / 1e3, shared.policy.networkTimeouts);
       const identity = await client.loginWithCookie(cookie);
       await credentials.saveIdentity(server, identity);
-      return { server, authenticated: true, userEmail: identity.userEmail };
+      return { server, authenticated: true, userEmail: identity.userEmail, credentialStore: credentials.describe?.() };
     }
     if (action === "logout") {
       await credentials.deleteIdentity(server);
@@ -24871,7 +25901,12 @@ async function dispatch(args, parsed, output, root) {
     }
     if (action === "status") {
       const identity = await credentials.getIdentity(server);
-      return { server, authenticated: Boolean(identity), userEmail: identity?.userEmail };
+      return {
+        server,
+        authenticated: Boolean(identity),
+        userEmail: identity?.userEmail,
+        credentialStore: credentials.describe?.()
+      };
     }
     throw usageError("Use auth login, auth logout, or auth status.");
   }
@@ -24918,25 +25953,26 @@ async function dispatch(args, parsed, output, root) {
     if (!pdf) throw dataError("No downloaded remote PDF exists. Run compile first.");
     if (action === "path") return { path: pdf };
     if (action === "open") {
-      await execFileAsync3(openCommand(), [pdf]);
-      return { path: pdf, opened: true };
+      const opener = pdfOpenCommand(pdf);
+      await execFileAsync3(opener.command, opener.args);
+      return { path: pdf, opened: true, via: opener.command };
     }
     throw usageError("Use pdf path or pdf open.");
   }
   if (group === "status") {
     if (!boolOption(parsed, "refresh") && !boolOption(parsed, "full")) return readSyncStatus(root);
-    return withOwner(root, shared.policy, credentials, output, (owner) => owner.command("status", {
+    return withOwner(root, shared.policy, credentials, output, claimOptions, (owner) => owner.command("status", {
       refresh: true,
       full: boolOption(parsed, "full")
     }));
   }
   if (group === "sync") {
     if (boolOption(parsed, "watch")) {
-      await watchWithTakeover(root, shared.policy, credentials, output);
+      await watchWithTakeover(root, shared.policy, credentials, output, claimOptions);
       return WATCH_RESULT;
     }
     if (!boolOption(parsed, "once")) throw usageError("Use sync --once or sync --watch.");
-    return withOwner(root, shared.policy, credentials, output, (owner) => owner.command("sync-once"));
+    return withOwner(root, shared.policy, credentials, output, claimOptions, (owner) => owner.command("sync-once"));
   }
   if (group === "push" || group === "pull") {
     if (!action) throw usageError(`Use ${group} <path>.`);
@@ -24946,35 +25982,46 @@ async function dispatch(args, parsed, output, root) {
       if (!process.stdin.isTTY || output.json) throw usageError(`This ${group} may overwrite or delete data; pass --force.`);
       if (!await confirm(`Proceed with ${group} ${action}?`)) throw usageError("Operation cancelled.");
     }
-    return withOwner(root, shared.policy, credentials, output, (owner) => owner.command(group, { path: action, force }));
+    return withOwner(root, shared.policy, credentials, output, claimOptions, (owner) => owner.command(group, { path: action, force }));
   }
   if (group === "conflicts") {
-    if (action === "list") return withOwner(root, shared.policy, credentials, output, (owner) => owner.command("conflicts-list"));
+    if (action === "list") return withOwner(root, shared.policy, credentials, output, claimOptions, (owner) => owner.command("conflicts-list"));
     if (action === "resolve") {
       if (!operand) throw usageError("Use conflicts resolve <path> --use local|remote.");
       const use = stringOption(parsed, "use");
       if (use !== "local" && use !== "remote") throw usageError("--use must be local or remote.");
-      return withOwner(root, shared.policy, credentials, output, (owner) => owner.command("conflicts-resolve", { path: operand, use }));
+      return withOwner(root, shared.policy, credentials, output, claimOptions, (owner) => owner.command("conflicts-resolve", { path: operand, use }));
     }
     throw usageError("Use conflicts list or conflicts resolve <path> --use local|remote.");
   }
   throw usageError(`Unknown command: ${args.join(" ")}`);
 }
 var OwnerFacade = class {
-  constructor(root, policy, credentials, output) {
+  constructor(root, policy, credentials, output, coordinator = new SyncOwnerCoordinator({ log: (message) => output.log(message) })) {
     this.root = root;
     this.policy = policy;
     this.credentials = credentials;
     this.output = output;
+    this.coordinator = coordinator;
+    this.stopDemotionListener = coordinator.onDidDemote(async (event) => {
+      this.demotion = event;
+      await this.engine?.fence();
+    });
   }
   root;
   policy;
   credentials;
   output;
+  coordinator;
   engine;
-  coordinator = new SyncOwnerCoordinator();
-  async start() {
-    return this.coordinator.claim(this.root, (command, args) => this.handle(command, args));
+  stopDemotionListener;
+  /** Set when ownership was lost to another process while this facade owned the mirror. */
+  demotion;
+  get holder() {
+    return this.coordinator.holder;
+  }
+  async start(options = {}) {
+    return this.coordinator.claim(this.root, (command, args) => this.handle(command, args), options);
   }
   command(command, args = {}) {
     return this.coordinator.request(command, args);
@@ -24996,7 +26043,9 @@ var OwnerFacade = class {
   }
   async close() {
     await this.engine?.stop();
+    this.engine = void 0;
     await this.coordinator.release();
+    this.stopDemotionListener();
   }
   async handle(command, args) {
     const engine = await this.getEngine();
@@ -25027,35 +26076,79 @@ var OwnerFacade = class {
     return this.engine;
   }
 };
-async function withOwner(root, policy, credentials, output, run) {
+async function withOwner(root, policy, credentials, output, claimOptions, run) {
   const owner = new OwnerFacade(root, policy, credentials, output);
-  await owner.start();
   try {
+    if (await owner.start(claimOptions) === "standby") throw standbyError(owner.holder);
     return await run(owner);
   } finally {
     await owner.close();
   }
 }
-async function watchWithTakeover(root, policy, credentials, output) {
+function standbyError(holder) {
+  const hint = holder?.legacy ? " Run sync --takeover --force to displace it." : holder?.reason === "foreign-owner" || holder?.reason === "takeover-timeout" ? " Pass --takeover to move sync here." : "";
+  return new CliError(`${describeSyncHolder(holder)}${hint}`, 5, "owner_remote");
+}
+var STANDBY_RECHECK_MS = 15e3;
+async function watchWithTakeover(root, policy, credentials, output, claimOptions) {
   let stopping = false;
   let interrupted = false;
   let activeOwner;
   let activeSocket;
+  let wake;
+  const aborter = new AbortController();
   const stop = () => {
     interrupted = true;
     stopping = true;
+    aborter.abort(new CliError("Interrupted.", 130, "interrupted"));
     activeSocket?.destroy();
     activeOwner?.requestStop();
+    wake?.();
   };
   const disposeSignalHandlers = installStopSignalHandlers(stop);
+  const coordinator = new SyncOwnerCoordinator({ log: (message) => output.log(message) });
+  let pendingTakeover = claimOptions;
+  let reportedStandby;
   try {
     while (!stopping) {
-      const owner = new OwnerFacade(root, policy, credentials, output);
+      const owner = new OwnerFacade(root, policy, credentials, output, coordinator);
       activeOwner = owner;
-      const role = await owner.start();
+      const role = await owner.start({ ...pendingTakeover, signal: aborter.signal }).catch((error) => {
+        if (stopping) return void 0;
+        throw error;
+      });
+      if (!role) break;
+      pendingTakeover = {};
+      if (role === "standby") {
+        const holder = owner.holder;
+        const key = `${holder?.reason}:${holder?.hostname ?? ""}:${holder?.pid ?? ""}`;
+        if (key !== reportedStandby) {
+          reportedStandby = key;
+          output.event("owner-standby", root, { ...holder, message: describeSyncHolder(holder) });
+        }
+        await owner.close();
+        activeOwner = void 0;
+        await new Promise((resolve10) => {
+          const timer = setTimeout(resolve10, Math.round(STANDBY_RECHECK_MS * (0.8 + Math.random() * 0.4)));
+          wake = () => {
+            clearTimeout(timer);
+            resolve10();
+          };
+        });
+        wake = void 0;
+        continue;
+      }
+      reportedStandby = void 0;
       output.event(role === "owner" ? "owner-acquired" : "owner-connected", root);
       if (role === "owner") {
         await owner.runWatchAsOwner();
+        if (owner.demotion) {
+          output.event("owner-demoted", root, {
+            reason: owner.demotion.reason,
+            holder: owner.demotion.holder,
+            message: describeSyncHolder(owner.demotion.holder)
+          });
+        }
       } else {
         activeSocket = await owner.subscribe((event) => output.event(event.event, event.root, event.data));
         await new Promise((resolve10) => {
@@ -25121,8 +26214,8 @@ async function makeClient(serverUrl, credentials, policy) {
 }
 async function resolveMirrorRoot(candidate) {
   let current = path18.resolve(candidate);
-  const stat13 = await fs17.stat(current).catch(() => void 0);
-  if (stat13?.isFile()) current = path18.dirname(current);
+  const stat14 = await fs17.stat(current).catch(() => void 0);
+  if (stat14?.isFile()) current = path18.dirname(current);
   while (true) {
     if (await exists4(manifestPath(current))) return current;
     const parent = path18.dirname(current);
@@ -25149,6 +26242,7 @@ function parseArgs(argv) {
     "once",
     "watch",
     "force",
+    "takeover",
     "help"
   ]);
   for (let index = 0; index < argv.length; index += 1) {
@@ -25216,7 +26310,8 @@ Commands: auth login|logout|status, projects list, mirrors list, mirror create,
 config list|get|set, status, doctor, sync --once|--watch, push, pull,
 conflicts list|resolve, compile, pdf path|open
 
-Global options: --root <path> --server <url> --json --no-color`;
+Global options: --root <path> --server <url> --json --no-color
+--takeover moves sync here from another machine that holds it (exit code 5 otherwise).`;
 }
 function commandName(positionals) {
   if (positionals.length === 0) return "help";
@@ -25313,6 +26408,24 @@ function openCommand() {
   if (process.platform === "linux") return "xdg-open";
   throw new Error(`Opening files is not supported on ${process.platform}.`);
 }
+function pdfOpenCommand(pdf, env = process.env, platform = process.platform) {
+  if (platform === "linux" && !env.DISPLAY && !env.WAYLAND_DISPLAY) {
+    const editor = env.VSCODE_IPC_HOOK_CLI ? ["code", "cursor"].find((name) => onPath(name, env)) : void 0;
+    if (editor) return { command: editor, args: [pdf] };
+    throw dataError(`No display is available to open ${pdf}. Run this in the editor's integrated terminal, or open the file from the editor.`);
+  }
+  return { command: openCommand(), args: [pdf] };
+}
+function onPath(command, env) {
+  return (env.PATH ?? "").split(path18.delimiter).filter(Boolean).some((directory) => {
+    try {
+      const stat14 = (0, import_fs9.statSync)(path18.join(directory, command));
+      return stat14.isFile() && (stat14.mode & 73) !== 0;
+    } catch {
+      return false;
+    }
+  });
+}
 function installStopSignalHandlers(stop) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
@@ -25333,7 +26446,8 @@ if (require.main === module) {
   main,
   makeSuccessEnvelope,
   openCommand,
-  parseArgs
+  parseArgs,
+  pdfOpenCommand
 });
 /*! Bundled license information:
 

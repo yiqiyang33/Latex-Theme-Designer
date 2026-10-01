@@ -891,13 +891,13 @@ async function assertWorkspacePathSafe(rootDir, candidate) {
   let current = root;
   for (const segment of path.relative(root, absolute).split(path.sep)) {
     current = path.join(current, segment);
-    const stat12 = await import_node_fs.promises.lstat(current).catch((error) => {
+    const stat13 = await import_node_fs.promises.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (!stat12) break;
-    if (stat12.isSymbolicLink()) throw new Error(`Refusing to access symlinked workspace path: ${candidate}`);
-    if (!stat12.isDirectory() && current !== absolute) throw new Error(`Workspace path component is not a directory: ${candidate}`);
+    if (!stat13) break;
+    if (stat13.isSymbolicLink()) throw new Error(`Refusing to access symlinked workspace path: ${candidate}`);
+    if (!stat13.isDirectory() && current !== absolute) throw new Error(`Workspace path component is not a directory: ${candidate}`);
   }
   return absolute;
 }
@@ -1008,10 +1008,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename20, pattern) {
+function matchesGlob(relPath, basename21, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename20);
+    return globToRegExp(pattern).test(basename21);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -11847,7 +11847,7 @@ var require_form_data = __commonJS({
     var parseUrl = require("url").parse;
     var fs39 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto7 = require("crypto");
+    var crypto8 = require("crypto");
     var mime2 = require_mime_types();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -11912,12 +11912,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs39.stat(value.path, function(err, stat12) {
+          fs39.stat(value.path, function(err, stat13) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat12.size - (value.start ? value.start : 0);
+            var fileSize = stat13.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -12053,7 +12053,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData2.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto7.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto8.randomBytes(12).toString("hex");
     };
     FormData2.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -16775,18 +16775,18 @@ var ChangeHistoryService = class {
   }
   async captureValue(target) {
     try {
-      const stat12 = await import_node_fs2.promises.lstat(target);
-      if (stat12.isSymbolicLink()) {
+      const stat13 = await import_node_fs2.promises.lstat(target);
+      if (stat13.isSymbolicLink()) {
         const link = await import_node_fs2.promises.readlink(target);
-        return { kind: "symlink", link_target: link, mode: stat12.mode, fingerprint: hash(`symlink:${link}`) };
+        return { kind: "symlink", link_target: link, mode: stat13.mode, fingerprint: hash(`symlink:${link}`) };
       }
-      if (stat12.isDirectory()) {
+      if (stat13.isDirectory()) {
         const entries = (await import_node_fs2.promises.readdir(target)).sort();
-        return { kind: "directory", mode: stat12.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
+        return { kind: "directory", mode: stat13.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
       }
-      if (stat12.isFile()) {
+      if (stat13.isFile()) {
         const content = await import_node_fs2.promises.readFile(target);
-        return { kind: "file", content_base64: content.toString("base64"), mode: stat12.mode, fingerprint: hashBuffer(content) };
+        return { kind: "file", content_base64: content.toString("base64"), mode: stat13.mode, fingerprint: hashBuffer(content) };
       }
       return { kind: "missing", fingerprint: hash("missing") };
     } catch (err) {
@@ -16818,8 +16818,8 @@ var ChangeHistoryService = class {
     const missing = entries.filter((entry) => entry.value.kind === "missing");
     for (const { target } of missing) {
       try {
-        const stat12 = await import_node_fs2.promises.lstat(target);
-        if (!stat12.isDirectory()) await import_node_fs2.promises.unlink(target);
+        const stat13 = await import_node_fs2.promises.lstat(target);
+        if (!stat13.isDirectory()) await import_node_fs2.promises.unlink(target);
       } catch (err) {
         const code = err.code;
         if (code !== "ENOENT") throw err;
@@ -17809,8 +17809,8 @@ async function validateTemplateAndParent(templateId, parentPath, extensionDir) {
   const errors = [];
   const resolvedParent = path7.resolve(parentPath || "");
   try {
-    const stat12 = await import_node_fs7.promises.stat(resolvedParent);
-    if (!stat12.isDirectory()) errors.push("Selected parent location is not a directory.");
+    const stat13 = await import_node_fs7.promises.stat(resolvedParent);
+    if (!stat13.isDirectory()) errors.push("Selected parent location is not a directory.");
     else await import_node_fs7.promises.access(resolvedParent, import_node_fs7.constants.W_OK);
   } catch (err) {
     errors.push(`Parent location is not writable: ${err.message}`);
@@ -17854,9 +17854,9 @@ async function preflightCreateProject(draft, extensionDir) {
   let targetExists = false;
   let targetEmpty = false;
   try {
-    const stat12 = await import_node_fs7.promises.lstat(rootPath);
+    const stat13 = await import_node_fs7.promises.lstat(rootPath);
     targetExists = true;
-    if (!stat12.isDirectory()) errors.push("A non-directory item already exists at the project path.");
+    if (!stat13.isDirectory()) errors.push("A non-directory item already exists at the project path.");
     else {
       const entries = await import_node_fs7.promises.readdir(rootPath);
       targetEmpty = entries.length === 0;
@@ -21086,8 +21086,8 @@ async function loadRecipeCatalog(rootDir) {
 async function generateVscodeSettingsIfMissing(rootDir) {
   const settingsPath = path12.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat12 = await import_node_fs11.promises.stat(settingsPath);
-    if (stat12.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
+    const stat13 = await import_node_fs11.promises.stat(settingsPath);
+    if (stat13.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
@@ -21222,9 +21222,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path13.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename20 = path13.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename20, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename20, pattern))) {
+        const basename21 = path13.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename21, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename21, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -22952,8 +22952,8 @@ var TemplateService = class {
     await assertWorkspacePathSafe(this.rootDir, targetAbs);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat12 = await import_node_fs17.promises.stat(targetAbs);
-      if (stat12.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
+      const stat13 = await import_node_fs17.promises.stat(targetAbs);
+      if (stat13.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
@@ -23344,6 +23344,7 @@ function isRecord3(value) {
 
 // src/overleaf/overleafService.ts
 var fs36 = __toESM(require("node:fs/promises"));
+var os8 = __toESM(require("node:os"));
 var path42 = __toESM(require("node:path"));
 var vscode11 = __toESM(require("vscode"));
 
@@ -25063,15 +25064,15 @@ async function assertNoSymlinkPath(root, relativePath) {
   let current = absoluteRoot;
   for (const segment of normalized.split("/")) {
     current = path22.join(current, segment);
-    const stat12 = await fs18.lstat(current).catch((error) => {
+    const stat13 = await fs18.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (!stat12) break;
-    if (stat12.isSymbolicLink()) {
+    if (!stat13) break;
+    if (stat13.isSymbolicLink()) {
       throw new Error(`Refusing to access symlinked mirror path: ${relativePath}`);
     }
-    if (!stat12.isDirectory() && current !== path22.join(absoluteRoot, ...normalized.split("/"))) {
+    if (!stat13.isDirectory() && current !== path22.join(absoluteRoot, ...normalized.split("/"))) {
       throw new Error(`Mirror path component is not a directory: ${relativePath}`);
     }
   }
@@ -25084,11 +25085,11 @@ async function assertNoSymlinkAbsolutePath(root, candidate) {
   let current = absoluteRoot;
   for (const segment of relative10 ? relative10.split(path22.sep) : []) {
     current = path22.join(current, segment);
-    const stat12 = await fs18.lstat(current).catch((error) => {
+    const stat13 = await fs18.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (stat12?.isSymbolicLink()) throw new Error(`Refusing to access symlinked path: ${candidate}`);
+    if (stat13?.isSymbolicLink()) throw new Error(`Refusing to access symlinked path: ${candidate}`);
   }
   return absoluteCandidate;
 }
@@ -25131,6 +25132,61 @@ function processAlive(pid) {
 }
 function sleep(ms) {
   return new Promise((resolve29) => setTimeout(resolve29, ms));
+}
+var TRANSIENT_FS_ERROR_CODES = /* @__PURE__ */ new Set([
+  "EIO",
+  "ESTALE",
+  "ETIMEDOUT",
+  "EAGAIN",
+  "EINTR",
+  "EBUSY",
+  "ENOTCONN",
+  "EHOSTDOWN",
+  "ENETUNREACH",
+  "ECONNRESET"
+]);
+function isTransientFsError(error) {
+  const code = error?.code;
+  return typeof code === "string" && TRANSIENT_FS_ERROR_CODES.has(code);
+}
+var NETWORK_FILESYSTEM_TYPES = /* @__PURE__ */ new Set([
+  26985,
+  // NFS
+  20859,
+  // SMB
+  4283649346,
+  // CIFS
+  4266872130,
+  // SMB2
+  198183888,
+  // Lustre
+  1196443219,
+  // GPFS
+  12805120,
+  // Ceph
+  1702057286,
+  // FUSE (sshfs, rclone, ...)
+  1397113167,
+  // AFS
+  1799439955,
+  // kAFS
+  16914839,
+  // 9P (WSL, VM shares)
+  428016422,
+  // BeeGFS
+  18225520,
+  // GFS2
+  1952539503
+  // OCFS2
+]);
+async function isNetworkFileSystem(target) {
+  if (process.platform !== "linux") return false;
+  try {
+    const stats = await fs18.statfs(target);
+    return NETWORK_FILESYSTEM_TYPES.has(Number(stats.type) >>> 0);
+  } catch {
+    return false;
+  }
 }
 function formatUnknownError(error) {
   if (error instanceof Error) {
@@ -25414,7 +25470,11 @@ function isToolkitOverridePath(relPath) {
 }
 function isAlwaysLocal(relPath) {
   const normalized = toPosixPath2(relPath);
-  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || /(^|\/)\.DS_Store$/.test(normalized);
+  return [".overleaf-codex/", ".vscode/", ".git/"].some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) || normalized === LOCAL_IGNORE_NAME || /(^|\/)\.vscode(\/|$)/.test(normalized) || /(^|\/)\.git(\/|$)/.test(normalized) || /(^|\/)\.gitignore$/.test(normalized) || /(^|\/)\.latexmkrc$/.test(normalized) || isFilesystemLeftover(normalized);
+}
+function isFilesystemLeftover(relPath) {
+  const normalized = toPosixPath2(relPath);
+  return /(^|\/)\.DS_Store$/.test(normalized) || /(^|\/)\.nfs[0-9A-Fa-f]{8,}$/.test(normalized) || /(^|\/)\._[^/]+$/.test(normalized) || /(^|\/)__MACOSX(\/|$)/.test(normalized) || /(^|\/)\.[^/]+\.(?:incoming|backup)-\d+-\d+-[0-9a-f]{8}$/.test(normalized);
 }
 var TOOLKIT_SYNC_EXCLUDE_PATTERNS = [
   ".overleaf-codex/**",
@@ -25509,9 +25569,20 @@ function metadataPath(root, ...parts) {
 }
 async function readManifest(root) {
   const target = manifestPath(root);
+  let raw;
+  try {
+    raw = await readMetadataText(target, MAX_MANIFEST_JSON_BYTES);
+  } catch (error) {
+    if (error instanceof MetadataUnreadableError) throw error;
+    await quarantineCorruptFile(target);
+    throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
+  }
+  if (raw === void 0) {
+    throw Object.assign(new Error(`No Overleaf manifest exists at ${target}.`), { code: "ENOENT" });
+  }
   let parsed;
   try {
-    parsed = JSON.parse(await readTextFileBounded(target, MAX_MANIFEST_JSON_BYTES));
+    parsed = JSON.parse(raw);
   } catch (error) {
     await quarantineCorruptFile(target);
     throw new Error(`Overleaf manifest could not be read safely and was quarantined at ${target}.`, { cause: error });
@@ -25574,16 +25645,41 @@ function syncStatusPath(root) {
 }
 async function readSyncStatus(root) {
   try {
-    const bounded = await readTextFileBounded(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
+    const bounded = await readMetadataText(syncStatusPath(root), MAX_METADATA_JSON_BYTES);
     if (!bounded) return void 0;
     const parsed = JSON.parse(bounded);
     const validationError = validateSyncStatus(parsed);
     if (validationError) throw new Error(validationError);
     return parsed;
   } catch (error) {
+    if (error instanceof MetadataUnreadableError) return void 0;
     await quarantineCorruptFile(syncStatusPath(root));
     console.warn(`Overleaf sync status at ${syncStatusPath(root)} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
     return void 0;
+  }
+}
+var MetadataUnreadableError = class extends Error {
+  constructor(target, cause) {
+    super(`Could not read ${target}: ${formatUnknownError(cause)}`, { cause });
+    this.target = target;
+    this.name = "MetadataUnreadableError";
+  }
+  target;
+  code = "METADATA_UNREADABLE";
+};
+var UNREADABLE_NOT_CORRUPT_CODES = /* @__PURE__ */ new Set(["EACCES", "EPERM", "EMFILE", "ENFILE"]);
+async function readMetadataText(target, maxBytes, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await readTextFileBounded(target, maxBytes);
+    } catch (error) {
+      const code = error?.code;
+      if (code === "ENOENT") return void 0;
+      if (typeof code === "string" && UNREADABLE_NOT_CORRUPT_CODES.has(code)) throw new MetadataUnreadableError(target, error);
+      if (!isTransientFsError(error)) throw error;
+      if (attempt >= attempts) throw new MetadataUnreadableError(target, error);
+      await sleep(50 * 2 ** (attempt - 1));
+    }
   }
 }
 async function readTextFileBounded(target, maxBytes) {
@@ -25725,9 +25821,88 @@ function getManifestEntityIndex(manifest) {
 }
 
 // src/overleaf/compileCore.ts
-var crypto3 = __toESM(require("crypto"));
+var crypto4 = __toESM(require("crypto"));
 var fs20 = __toESM(require("fs/promises"));
 var path24 = __toESM(require("path"));
+
+// src/overleaf/hostIdentity.ts
+var crypto3 = __toESM(require("crypto"));
+var import_fs3 = require("fs");
+var os4 = __toESM(require("os"));
+var currentIdentity;
+function currentHostIdentity() {
+  if (!currentIdentity) {
+    const bootId = readProcText("/proc/sys/kernel/random/boot_id");
+    const pidNamespace = readProcLink("/proc/self/ns/pid");
+    currentIdentity = {
+      hostname: os4.hostname(),
+      ...bootId ? { bootId } : {},
+      ...pidNamespace ? { pidNamespace } : {}
+    };
+  }
+  return currentIdentity;
+}
+function hostRecordFields(host = currentHostIdentity()) {
+  return {
+    hostname: host.hostname,
+    ...host.bootId ? { bootId: host.bootId } : {},
+    ...host.pidNamespace ? { pidNamespace: host.pidNamespace } : {}
+  };
+}
+function hostRelation(record, self = currentHostIdentity()) {
+  const hostname3 = typeof record.hostname === "string" ? record.hostname : void 0;
+  const bootId = typeof record.bootId === "string" ? record.bootId : void 0;
+  if (!hostname3 && !bootId) return "legacy";
+  if (bootId && self.bootId) {
+    if (bootId !== self.bootId) return hostname3 === self.hostname ? "rebooted" : "foreign";
+    const pidNamespace = typeof record.pidNamespace === "string" ? record.pidNamespace : void 0;
+    return pidNamespace && self.pidNamespace && pidNamespace !== self.pidNamespace ? "foreign" : "same";
+  }
+  return hostname3 === self.hostname ? "same" : "foreign";
+}
+async function localProcessMatches(pid, processStart) {
+  if (!processAlive(pid)) return false;
+  if (!processStart) return true;
+  const currentStart = await processStartSignature(pid);
+  return !currentStart || currentStart === processStart;
+}
+async function shortLockIsStale(record, lockAgeMs2, foreignStaleMs, self = currentHostIdentity()) {
+  const relation = hostRelation(record, self);
+  if (relation === "same" || relation === "legacy") {
+    return typeof record.pid !== "number" || !await localProcessMatches(record.pid, record.processStart);
+  }
+  return lockAgeMs2 >= foreignStaleMs;
+}
+function lockAgeMs(createdAt, stat13, now = Date.now()) {
+  const created = typeof createdAt === "number" ? createdAt : Date.parse(createdAt ?? "");
+  const ages = [
+    ...Number.isFinite(created) ? [now - created] : [],
+    ...stat13 ? [now - stat13.mtimeMs] : []
+  ];
+  return ages.length ? Math.max(0, Math.min(...ages)) : 0;
+}
+function hostTag(host = currentHostIdentity()) {
+  return crypto3.createHash("sha256").update(`${host.hostname}\0${host.bootId ?? ""}\0${host.pidNamespace ?? ""}`).digest("hex").slice(0, 8);
+}
+function describeHost(host) {
+  return typeof host?.hostname === "string" && host.hostname ? host.hostname : "another machine";
+}
+function readProcText(target) {
+  try {
+    return (0, import_fs3.readFileSync)(target, "utf8").trim() || void 0;
+  } catch {
+    return void 0;
+  }
+}
+function readProcLink(target) {
+  try {
+    return (0, import_fs3.readlinkSync)(target) || void 0;
+  } catch {
+    return void 0;
+  }
+}
+
+// src/overleaf/compileCore.ts
 var DEFAULT_COMPILE_LOCK_WAIT_MS = 12e4;
 var DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS = 5e3;
 async function compileRemoteProject(root, client, rootDocOverride, options = {}) {
@@ -25740,7 +25915,7 @@ async function compileRemoteProject(root, client, rootDocOverride, options = {})
   const releaseCompileLock = await acquireCompileLock(outputRoot, options);
   try {
     await cleanupInterruptedCompileArtifacts(root);
-    const token = `${process.pid}-${Date.now()}-${crypto3.randomBytes(6).toString("hex")}`;
+    const token = `${process.pid}-${Date.now()}-${crypto4.randomBytes(6).toString("hex")}`;
     const stagingRoot = metadataPath(root, `${OUTPUT_DIR}.staging-${token}`);
     const backupRoot = metadataPath(root, `${OUTPUT_DIR}.backup-${token}`);
     const stagedFiles = [];
@@ -25781,22 +25956,24 @@ async function cleanupInterruptedCompileArtifacts(root) {
     retainedBackup = backups[0].name;
     await fs20.rename(path24.join(dir, retainedBackup), outputRoot).catch(() => void 0);
   }
-  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).filter((entry) => entry.name !== retainedBackup).map((entry) => fs20.rm(path24.join(dir, entry.name), { recursive: true, force: true })));
+  await Promise.all(entries.filter((entry) => entry.name.startsWith(`${OUTPUT_DIR}.staging-`) || entry.name.startsWith(`${OUTPUT_DIR}.backup-`)).filter((entry) => entry.name !== retainedBackup).map((entry) => fs20.rm(path24.join(dir, entry.name), { recursive: true, force: true }).catch(() => void 0)));
 }
 async function acquireCompileLock(outputRoot, options = {}) {
   const lock = `${outputRoot}.lock`;
   const owner = path24.join(lock, "owner.json");
   const deadline = Date.now() + Math.max(1, options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS);
   const missingOwnerGraceMs = Math.max(1, options.lockMissingOwnerGraceMs ?? DEFAULT_COMPILE_LOCK_MISSING_OWNER_GRACE_MS);
+  const foreignStaleMs = Math.max(1, options.lockForeignStaleMs ?? 2 * (options.lockWaitMs ?? DEFAULT_COMPILE_LOCK_WAIT_MS));
   for (; ; ) {
     try {
       await fs20.mkdir(lock, { recursive: false });
-      const nonce = crypto3.randomBytes(8).toString("hex");
+      const nonce = crypto4.randomBytes(8).toString("hex");
       await fs20.writeFile(owner, JSON.stringify({
         pid: process.pid,
         startedAt: Date.now(),
         processStart: await processStartSignature(process.pid),
-        nonce
+        nonce,
+        ...hostRecordFields()
       }));
       return async () => {
         const current = await readTextFileBounded(owner, 64 * 1024).catch(() => void 0);
@@ -25810,11 +25987,9 @@ async function acquireCompileLock(outputRoot, options = {}) {
         const value = JSON.parse(raw ?? "");
         if (typeof value.pid !== "number" || typeof value.startedAt !== "number") {
           stale = await lockAge(lock) >= missingOwnerGraceMs;
-        } else if (!processAlive(value.pid)) {
-          stale = true;
-        } else if (value.processStart) {
-          const currentStart = await processStartSignature(value.pid);
-          stale = Boolean(currentStart && currentStart !== value.processStart);
+        } else {
+          const age = Math.min(Math.max(0, Date.now() - value.startedAt), await lockAge(lock));
+          stale = await shortLockIsStale(value, age, foreignStaleMs);
         }
       } catch {
         stale = await lockAge(lock) >= missingOwnerGraceMs;
@@ -25831,8 +26006,8 @@ async function acquireCompileLock(outputRoot, options = {}) {
   }
 }
 async function lockAge(lock) {
-  const stat12 = await fs20.stat(lock).catch(() => void 0);
-  return stat12 ? Math.max(0, Date.now() - stat12.mtimeMs) : Number.POSITIVE_INFINITY;
+  const stat13 = await fs20.stat(lock).catch(() => void 0);
+  return stat13 ? Math.max(0, Date.now() - stat13.mtimeMs) : Number.POSITIVE_INFINITY;
 }
 async function latestRemotePdf(root) {
   const outputRoot = metadataPath(root, OUTPUT_DIR);
@@ -25957,11 +26132,11 @@ var path30 = __toESM(require("path"));
 var vscode9 = __toESM(require("vscode"));
 
 // src/overleaf/sharedState.ts
-var crypto4 = __toESM(require("crypto"));
+var crypto5 = __toESM(require("crypto"));
 var fs21 = __toESM(require("fs/promises"));
-var os4 = __toESM(require("os"));
+var os5 = __toESM(require("os"));
 var path26 = __toESM(require("path"));
-var import_fs3 = require("fs");
+var import_fs4 = require("fs");
 
 // src/overleaf/syncHealthService.ts
 var SyncHealthService = class {
@@ -26059,16 +26234,16 @@ var DEFAULT_SYNC_POLICY = {
   networkTimeouts: DEFAULT_NETWORK_TIMEOUTS
 };
 function applicationSupportRoot() {
-  return process.env.LATEX_TOOLKIT_SUPPORT_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_SUPPORT_HOME) : process.platform === "darwin" ? path26.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path26.join(process.env.XDG_CONFIG_HOME || path26.join(os4.homedir(), ".config"), "latex-editing-toolkit");
+  return process.env.LATEX_TOOLKIT_SUPPORT_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_SUPPORT_HOME) : process.platform === "darwin" ? path26.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path26.join(process.env.XDG_CONFIG_HOME || path26.join(os5.homedir(), ".config"), "latex-editing-toolkit");
 }
 function applicationDataRoot() {
-  return process.env.LATEX_TOOLKIT_DATA_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_DATA_HOME) : process.platform === "darwin" ? path26.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path26.join(process.env.XDG_DATA_HOME || path26.join(os4.homedir(), ".local", "share"), "latex-editing-toolkit");
+  return process.env.LATEX_TOOLKIT_DATA_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_DATA_HOME) : process.platform === "darwin" ? path26.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit") : path26.join(process.env.XDG_DATA_HOME || path26.join(os5.homedir(), ".local", "share"), "latex-editing-toolkit");
 }
 function credentialRoot() {
   return path26.join(applicationDataRoot(), "credentials");
 }
 function runtimeRoot() {
-  return process.env.LATEX_TOOLKIT_CACHE_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_CACHE_HOME) : process.platform === "darwin" ? path26.join(os4.homedir(), "Library", "Caches", "latex-editing-toolkit", "runtime") : path26.join(process.env.XDG_CACHE_HOME || path26.join(os4.homedir(), ".cache"), "latex-editing-toolkit", "runtime");
+  return process.env.LATEX_TOOLKIT_CACHE_HOME ? path26.resolve(process.env.LATEX_TOOLKIT_CACHE_HOME) : process.platform === "darwin" ? path26.join(os5.homedir(), "Library", "Caches", "latex-editing-toolkit", "runtime") : path26.join(process.env.XDG_CACHE_HOME || path26.join(os5.homedir(), ".cache"), "latex-editing-toolkit", "runtime");
 }
 function sharedStatePath() {
   return path26.join(applicationSupportRoot(), "overleaf.json");
@@ -26088,10 +26263,10 @@ function defaultSharedState() {
     localProjectsRoot: defaultLocalProjectsRoot()
   };
 }
-function defaultLocalProjectsRoot(home = os4.homedir()) {
+function defaultLocalProjectsRoot(home = os5.homedir()) {
   return path26.join(home, "Documents", "OverleafCodex", "projects");
 }
-function normalizeLocalProjectsRoot(value, platform3 = process.platform, home = os4.homedir()) {
+function normalizeLocalProjectsRoot(value, platform3 = process.platform, home = os5.homedir()) {
   const fallback = defaultLocalProjectsRoot(home);
   if (typeof value !== "string" || !value.trim()) return fallback;
   const expanded = value.trim() === "~" ? home : value.trim().startsWith("~/") ? path26.join(home, value.trim().slice(2)) : value.trim();
@@ -26099,12 +26274,16 @@ function normalizeLocalProjectsRoot(value, platform3 = process.platform, home = 
   const foreignPrefix = platform3 === "darwin" ? [/^\/home(?:\/|$)/, /^\/root(?:\/|$)/, /^\/mnt(?:\/|$)/, /^\/media(?:\/|$)/] : platform3 === "linux" ? [/^\/Users(?:\/|$)/, /^\/Volumes(?:\/|$)/] : [];
   if (foreignPrefix.some((pattern) => pattern.test(resolved))) return fallback;
   const suffix = `${path26.sep}Documents${path26.sep}OverleafCodex${path26.sep}projects`;
-  if (resolved.endsWith(suffix) && resolved !== path26.resolve(fallback) && !(0, import_fs3.existsSync)(resolved)) return fallback;
+  if (resolved.endsWith(suffix) && resolved !== path26.resolve(fallback) && !(0, import_fs4.existsSync)(resolved)) return fallback;
   return resolved;
 }
 async function readSharedState(persistMigration = true) {
   await migrateLegacyLinuxPaths();
-  const raw = await readTextFileBounded(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(() => void 0);
+  const raw = await readMetadataText(sharedStatePath(), MAX_METADATA_JSON_BYTES).catch(async (error) => {
+    if (error instanceof MetadataUnreadableError) throw error;
+    await fs21.rename(sharedStatePath(), `${sharedStatePath()}.corrupt-${Date.now()}`).catch(() => void 0);
+    return void 0;
+  });
   if (!raw) return defaultSharedState();
   let parsed;
   try {
@@ -26148,11 +26327,9 @@ async function readSharedState(persistMigration = true) {
 async function migrateLegacyLinuxPaths() {
   if (process.platform !== "linux") return;
   if (process.env.LATEX_TOOLKIT_SUPPORT_HOME || process.env.LATEX_TOOLKIT_DATA_HOME || process.env.LATEX_TOOLKIT_CACHE_HOME) return;
-  const legacySupport = path26.join(os4.homedir(), "Library", "Application Support", "latex-editing-toolkit");
-  const legacyCache = path26.join(os4.homedir(), "Library", "Caches", "latex-editing-toolkit");
+  const legacySupport = path26.join(os5.homedir(), "Library", "Application Support", "latex-editing-toolkit");
   const configRoot = applicationSupportRoot();
   const dataRoot = applicationDataRoot();
-  const cacheRoot = runtimeRoot();
   const marker = path26.join(configRoot, ".legacy-migration-v1");
   if (await exists3(marker)) return;
   const legacyState = path26.join(legacySupport, "overleaf.json");
@@ -26161,7 +26338,6 @@ async function migrateLegacyLinuxPaths() {
     await fs21.copyFile(legacyState, sharedStatePath());
   }
   await copyDirectoryIfMissing(path26.join(legacySupport, "cli"), path26.join(dataRoot, "cli"));
-  await copyDirectoryIfMissing(path26.join(legacyCache, "runtime"), cacheRoot);
   await fs21.mkdir(configRoot, { recursive: true, mode: 448 });
   await fs21.writeFile(marker, `${(/* @__PURE__ */ new Date()).toISOString()}
 `, { mode: 384 });
@@ -26214,6 +26390,7 @@ function dedupeMirrors(records) {
 }
 var SHARED_STATE_LOCK_TIMEOUT_MS = 15e3;
 var SHARED_STATE_STALE_GRACE_MS = 5e3;
+var SHARED_STATE_FOREIGN_STALE_MS = SHARED_STATE_LOCK_TIMEOUT_MS * 2;
 function normalizeSharedState(state) {
   return {
     ...state,
@@ -26258,14 +26435,16 @@ async function writeSharedStateUnlocked(state) {
 async function acquireSharedStateLock() {
   const lockPath = sharedStateLockPath();
   const metadataPath2 = path26.join(lockPath, "owner.json");
-  const deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadline = Date.now() + SHARED_STATE_LOCK_TIMEOUT_MS;
+  let deadlineExtended = false;
   await fs21.mkdir(path26.dirname(lockPath), { recursive: true, mode: 448 });
   while (true) {
     const metadata = {
       pid: process.pid,
-      nonce: crypto4.randomBytes(16).toString("hex"),
+      nonce: crypto5.randomBytes(16).toString("hex"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature(process.pid)
+      processStart: await processStartSignature(process.pid),
+      ...hostRecordFields()
     };
     try {
       await fs21.mkdir(lockPath, { mode: 448 });
@@ -26289,7 +26468,16 @@ async function acquireSharedStateLock() {
       continue;
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}`);
+      const holder = await readSharedStateLockMetadata(metadataPath2);
+      const relation = holder ? hostRelation(holder) : void 0;
+      if (holder && !deadlineExtended && (relation === "foreign" || relation === "rebooted")) {
+        const stat13 = await fs21.stat(lockPath).catch(() => void 0);
+        deadline = Date.now() + Math.max(0, SHARED_STATE_FOREIGN_STALE_MS - lockAgeMs(holder.createdAt, stat13)) + 1e3;
+        deadlineExtended = true;
+        continue;
+      }
+      const heldBy = holder ? ` (held by ${describeHost(holder)}, pid ${holder.pid})` : "";
+      throw new Error(`Timed out waiting for the shared Overleaf configuration lock: ${lockPath}${heldBy}`);
     }
     await delay(25 + Math.floor(Math.random() * 25));
   }
@@ -26312,8 +26500,8 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat12 = await fs21.stat(guardPath).catch(() => void 0);
-  if (!stat12 || Date.now() - stat12.mtimeMs < staleMs) return false;
+  const stat13 = await fs21.stat(guardPath).catch(() => void 0);
+  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
   await fs21.rm(guardPath, { recursive: true, force: true });
   try {
     await fs21.mkdir(guardPath, { mode: 448 });
@@ -26325,13 +26513,9 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
 }
 async function sharedStateLockIsStale(lockPath, metadataPath2) {
   const metadata = await readSharedStateLockMetadata(metadataPath2);
-  if (metadata) {
-    if (!processAlive(metadata.pid)) return true;
-    const currentStart = await processStartSignature(metadata.pid);
-    return Boolean(metadata.processStart && currentStart && metadata.processStart !== currentStart);
-  }
-  const stat12 = await fs21.stat(lockPath).catch(() => void 0);
-  return Boolean(stat12 && Date.now() - stat12.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+  const stat13 = await fs21.stat(lockPath).catch(() => void 0);
+  if (metadata) return shortLockIsStale(metadata, lockAgeMs(metadata.createdAt, stat13), SHARED_STATE_FOREIGN_STALE_MS);
+  return Boolean(stat13 && Date.now() - stat13.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
   const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
@@ -26357,10 +26541,9 @@ async function exists3(target) {
 
 // src/overleaf/mirrorCore.ts
 var fs23 = __toESM(require("fs/promises"));
-var os5 = __toESM(require("os"));
 var path29 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
-var import_util10 = require("util");
+var import_util11 = require("util");
 var import_ignore2 = __toESM(require_ignore());
 
 // src/overleaf/tree.ts
@@ -26484,7 +26667,10 @@ function buildProjectTreeIndex(serverUrl, projectId, projectName, project) {
   return { manifest, folders, files };
 }
 function canonicalPathKey2(value) {
-  return value.normalize("NFKC").toLocaleLowerCase("en-US");
+  return projectPathKey(value);
+}
+function projectPathKey(value, platform3 = process.platform) {
+  return platform3 === "darwin" || platform3 === "win32" ? value.normalize("NFKC").toLocaleLowerCase("en-US") : value.normalize("NFC");
 }
 function walkFolder(folder, folderPath, parentFolderId, folders, files) {
   folders.push({
@@ -26524,7 +26710,7 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
 
 // src/overleaf/syncStatus.ts
 var fs22 = __toESM(require("fs/promises"));
-var import_fs4 = require("fs");
+var import_fs5 = require("fs");
 var import_crypto2 = require("crypto");
 var path28 = __toESM(require("path"));
 function classifySyncStatus(input) {
@@ -26818,13 +27004,13 @@ async function scanLocalProject(root, manifest) {
         childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat12 = await runFs(() => fs22.stat(absPath).catch(() => void 0));
-        if (stat12) {
+        const stat13 = await runFs(() => fs22.stat(absPath).catch(() => void 0));
+        if (stat13) {
           fileMetadata.set(relPath, {
-            size: stat12.size,
-            mtimeMs: stat12.mtimeMs,
-            ctimeMs: stat12.ctimeMs,
-            inode: Number(stat12.ino)
+            size: stat13.size,
+            mtimeMs: stat13.mtimeMs,
+            ctimeMs: stat13.ctimeMs,
+            inode: Number(stat13.ino)
           });
         }
       }
@@ -26865,7 +27051,7 @@ function buildTrackedOrParentPathIndex(manifest) {
 }
 async function fileHash(filePath) {
   try {
-    const hash2 = (0, import_fs4.createReadStream)(filePath);
+    const hash2 = (0, import_fs5.createReadStream)(filePath);
     const digest = await new Promise((resolve29, reject) => {
       const state = (0, import_crypto2.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
@@ -26878,14 +27064,14 @@ async function fileHash(filePath) {
   }
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false, knownMetadata) {
-  const stat12 = knownMetadata ? {
+  const stat13 = knownMetadata ? {
     isFile: () => true,
     size: knownMetadata.size,
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
   } : await fs22.stat(filePath).catch(() => void 0);
-  if (!stat12?.isFile()) {
+  if (!stat13?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -26897,17 +27083,17 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat12.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat12.size && manifestFile.localMtimeMs === stat12.mtimeMs && manifestFile.localCtimeMs === stat12.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat13.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat13.size && manifestFile.localMtimeMs === stat13.mtimeMs && manifestFile.localCtimeMs === stat13.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash2 = await fileHash(filePath);
   if (!manifestFile) return { hash: hash2, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat12.size || manifestFile.localMtimeMs !== stat12.mtimeMs || manifestFile.localCtimeMs !== stat12.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat13.size || manifestFile.localMtimeMs !== stat13.mtimeMs || manifestFile.localCtimeMs !== stat13.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash2;
-  manifestFile.localSize = stat12.size;
-  manifestFile.localMtimeMs = stat12.mtimeMs;
-  manifestFile.localCtimeMs = stat12.ctimeMs;
+  manifestFile.localSize = stat13.size;
+  manifestFile.localMtimeMs = stat13.mtimeMs;
+  manifestFile.localCtimeMs = stat13.ctimeMs;
   manifestFile.localInode = inode;
   return { hash: hash2, cacheChanged, reused: false };
 }
@@ -26916,12 +27102,12 @@ function trashPathFor(root, relPath) {
   return path28.join(root, ".overleaf-codex", "trash", stamp, relPath);
 }
 function shouldSkip(relPath) {
-  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath);
+  return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath) || isFilesystemLeftover(relPath);
 }
 
 // src/overleaf/mirrorCore.ts
 init_utils();
-var execFileAsync2 = (0, import_util10.promisify)(import_child_process3.execFile);
+var execFileAsync2 = (0, import_util11.promisify)(import_child_process3.execFile);
 var AGENTS_CONTENT = `# AGENTS.md
 
 This folder is a real local mirror of an Overleaf project.
@@ -27192,7 +27378,7 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
   const metadataRoot = metadataPath(root);
   const ignoreFile = path29.join(root, LOCAL_IGNORE_NAME);
   const metadataExisted = await exists4(metadataRoot);
-  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat12) => stat12.size, () => void 0);
+  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat13) => stat13.size, () => void 0);
   const projectId = await client.createProject(projectName);
   let manifestWritten = false;
   let keptFiles = [];
@@ -27287,11 +27473,10 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
   const outputDir = ".overleaf-codex/local-build";
   const outputDirFromRootDoc = path29.posix.relative(rootDir, outputDir) || ".";
   const workspaceFromRootDoc = path29.posix.relative(rootDir, ".") || ".";
-  const biberCacheDir = path29.join(os5.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
   const compileCommand = [
     `mkdir -p ${shellQuote(outputDir)}`,
-    `mkdir -p ${shellQuote(biberCacheDir)}`,
+    biberCacheShell(root),
     `cd ${shellQuote(rootDir)}`,
     [
       "find . -type d",
@@ -27328,9 +27513,7 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
       env: {
         TEXINPUTS: searchPrefix,
         GINPUTS: searchPrefix,
-        BIBINPUTS: searchPrefix,
-        PAR_GLOBAL_TEMP: biberCacheDir,
-        PAR_TEMP: biberCacheDir
+        BIBINPUTS: searchPrefix
       }
     }],
     "latex-workshop.latex.recipes": [{ name: "latexmk (local mirror)", tools: ["latexmk-local-mirror"] }]
@@ -27369,13 +27552,59 @@ async function upgradeGeneratedLatexmkRc(root, rootDocPath) {
   const rcPath = latexmkRcPath(root, rootDocPath);
   const existing = await fs23.readFile(rcPath, "utf8").catch(() => void 0);
   if (!existing?.startsWith(LATEXMKRC_HEADER)) return false;
-  const missing = LATEXMKRC_BLOCKS.filter((block) => !existing.includes(block.marker));
-  if (!missing.length) return false;
-  const appended = missing.flatMap((block) => block.lines).join("\n");
-  await fs23.writeFile(rcPath, `${existing.endsWith("\n") ? existing : `${existing}
-`}${appended}
+  const current = existing.replace(LEGACY_BIBER_CACHE_PERL, () => biberCachePerl(root).join("\n"));
+  const missing = LATEXMKRC_BLOCKS.filter((block) => !current.includes(block.marker));
+  if (current === existing && !missing.length) return false;
+  const appended = missing.map((block) => `${block.lines.join("\n")}
+`).join("");
+  await fs23.writeFile(rcPath, `${current.endsWith("\n") ? current : `${current}
+`}${appended}`, "utf8");
+  return true;
+}
+var LEGACY_BIBER_CACHE_PERL = /^my \$overleaf_codex_biber_cache = '[^'\n]*';$/m;
+var LEGACY_BIBER_CACHE_SHELL = /mkdir -p '[^']*overleaf-codex-biber[^']*'/;
+async function upgradeGeneratedVsCodeSettings(root) {
+  const settingsPath = path29.join(root, ".vscode", "settings.json");
+  const raw = await fs23.readFile(settingsPath, "utf8").catch(() => void 0);
+  if (!raw) return false;
+  let settings;
+  try {
+    settings = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  const tools = settings["latex-workshop.latex.tools"];
+  const tool = Array.isArray(tools) ? tools.find((candidate) => candidate?.name === "latexmk-local-mirror") : void 0;
+  const command = tool?.args?.[1];
+  if (!tool || typeof command !== "string" || !LEGACY_BIBER_CACHE_SHELL.test(command)) return false;
+  tool.args[1] = command.replace(LEGACY_BIBER_CACHE_SHELL, () => biberCacheShell(root));
+  if (tool.env) {
+    delete tool.env.PAR_GLOBAL_TEMP;
+    delete tool.env.PAR_TEMP;
+  }
+  await fs23.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
   return true;
+}
+function biberCacheShell(root) {
+  const hash2 = sha1(root).slice(0, 12);
+  return [
+    '{ biber_root="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/latex-toolkit-$(id -u)"',
+    'mkdir -p "$biber_root" 2>/dev/null',
+    'chmod 700 "$biber_root" 2>/dev/null',
+    `if [ -d "$biber_root" ] && [ -O "$biber_root" ] && [ ! -L "$biber_root" ]; then biber_cache="$biber_root/biber/${hash2}"; else biber_cache="$PWD/.overleaf-codex/local-build/.biber-cache"; fi`,
+    'mkdir -p "$biber_cache" && export PAR_GLOBAL_TEMP="$biber_cache" PAR_TEMP="$biber_cache"; }'
+  ].join("; ");
+}
+function biberCachePerl(root) {
+  const hash2 = sha1(root).slice(0, 12);
+  return [
+    `my $overleaf_codex_biber_root = ($ENV{'XDG_RUNTIME_DIR'} || $ENV{'TMPDIR'} || '/tmp') . "/latex-toolkit-$<";`,
+    "make_path($overleaf_codex_biber_root, { error => \\my $overleaf_codex_biber_error });",
+    "chmod 0700, $overleaf_codex_biber_root;",
+    "my $overleaf_codex_biber_cache = (-d $overleaf_codex_biber_root && -O _ && ! -l $overleaf_codex_biber_root)",
+    `  ? "$overleaf_codex_biber_root/biber/${hash2}" : "$overleaf_codex_build_dir/.biber-cache";`
+  ];
 }
 async function writeLocalLatexmkRc(root, rootDocPath) {
   const rootDir = rootDocPath ? path29.posix.dirname(rootDocPath) : ".";
@@ -27384,7 +27613,6 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
   const outputDirFromRootDoc = path29.posix.relative(rootDir, outputDir) || ".";
   const workspaceFromRootDoc = path29.posix.relative(rootDir, ".") || ".";
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
-  const biberCacheDir = path29.join(os5.tmpdir(), "overleaf-codex-biber", sha1(root).slice(0, 12));
   const content = [
     LATEXMKRC_HEADER,
     "# This file is local-only and should not be synced back to Overleaf.",
@@ -27394,7 +27622,7 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
     "use File::Find;",
     "use File::Path qw(make_path);",
     `my $overleaf_codex_build_dir = ${perlSingleQuote(outputDirFromRootDoc)};`,
-    `my $overleaf_codex_biber_cache = ${perlSingleQuote(biberCacheDir)};`,
+    ...biberCachePerl(root),
     "make_path($overleaf_codex_build_dir);",
     "make_path($overleaf_codex_biber_cache);",
     "find({",
@@ -27645,7 +27873,7 @@ var http = __toESM(require("http"));
 var https = __toESM(require("https"));
 var path32 = __toESM(require("path"));
 var fs26 = __toESM(require("fs/promises"));
-var import_fs6 = require("fs");
+var import_fs7 = require("fs");
 var import_module = require("module");
 var import_stream = require("stream");
 var import_promises = require("stream/promises");
@@ -27699,18 +27927,18 @@ var v4_default = v4;
 
 // src/overleaf/binaryTransfer.ts
 var import_crypto3 = require("crypto");
-var import_fs5 = require("fs");
+var import_fs6 = require("fs");
 var fs25 = __toESM(require("fs/promises"));
 var path31 = __toESM(require("path"));
 var import_crypto4 = require("crypto");
 async function hashFileDigests(filePath) {
-  const stat12 = await fs25.stat(filePath);
-  if (!stat12.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
+  const stat13 = await fs25.stat(filePath);
+  if (!stat13.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
   const sha12 = (0, import_crypto3.createHash)("sha1");
   const git = (0, import_crypto3.createHash)("sha1");
-  git.update(`blob ${stat12.size}\0`);
+  git.update(`blob ${stat13.size}\0`);
   await new Promise((resolve29, reject) => {
-    const input = (0, import_fs5.createReadStream)(filePath);
+    const input = (0, import_fs6.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha12.update(chunk);
       git.update(chunk);
@@ -27718,21 +27946,24 @@ async function hashFileDigests(filePath) {
     input.on("error", reject);
     input.on("end", resolve29);
   });
-  return { size: stat12.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
+  return { size: stat13.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
   const token = `${process.pid}-${Date.now()}-${(0, import_crypto4.randomBytes)(4).toString("hex")}`;
-  const backupPath = path31.join(path31.dirname(targetPath), `.${path31.basename(targetPath)}.backup-${token}`);
+  const directory = path31.dirname(targetPath);
+  const incomingPath = path31.join(directory, `.${path31.basename(targetPath)}.incoming-${token}`);
+  const backupPath = path31.join(directory, `.${path31.basename(targetPath)}.backup-${token}`);
   let backedUp = false;
   try {
-    await fs25.mkdir(path31.dirname(targetPath), { recursive: true });
+    await fs25.mkdir(directory, { recursive: true });
+    await moveOrCopy(stagedPath, incomingPath);
     try {
       await fs25.rename(targetPath, backupPath);
       backedUp = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    await fs25.rename(stagedPath, targetPath);
+    await fs25.rename(incomingPath, targetPath);
     if (backedUp) await fs25.rm(backupPath, { force: true });
   } catch (error) {
     if (backedUp) {
@@ -27741,7 +27972,16 @@ async function installStagedFile(stagedPath, targetPath) {
     }
     throw error;
   } finally {
+    await fs25.rm(incomingPath, { force: true }).catch(() => void 0);
     await fs25.rm(stagedPath, { force: true }).catch(() => void 0);
+  }
+}
+async function moveOrCopy(source, target) {
+  try {
+    await fs25.rename(source, target);
+  } catch (error) {
+    if (error.code !== "EXDEV") throw error;
+    await fs25.copyFile(source, target);
   }
 }
 
@@ -27899,13 +28139,13 @@ var OverleafClient = class {
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadFileFromPath(projectId, parentFolderId, filename, sourcePath) {
-    const stat12 = await fs26.stat(sourcePath);
-    if (!stat12.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
+    const stat13 = await fs26.stat(sourcePath);
+    if (!stat13.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
     const form = new import_form_data.default();
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs6.createReadStream)(sourcePath), { filename, knownLength: stat12.size });
+    form.append("qqfile", (0, import_fs7.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -28201,7 +28441,7 @@ var OverleafClient = class {
             }
           }
         });
-        await (0, import_promises.pipeline)(res.body, limiter, (0, import_fs6.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
+        await (0, import_promises.pipeline)(res.body, limiter, (0, import_fs7.createWriteStream)(targetPath, { flags: offset > 0 ? "a" : "w" }));
         const actualSize = (await fs26.stat(targetPath)).size;
         const received = actualSize - before;
         if (responseEnd !== void 0 && received !== responseEnd - responseStart + 1) {
@@ -28946,16 +29186,14 @@ var BinaryTransactionStore = class {
   async list() {
     const target = metadataPath(this.root, TRANSACTIONS_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
-        if (error.code === "ENOENT") return void 0;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateTransactionList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs27.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf binary transactions at ${target} were quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
@@ -29275,16 +29513,14 @@ var ConflictStore = class {
   async list() {
     const target = metadataPath(this.root, CONFLICT_INDEX_NAME);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
-        if (error.code === "ENOENT") return void 0;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       const validationError = validateConflictList(parsed);
       if (validationError) throw new Error(validationError);
       return parsed;
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs29.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf conflict index at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return [];
@@ -29351,13 +29587,11 @@ var ManifestStore = class {
   async readJson(name, fallback) {
     const target = metadataPath(this.root, name);
     try {
-      const raw = await readTextFileBounded(target, MAX_METADATA_JSON_BYTES).catch((error) => {
-        if (error.code === "ENOENT") return void 0;
-        throw error;
-      });
+      const raw = await readMetadataText(target, MAX_METADATA_JSON_BYTES);
       if (!raw) return fallback;
       return JSON.parse(raw);
     } catch (error) {
+      if (error instanceof MetadataUnreadableError) throw error;
       await fs30.rename(target, `${target}.corrupt-${Date.now()}`).catch(() => void 0);
       console.warn(`Overleaf metadata at ${target} was quarantined: ${error instanceof Error ? error.message : String(error)}`);
       return fallback;
@@ -29707,6 +29941,88 @@ function normalizeRequest(request) {
   };
 }
 
+// src/overleaf/networkRescan.ts
+var DEFAULT_NETWORK_RESCAN_MS = 3e4;
+var NetworkRescanner = class {
+  constructor(root, manifest, onChanges, intervalMs = DEFAULT_NETWORK_RESCAN_MS, onError = () => void 0) {
+    this.root = root;
+    this.manifest = manifest;
+    this.onChanges = onChanges;
+    this.intervalMs = intervalMs;
+    this.onError = onError;
+  }
+  root;
+  manifest;
+  onChanges;
+  intervalMs;
+  onError;
+  timer;
+  previous;
+  scanning = false;
+  stopped = true;
+  /** Starts polling when the mirror is on a network filesystem (or when forced); returns whether it did. */
+  async start(force = false) {
+    if (this.intervalMs <= 0) return false;
+    if (!force && !await isNetworkFileSystem(this.root)) return false;
+    this.stopped = false;
+    this.previous = await this.snapshot().catch((error) => {
+      this.onError(error);
+      return void 0;
+    });
+    this.schedule();
+    return true;
+  }
+  stop() {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = void 0;
+  }
+  /** One comparison pass; reports and returns the differences from the previous pass. */
+  async poll() {
+    if (this.scanning) return [];
+    this.scanning = true;
+    try {
+      const current = await this.snapshot();
+      if (!current) return [];
+      const previous = this.previous;
+      this.previous = current;
+      if (!previous) return [];
+      const changes = [];
+      for (const [relPath, stamp] of current) {
+        const before = previous.get(relPath);
+        if (before === void 0) changes.push({ relPath, kind: "create" });
+        else if (before !== stamp) changes.push({ relPath, kind: "change" });
+      }
+      for (const relPath of previous.keys()) {
+        if (!current.has(relPath)) changes.push({ relPath, kind: "delete" });
+      }
+      if (changes.length && !this.stopped) this.onChanges(changes);
+      return changes;
+    } finally {
+      this.scanning = false;
+    }
+  }
+  schedule() {
+    if (this.stopped) return;
+    this.timer = setTimeout(() => {
+      this.timer = void 0;
+      void this.poll().catch((error) => this.onError(error)).finally(() => this.schedule());
+    }, this.intervalMs);
+    this.timer.unref?.();
+  }
+  async snapshot() {
+    const manifest = this.manifest();
+    if (!manifest) return void 0;
+    const scan = await scanLocalProject(this.root, manifest);
+    const stamps = /* @__PURE__ */ new Map();
+    for (const relPath of scan.files) {
+      const metadata = scan.fileMetadata.get(relPath);
+      stamps.set(relPath, metadata ? `${metadata.size}:${metadata.mtimeMs}:${metadata.inode}` : "unknown");
+    }
+    return stamps;
+  }
+};
+
 // src/overleaf/config.ts
 var EXPLICIT_CONFIGURATION_SCOPES = [
   "globalValue",
@@ -30035,6 +30351,7 @@ var RealtimeSyncService = class {
   manifest;
   session;
   watcher;
+  networkRescanner;
   renameDisposable;
   docStates = /* @__PURE__ */ new Map();
   pendingDocJoins = /* @__PURE__ */ new Map();
@@ -30593,6 +30910,7 @@ var RealtimeSyncService = class {
     await this.reconcileOnStart(progress, signal);
     this.assertGeneration(generation, signal);
     this.watcher = vscode10.workspace.createFileSystemWatcher(new vscode10.RelativePattern(root, "**/*"));
+    this.startNetworkRescan(root);
     this.watcher.onDidCreate((uri) => this.queueLocal(uri, "create"), this, this.watcherDisposables);
     this.watcher.onDidChange((uri) => this.queueLocal(uri, "change"), this, this.watcherDisposables);
     this.watcher.onDidDelete((uri) => this.queueLocal(uri, "delete"), this, this.watcherDisposables);
@@ -30606,6 +30924,44 @@ var RealtimeSyncService = class {
     await this.loadConnectedUsers();
     this.statusChanged.fire();
     this.log(`Realtime sync started for ${this.manifest.projectName}.`);
+  }
+  /**
+   * The file watcher only sees changes made through this machine. A mirror on a network filesystem
+   * is also edited from other machines (another login node, a cluster job), so there a periodic
+   * stat pass feeds what it finds into the same local-change queue.
+   */
+  startNetworkRescan(root) {
+    const seconds = vscode10.workspace.getConfiguration("latexEditingToolkit.overleaf").get("networkRescanSeconds", 30);
+    const intervalMs = typeof seconds === "number" && Number.isFinite(seconds) ? Math.max(0, seconds) * 1e3 : DEFAULT_NETWORK_RESCAN_MS;
+    const rescanner = new NetworkRescanner(
+      root,
+      () => this.root === root ? this.manifest : void 0,
+      (changes) => {
+        if (this.root !== root) return;
+        this.log(`Found ${changes.length} change(s) made outside this machine.`);
+        for (const change of changes) this.queueLocal(vscode10.Uri.file(path38.join(root, change.relPath)), change.kind);
+      },
+      intervalMs,
+      (error) => this.log(`Network filesystem rescan failed: ${formatUnknownError(error)}`)
+    );
+    this.networkRescanner = rescanner;
+    void rescanner.start().then((started) => {
+      if (started && this.networkRescanner === rescanner) {
+        this.log(`The mirror is on a network filesystem; checking for edits from other machines every ${Math.round(intervalMs / 1e3)} s.`);
+      }
+    });
+  }
+  /**
+   * Stops at once because another process now owns this mirror. The socket goes first, so no edit
+   * from here reaches Overleaf while in-flight work drains; then the usual teardown runs.
+   */
+  async fence(reason) {
+    this.generation += 1;
+    this.stopping = true;
+    this.shouldReconnect = false;
+    this.session?.disconnect();
+    this.log(`Sync stopped on this machine: ${reason}`);
+    await this.stop();
   }
   async stop() {
     this.generation += 1;
@@ -30649,6 +31005,8 @@ var RealtimeSyncService = class {
     this.clearCollaborators();
     this.watcher?.dispose();
     this.watcher = void 0;
+    this.networkRescanner?.stop();
+    this.networkRescanner = void 0;
     this.renameDisposable?.dispose();
     this.renameDisposable = void 0;
     this.session?.disconnect();
@@ -30810,7 +31168,7 @@ var RealtimeSyncService = class {
     const remoteUri = vscode10.Uri.file(state.conflictPath);
     const localUri = vscode10.Uri.file(this.abs(normalized));
     const basePath = await assertNoSymlinkAbsolutePath(this.root, baseDocPath(this.root, state.docId));
-    const baseExists = await fs33.lstat(basePath).then((stat12) => stat12.isFile(), () => false);
+    const baseExists = await fs33.lstat(basePath).then((stat13) => stat13.isFile(), () => false);
     if (baseExists) {
       const baseUri = vscode10.Uri.file(basePath);
       await vscode10.commands.executeCommand(
@@ -31192,20 +31550,22 @@ var RealtimeSyncService = class {
     return true;
   }
   async registerPotentialRenameCreate(relPath) {
+    const observedAt = Date.now();
     const safePath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
     if (!safePath) return;
-    const stat12 = await fs33.stat(safePath).catch(() => void 0);
-    if (!stat12) return;
+    const stat13 = await fs33.stat(safePath).catch(() => void 0);
+    if (!stat13) return;
     if (this.hasPendingFolderRenameAncestor(relPath)) {
       this.scheduleLocalChange(relPath, "create", 1e3);
       return;
     }
-    if (stat12.isDirectory()) {
+    if (stat13.isDirectory()) {
       this.pendingFolderRenameRoots.add(relPath);
       const detection2 = this.renameDetector.registerCreate({
         path: relPath,
         hash: await this.folderFingerprintFromLocal(relPath),
-        entityType: "folder"
+        entityType: "folder",
+        observedAt
       });
       if (detection2.kind !== "none") {
         this.handleRenameDetection(detection2);
@@ -31221,7 +31581,8 @@ var RealtimeSyncService = class {
     const detection = this.renameDetector.registerCreate({
       path: relPath,
       hash: hash2,
-      entityType: isTextLike(relPath) ? "doc" : "file"
+      entityType: isTextLike(relPath) ? "doc" : "file",
+      observedAt
     });
     if (detection.kind !== "none") {
       this.handleRenameDetection(detection);
@@ -31759,12 +32120,12 @@ var RealtimeSyncService = class {
       return;
     }
     const absPath = await assertNoSymlinkPath(this.root, relPath);
-    const stat12 = await fs33.stat(absPath).catch(() => void 0);
-    if (!stat12) {
+    const stat13 = await fs33.stat(absPath).catch(() => void 0);
+    if (!stat13) {
       await this.handleLocalDelete(relPath);
       return;
     }
-    if (stat12.isDirectory()) {
+    if (stat13.isDirectory()) {
       await this.handleLocalFolderCreate(relPath);
       return;
     }
@@ -32403,7 +32764,7 @@ var RealtimeSyncService = class {
       } catch {
         snapshotPath = "";
       }
-      const snapshotExists = Boolean(snapshotPath) && await fs33.lstat(snapshotPath).then((stat12) => stat12.isFile(), () => false);
+      const snapshotExists = Boolean(snapshotPath) && await fs33.lstat(snapshotPath).then((stat13) => stat13.isFile(), () => false);
       if (!state || state.docId !== conflict.docId || !snapshotExists) {
         await this.conflictStore?.remove(normalized);
         continue;
@@ -32766,14 +33127,30 @@ var RealtimeSyncService = class {
 };
 
 // src/overleaf/keychainStore.ts
-var crypto5 = __toESM(require("crypto"));
-var import_fs7 = require("fs");
+var crypto6 = __toESM(require("crypto"));
+var import_fs8 = require("fs");
 var fs34 = __toESM(require("fs/promises"));
 var path39 = __toESM(require("path"));
 var import_child_process4 = require("child_process");
 var import_module2 = require("module");
 var KEYCHAIN_SERVICE = "yiqiyang33.latex-editing-toolkit.overleaf";
-var systemSecretTool = { run: (args, stdin) => runCommand("secret-tool", args, stdin) };
+var CredentialBackendUnavailableError = class extends Error {
+  code = "CREDENTIAL_BACKEND_UNAVAILABLE";
+  constructor(message, options) {
+    super(message, options);
+    this.name = "CredentialBackendUnavailableError";
+  }
+};
+var DEFAULT_SECRET_TOOL_TIMEOUTS = { lookupMs: 5e3, storeMs: 1e4 };
+var systemSecretTool = {
+  run: (args, stdin) => runCommand(
+    "secret-tool",
+    args,
+    stdin,
+    args[0] === "store" ? DEFAULT_SECRET_TOOL_TIMEOUTS.storeMs : DEFAULT_SECRET_TOOL_TIMEOUTS.lookupMs
+  )
+};
+var PRIMARY_RETRY_MS = 10 * 6e4;
 var MacKeychainCredentialStore = class {
   constructor(keychain, runtimeRoot2 = path39.join(__dirname, "vendor", "keytar", `${process.platform}-${process.arch}`)) {
     this.keychain = keychain;
@@ -32824,13 +33201,15 @@ var MacKeychainCredentialStore = class {
   }
 };
 var SecretToolCredentialStore = class {
-  constructor(secretTool = systemSecretTool) {
+  constructor(secretTool = systemSecretTool, timeouts = DEFAULT_SECRET_TOOL_TIMEOUTS) {
     this.secretTool = secretTool;
+    this.timeouts = timeouts;
   }
   secretTool;
+  timeouts;
   async saveIdentity(serverUrl, identity) {
     const account = normalizeServerUrl(serverUrl);
-    await this.secretTool.run(
+    await this.invoke(
       ["store", "--label", "LaTeX Editing Toolkit Overleaf", "service", KEYCHAIN_SERVICE, "account", account],
       JSON.stringify(identity)
     );
@@ -32841,7 +33220,7 @@ var SecretToolCredentialStore = class {
     const state = await readSharedState();
     if (state.credentialTombstones.includes(account)) return void 0;
     try {
-      const raw = await this.secretTool.run(["lookup", "service", KEYCHAIN_SERVICE, "account", account]);
+      const raw = await this.invoke(["lookup", "service", KEYCHAIN_SERVICE, "account", account]);
       return raw ? parseIdentity(raw) : void 0;
     } catch (error) {
       if (isMissingCredential(error)) return void 0;
@@ -32850,10 +33229,33 @@ var SecretToolCredentialStore = class {
   }
   async deleteIdentity(serverUrl) {
     const account = normalizeServerUrl(serverUrl);
-    await this.secretTool.run(["clear", "service", KEYCHAIN_SERVICE, "account", account]).catch((error) => {
+    await this.invoke(["clear", "service", KEYCHAIN_SERVICE, "account", account]).catch((error) => {
       if (!isMissingCredential(error)) throw error;
     });
     await markCredentialDeleted(account);
+  }
+  /**
+   * Runs one secret-tool operation under a deadline. A miss stays a miss, and every other failure
+   * becomes CredentialBackendUnavailableError: on a headless host the keyring fails in many ways
+   * (no login collection, locked collection, no D-Bus session), and none of them is fixable here.
+   */
+  async invoke(args, stdin) {
+    const operation = args[0];
+    const timeoutMs = operation === "store" ? this.timeouts.storeMs : this.timeouts.lookupMs;
+    try {
+      return await withTimeout(
+        this.secretTool.run(args, stdin),
+        timeoutMs,
+        `secret-tool ${operation} timed out after ${timeoutMs} ms`
+      );
+    } catch (error) {
+      if ((operation === "lookup" || operation === "clear") && isBareExitOne(error)) return "";
+      if (isMissingCredential(error)) throw error;
+      throw new CredentialBackendUnavailableError(
+        `secret-tool ${operation} failed: ${errorMessage(error)}`,
+        { cause: error }
+      );
+    }
   }
   async listServers() {
     return (await readSharedState()).servers;
@@ -32911,58 +33313,67 @@ var FileCredentialStore = class {
     };
   }
   filePath(account) {
-    const digest = crypto5.createHash("sha256").update(account).digest("hex");
+    const digest = crypto6.createHash("sha256").update(account).digest("hex");
     return path39.join(this.root, `${digest}.json`);
   }
 };
 var FallbackCredentialStore = class {
-  constructor(primary, fallback) {
+  constructor(primary, fallback, now = Date.now) {
     this.primary = primary;
     this.fallback = fallback;
+    this.now = now;
     this.fallbackActive = !(primary.describe?.()?.available ?? true);
   }
   primary;
   fallback;
+  now;
   fallbackActive;
+  primaryUnavailableUntil = 0;
+  primaryUnavailableReason;
   async saveIdentity(serverUrl, identity) {
-    try {
-      await this.primary.saveIdentity(serverUrl, identity);
-      this.fallbackActive = false;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      await this.fallback.saveIdentity(serverUrl, identity);
-      this.fallbackActive = true;
-    }
-  }
-  async getIdentity(serverUrl) {
-    let primaryValue;
-    try {
-      primaryValue = await this.primary.getIdentity(serverUrl);
-      this.fallbackActive = false;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      this.fallbackActive = true;
-    }
-    if (primaryValue) return primaryValue;
-    const fallbackValue = await this.fallback.getIdentity(serverUrl);
-    if (fallbackValue && !this.fallbackActive) {
+    if (this.primaryUsable()) {
       try {
-        await this.primary.saveIdentity(serverUrl, fallbackValue);
+        await this.primary.saveIdentity(serverUrl, identity);
+        this.fallbackActive = false;
         await this.fallback.clearIdentity(serverUrl);
+        return;
       } catch (error) {
         if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
       }
     }
+    await this.fallback.saveIdentity(serverUrl, identity);
+    this.fallbackActive = true;
+  }
+  async getIdentity(serverUrl) {
+    if (this.primaryUsable()) {
+      try {
+        const primaryValue = await this.primary.getIdentity(serverUrl);
+        if (primaryValue) {
+          this.fallbackActive = false;
+          return primaryValue;
+        }
+      } catch (error) {
+        if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
+      }
+    }
+    const fallbackValue = await this.fallback.getIdentity(serverUrl);
+    if (!fallbackValue) return void 0;
+    this.fallbackActive = true;
+    if (this.primaryUsable()) await this.migrateToPrimary(serverUrl, fallbackValue);
     return fallbackValue;
   }
   async deleteIdentity(serverUrl) {
     let deletedByPrimary = false;
-    try {
-      await this.primary.deleteIdentity(serverUrl);
-      deletedByPrimary = true;
-    } catch (error) {
-      if (!isBackendUnavailable(error)) throw error;
-      this.fallbackActive = true;
+    if (this.primaryUsable()) {
+      try {
+        await this.primary.deleteIdentity(serverUrl);
+        deletedByPrimary = true;
+      } catch (error) {
+        if (!isBackendUnavailable(error)) throw error;
+        this.markPrimaryUnavailable(error);
+      }
     }
     await this.fallback.clearIdentity(serverUrl);
     if (!deletedByPrimary) await markCredentialDeleted(normalizeServerUrl(serverUrl));
@@ -32971,14 +33382,48 @@ var FallbackCredentialStore = class {
     return (await readSharedState()).servers;
   }
   describe() {
-    if (!this.fallbackActive) return this.primary.describe?.() ?? { kind: "secret-tool", available: true };
-    return this.fallback.describe();
+    if (!this.fallbackActive && this.primaryUsable()) {
+      return this.primary.describe?.() ?? { kind: "secret-tool", available: true };
+    }
+    const info = this.fallback.describe();
+    return this.primaryUnavailableReason ? { ...info, warning: `${info.warning} The system keyring is unavailable: ${this.primaryUnavailableReason}` } : info;
+  }
+  /**
+   * Moves a file credential into the system keyring once the keyring works, and deletes the file
+   * only after reading the credential back: a keyring that accepts writes into a volatile session
+   * collection would otherwise lose the login on its next restart.
+   */
+  async migrateToPrimary(serverUrl, identity) {
+    try {
+      await this.primary.saveIdentity(serverUrl, identity);
+      const stored = await this.primary.getIdentity(serverUrl);
+      if (!stored || JSON.stringify(stored) !== JSON.stringify(identity)) return;
+      await this.fallback.clearIdentity(serverUrl);
+      this.fallbackActive = false;
+    } catch (error) {
+      if (!isBackendUnavailable(error)) throw error;
+      this.markPrimaryUnavailable(error);
+    }
+  }
+  primaryUsable() {
+    return this.now() >= this.primaryUnavailableUntil;
+  }
+  /** Skips the keyring for a while, so status refreshes don't spawn a failing process each time. */
+  markPrimaryUnavailable(error) {
+    this.primaryUnavailableUntil = this.now() + PRIMARY_RETRY_MS;
+    this.primaryUnavailableReason = errorMessage(error);
+    this.fallbackActive = true;
   }
 };
-function createCredentialStore(platform3 = process.platform) {
-  if (platform3 === "darwin") return new FallbackCredentialStore(new MacKeychainCredentialStore(), new FileCredentialStore());
-  if (platform3 === "linux") return new FallbackCredentialStore(new SecretToolCredentialStore(), new FileCredentialStore());
-  return new FileCredentialStore();
+function createCredentialStore(platform3 = process.platform, env3 = process.env) {
+  const mode = env3.LATEX_TOOLKIT_CREDENTIAL_STORE?.trim().toLowerCase();
+  if (mode === "file") return new FileCredentialStore();
+  const system = platform3 === "darwin" ? new MacKeychainCredentialStore() : platform3 === "linux" ? new SecretToolCredentialStore() : void 0;
+  if (mode === "system") {
+    if (!system) throw new Error(`LATEX_TOOLKIT_CREDENTIAL_STORE=system is not supported on ${platform3}.`);
+    return system;
+  }
+  return system ? new FallbackCredentialStore(system, new FileCredentialStore()) : new FileCredentialStore();
 }
 async function markCredentialSaved(account) {
   await updateSharedState((state) => {
@@ -33016,27 +33461,56 @@ async function writePrivateJson(target, value) {
   try {
     await fs34.writeFile(temporary, `${JSON.stringify(value, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-    await fs34.chmod(temporary, 384);
+    await restrictToOwner(temporary);
     await fs34.rename(temporary, target);
-    await fs34.chmod(target, 384);
+    await fs34.chmod(target, 384).catch(() => void 0);
   } finally {
     await fs34.rm(temporary, { force: true }).catch(() => void 0);
   }
 }
-function runCommand(command, args, stdin) {
+async function restrictToOwner(target) {
+  const chmodError = await fs34.chmod(target, 384).then(() => void 0, (error) => error);
+  const mode = (await fs34.stat(target)).mode & 511;
+  if ((mode & 63) !== 0) {
+    throw new Error(
+      `Refusing to store the Overleaf credential in ${target}: other users could read it (mode ${mode.toString(8)})${chmodError ? `, and chmod failed: ${errorMessage(chmodError)}` : ""}.`
+    );
+  }
+}
+function runCommand(command, args, stdin, timeoutMs) {
   return new Promise((resolve29, reject) => {
     const child = (0, import_child_process4.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
+    let settled = false;
+    const timer = timeoutMs === void 0 ? void 0 : setTimeout(() => {
+      settled = true;
+      child.kill("SIGKILL");
+      const error = new Error(`${command} ${args[0] ?? ""} timed out after ${timeoutMs} ms.`);
+      error.code = "ETIMEDOUT";
+      reject(error);
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-    child.once("error", (error) => reject(error));
+    child.stdin.on("error", () => void 0);
+    child.once("error", (error) => {
+      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
     child.once("close", (code) => {
+      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       const output = Buffer.concat(stdout).toString("utf8").trim();
       if (code === 0) resolve29(output);
       else {
-        const error = new Error(Buffer.concat(stderr).toString("utf8").trim() || `${command} exited with code ${code}.`);
+        const errorText = Buffer.concat(stderr).toString("utf8").trim();
+        const error = new Error(errorText || `${command} exited with code ${code}.`);
         error.code = String(code ?? "unknown");
+        error.exitCode = code;
+        error.stderr = errorText;
         reject(error);
       }
     });
@@ -33044,8 +33518,34 @@ function runCommand(command, args, stdin) {
 `);
   });
 }
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve29, reject) => {
+    const timer = setTimeout(() => {
+      const error = new Error(message);
+      error.code = "ETIMEDOUT";
+      reject(error);
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve29(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+function isBareExitOne(error) {
+  const failure = error;
+  return failure?.exitCode === 1 && !failure.stderr?.trim();
+}
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 function hasKeytarRuntime(root) {
-  return (0, import_fs7.existsSync)(path39.join(root, "lib", "keytar.js")) && (0, import_fs7.existsSync)(path39.join(root, "build", "Release", "keytar.node"));
+  return (0, import_fs8.existsSync)(path39.join(root, "lib", "keytar.js")) && (0, import_fs8.existsSync)(path39.join(root, "build", "Release", "keytar.node"));
 }
 function loadMacKeychainApi(root) {
   const target = `${process.platform}-${process.arch}`;
@@ -33066,16 +33566,17 @@ function isMissingCredential(error) {
   return /could not be found|no such secret|not found in collection|SecKeychainSearchCopyNext|specified item could not be found/i.test(message);
 }
 function isBackendUnavailable(error) {
+  if (error instanceof CredentialBackendUnavailableError) return true;
   const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets|no such file or directory/i.test(message);
+  return /ENOENT|command not found|cannot find module|could not load the macOS Keychain runtime|dlopen|incompatible architecture|NODE_MODULE_VERSION|dbus|secret service|cannot autolaunch|org\.freedesktop\.secrets?|\/org\/freedesktop\/secrets|locked collection|timed out|no such file or directory/i.test(message);
 }
 function findExecutable(command) {
   const entries = (process.env.PATH ?? "").split(path39.delimiter).filter(Boolean);
   for (const entry of entries) {
     const candidate = path39.join(entry, command);
     try {
-      const stat12 = require("fs").statSync(candidate);
-      if (stat12.isFile() && (stat12.mode & 73) !== 0) return candidate;
+      const stat13 = require("fs").statSync(candidate);
+      if (stat13.isFile() && (stat13.mode & 73) !== 0) return candidate;
     } catch {
     }
   }
@@ -33126,6 +33627,10 @@ var SecretStore = class {
     await this.context.secrets.delete(SERVERS_KEY);
     return this.keychain.listServers();
   }
+  /** The backend that served or stored the most recent credential. */
+  describe() {
+    return this.keychain.describe?.();
+  }
   key(serverUrl) {
     return `${SECRET_PREFIX}${normalizeServerUrl(serverUrl)}`;
   }
@@ -33175,121 +33680,191 @@ function workspaceContainsPath(candidate, workspaceRoots) {
 }
 
 // src/overleaf/syncOwnerCoordinator.ts
-var crypto6 = __toESM(require("crypto"));
+var crypto7 = __toESM(require("crypto"));
 var fs35 = __toESM(require("fs/promises"));
 var net = __toESM(require("net"));
 var path41 = __toESM(require("path"));
+var import_perf_hooks = require("perf_hooks");
 var MAX_IPC_FRAME_BYTES = 1024 * 1024;
 var MAX_IPC_BUFFER_BYTES = 4 * 1024 * 1024;
 var MAX_IPC_MESSAGE_BYTES = 32 * 1024 * 1024;
 var MAX_ACTIVE_IPC_CHUNKS = 64;
 var IPC_CHUNK_BYTES = 512 * 1024;
+var MAX_LOCK_RECORD_BYTES = 64 * 1024;
+var DEFAULT_HEARTBEAT_MS = 5e3;
+var DEFAULT_LEASE_MS = 6e4;
+var DEFAULT_FENCE_MARGIN_MS = 15e3;
+var DEFAULT_IO_TIMEOUT_MS = 5e3;
+var DEFAULT_ASSUME_DEAD_AFTER_MS = 10 * 6e4;
+var DEFAULT_LEGACY_STALE_MS = 3 * 60 * 6e4 + 10 * 6e4;
+var DEFAULT_MISSING_METADATA_STALE_MS = 1e4;
+var DEFAULT_TAKEOVER_POLL_MS = 1e3;
+var CLAIM_WRITE_BUDGET_MS = 5e3;
+var DEMOTE_LISTENER_TIMEOUT_MS = 1e4;
+var LIVE_OWNER_NONCES = /* @__PURE__ */ new Set();
+var SyncStandbyError = class extends Error {
+  constructor(holder) {
+    super(describeSyncHolder(holder));
+    this.holder = holder;
+    this.name = "SyncStandbyError";
+  }
+  holder;
+  code = "SYNC_STANDBY";
+};
 var SyncOwnerCoordinator = class {
   constructor(options = {}) {
     this.options = options;
+    this.host = options.host ?? currentHostIdentity();
+    this.heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    this.leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
+    this.fenceMarginMs = options.fenceMarginMs ?? DEFAULT_FENCE_MARGIN_MS;
+    this.ioTimeoutMs = options.ioTimeoutMs ?? DEFAULT_IO_TIMEOUT_MS;
+    this.takeoverTimeoutMs = options.takeoverTimeoutMs ?? this.leaseMs + 2 * this.heartbeatMs + 5e3;
+    if (3 * this.heartbeatMs > this.leaseMs - this.fenceMarginMs || this.ioTimeoutMs >= this.fenceMarginMs) {
+      throw new Error("Sync owner lease timing is inconsistent: need 3 x heartbeat <= lease - margin and I/O timeout < margin.");
+    }
   }
   options;
+  /** The mirror's real path: what the lock is keyed by and what IPC messages carry. */
   root;
+  /** The mirror path as the caller named it, which may go through a symlink. */
+  requestedRoot;
   metadata;
   server;
   handler;
+  mode = "none";
+  standbyHolder;
+  ownerSocketPath;
+  lease;
+  demoting;
+  legacyIsLocal;
+  observations = /* @__PURE__ */ new Map();
+  demoteListeners = /* @__PURE__ */ new Set();
   clientSockets = /* @__PURE__ */ new Set();
   subscriberSockets = /* @__PURE__ */ new Set();
   eventSockets = /* @__PURE__ */ new Set();
   writeQueues = /* @__PURE__ */ new WeakMap();
   commandQueue = Promise.resolve();
   releasing = false;
+  host;
+  heartbeatMs;
+  leaseMs;
+  fenceMarginMs;
+  ioTimeoutMs;
+  takeoverTimeoutMs;
   get isOwner() {
-    return Boolean(this.server);
+    return this.mode === "owner";
   }
+  /** The selected mirror, as the caller named it in claim(). */
   get currentRoot() {
-    return this.root;
+    return this.root ? this.requestedRoot : void 0;
   }
-  async claim(root, handler) {
+  get role() {
+    return this.mode;
+  }
+  /** Who holds ownership while this coordinator is in standby. */
+  get holder() {
+    return this.mode === "standby" ? this.standbyHolder : void 0;
+  }
+  /**
+   * Called when this owner loses ownership on its own: superseded, asked to hand over, or unable to
+   * renew its lease. Listeners must stop syncing before they resolve; the lock is handed over only
+   * after they finish (or after a bounded wait).
+   */
+  onDidDemote(listener) {
+    this.demoteListeners.add(listener);
+    return () => this.demoteListeners.delete(listener);
+  }
+  async claim(root, handler, options = {}) {
     await this.release();
     try {
-      return await this.claimInner(root, handler);
+      return await this.claimInner(root, handler, options);
     } catch (error) {
       this.handler = void 0;
       this.root = void 0;
+      this.requestedRoot = void 0;
+      this.mode = "none";
+      this.standbyHolder = void 0;
+      this.ownerSocketPath = void 0;
       throw error;
     }
   }
-  async claimInner(root, handler) {
-    this.root = await fs35.realpath(path41.resolve(root)).catch(() => path41.resolve(root));
+  async claimInner(root, handler, options) {
+    this.requestedRoot = path41.resolve(root);
+    this.root = await fs35.realpath(this.requestedRoot).catch(() => this.requestedRoot);
     this.handler = handler;
-    const paths = runtimePaths(this.root);
-    for (const directory of /* @__PURE__ */ new Set([runtimeRoot(), path41.dirname(paths.socketPath)])) {
-      await fs35.mkdir(directory, { recursive: true, mode: 448 });
-      await fs35.chmod(directory, 448).catch(() => void 0);
-    }
-    const deadline = Date.now() + (this.options.ownerStartupTimeoutMs ?? 3e3);
-    while (true) {
-      if (await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) return "client";
-      try {
-        await fs35.mkdir(paths.lockPath, { mode: 448 });
-        break;
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-      }
-      if (await this.clearStaleLock(paths)) {
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for the sync owner socket for ${this.root}.`);
-      }
-      await delay2(this.options.retryDelayMs ?? 50);
-    }
-    const metadata = {
-      version: 1,
-      pid: process.pid,
-      root: this.root,
-      socketPath: paths.socketPath,
-      nonce: crypto6.randomBytes(16).toString("hex"),
-      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      processStart: await processStartSignature(process.pid)
-    };
+    const paths = runtimePaths(this.root, { socketDirectory: this.options.socketDirectory, host: this.host });
+    await fs35.mkdir(runtimeRoot(), { recursive: true, mode: 448 });
+    await fs35.chmod(runtimeRoot(), 448).catch(() => void 0);
+    const socketPath = await this.prepareSocketPath(paths.hash);
+    this.legacyIsLocal ??= this.options.runtimeRootIsShared !== void 0 ? !this.options.runtimeRootIsShared : !await isNetworkFileSystem(runtimeRoot());
+    const connectTimeoutMs = this.options.connectTimeoutMs ?? 200;
+    const deadline = this.mono() + (options.takeover ? this.takeoverTimeoutMs : this.options.ownerStartupTimeoutMs ?? 3e3);
+    let reservation;
+    let last;
+    let lastLiveness = "unknown";
     try {
-      await fs35.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
-`, { mode: 384 });
-      await fs35.rm(paths.socketPath, { force: true });
-      this.server = net.createServer((socket) => this.accept(socket));
-      await new Promise((resolve29, reject) => {
-        this.server.once("error", reject);
-        this.server.listen(paths.socketPath, () => {
-          this.server.removeListener("error", reject);
-          resolve29();
-        });
-      });
-      await fs35.chmod(paths.socketPath, 384);
-      if (!await canConnect(paths.socketPath, this.options.connectTimeoutMs ?? 200)) {
-        throw new Error("Sync owner socket did not become reachable after startup.");
+      while (true) {
+        throwIfAborted(options.signal);
+        if (await canConnect(socketPath, connectTimeoutMs)) return this.becomeClient(socketPath);
+        const takeover = await this.readTakeover(paths);
+        if (takeover && this.takeoverIsFresh(takeover) && takeover.requester.token !== reservation?.token) {
+          return this.enterStandby(this.holderFromTakeover(takeover, "takeover-pending"));
+        }
+        if (await tryCreateDirectory(paths.lockPath)) {
+          await this.publish(paths, socketPath);
+          return "owner";
+        }
+        const state = await this.readLockState(paths);
+        if (!state.exists) continue;
+        const liveness = await this.classify(paths.lockPath, state);
+        last = state;
+        lastLiveness = liveness;
+        if (liveness === "stale") {
+          if (await this.reclaim(paths, state.metadata?.nonce)) continue;
+        } else if (liveness === "live-local") {
+          const recorded = state.metadata?.socketPath;
+          if (recorded && recorded !== socketPath && path41.basename(recorded).startsWith(paths.hash) && await canConnect(recorded, connectTimeoutMs)) {
+            return this.becomeClient(recorded);
+          }
+        } else if (liveness === "live-foreign" || liveness === "live-legacy") {
+          const legacy = liveness === "live-legacy";
+          if (!options.takeover || legacy && !options.forceLegacy) {
+            return this.enterStandby(this.holderFrom(state, legacy ? "legacy-owner" : "foreign-owner"));
+          }
+          if (legacy) {
+            if (await this.reclaim(paths, state.metadata?.nonce, true)) continue;
+          } else if (state.metadata && reservation?.targetNonce !== state.metadata.nonce) {
+            if (reservation) await this.withdrawTakeover(paths, reservation.token).catch(() => void 0);
+            reservation = { token: await this.requestTakeover(paths, state.metadata.nonce), targetNonce: state.metadata.nonce };
+            this.options.log?.(`Asked ${describeHolderLocation(this.holderFrom(state, "foreign-owner"))} to hand over Overleaf sync for ${this.root}.`);
+          }
+        }
+        if (this.mono() >= deadline) {
+          const reason = options.takeover ? "takeover-timeout" : lastLiveness === "live-local" ? "unreachable" : "unknown";
+          return this.enterStandby(last ? this.holderFrom(last, reason) : { reason, sameHost: false, legacy: false });
+        }
+        await delay2(options.takeover ? this.options.takeoverPollMs ?? DEFAULT_TAKEOVER_POLL_MS : this.options.retryDelayMs ?? 50);
       }
-      this.metadata = metadata;
-      return "owner";
-    } catch (error) {
-      const server = this.server;
-      this.server = void 0;
-      if (server?.listening) await new Promise((resolve29) => server.close(() => resolve29()));
-      await fs35.rm(paths.lockPath, { recursive: true, force: true });
-      await fs35.rm(paths.socketPath, { force: true });
-      throw error;
+    } finally {
+      if (reservation) await this.withdrawTakeover(paths, reservation.token).catch(() => void 0);
     }
   }
   async request(command, args = {}, timeoutMs = 12e4) {
     if (!this.root) throw new Error("No sync root is selected.");
-    if (this.server && this.handler) {
+    if (this.mode === "standby") throw new SyncStandbyError(this.standbyHolder);
+    if (this.mode === "owner" && this.handler) {
       if (this.releasing) throw new Error("Sync owner is shutting down.");
       return this.runCommand(() => this.handler?.(command, args));
     }
     const request = {
       version: 1,
-      id: crypto6.randomUUID(),
+      id: crypto7.randomUUID(),
       command,
       root: this.root,
       args
     };
-    return sendRequest(runtimePaths(this.root).socketPath, request, timeoutMs);
+    return sendRequest(this.clientSocketPath(), request, timeoutMs);
   }
   emit(event, data) {
     if (!this.root) return;
@@ -33311,7 +33886,8 @@ var SyncOwnerCoordinator = class {
   }
   async subscribe(onEvent, timeoutMs = this.options.subscriptionTimeoutMs ?? 5e3) {
     if (!this.root) throw new Error("No sync root is selected.");
-    const socket = net.createConnection(runtimePaths(this.root).socketPath);
+    if (this.mode === "standby") throw new SyncStandbyError(this.standbyHolder);
+    const socket = net.createConnection(this.clientSocketPath());
     socket.on("error", () => void 0);
     try {
       await onceConnected(socket, timeoutMs);
@@ -33350,7 +33926,7 @@ var SyncOwnerCoordinator = class {
     try {
       await this.enqueueMessage(socket, {
         version: 1,
-        id: crypto6.randomUUID(),
+        id: crypto7.randomUUID(),
         command: "subscribe",
         root: this.root,
         args: {}
@@ -33365,6 +33941,9 @@ var SyncOwnerCoordinator = class {
   }
   async release() {
     this.releasing = true;
+    await this.demoting?.catch(() => void 0);
+    const lease = this.lease;
+    this.stopLease();
     await this.commandQueue.catch(() => void 0);
     await Promise.all([...this.clientSockets].map((socket) => this.writeQueues.get(socket)?.catch(() => void 0)));
     for (const socket of this.subscriberSockets) socket.destroy();
@@ -33377,18 +33956,38 @@ var SyncOwnerCoordinator = class {
       this.server = void 0;
       await new Promise((resolve29) => server.close(() => resolve29()));
     }
-    if (this.metadata && this.root) {
-      const paths = runtimePaths(this.root);
-      const current = await readMetadata(paths.metadataPath);
-      if (current?.nonce === this.metadata.nonce) {
-        await fs35.rm(paths.socketPath, { force: true });
-        await fs35.rm(paths.lockPath, { recursive: true, force: true });
+    if (this.metadata && lease) {
+      LIVE_OWNER_NONCES.delete(this.metadata.nonce);
+      if (this.leaseElapsedMs(lease) < this.leaseMs - this.fenceMarginMs) {
+        const current = await withTimeout2(readJsonFile(lease.paths.metadataPath), this.ioTimeoutMs, "owner record read").catch(() => void 0);
+        if (current?.status === "ok" && current.value.nonce === this.metadata.nonce) {
+          await fs35.rm(this.metadata.socketPath, { force: true }).catch(() => void 0);
+          await retireLockDirectory(lease.paths.lockPath).catch(() => void 0);
+        }
       }
     }
     this.metadata = void 0;
     this.handler = void 0;
     this.root = void 0;
+    this.requestedRoot = void 0;
+    this.mode = "none";
+    this.standbyHolder = void 0;
+    this.ownerSocketPath = void 0;
     this.releasing = false;
+  }
+  becomeClient(socketPath) {
+    this.ownerSocketPath = socketPath;
+    this.mode = "client";
+    return "client";
+  }
+  enterStandby(holder) {
+    this.mode = "standby";
+    this.standbyHolder = holder;
+    this.ownerSocketPath = void 0;
+    return "standby";
+  }
+  clientSocketPath() {
+    return this.ownerSocketPath ?? runtimePaths(this.root, { socketDirectory: this.options.socketDirectory, host: this.host }).socketPath;
   }
   accept(socket) {
     this.clientSockets.add(socket);
@@ -33411,7 +34010,7 @@ var SyncOwnerCoordinator = class {
       await this.enqueueMessage(socket, { version: 1, event: "subscribed", root: this.root });
       return;
     }
-    if (this.releasing) {
+    if (this.releasing || this.mode !== "owner") {
       await this.enqueueMessage(socket, errorResponse(value.id, "owner_releasing", "Sync owner is shutting down."));
       return;
     }
@@ -33433,48 +34032,505 @@ var SyncOwnerCoordinator = class {
     this.writeQueues.set(socket, current);
     return current;
   }
-  async lockIsStale(paths) {
-    const metadata = await readMetadata(paths.metadataPath);
-    if (!metadata) {
-      const stat12 = await fs35.stat(paths.lockPath).catch(() => void 0);
-      return Boolean(stat12 && Date.now() - stat12.mtimeMs >= (this.options.missingMetadataStaleMs ?? 1e3));
+  async prepareSocketPath(hash2) {
+    for (const candidate of socketDirectoryCandidates(this.options.socketDirectory)) {
+      const socketPath = socketPathFor(hash2, candidate, this.host);
+      if (await ensurePrivateDirectory(path41.dirname(socketPath))) return socketPath;
     }
-    if (processAlive(metadata.pid)) {
-      const currentStart = await processStartSignature(metadata.pid);
-      if (!metadata.processStart || !currentStart || metadata.processStart === currentStart) return false;
-    }
-    return true;
+    throw new Error("No private directory is available for the Overleaf sync owner socket.");
   }
-  async clearStaleLock(paths) {
+  /** Creates the owner record, starts the heartbeat, and opens the socket for this host's clients. */
+  async publish(paths, socketPath) {
+    const startedMono = this.mono();
+    const metadata = {
+      version: 2,
+      pid: process.pid,
+      root: this.root,
+      socketPath,
+      nonce: crypto7.randomBytes(16).toString("hex"),
+      startedAt: new Date(this.now()).toISOString(),
+      processStart: await processStartSignature(process.pid),
+      ...hostRecordFields(this.host),
+      heartbeatMs: this.heartbeatMs,
+      leaseMs: this.leaseMs
+    };
+    let server;
+    try {
+      await withTimeout2(
+        fs35.writeFile(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}
+`, { mode: 384, flag: "wx" }),
+        this.ioTimeoutMs,
+        "Writing the sync owner record timed out"
+      );
+      const renewedMono = this.mono();
+      const renewedWall = this.now();
+      await withTimeout2(writeHeartbeat(paths.lockPath, metadata.nonce, 0, renewedWall), this.ioTimeoutMs, "Writing the sync owner heartbeat timed out");
+      if (this.mono() - startedMono > CLAIM_WRITE_BUDGET_MS) {
+        const current = await readJsonFile(paths.metadataPath);
+        if (current.status !== "ok" || current.value.nonce !== metadata.nonce) {
+          throw new Error("Lost the sync owner lock while publishing it.");
+        }
+      }
+      await fs35.rm(socketPath, { force: true });
+      server = net.createServer((socket) => this.accept(socket));
+      await listen(server, socketPath);
+      await fs35.chmod(socketPath, 384).catch(() => void 0);
+      if (!await canConnect(socketPath, this.options.connectTimeoutMs ?? 200)) {
+        throw new Error("Sync owner socket did not become reachable after startup.");
+      }
+      this.server = server;
+      this.metadata = metadata;
+      this.mode = "owner";
+      LIVE_OWNER_NONCES.add(metadata.nonce);
+      this.lease = { paths, nonce: metadata.nonce, seq: 0, renewedMono, renewedWall, failures: 0, lockMissing: 0 };
+      this.scheduleTick(this.heartbeatMs);
+    } catch (error) {
+      if (server?.listening) await new Promise((resolve29) => server.close(() => resolve29()));
+      const current = await readJsonFile(paths.metadataPath).catch(() => void 0);
+      if (!current || current.status !== "ok" || current.value.nonce === metadata.nonce) {
+        await retireLockDirectory(paths.lockPath).catch(() => void 0);
+      }
+      await fs35.rm(socketPath, { force: true }).catch(() => void 0);
+      throw error;
+    }
+  }
+  scheduleTick(delayMs) {
+    const lease = this.lease;
+    if (!lease) return;
+    if (lease.timer) clearTimeout(lease.timer);
+    lease.timer = setTimeout(() => this.tick(lease), delayMs);
+    lease.timer.unref?.();
+  }
+  /**
+   * One heartbeat. The fence check runs on every tick, even while an earlier renewal is stuck on a
+   * hung NFS call; a new renewal starts only once the previous one has settled, so stuck calls
+   * never pile up on the I/O thread pool.
+   */
+  tick(lease) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    if (this.leaseElapsedMs(lease) >= this.leaseMs - this.fenceMarginMs) {
+      void this.demote("lease-lost");
+      return;
+    }
+    if (!lease.pending) {
+      const startedMono = this.mono();
+      const startedWall = this.now();
+      const operation = this.renew(lease, startedWall);
+      const settled = operation.then(() => void 0, () => void 0);
+      lease.pending = settled;
+      void settled.then(() => {
+        if (lease.pending === settled) lease.pending = void 0;
+      });
+      void withTimeout2(operation, this.ioTimeoutMs, "Sync owner heartbeat timed out").then(
+        (outcome) => this.onRenewal(lease, outcome, startedMono, startedWall),
+        (error) => this.onRenewalFailure(lease, error)
+      );
+    }
+    this.scheduleTick(this.heartbeatMs);
+  }
+  async renew(lease, at) {
+    const owner = await readJsonFile(lease.paths.metadataPath);
+    if (owner.status === "missing") {
+      const lockExists = await fs35.stat(lease.paths.lockPath).then(() => true, (error) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      });
+      if (!lockExists) return { kind: "lock-missing" };
+      throw new Error("The sync owner record is missing from its lock.");
+    }
+    if (owner.status === "error") throw owner.error;
+    if (owner.status === "invalid" || !isOwnerMetadata(owner.value)) throw new Error("The sync owner record is unreadable.");
+    if (owner.value.nonce !== lease.nonce) {
+      return { kind: "demote", reason: "superseded", holder: this.holderFrom({ exists: true, metadata: owner.value }, "superseded") };
+    }
+    const takeover = await this.readTakeover(lease.paths);
+    if (takeover && takeover.targetNonce === lease.nonce && this.takeoverIsFresh(takeover)) {
+      return { kind: "demote", reason: "takeover-requested", holder: this.holderFromTakeover(takeover, "takeover-requested") };
+    }
+    await (this.options.heartbeatWrite ?? writeHeartbeat)(lease.paths.lockPath, lease.nonce, lease.seq + 1, at);
+    return { kind: "renewed" };
+  }
+  onRenewal(lease, outcome, startedMono, startedWall) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    if (outcome.kind === "renewed") {
+      lease.seq += 1;
+      lease.renewedMono = startedMono;
+      lease.renewedWall = startedWall;
+      if (lease.failures) this.options.log?.(`Sync owner heartbeat recovered after ${lease.failures} failed attempt(s).`);
+      lease.failures = 0;
+      lease.lockMissing = 0;
+      return;
+    }
+    if (outcome.kind === "lock-missing") {
+      lease.lockMissing += 1;
+      if (lease.lockMissing >= 2) void this.demote("lock-lost");
+      else this.scheduleTick(Math.min(250, this.heartbeatMs));
+      return;
+    }
+    void this.demote(outcome.reason, outcome.holder);
+  }
+  onRenewalFailure(lease, error) {
+    if (this.lease !== lease || this.mode !== "owner") return;
+    lease.failures += 1;
+    if (lease.failures === 1 || lease.failures % 3 === 0) {
+      this.options.log?.(`Sync owner heartbeat failed (attempt ${lease.failures}): ${formatUnknownError(error)}`);
+    }
+    this.scheduleTick(Math.min(this.heartbeatMs, 1e3 * 2 ** Math.min(lease.failures - 1, 2)));
+  }
+  stopLease() {
+    if (this.lease?.timer) clearTimeout(this.lease.timer);
+    this.lease = void 0;
+  }
+  leaseElapsedMs(lease) {
+    return Math.max(this.mono() - lease.renewedMono, this.now() - lease.renewedWall);
+  }
+  /** Stops acting as owner: listeners stop the sync engine first, then the lock is let go. */
+  demote(reason, holder) {
+    if (this.demoting) return this.demoting;
+    const lease = this.lease;
+    const metadata = this.metadata;
+    const root = this.requestedRoot ?? this.root;
+    if (this.mode !== "owner" || !lease || !metadata || !root) return Promise.resolve();
+    this.demoting = (async () => {
+      this.stopLease();
+      LIVE_OWNER_NONCES.delete(metadata.nonce);
+      const standby = { ...holder ?? { sameHost: false, legacy: false }, reason };
+      this.mode = "standby";
+      this.standbyHolder = standby;
+      this.options.log?.(`Sync owner for ${root} stepped down: ${describeSyncHolder(standby)}`);
+      const event = { root, reason, holder: standby };
+      await Promise.race([
+        Promise.allSettled([...this.demoteListeners].map((listener) => Promise.resolve().then(() => listener(event)))),
+        delay2(DEMOTE_LISTENER_TIMEOUT_MS)
+      ]);
+      const notices = [...this.eventSockets].map((socket) => this.enqueueMessage(socket, {
+        version: 1,
+        event: "owner-demoted",
+        root,
+        data: { reason, holder: standby }
+      }).catch(() => void 0));
+      await Promise.race([Promise.allSettled(notices), delay2(200)]);
+      const server = this.server;
+      this.server = void 0;
+      for (const socket of this.clientSockets) socket.destroy();
+      this.clientSockets.clear();
+      this.eventSockets.clear();
+      if (server) await new Promise((resolve29) => server.close(() => resolve29()));
+      if (reason === "takeover-requested" && this.leaseElapsedMs(lease) < this.leaseMs - this.fenceMarginMs) {
+        const current = await withTimeout2(readJsonFile(lease.paths.metadataPath), this.ioTimeoutMs, "owner record read").catch(() => void 0);
+        if (current?.status === "ok" && current.value.nonce === metadata.nonce) {
+          await retireLockDirectory(lease.paths.lockPath).catch(() => void 0);
+        }
+      }
+      this.metadata = void 0;
+    })().finally(() => {
+      this.demoting = void 0;
+    });
+    return this.demoting;
+  }
+  async readLockState(paths) {
+    const io = (operation) => withTimeout2(operation, this.ioTimeoutMs, "Reading the sync owner lock timed out");
+    let lockMtimeMs;
+    try {
+      lockMtimeMs = (await io(fs35.stat(paths.lockPath))).mtimeMs;
+    } catch (error) {
+      return error.code === "ENOENT" ? { exists: false } : { exists: true, unreadable: true };
+    }
+    const owner = await io(readJsonFile(paths.metadataPath)).catch((error) => ({ status: "error", error }));
+    if (owner.status === "error") return { exists: true, lockMtimeMs, unreadable: true };
+    if (owner.status !== "ok" || !isOwnerMetadata(owner.value)) return { exists: true, lockMtimeMs };
+    const metadata = owner.value;
+    if (metadata.version < 2) return { exists: true, lockMtimeMs, metadata };
+    const beat = await io(readJsonFile(heartbeatPath(paths.lockPath, metadata.nonce))).catch((error) => ({ status: "error", error }));
+    if (beat.status === "error") return { exists: true, lockMtimeMs, metadata, unreadable: true };
+    return beat.status === "ok" && isHeartbeat(beat.value, metadata.nonce) ? { exists: true, lockMtimeMs, metadata, heartbeat: beat.value } : { exists: true, lockMtimeMs, metadata };
+  }
+  async classify(lockPath, state) {
+    if (state.unreadable) return "unknown";
+    const metadata = state.metadata;
+    if (!metadata) {
+      const age2 = state.lockMtimeMs === void 0 ? 0 : this.now() - state.lockMtimeMs;
+      return age2 >= (this.options.missingMetadataStaleMs ?? DEFAULT_MISSING_METADATA_STALE_MS) ? "stale" : "unknown";
+    }
+    const relation = hostRelation(metadata, this.host);
+    if (relation === "same" || relation === "legacy" && this.legacyIsLocal) {
+      if (metadata.pid === process.pid) return LIVE_OWNER_NONCES.has(metadata.nonce) ? "live-local" : "stale";
+      return await localProcessMatches(metadata.pid, metadata.processStart) ? "live-local" : "stale";
+    }
+    if (relation === "legacy") {
+      if (await localProcessMatches(metadata.pid, metadata.processStart)) return "live-local";
+      return this.observedUnchanged(lockPath, `legacy:${metadata.nonce}`, this.options.legacyStaleMs ?? DEFAULT_LEGACY_STALE_MS) ? "stale" : "live-legacy";
+    }
+    const beatAt = Date.parse(state.heartbeat?.at ?? metadata.startedAt);
+    const age = Number.isFinite(beatAt) ? this.now() - beatAt : Number.POSITIVE_INFINITY;
+    const lease = Math.max(typeof metadata.leaseMs === "number" ? metadata.leaseMs : 0, this.leaseMs);
+    if (relation === "rebooted") return age > lease ? "stale" : "live-foreign";
+    const unchangedMs = this.unchangedFor(lockPath, `${metadata.nonce}:${state.heartbeat?.seq ?? -1}`);
+    if (unchangedMs >= lease) return "stale";
+    const beat = typeof metadata.heartbeatMs === "number" ? metadata.heartbeatMs : this.heartbeatMs;
+    return age > (this.options.assumeDeadAfterMs ?? DEFAULT_ASSUME_DEAD_AFTER_MS) && unchangedMs >= 2 * beat ? "stale" : "live-foreign";
+  }
+  /** Whether `key` has stayed the same for `windowMs` of this process's own monotonic time. */
+  observedUnchanged(lockPath, key, windowMs) {
+    return this.unchangedFor(lockPath, key) >= windowMs;
+  }
+  /** How long this process has seen `key` for the lock unchanged, on its own monotonic clock. */
+  unchangedFor(lockPath, key) {
+    const now = this.mono();
+    const seen = this.observations.get(lockPath);
+    if (!seen || seen.key !== key) {
+      this.observations.set(lockPath, { key, since: now });
+      return 0;
+    }
+    return now - seen.since;
+  }
+  async reclaim(paths, expectedNonce, force = false) {
     const guardPath = `${paths.lockPath}.reclaim`;
     if (!await acquireReclaimGuard2(
       guardPath,
       Math.max((this.options.ownerStartupTimeoutMs ?? 3e3) * 2, 1e4)
     )) return false;
     try {
-      if (!await this.lockIsStale(paths)) return false;
-      await fs35.rm(paths.lockPath, { recursive: true, force: true });
-      await fs35.rm(paths.socketPath, { force: true });
+      const state = await this.readLockState(paths);
+      if (!state.exists) return true;
+      if (state.unreadable || state.metadata?.nonce !== expectedNonce) return false;
+      if (!force && await this.classify(paths.lockPath, state) !== "stale") return false;
+      await retireLockDirectory(paths.lockPath);
+      this.observations.delete(paths.lockPath);
       return true;
     } finally {
       await fs35.rm(guardPath, { recursive: true, force: true });
     }
   }
+  async readTakeover(paths) {
+    const read = await withTimeout2(readJsonFile(paths.takeoverPath), this.ioTimeoutMs, "takeover read").catch(() => void 0);
+    return read?.status === "ok" && isTakeoverRecord(read.value) ? read.value : void 0;
+  }
+  takeoverIsFresh(record) {
+    const requestedAt = Date.parse(record.requestedAt);
+    return Number.isFinite(requestedAt) && this.now() - requestedAt < this.takeoverTimeoutMs + this.heartbeatMs;
+  }
+  async requestTakeover(paths, targetNonce) {
+    const token = crypto7.randomBytes(16).toString("hex");
+    const record = {
+      version: 1,
+      root: this.root,
+      targetNonce,
+      requestedAt: new Date(this.now()).toISOString(),
+      requester: { ...hostRecordFields(this.host), pid: process.pid, token }
+    };
+    const temporary = `${paths.takeoverPath}.${crypto7.randomBytes(4).toString("hex")}.tmp`;
+    await fs35.writeFile(temporary, `${JSON.stringify(record, null, 2)}
+`, { mode: 384, flag: "wx" });
+    try {
+      await fs35.rename(temporary, paths.takeoverPath);
+    } catch (error) {
+      await fs35.rm(temporary, { force: true }).catch(() => void 0);
+      throw error;
+    }
+    return token;
+  }
+  async withdrawTakeover(paths, token) {
+    const record = await this.readTakeover(paths);
+    if (record?.requester.token === token) await fs35.rm(paths.takeoverPath, { force: true });
+  }
+  holderFrom(state, reason) {
+    const metadata = state.metadata;
+    if (!metadata) return { reason, sameHost: false, legacy: false };
+    const relation = hostRelation(metadata, this.host);
+    const beatAt = Date.parse(state.heartbeat?.at ?? metadata.startedAt);
+    return {
+      reason,
+      ...metadata.hostname ? { hostname: metadata.hostname } : relation === "same" ? { hostname: this.host.hostname } : {},
+      pid: metadata.pid,
+      startedAt: metadata.startedAt,
+      ...Number.isFinite(beatAt) ? { heartbeatAgeMs: Math.max(0, this.now() - beatAt) } : {},
+      sameHost: relation === "same",
+      legacy: relation === "legacy"
+    };
+  }
+  holderFromTakeover(record, reason) {
+    return {
+      reason,
+      hostname: record.requester.hostname,
+      pid: record.requester.pid,
+      sameHost: hostRelation(record.requester, this.host) === "same",
+      legacy: false
+    };
+  }
+  now() {
+    return this.options.now?.() ?? Date.now();
+  }
+  mono() {
+    return this.options.monotonicNow?.() ?? import_perf_hooks.performance.now();
+  }
 };
-function runtimePaths(root) {
-  const hash2 = crypto6.createHash("sha256").update(path41.resolve(root)).digest("hex").slice(0, 32);
+function describeSyncHolder(holder) {
+  const where = describeHolderLocation(holder);
+  switch (holder?.reason) {
+    case "takeover-pending":
+      return `${where} is taking over Overleaf sync for this mirror; sync is paused here.`;
+    case "takeover-timeout":
+      return `${where} did not hand over Overleaf sync in time; sync is paused here.`;
+    case "legacy-owner":
+      return `An older version of the extension on ${where} is syncing this mirror; sync is paused here.`;
+    case "unreachable":
+      return `${where} holds Overleaf sync for this mirror but is not responding; sync is paused here.`;
+    case "superseded":
+    case "takeover-requested":
+      return `Overleaf sync for this mirror moved to ${where}; sync is paused here.`;
+    case "lease-lost":
+      return "Overleaf sync stopped here because its lock could not be renewed in time (is the home directory reachable?).";
+    case "lock-lost":
+      return "Overleaf sync stopped here because its lock was removed.";
+    case "unknown":
+      return "Overleaf sync for this mirror is held elsewhere and its lock could not be read; sync is paused here.";
+    default:
+      return `Overleaf sync for this mirror is running on ${where}; sync is paused here.`;
+  }
+}
+function describeHolderLocation(holder) {
+  if (holder?.sameHost) return "another window on this machine";
+  const host = holder?.hostname ?? "another machine";
+  return holder?.pid ? `${host} (pid ${holder.pid})` : host;
+}
+function socketDirectoryCandidates(explicit) {
+  if (explicit) return [{ directory: path41.resolve(explicit), shared: false }];
+  const candidates = [];
+  if (process.env.LATEX_TOOLKIT_SOCKET_HOME) {
+    candidates.push({ directory: path41.resolve(process.env.LATEX_TOOLKIT_SOCKET_HOME), shared: false });
+  }
+  const xdgRuntime = process.env.XDG_RUNTIME_DIR;
+  if (xdgRuntime && path41.isAbsolute(xdgRuntime)) {
+    candidates.push({ directory: path41.join(xdgRuntime, "latex-editing-toolkit"), shared: false });
+  }
+  candidates.push({ directory: runtimeRoot(), shared: process.platform !== "darwin" });
+  return candidates;
+}
+function socketPathFor(hash2, candidate, host) {
+  const name = candidate.shared ? `${hash2}.${hostTag(host)}` : hash2;
+  const socketPath = path41.join(candidate.directory, name);
+  const limit = process.platform === "darwin" ? 103 : 107;
+  return Buffer.byteLength(socketPath) <= limit ? socketPath : path41.join("/tmp", `latex-toolkit-${process.getuid?.() ?? "user"}`, name);
+}
+function runtimePaths(root, options = {}) {
+  const hash2 = crypto7.createHash("sha256").update(path41.resolve(root)).digest("hex").slice(0, 32);
   const lockPath = path41.join(runtimeRoot(), `${hash2}.lock`);
-  const normalSocketPath = path41.join(runtimeRoot(), hash2);
-  const macSocketPathLimit = 104;
-  const socketPath = process.platform === "darwin" && Buffer.byteLength(normalSocketPath) >= macSocketPathLimit ? path41.join("/tmp", `latex-toolkit-${process.getuid?.() ?? "user"}`, hash2) : normalSocketPath;
   return {
+    hash: hash2,
     lockPath,
     metadataPath: path41.join(lockPath, "owner.json"),
-    // macOS limits AF_UNIX paths to roughly 104 bytes. Keep metadata under the
-    // configured cache root, but move only an overlong socket into a private,
-    // per-user directory under /tmp.
-    socketPath
+    takeoverPath: path41.join(runtimeRoot(), `${hash2}.takeover.json`),
+    socketPath: socketPathFor(hash2, socketDirectoryCandidates(options.socketDirectory)[0], options.host ?? currentHostIdentity())
   };
+}
+function heartbeatPath(lockPath, nonce) {
+  return path41.join(lockPath, `heartbeat-${nonce}.json`);
+}
+async function writeHeartbeat(lockPath, nonce, seq, at) {
+  const target = heartbeatPath(lockPath, nonce);
+  const temporary = `${target}.${crypto7.randomBytes(4).toString("hex")}.tmp`;
+  const record = { version: 1, nonce, seq, at: new Date(at).toISOString() };
+  await fs35.writeFile(temporary, `${JSON.stringify(record)}
+`, { mode: 384, flag: "wx" });
+  try {
+    await fs35.rename(temporary, target);
+  } catch (error) {
+    await fs35.rm(temporary, { force: true }).catch(() => void 0);
+    throw error;
+  }
+}
+async function retireLockDirectory(lockPath) {
+  const retired = `${lockPath}.retired-${process.pid}-${crypto7.randomBytes(4).toString("hex")}`;
+  try {
+    await fs35.rename(lockPath, retired);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  await fs35.rm(retired, { recursive: true, force: true }).catch(() => void 0);
+}
+async function tryCreateDirectory(target) {
+  try {
+    await fs35.mkdir(target, { mode: 448 });
+    return true;
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+}
+async function ensurePrivateDirectory(directory) {
+  try {
+    await fs35.mkdir(directory, { recursive: true, mode: 448 });
+    let stat13 = await fs35.lstat(directory);
+    if (!stat13.isDirectory() || stat13.isSymbolicLink()) return false;
+    const uid = process.getuid?.();
+    if (uid !== void 0 && stat13.uid !== uid) return false;
+    if ((stat13.mode & 63) !== 0) {
+      await fs35.chmod(directory, 448);
+      stat13 = await fs35.lstat(directory);
+      if ((stat13.mode & 63) !== 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function listen(server, socketPath) {
+  return new Promise((resolve29, reject) => {
+    server.once("error", reject);
+    server.listen(socketPath, () => {
+      server.removeListener("error", reject);
+      resolve29();
+    });
+  });
+}
+async function readJsonFile(target) {
+  let raw;
+  try {
+    raw = await readTextFileBounded(target, MAX_LOCK_RECORD_BYTES);
+  } catch (error) {
+    if (error.code === "ENOENT") return { status: "missing" };
+    return { status: "error", error };
+  }
+  try {
+    return { status: "ok", value: JSON.parse(raw) };
+  } catch {
+    return { status: "invalid" };
+  }
+}
+function withTimeout2(operation, timeoutMs, message) {
+  return new Promise((resolve29, reject) => {
+    const timer = setTimeout(() => reject(Object.assign(new Error(message), { code: "ETIMEDOUT" })), timeoutMs);
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve29(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw signal.reason ?? new Error("Operation cancelled.");
+}
+function isOwnerMetadata(value) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return (record.version === 1 || record.version === 2) && typeof record.pid === "number" && typeof record.nonce === "string" && typeof record.socketPath === "string" && typeof record.startedAt === "string";
+}
+function isHeartbeat(value, nonce) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return record.nonce === nonce && typeof record.seq === "number" && typeof record.at === "string";
+}
+function isTakeoverRecord(value) {
+  if (!value || typeof value !== "object") return false;
+  const record = value;
+  return record.version === 1 && typeof record.targetNonce === "string" && typeof record.requestedAt === "string" && Boolean(record.requester) && typeof record.requester?.token === "string" && typeof record.requester?.hostname === "string" && typeof record.requester?.pid === "number";
 }
 function sendRequest(socketPath, request, timeoutMs) {
   return new Promise((resolve29, reject) => {
@@ -33571,7 +34627,7 @@ function writeMessageBounded(socket, value) {
     return Promise.reject(new Error("Sync IPC message exceeded its limit."));
   }
   const candidateId = value?.id;
-  const id = typeof candidateId === "string" ? candidateId : crypto6.randomUUID();
+  const id = typeof candidateId === "string" ? candidateId : crypto7.randomUUID();
   const total = Math.ceil(encoded.length / IPC_CHUNK_BYTES);
   return Array.from({ length: total }, (_, index) => encoded.subarray(index * IPC_CHUNK_BYTES, (index + 1) * IPC_CHUNK_BYTES)).reduce(
     (promise, payload, index) => promise.then(() => writeFrame(socket, `${JSON.stringify({
@@ -33670,8 +34726,8 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat12 = await fs35.stat(guardPath).catch(() => void 0);
-  if (!stat12 || Date.now() - stat12.mtimeMs < staleMs) return false;
+  const stat13 = await fs35.stat(guardPath).catch(() => void 0);
+  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
   await fs35.rm(guardPath, { recursive: true, force: true });
   try {
     await fs35.mkdir(guardPath, { mode: 448 });
@@ -33679,15 +34735,6 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
-  }
-}
-async function readMetadata(target) {
-  const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
-  if (!raw) return void 0;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return void 0;
   }
 }
 function isOwnerRequest(value) {
@@ -33713,6 +34760,11 @@ var OverleafService = class {
     this.output = output;
     this.onChanged = onChanged;
     this.secrets = new SecretStore(context);
+    this.ownerCoordinator = new SyncOwnerCoordinator({
+      log: (message) => this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${message}`)
+    });
+    const stopDemotionListener = this.ownerCoordinator.onDidDemote((event) => this.handleOwnerDemoted(event));
+    this.disposables.push({ dispose: stopDemotionListener });
     this.mirrorManager = new MirrorManager(context, scope, migrateLegacyMirrors);
     this.realtimeSync = new RealtimeSyncService(context, output);
     this.diagnostics = new CompileDiagnosticProvider("LaTeX Editing Toolkit");
@@ -33742,9 +34794,10 @@ var OverleafService = class {
   realtimeSync;
   diagnostics;
   compileService;
-  ownerCoordinator = new SyncOwnerCoordinator();
+  ownerCoordinator;
   ownerSubscription;
   takeoverTimer;
+  standbyTimer;
   takeoverEnabled = false;
   externalSyncStatus;
   externalConflicts = [];
@@ -33756,13 +34809,17 @@ var OverleafService = class {
   compileOnSaveTimer;
   compileOnSaveDocument;
   compileOnSaveInFlight;
+  fileCredentialNoticeShown = false;
   disposables = [];
   registerCommands(register) {
     const entries = [
       ["overleafCodex.loginWithCookie", (candidate) => this.loginWithCookie(candidate)],
       ["overleafCodex.listProjects", (candidate) => this.listProjects(candidate)],
       ["overleafCodex.openProjectLocally", (candidate) => this.openProjectLocally(candidate)],
-      ["overleafCodex.startRealtimeSync", (candidate) => this.startRealtimeSync(candidate)],
+      // An explicit start - from a command, a button, or auto-start when a window opens the mirror -
+      // takes sync over from another machine that still holds it.
+      ["overleafCodex.startRealtimeSync", (candidate) => this.startRealtimeSync(candidate, { takeover: true })],
+      ["overleafCodex.takeOverSync", (candidate) => this.takeOverSync(candidate)],
       ["overleafCodex.stopRealtimeSync", (candidate) => this.stopRealtimeSync(candidate)],
       ["overleafCodex.checkSyncStatus", (candidate) => this.checkSyncStatus("incremental", candidate)],
       ["overleafCodex.runFullSyncAudit", (candidate) => this.checkSyncStatus("full", candidate)],
@@ -33820,7 +34877,7 @@ var OverleafService = class {
         projectName: manifest.projectName,
         mirrorRoot,
         rootDocument: manifest.rootDocPath,
-        running: this.realtimeSync.running && this.realtimeSync.currentRoot === mirrorRoot || this.ownerCoordinator.currentRoot === mirrorRoot,
+        running: this.realtimeSync.running && this.realtimeSync.currentRoot === mirrorRoot || this.ownerCoordinator.currentRoot === mirrorRoot && this.ownerCoordinator.role !== "standby",
         syncStatus: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getSyncStatusReport() : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus : void 0,
         syncItems: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getSyncStatusItems() : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalSyncStatus?.items ?? [] : [],
         conflicts: this.realtimeSync.currentRoot === mirrorRoot ? this.realtimeSync.getConflicts() : this.ownerCoordinator.currentRoot === mirrorRoot ? this.externalConflicts : [],
@@ -33828,7 +34885,8 @@ var OverleafService = class {
         lastSyncAt: manifest.lastSyncAt,
         lastRemoteCompile: manifest.lastRemoteCompile,
         compileMode: this.compileMode(),
-        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot ? this.ownerCoordinator.isOwner ? "owner" : "client" : "none",
+        ownerRole: this.ownerRoleForRoot(mirrorRoot),
+        ...this.syncHolderForRoot(mirrorRoot),
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
@@ -33845,7 +34903,8 @@ var OverleafService = class {
         collaborators: [],
         error: sanitizeDiagnosticText(formatUnknownError(error)),
         compileMode: this.compileMode(),
-        ownerRole: this.ownerCoordinator.currentRoot === mirrorRoot ? this.ownerCoordinator.isOwner ? "owner" : "client" : "none",
+        ownerRole: this.ownerRoleForRoot(mirrorRoot),
+        ...this.syncHolderForRoot(mirrorRoot),
         connectionState: this.connectionStateForRoot(mirrorRoot),
         connectionReason: this.connectionReasonForRoot(mirrorRoot),
         reconnectAttempts: this.reconnectAttemptsForRoot(mirrorRoot),
@@ -33864,6 +34923,7 @@ var OverleafService = class {
       this.takeoverEnabled = false;
       if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
       this.takeoverTimer = void 0;
+      this.clearStandbyTimer();
       this.ownerSubscription = void 0;
       this.clearExternalSnapshot();
       await this.ownerCoordinator.release();
@@ -33872,7 +34932,7 @@ var OverleafService = class {
     const state = await this.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
     if (!vscode11.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
-    if (!state.running) await this.startRealtimeSync(state.mirrorRoot);
+    if (!state.running) await this.startRealtimeSync(state.mirrorRoot, { takeover: true });
   }
   /**
    * Creates an Overleaf project, scaffolds a starter template into its new local mirror, and
@@ -33911,7 +34971,7 @@ var OverleafService = class {
       totalBytes: 0,
       signedIn: (await this.secrets.listServers()).length > 0
     };
-    if (!folder || !await fs36.stat(folder).then((stat12) => stat12.isDirectory(), () => false)) {
+    if (!folder || !await fs36.stat(folder).then((stat13) => stat13.isDirectory(), () => false)) {
       return { ...state, blockedReason: "This folder does not exist." };
     }
     if (await fs36.stat(manifestPath(folder)).then(() => true, () => false)) {
@@ -34066,7 +35126,10 @@ var OverleafService = class {
       case "overleaf-publish":
         return this.publishFromForm(payload);
       case "overleaf-start-sync":
-        await this.startRealtimeSync(payload.workspacePath);
+        await this.startRealtimeSync(payload.workspacePath, { takeover: true });
+        return this.state(payload.workspacePath);
+      case "overleaf-takeover-sync":
+        await this.takeOverSync(payload.workspacePath);
         return this.state(payload.workspacePath);
       case "overleaf-stop-sync":
         await this.stopRealtimeSync(payload.workspacePath);
@@ -34148,6 +35211,7 @@ var OverleafService = class {
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = void 0;
+    this.clearStandbyTimer();
     this.ownerSubscription = void 0;
     this.cancelCompileOnSave();
     await this.realtimeSync.stop().catch(() => void 0);
@@ -34157,6 +35221,7 @@ var OverleafService = class {
   dispose() {
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
+    this.clearStandbyTimer();
     this.ownerSubscription = void 0;
     this.cancelCompileOnSave();
     void this.ownerCoordinator.release();
@@ -34179,8 +35244,17 @@ var OverleafService = class {
       () => client.loginWithCookie(cookie)
     );
     await this.secrets.saveIdentity(serverUrl, identity);
-    this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf login succeeded for ${serverUrl}`);
+    const backend = this.secrets.describe();
+    const storedAt = backend ? `; credential store ${backend.kind}${backend.location ? ` at ${backend.location}` : ""}` : "";
+    this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf login succeeded for ${serverUrl}${storedAt}`);
+    if (backend?.warning) this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${backend.warning}`);
     vscode11.window.setStatusBarMessage(`Overleaf login succeeded${identity.userEmail ? ` as ${identity.userEmail}` : ""}.`, 3e3);
+    if (backend?.kind === "restricted-file" && !this.fileCredentialNoticeShown) {
+      this.fileCredentialNoticeShown = true;
+      void vscode11.window.showInformationMessage(
+        `No usable system keyring on ${os8.hostname()}, so the Overleaf cookie was saved to ${backend.location ?? "a private credentials file"}, readable only by your account. Backups or NFS snapshots of your home directory may keep copies; logging out deletes the file.`
+      );
+    }
     this.onChanged();
   }
   async listProjects(_candidate) {
@@ -34239,14 +35313,19 @@ var OverleafService = class {
     await this.mirrorManager.openFolder(mirrored);
     this.onChanged();
   }
-  async startRealtimeSync(candidate) {
+  async startRealtimeSync(candidate, options = {}) {
     const root = await this.requireMirrorRoot(candidate);
     if (this.realtimeSync.running && this.realtimeSync.currentRoot === root && this.ownerCoordinator.isOwner) return;
-    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner && this.ownerSubscription) return;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "client" && this.ownerSubscription) return;
     this.takeoverEnabled = true;
     this.ownerSubscription = void 0;
+    this.clearStandbyTimer();
     this.clearExternalSnapshot();
-    const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    const role = await this.claimOwnership(root, options);
+    if (role === "standby") {
+      this.enterStandby(root, options.takeover === true);
+      return;
+    }
     if (role === "client") {
       this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Using existing sync owner for ${root}.`);
       await this.connectToExistingOwner(root);
@@ -34257,6 +35336,9 @@ var OverleafService = class {
       const manifest = await readManifest(root);
       if (await upgradeGeneratedLatexmkRc(root, manifest.rootDocPath).catch(() => false)) {
         this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Updated the generated .latexmkrc in ${root} with the current build settings.`);
+      }
+      if (await upgradeGeneratedVsCodeSettings(root).catch(() => false)) {
+        this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Updated the local build task in ${path42.join(root, ".vscode", "settings.json")} to keep biber's cache private.`);
       }
       const client = await this.makeClient(manifest.serverUrl);
       await vscode11.window.withProgress(
@@ -34276,7 +35358,7 @@ var OverleafService = class {
           );
           if (action === "Login again") {
             await this.loginWithCookie({ serverUrl });
-            await this.startRealtimeSync(root);
+            await this.startRealtimeSync(root, options);
             return;
           }
         }
@@ -34285,12 +35367,113 @@ var OverleafService = class {
     }
     this.onChanged();
   }
+  /**
+   * Claims sync ownership for `root`. With `takeover`, an owner on another machine is asked to hand
+   * over (it stops and releases within a heartbeat, or its lease runs out if it hangs). An owner from
+   * an older version cannot be asked, so displacing it needs `forceLegacy`, which only the
+   * confirmed Take Over Sync command passes.
+   */
+  async claimOwnership(root, options) {
+    const handler = (command, args) => this.handleOwnerCommand(command, args);
+    const role = await this.ownerCoordinator.claim(root, handler);
+    if (role !== "standby" || !options.takeover) return role;
+    const holder = this.ownerCoordinator.holder;
+    const askable = holder?.reason === "foreign-owner";
+    const forced = holder?.reason === "legacy-owner" && options.forceLegacy === true;
+    if (!askable && !forced) return role;
+    const from = holder?.hostname ?? "another machine";
+    this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Taking over Overleaf sync for ${root} from ${from}.`);
+    return vscode11.window.withProgress(
+      { location: vscode11.ProgressLocation.Notification, title: `Taking over Overleaf sync from ${from}`, cancellable: true },
+      (_progress, token) => this.ownerCoordinator.claim(root, handler, {
+        takeover: true,
+        forceLegacy: forced,
+        signal: abortSignalFromToken(token)
+      })
+    );
+  }
+  /** Sync is held elsewhere: show why, and look again later in case that owner goes away. */
+  enterStandby(root, explicit) {
+    const holder = this.ownerCoordinator.holder;
+    const description = describeSyncHolder(holder);
+    this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${description}`);
+    this.scheduleStandbyRecheck(root);
+    this.onChanged();
+    if (explicit && holder && holder.reason !== "foreign-owner") this.offerTakeover(root, description);
+  }
+  offerTakeover(root, description) {
+    const action = "Take Over Sync Here";
+    void vscode11.window.showWarningMessage(description, action).then((choice) => {
+      if (choice !== action) return;
+      void this.takeOverSync(root).catch((error) => {
+        this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf sync takeover failed: ${formatUnknownError(error)}`);
+        void vscode11.window.showErrorMessage(`Overleaf sync takeover failed: ${formatUnknownError(error)}`);
+      });
+    });
+  }
+  async takeOverSync(candidate) {
+    const root = await this.requireMirrorRoot(candidate);
+    const role = this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.role : "none";
+    if (role === "owner" || role === "client") {
+      vscode11.window.setStatusBarMessage("Overleaf sync for this mirror already runs on this machine.", 3e3);
+      return;
+    }
+    if (role === "none") {
+      await this.startRealtimeSync(root, { takeover: true });
+      return;
+    }
+    const holder = this.ownerCoordinator.holder;
+    if (holder?.legacy) {
+      const confirm = "Take Over";
+      const choice = await vscode11.window.showWarningMessage(
+        `${describeSyncHolder(holder)} It cannot be asked to stop, so if that window is still open it may keep syncing until it is closed or reloaded.`,
+        { modal: true },
+        confirm
+      );
+      if (choice !== confirm) return;
+      await this.startRealtimeSync(root, { takeover: true, forceLegacy: true });
+      return;
+    }
+    await this.startRealtimeSync(root, { takeover: true });
+  }
+  /**
+   * This owner lost ownership (taken over from another machine, or its lock could not be renewed).
+   * The engine must be stopped before this resolves: the coordinator hands the lock over only then.
+   */
+  async handleOwnerDemoted(event) {
+    const description = describeSyncHolder(event.holder);
+    if (this.realtimeSync.currentRoot === event.root) await this.realtimeSync.fence(description);
+    this.ownerSubscription = void 0;
+    this.clearExternalSnapshot();
+    this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${description}`);
+    this.scheduleStandbyRecheck(event.root);
+    this.onChanged();
+    this.offerTakeover(event.root, description);
+  }
+  scheduleStandbyRecheck(root) {
+    this.clearStandbyTimer();
+    if (!this.takeoverEnabled || !this.isMirrorRootOpen(root)) return;
+    const delayMs = Math.round(15e3 * (0.8 + Math.random() * 0.4));
+    this.standbyTimer = setTimeout(() => {
+      this.standbyTimer = void 0;
+      if (this.ownerCoordinator.currentRoot !== root || this.ownerCoordinator.role !== "standby") return;
+      void this.startRealtimeSync(root).catch((error) => {
+        this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf sync recheck failed: ${formatUnknownError(error)}`);
+        this.onChanged();
+      });
+    }, delayMs);
+  }
+  clearStandbyTimer() {
+    if (this.standbyTimer) clearTimeout(this.standbyTimer);
+    this.standbyTimer = void 0;
+  }
   async stopRealtimeSync(candidate) {
     const root = this.resolveMirrorRoot(candidate);
     if (root && this.realtimeSync.currentRoot && this.realtimeSync.currentRoot !== root) return;
     this.takeoverEnabled = false;
     if (this.takeoverTimer) clearTimeout(this.takeoverTimer);
     this.takeoverTimer = void 0;
+    this.clearStandbyTimer();
     this.ownerSubscription = void 0;
     this.clearExternalSnapshot();
     await this.realtimeSync.stop();
@@ -34610,11 +35793,15 @@ var OverleafService = class {
   }
   async copyDiagnostics(candidate) {
     const state = await this.state(candidate);
+    const credentialStore = this.secrets.describe();
     const lines = [
       "LaTeX Editing Toolkit Overleaf diagnostics",
+      `host=${os8.hostname()} platform=${process.platform}-${process.arch} remote=${vscode11.env.remoteName ?? "local"}`,
+      `credentialStore=${credentialStore?.kind ?? "unknown"} location=${credentialStore?.location ?? ""}`,
       `server=${state.serverUrl ?? ""}`,
       `project=${state.projectId ?? ""}`,
       `role=${state.ownerRole}`,
+      ...state.syncHolder ? [`holder=${state.syncHolder.hostname ?? ""} pid=${state.syncHolder.pid ?? ""} reason=${state.syncHolder.reason}`] : [],
       `connection=${state.connectionState}`,
       `connectionReason=${state.connectionReason ?? ""}`,
       `reconnectAttempts=${state.reconnectAttempts}`,
@@ -34661,13 +35848,21 @@ var OverleafService = class {
     const root = await this.requireMirrorRoot(candidate);
     if (this.realtimeSync.running && this.realtimeSync.currentRoot === root) return;
     this.takeoverEnabled = true;
-    if (this.ownerCoordinator.currentRoot === root && !this.ownerCoordinator.isOwner) {
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") {
+      throw new SyncStandbyError(this.ownerCoordinator.holder);
+    }
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "client") {
       if (!this.ownerSubscription) await this.connectToExistingOwner(root);
       return;
     }
     this.ownerSubscription = void 0;
+    this.clearStandbyTimer();
     this.clearExternalSnapshot();
     const role = await this.ownerCoordinator.claim(root, (command, args) => this.handleOwnerCommand(command, args));
+    if (role === "standby") {
+      this.enterStandby(root, false);
+      throw new SyncStandbyError(this.ownerCoordinator.holder);
+    }
     if (role === "client") {
       await this.connectToExistingOwner(root);
       return;
@@ -34821,13 +36016,24 @@ var OverleafService = class {
     this.externalReconnectAttempts = 0;
     this.externalActivityLog = [];
   }
+  ownerRoleForRoot(root) {
+    return this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.role : "none";
+  }
+  syncHolderForRoot(root) {
+    const holder = this.ownerCoordinator.currentRoot === root ? this.ownerCoordinator.holder : void 0;
+    return holder ? { syncHolder: { ...holder, description: describeSyncHolder(holder) } } : {};
+  }
   connectionStateForRoot(root) {
     if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncState;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") return "stopped";
     if (this.ownerCoordinator.currentRoot === root) return this.externalConnectionState ?? "checking";
     return "stopped";
   }
   connectionReasonForRoot(root) {
     if (this.realtimeSync.currentRoot === root) return this.realtimeSync.projectSyncReason;
+    if (this.ownerCoordinator.currentRoot === root && this.ownerCoordinator.role === "standby") {
+      return describeSyncHolder(this.ownerCoordinator.holder);
+    }
     return this.ownerCoordinator.currentRoot === root ? this.externalConnectionReason : void 0;
   }
   reconnectAttemptsForRoot(root) {
@@ -35103,23 +36309,28 @@ async function exists6(filePath) {
 
 // src/overleaf/cliInstaller.ts
 var fs37 = __toESM(require("fs/promises"));
-var os8 = __toESM(require("os"));
+var os9 = __toESM(require("os"));
 var path43 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
-var import_util29 = require("util");
-var execFileAsync3 = (0, import_util29.promisify)(import_child_process5.execFile);
+var import_util31 = require("util");
+var execFileAsync3 = (0, import_util31.promisify)(import_child_process5.execFile);
 var MARKER = ".latex-editing-toolkit-cli.json";
+var LAUNCHER_MARKER = "latex-editing-toolkit-cli-launcher v1";
+var MAX_LAUNCHER_BYTES = 16 * 1024;
+var MINIMUM_NODE_MAJOR = 20;
+var REMOTE_SERVER_HOMES = [".vscode-server", ".vscode-server-insiders", ".cursor-server", ".windsurf-server", ".vscodium-server"];
 async function installCli(extensionRoot, version) {
   await migrateLegacyLinuxPaths();
-  await assertNode20();
+  const node = await resolveCliNode();
   const supportRoot = cliSupportRoot();
   const installRoot = path43.join(supportRoot, version);
   const commandPath = cliCommandPath();
   const commandDir = path43.dirname(commandPath);
   await assertManagedDestination(commandPath, supportRoot);
   await fs37.mkdir(supportRoot, { recursive: true });
-  const stagingRoot = path43.join(supportRoot, `.staging-${version}-${process.pid}-${Date.now()}`);
-  const backupRoot = path43.join(supportRoot, `.backup-${version}-${process.pid}-${Date.now()}`);
+  const scratchId = `${hostTag()}-${process.pid}-${Date.now()}`;
+  const stagingRoot = path43.join(supportRoot, `.staging-${version}-${scratchId}`);
+  const backupRoot = path43.join(supportRoot, `.backup-${version}-${scratchId}`);
   await fs37.mkdir(stagingRoot, { recursive: true });
   try {
     await Promise.all([
@@ -35133,34 +36344,95 @@ async function installCli(extensionRoot, version) {
     try {
       await fs37.rename(stagingRoot, installRoot);
     } catch (error) {
-      if (await fs37.stat(backupRoot).then(() => true, () => false)) await fs37.rename(backupRoot, installRoot);
-      throw error;
+      if (await fs37.stat(backupRoot).then(() => true, () => false)) await fs37.rename(backupRoot, installRoot).catch(() => void 0);
+      if (!isOccupied(error) || await installedVersion(installRoot) !== version) throw error;
     }
     await fs37.rm(backupRoot, { recursive: true, force: true });
   } finally {
     await fs37.rm(stagingRoot, { recursive: true, force: true });
   }
   await fs37.mkdir(commandDir, { recursive: true });
-  const temporary = `${commandPath}.tmp-${process.pid}`;
+  const temporary = `${commandPath}.tmp-${scratchId}`;
   await fs37.rm(temporary, { force: true });
-  await fs37.symlink(path43.join(installRoot, "cli.js"), temporary);
+  await fs37.writeFile(temporary, launcherScript(path43.join(installRoot, "cli.js")), { mode: 493 });
+  await fs37.chmod(temporary, 493);
   await fs37.rename(temporary, commandPath);
   const removedVersions = await pruneSupersededInstalls(supportRoot, version);
   return {
     installRoot,
     commandPath,
     pathConfigured: (process.env.PATH ?? "").split(path43.delimiter).includes(commandDir),
+    node: node.path,
     removedVersions
   };
+}
+function launcherScript(cliPath) {
+  const serverNodes = REMOTE_SERVER_HOMES.flatMap((home) => [
+    `"$HOME"/${home}/cli/servers/*/server/node`,
+    `"$HOME"/${home}/bin/*/node`
+  ]).join(" \\\n  ");
+  return [
+    "#!/bin/sh",
+    `# Managed by LaTeX Editing Toolkit (${LAUNCHER_MARKER}); reinstall from the editor instead of editing.`,
+    `# target: ${JSON.stringify(cliPath)}`,
+    `cli=${shellQuote2(cliPath)}`,
+    "usable() {",
+    `  "$1" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= ${MINIMUM_NODE_MAJOR} ? 0 : 1)' >/dev/null 2>&1`,
+    "}",
+    'if [ -n "${LATEX_TOOLKIT_NODE:-}" ]; then exec "$LATEX_TOOLKIT_NODE" --no-deprecation "$cli" "$@"; fi',
+    'if command -v node >/dev/null 2>&1 && usable node; then exec node --no-deprecation "$cli" "$@"; fi',
+    `for candidate in ${serverNodes}; do`,
+    '  if [ -x "$candidate" ] && usable "$candidate"; then exec "$candidate" --no-deprecation "$cli" "$@"; fi',
+    "done",
+    `echo "latex-toolkit: Node.js ${MINIMUM_NODE_MAJOR} or newer was not found on PATH or in an editor server installation; install it or set LATEX_TOOLKIT_NODE." >&2`,
+    "exit 127",
+    ""
+  ].join("\n");
+}
+async function resolveCliNode(env3 = process.env) {
+  const candidates = [
+    ...env3.LATEX_TOOLKIT_NODE ? [env3.LATEX_TOOLKIT_NODE] : [],
+    "node",
+    // Electron's binary (the local editor's extension host) only runs scripts with
+    // ELECTRON_RUN_AS_NODE, so it is no use to a plain shell command.
+    ...process.versions.electron ? [] : [process.execPath],
+    ...await editorServerNodes(os9.homedir())
+  ];
+  for (const candidate of candidates) {
+    const major = await nodeMajor(candidate);
+    if (major >= MINIMUM_NODE_MAJOR) return { path: candidate, major };
+  }
+  throw new Error(
+    `Installing the CLI requires Node.js ${MINIMUM_NODE_MAJOR} or newer, on PATH or in an editor server installation. Install Node.js, or set LATEX_TOOLKIT_NODE to a node binary.`
+  );
+}
+async function editorServerNodes(home) {
+  const found = [];
+  for (const base of REMOTE_SERVER_HOMES) {
+    for (const [parent, suffix] of [[path43.join(home, base, "cli", "servers"), ["server", "node"]], [path43.join(home, base, "bin"), ["node"]]]) {
+      const entries = await fs37.readdir(parent, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (entry.isDirectory()) found.push(path43.join(parent, entry.name, ...suffix));
+      }
+    }
+  }
+  return found;
+}
+async function nodeMajor(candidate) {
+  const result = await execFileAsync3(candidate, ["-p", "process.versions.node"], { encoding: "utf8", timeout: 15e3 }).catch(() => void 0);
+  const major = Number(/^(\d+)\./.exec(String(result?.stdout ?? "").trim())?.[1]);
+  return Number.isFinite(major) ? major : 0;
 }
 async function pruneSupersededInstalls(supportRoot, keepVersion) {
   const entries = await fs37.readdir(supportRoot, { withFileTypes: true }).catch(() => []);
   const removed = [];
+  const ownScratch = `-${hostTag()}-${process.pid}-`;
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === keepVersion) continue;
     const candidate = path43.join(supportRoot, entry.name);
     const scratch = entry.name.startsWith(".staging-") || entry.name.startsWith(".backup-");
-    if (scratch && !entry.name.includes(`-${process.pid}-`)) continue;
+    const mine = entry.name.includes(ownScratch) || !SCRATCH_WITH_HOST.test(entry.name) && entry.name.includes(`-${process.pid}-`);
+    if (scratch && !mine) continue;
     if (!scratch && !await hasManagedMarker(candidate)) continue;
     if (await fs37.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
       removed.push(entry.name);
@@ -35168,14 +36440,28 @@ async function pruneSupersededInstalls(supportRoot, keepVersion) {
   }
   return removed;
 }
+var SCRATCH_WITH_HOST = /-[0-9a-f]{8}-\d+-\d+$/;
 async function hasManagedMarker(installRoot) {
   return fs37.stat(path43.join(installRoot, MARKER)).then(() => true, () => false);
+}
+async function installedVersion(installRoot) {
+  const raw = await fs37.readFile(path43.join(installRoot, MARKER), "utf8").catch(() => void 0);
+  try {
+    const parsed = JSON.parse(raw ?? "");
+    return typeof parsed.version === "string" ? parsed.version : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function isOccupied(error) {
+  const code = error?.code;
+  return code === "EEXIST" || code === "ENOTEMPTY";
 }
 async function uninstallCli() {
   await migrateLegacyLinuxPaths();
   const supportRoot = cliSupportRoot();
   const commandPath = cliCommandPath();
-  const managed = await isManagedLink(commandPath, supportRoot);
+  const managed = await isManagedCommand(commandPath, supportRoot);
   if (!managed) return { removed: false, commandPath };
   await fs37.rm(commandPath, { force: true });
   await fs37.rm(supportRoot, { recursive: true, force: true });
@@ -35185,50 +36471,63 @@ async function updateManagedCliIfInstalled(extensionRoot, version) {
   await migrateLegacyLinuxPaths();
   const supportRoot = cliSupportRoot();
   const commandPath = cliCommandPath();
-  if (!await isManagedLink(commandPath, supportRoot)) return void 0;
+  if (!await isManagedCommand(commandPath, supportRoot)) return void 0;
   return installCli(extensionRoot, version);
 }
-async function assertNode20() {
-  const result = await execFileAsync3("/usr/bin/env", ["node", "--version"], { encoding: "utf8" }).catch(() => void 0);
-  const major = Number(/^v(\d+)/.exec(String(result?.stdout ?? ""))?.[1]);
-  if (!Number.isFinite(major) || major < 20) throw new Error("Installing the CLI requires Node.js 20 or newer on PATH.");
-}
 function cliSupportRoot() {
-  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path43.join(os8.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path43.join(
-    process.env.XDG_DATA_HOME || path43.join(os8.homedir(), ".local", "share"),
+  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path43.join(os9.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path43.join(
+    process.env.XDG_DATA_HOME || path43.join(os9.homedir(), ".local", "share"),
     "latex-editing-toolkit",
     "cli"
   );
 }
 function cliCommandPath() {
   return path43.join(
-    process.env.LATEX_TOOLKIT_BIN_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path43.join(os8.homedir(), ".local", "bin"),
+    process.env.LATEX_TOOLKIT_BIN_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path43.join(os9.homedir(), ".local", "bin"),
     "latex-toolkit"
   );
 }
 async function assertManagedDestination(commandPath, supportRoot) {
-  const stat12 = await fs37.lstat(commandPath).catch(() => void 0);
-  if (!stat12) return;
-  if (!await isManagedLink(commandPath, supportRoot)) {
+  const stat13 = await fs37.lstat(commandPath).catch(() => void 0);
+  if (!stat13) return;
+  if (!await isManagedCommand(commandPath, supportRoot)) {
     throw new Error(`Refusing to overwrite non-managed command: ${commandPath}`);
   }
 }
-async function isManagedLink(commandPath, supportRoot) {
-  const stat12 = await fs37.lstat(commandPath).catch(() => void 0);
-  if (!stat12?.isSymbolicLink()) return false;
-  const target = await fs37.realpath(commandPath).catch(() => void 0);
+async function isManagedCommand(commandPath, supportRoot) {
+  const stat13 = await fs37.lstat(commandPath).catch(() => void 0);
+  if (!stat13) return false;
   const canonicalSupportRoot = await fs37.realpath(supportRoot).catch(() => path43.resolve(supportRoot));
-  if (!target || !isWithin2(canonicalSupportRoot, target)) return false;
-  return hasManagedMarker(path43.dirname(target));
+  if (stat13.isSymbolicLink()) {
+    const target2 = await fs37.realpath(commandPath).catch(() => void 0);
+    if (!target2 || !isWithin2(canonicalSupportRoot, target2)) return false;
+    return hasManagedMarker(path43.dirname(target2));
+  }
+  if (!stat13.isFile() || stat13.size > MAX_LAUNCHER_BYTES) return false;
+  const content = await fs37.readFile(commandPath, "utf8").catch(() => "");
+  if (!content.includes(LAUNCHER_MARKER)) return false;
+  const declared = /^# target: (".*")$/m.exec(content)?.[1];
+  let target;
+  try {
+    target = declared ? JSON.parse(declared) : void 0;
+  } catch {
+    target = void 0;
+  }
+  if (!target) return false;
+  const resolved = await fs37.realpath(target).catch(() => path43.resolve(target));
+  return isWithin2(canonicalSupportRoot, resolved) || isWithin2(path43.resolve(supportRoot), path43.resolve(target));
 }
 function isWithin2(root, candidate) {
   const relative10 = path43.relative(path43.resolve(root), path43.resolve(candidate));
   return relative10 === "" || !relative10.startsWith("..") && !path43.isAbsolute(relative10);
 }
+function shellQuote2(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 // src/overleaf/sharedConfigBridge.ts
 var path44 = __toESM(require("path"));
-var os9 = __toESM(require("os"));
+var os10 = __toESM(require("os"));
 var vscode12 = __toESM(require("vscode"));
 var MIGRATION_KEY = "latexEditingToolkit.overleaf.sharedStateMigrated.v1";
 var applyingSharedSettings = false;
@@ -35317,8 +36616,8 @@ function explicitValue(configuration, section) {
   return inspected?.workspaceFolderValue ?? inspected?.workspaceValue ?? inspected?.globalValue;
 }
 function expandHome2(value) {
-  if (value === "~") return os9.homedir();
-  return value.startsWith("~/") ? path44.join(os9.homedir(), value.slice(2)) : path44.resolve(value);
+  if (value === "~") return os10.homedir();
+  return value.startsWith("~/") ? path44.join(os10.homedir(), value.slice(2)) : path44.resolve(value);
 }
 
 // src/extension.ts
@@ -35365,7 +36664,8 @@ function activate(context) {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
       const suffix = result.pathConfigured ? "" : ` Add ${path45.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
-      vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${pruned}`);
+      const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
+      vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();
@@ -35816,6 +37116,15 @@ function registerToolkitCommand(output, commandId, handler) {
     } catch (err) {
       if (isUserCancellation(err)) return void 0;
       const workspacePath = workspacePathFromArguments(args);
+      if (err instanceof SyncStandbyError) {
+        output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${commandId}: ${err.message}`);
+        const takeOver = "Take Over Sync Here";
+        const action2 = await vscode13.window.showWarningMessage(err.message, takeOver);
+        if (action2 === takeOver) {
+          await vscode13.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
+        }
+        return void 0;
+      }
       logToolkitError(output, commandId, workspacePath, err);
       const message = err instanceof Error ? err.message : String(err);
       const action = await vscode13.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
@@ -36711,8 +38020,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists7 = false;
         try {
-          const stat12 = await fs38.promises.stat(pdfPath);
-          exists7 = stat12.isFile();
+          const stat13 = await fs38.promises.stat(pdfPath);
+          exists7 = stat13.isFile();
         } catch {
           exists7 = false;
         }
