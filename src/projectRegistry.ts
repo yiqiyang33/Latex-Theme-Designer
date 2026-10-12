@@ -75,17 +75,28 @@ export class LocalProjectRegistry {
     return (await this.registry.list()).map(status => ({ ...status.record, missing: status.missing }));
   }
 
-  async add(rootPath: string, templateId: string): Promise<LocalNoteProject> {
+  /** Registers a project. `label` is the name to show, when it should not be the folder's. */
+  async add(rootPath: string, templateId: string, options: { label?: string } = {}): Promise<LocalNoteProject> {
     const normalizedPath = normalizeProjectPath(rootPath);
+    const label = options.label?.trim();
     return this.registry.upsertForRoot(normalizedPath, existing => existing
-      ? { ...existing, templateId: String(templateId || existing.templateId || "unknown") }
+      ? { ...existing, templateId: String(templateId || existing.templateId || "unknown"), ...(label ? { label } : {}) }
       : {
           id: randomUUID(),
           rootPath: normalizedPath,
-          label: path.basename(normalizedPath),
+          label: label || path.basename(normalizedPath),
           templateId: String(templateId || "unknown"),
           createdAt: new Date().toISOString()
         });
+  }
+
+  /** Changes the name Local Notes shows; the folder keeps its own. An empty name goes back to the folder's. */
+  async rename(id: string, label: string | undefined): Promise<LocalNoteProject> {
+    const current = await this.registry.findById(id);
+    if (!current) throw new Error("The local note project is no longer registered.");
+    const nextLabel = label?.trim() || path.basename(current.record.rootPath);
+    if (nextLabel.length > LOCAL_PROJECT_LABEL_MAX_LENGTH) throw new Error(`Use at most ${LOCAL_PROJECT_LABEL_MAX_LENGTH} characters.`);
+    return this.registry.upsert({ ...current.record, label: nextLabel });
   }
 
   async find(rootPath: string): Promise<LocalNoteProjectStatus | undefined> {
@@ -115,8 +126,10 @@ export class LocalProjectRegistry {
     if (!current) throw new Error("The local note project is no longer registered.");
     const duplicate = await this.registry.findByRoot(newPath);
     if (duplicate && duplicate.record.id !== current.record.id) throw new Error(`The selected directory is already registered as '${duplicate.record.label}'.`);
+    // A name the user chose stays; one that was only the folder's name follows the folder.
+    const label = current.record.label === path.basename(current.record.rootPath) ? path.basename(newPath) : current.record.label;
     await this.registry.removeByRoot(oldPath);
-    return this.registry.upsert({ ...current.record, rootPath: newPath, label: path.basename(newPath) });
+    return this.registry.upsert({ ...current.record, rootPath: newPath, label });
   }
 }
 
