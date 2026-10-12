@@ -176,9 +176,17 @@ Extra environments and text-like commands can be configured with the existing
 creates the project folder automatically. It remembers recent parent locations and checks write
 access, project-name safety, template validity, and file conflicts before writing anything.
 
+- When Local Notes has groups, the first question is which group the project joins. The group of
+  the note open in the window is offered first, and `New Group…` creates one together with the
+  project. Starting from a group's `New Project in Group` button skips the question.
+- When you are signed in to Overleaf, the next question is whether the project also lives on
+  Overleaf. An Overleaf project always goes in the mirrors folder, so the location is then not
+  asked.
+- For a project in a group, the location offered first is the folder the group's notes share, and
+  the suggested name continues a numbered series: after `hw-2-LP` comes `hw-3-LP`.
 - A missing target folder is created automatically.
 - An existing empty folder requires explicit confirmation.
-- A non-empty folder is rejected with a conflict summary.
+- A name taken by a file or a non-empty folder is refused as you type it.
 - Failed creation leaves partial resources available for inspection but does not register the
   project in Local Notes.
 
@@ -189,11 +197,14 @@ The Activity Bar includes a `Local Notes` group that remembers projects created 
 The registry is stored in the extension's local global state and is available after switching
 workspaces or restarting VS Code/Cursor.
 
-- Click a valid entry to open its project folder in the current window.
+- Click a valid entry to open its project folder in the current window, or use `Open in New
+  Window` from its context menu.
 - Missing project folders remain visible with a warning status.
 - Use `Relocate Local Project` on a missing entry to select its new folder. The selected folder
   must contain `main.tex`.
-- Use `Forget Local Project` to remove an entry from the Activity Bar without deleting files.
+- Use `Remove Local Project` to remove an entry from the Activity Bar without deleting files.
+- Use `Rename…` to change the name an entry shows. Only the name in the list changes; the folder
+  keeps its own, and an empty name goes back to the folder's.
 - The list refreshes when the VS Code/Cursor window regains focus, so folders moved or deleted
   outside the editor are marked `Missing` without polling.
 - Existing folders are compared using their real path. Registering the same project through a
@@ -202,6 +213,23 @@ workspaces or restarting VS Code/Cursor.
 
 The extension does not scan arbitrary directories and does not automatically register files
 created with `Generate Starter In Workspace`.
+
+### Groups
+
+Groups collect related notes, such as the homework of one course. They are labels kept by the
+extension: putting a note in a group, or renaming or deleting the group, never moves, renames, or
+deletes a folder. A note is in at most one group.
+
+- The `New Group…` button on the `Local Notes` heading creates a group.
+- A group's `+` button creates a project in it. Its context menu also has `Add Notes…`, to pick
+  several notes to put in it at once, `Rename Group…`, and `Delete Group`. Deleting a group leaves
+  its notes in Local Notes, outside any group.
+- A note's context menu has `Move to Group…`, which can also create a new group for it, and
+  `Remove from Group`.
+- Drag a note onto a group, or onto a note in that group, to move it there. Drag it onto the
+  `Local Notes` heading to take it out of its group.
+
+Groups are kept per machine and remote host, like the notes themselves.
 
 ## Style Presets
 
