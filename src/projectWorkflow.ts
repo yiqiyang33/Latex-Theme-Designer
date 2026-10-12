@@ -11,20 +11,21 @@ export interface CreateProjectService {
 }
 
 export interface CreateProjectRegistry {
-  add(rootPath: string, templateId: string): Promise<LocalNoteProject>;
+  add(rootPath: string, templateId: string, options?: { label?: string }): Promise<LocalNoteProject>;
 }
 
 /**
  * Create a Toolkit project in the only safe registration order: assets, main.tex,
- * then the cross-workspace Local Notes registry.
+ * then the cross-workspace Local Notes registry. Returns the registered record.
  */
 export async function runCreateProjectWorkflow(
   service: CreateProjectService,
   registry: CreateProjectRegistry,
   rootPath: string,
   templateId: string,
-  stylePreset?: string
-): Promise<void> {
+  stylePreset?: string,
+  options: { label?: string } = {}
+): Promise<LocalNoteProject> {
   await fs.mkdir(rootPath, { recursive: true });
   await service.handle("initialize-workspace", { template_id: templateId });
   await service.handle("template-bootstrap", {
@@ -33,7 +34,7 @@ export async function runCreateProjectWorkflow(
     overwrite: false,
     style_preset: stylePreset
   });
-  await registry.add(rootPath, templateId);
+  return registry.add(rootPath, templateId, options);
 }
 
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;

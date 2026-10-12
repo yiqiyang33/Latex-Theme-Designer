@@ -14,6 +14,7 @@ import {
   type LocalNoteGroup
 } from "../src/localNoteGroups";
 import { LOCAL_PROJECTS_STATE_KEY, LocalProjectRegistry } from "../src/projectRegistry";
+import { runCreateProjectWorkflow } from "../src/projectWorkflow";
 import type { LocalProjectStateStore } from "../src/types";
 
 /** Stores values the way VS Code's global state does: as JSON, so nothing is shared by reference. */
@@ -265,6 +266,15 @@ describe("Local Notes display names", () => {
     };
     expect(await relocated("old-plain", "new-plain")).toBe("new-plain");
     expect(await relocated("old-named", "new-named", "My Notes")).toBe("My Notes");
+  });
+
+  it("returns the record the create workflow registered, under the name it was given", async () => {
+    const registry = new LocalProjectRegistry(new JsonStateStore());
+    const root = path.join(await temporaryRoot(), "Paper-6ab88eb9e86a0a4beae6b018");
+    const service = { handle: async () => ({}) };
+    const created = await runCreateProjectWorkflow(service, registry, root, "research-paper", undefined, { label: "Paper" });
+    expect(created).toMatchObject({ rootPath: path.normalize(root), label: "Paper" });
+    expect((await registry.findById(created.id))?.label).toBe("Paper");
   });
 
   it("registers a project under a given name, also over an existing record", async () => {

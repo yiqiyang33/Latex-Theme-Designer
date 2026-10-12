@@ -234,8 +234,10 @@ export function suggestGroupFolder(
   return [...parents.values()].sort((left, right) => right.count - left.count || right.latest.localeCompare(left.latest))[0]?.parent;
 }
 
-// The suffix a mirror's folder carries after the project name: the Overleaf project id.
-const OVERLEAF_PROJECT_ID_SUFFIX = /-[0-9a-f]{24}$/;
+/** A folder name without the Overleaf project id a mirror's folder ends with. */
+export function stripOverleafProjectId(folderName: string): string {
+  return folderName.replace(/-[0-9a-f]{24}$/, "");
+}
 
 /**
  * The next name in a numbered series, from the latest one: the last number goes up by one and keeps
@@ -243,7 +245,7 @@ const OVERLEAF_PROJECT_ID_SUFFIX = /-[0-9a-f]{24}$/;
  * are skipped. Undefined when the name has no number to count from.
  */
 export function suggestNextNoteName(latestName: string, isTaken: (candidate: string) => boolean): string | undefined {
-  const match = /^(.*\D)?(\d+)(\D*)$/.exec(latestName.replace(OVERLEAF_PROJECT_ID_SUFFIX, ""));
+  const match = /^(.*\D)?(\d+)(\D*)$/.exec(stripOverleafProjectId(latestName));
   if (!match) return undefined;
   const [, prefix = "", digits, suffix] = match;
   let value = BigInt(digits);

@@ -14,9 +14,11 @@ import { SnippetService } from "./snippets/snippetService";
 import { ToolkitService } from "./toolkitService";
 import { OverleafService } from "./overleaf/overleafService";
 import { formatUnknownError } from "./overleaf/util";
-import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
+import type { LocalNoteProject, LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
 import { localResourceNode, projectIdFromArgument, type ToolkitTreeNode } from "./treeNodes";
 import { localProjectNode } from "./localNotesTree";
+import { LocalNoteGroupRegistry, scopedLocalNoteGroupsStateKey, stripOverleafProjectId, suggestGroupFolder, suggestNextNoteName } from "./localNoteGroups";
+import { notesInGroup, openNoteGroup, pickGroupForNewProject, placeNewProject, type NewProjectGroup } from "./localNotesCommands";
 import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
 import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
 import { SyncStandbyError } from "./overleaf/syncOwnerCoordinator";
@@ -43,6 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.globalState,
     scopedLocalProjectsStateKey(scope)
   );
+  const noteGroups = new LocalNoteGroupRegistry(context.globalState, scopedLocalNoteGroupsStateKey(scope));
   const recentProjectParentsKey = scopedStateKey(RECENT_PROJECT_PARENTS_KEY, scope);
   personalStyles = new PersonalStyleRegistry(context.globalState);
   const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
@@ -111,7 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
-      await createProjectWizard(context, projectRegistry, treeProvider, output, recentProjectParentsKey);
+      await createProjectWizard(context, projectRegistry, noteGroups, treeProvider, output, recentProjectParentsKey);
     }),
     command("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
       await openLocalProject(projectRegistry, projectPath);
@@ -341,11 +344,13 @@ async function warnAboutLegacySnips(context: vscode.ExtensionContext, output: vs
 async function createOverleafProjectFromTemplate(
   context: vscode.ExtensionContext,
   registry: LocalProjectRegistry,
+  noteGroups: LocalNoteGroupRegistry,
   treeProvider: ToolkitTreeProvider,
   projectName: string,
   templateId: string,
   output: vscode.OutputChannel,
-  stylePreset?: string
+  stylePreset: string | undefined,
+  placement: NewProjectGroup
 ): Promise<void> {
   const service = overleafService;
   if (!service) return;
@@ -361,16 +366,20 @@ async function createOverleafProjectFromTemplate(
   }
 
   try {
+    const registered: { project?: LocalNoteProject } = {};
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
       () => service.createProjectFromTemplate(projectName, async (root) => {
         const scoped = new ToolkitService(root, context.extensionPath, {
           additionalStylePresets: personalStyles?.definitions() ?? []
         });
-        await runCreateProjectWorkflow(scoped, registry, root, templateId, stylePreset);
+        // The folder name ends with the Overleaf project id; Local Notes shows the name instead.
+        registered.project = await runCreateProjectWorkflow(scoped, registry, root, templateId, stylePreset, { label: projectName });
       })
     );
 
+    // Grouped only once the project exists, so a failed creation leaves nothing in the group.
+    if (registered.project) await placeNewProject(noteGroups, registered.project, placement);
     treeProvider.refresh();
     if (!result.published) {
       output.appendLine(`[${new Date().toISOString()}] CREATE OVERLEAF PROJECT PUBLISH FAILED`);
@@ -398,56 +407,76 @@ async function createOverleafProjectFromTemplate(
   }
 }
 
+/**
+ * The Create Project wizard. Several steps are conditional, so titles name the step rather than
+ * count them. `groupId` comes from a group's own New Project action and skips the group question.
+ */
 async function createProjectWizard(
   context: vscode.ExtensionContext,
   registry: LocalProjectRegistry,
+  noteGroups: LocalNoteGroupRegistry,
   treeProvider: ToolkitTreeProvider,
   output: vscode.OutputChannel,
-  recentProjectParentsKey: string
+  recentProjectParentsKey: string,
+  options: { groupId?: string } = {}
 ): Promise<void> {
-  const recent = sanitizeRecentProjectParents(context.globalState.get<unknown>(recentProjectParentsKey));
-  const suggested = new Set<string>();
-  for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    if (folder.uri.scheme === "file") {
-      suggested.add(folder.uri.fsPath);
-      suggested.add(path.dirname(folder.uri.fsPath));
+  const [projects, groups] = await Promise.all([registry.list(), noteGroups.list()]);
+  let placement: NewProjectGroup = {};
+  if (options.groupId) {
+    const group = groups.find((candidate) => candidate.id === options.groupId);
+    if (!group) {
+      vscode.window.showWarningMessage("This group no longer exists.");
+      return;
     }
+    placement = { group };
+  } else if (groups.length > 0) {
+    const picked = await pickGroupForNewProject(groups, projects, await openNoteGroup(registry, groups), "Create Project: Group");
+    if (!picked) return;
+    placement = picked;
   }
-  for (const item of recent) suggested.add(item);
-  const location = await vscode.window.showQuickPick(
-    [
-      ...[...suggested].map((folderPath) => ({ label: path.basename(folderPath) || folderPath, description: folderPath, folderPath })),
-      { label: "$(folder-opened) Browse…", description: "Choose another parent folder", folderPath: "" }
-    ],
-    { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
-  );
-  if (!location) return;
-  let parentPath = location.folderPath;
-  if (!parentPath) {
-    const selected = await vscode.window.showOpenDialog({
-      title: "Create Project (1/3): Choose Parent Folder",
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Use as Parent Folder"
-    });
-    if (!selected?.[0]) return;
-    if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
-    parentPath = selected[0].fsPath;
+  const groupNotes = placement.group ? notesInGroup(projects, groups, placement.group.id) : [];
+
+  // Offer the Overleaf route only when it can actually work, so people who never use Overleaf
+  // are not asked a question they have no answer to. It comes before the location, which an
+  // Overleaf project does not use: its folder always goes in the mirrors root.
+  const overleafState = await overleafService?.state().catch(() => undefined);
+  let remote = false;
+  if (overleafState?.available && overleafState.authenticated) {
+    const target = await vscode.window.showQuickPick(
+      [
+        { label: "Local only", description: "Create the project in a folder you choose", remote: false },
+        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
+      ],
+      { title: "Create Project: Destination", placeHolder: "Where should this project live?" }
+    );
+    if (!target) return;
+    remote = target.remote;
   }
 
+  const recent = sanitizeRecentProjectParents(context.globalState.get<unknown>(recentProjectParentsKey));
+  let parentPath = "";
+  if (!remote) {
+    const groupFolder = placement.group
+      ? { groupName: placement.group.name, folderPath: suggestGroupFolder(groupNotes, overleafMirrorsRoots()) }
+      : undefined;
+    const picked = await pickProjectParent(recent, groupFolder);
+    if (!picked) return;
+    parentPath = picked;
+  }
+
+  // In a numbered series ("hw-1-LP", "hw-2-LP", ...) the next name is the likeliest one.
+  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path.basename(project.rootPath))));
+  const nextInSeries = groupNotes[0] && suggestNextNoteName(
+    path.basename(groupNotes[0].rootPath),
+    (candidate) => takenInGroup.has(candidate) || (!remote && fs.existsSync(path.join(parentPath, candidate)))
+  );
+  const defaultName = nextInSeries || "New Notes";
   const projectName = await vscode.window.showInputBox({
-    title: "Create Project (2/3): Project Name",
-    prompt: `A new folder will be created inside ${parentPath}`,
-    value: "New Notes",
-    valueSelection: [0, "New Notes".length],
-    validateInput: (value) => {
-      const name = value.trim();
-      if (!name) return "Project name is required.";
-      if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
-      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
-      return undefined;
-    }
+    title: "Create Project: Project Name",
+    prompt: remote ? "The name of the new Overleaf project" : `A new folder will be created inside ${parentPath}`,
+    value: defaultName,
+    valueSelection: [0, defaultName.length],
+    validateInput: (value) => projectNameError(value, remote ? undefined : parentPath)
   });
   if (!projectName) return;
 
@@ -457,7 +486,7 @@ async function createProjectWizard(
       { label: "Article", description: "Article and homework notes", documentKind: "article" },
       { label: "Beamer Slides", description: "Presentation notes with a child theme", documentKind: "beamer" }
     ],
-    { title: "Create Project (3/4): Document Type", placeHolder: "Choose the document type" }
+    { title: "Create Project: Document Type", placeHolder: "Choose the document type" }
   );
   if (!pickedKind) return;
   const pickedTemplate = await vscode.window.showQuickPick<{ label: string; description: string; detail: string; template: typeof STARTER_TEMPLATE_DEFINITIONS[number] }>(
@@ -467,37 +496,20 @@ async function createProjectWizard(
       detail: template.description,
       template
     })),
-    { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
+    { title: "Create Project: Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
 
-  // Both remaining questions are conditional, so the step count is too; deriving it keeps
-  // the labels from contradicting what is actually shown.
-  let step = 4;
   const style = await pickStylePresetForTemplate(
     pickedTemplate.template,
     [...STYLE_PRESET_DEFINITIONS, ...(personalStyles?.definitions() ?? [])],
-    `Create Project (${step + 1}/${step + 1}): Theme`
+    "Create Project: Theme"
   );
   if (style.cancelled) return;
-  if (style.stylePreset) step += 1;
 
-  // Offer the Overleaf route only when it can actually work, so people who never use Overleaf
-  // are not asked a question they have no answer to.
-  const overleafState = await overleafService?.state().catch(() => undefined);
-  if (overleafState?.available && overleafState.authenticated) {
-    const target = await vscode.window.showQuickPick(
-      [
-        { label: "Local only", description: "Create the project in the folder you chose", remote: false },
-        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
-      ],
-      { title: `Create Project (${step + 1}/${step + 1}): Destination`, placeHolder: "Where should this project live?" }
-    );
-    if (!target) return;
-    if (target.remote) {
-      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output, style.stylePreset);
-      return;
-    }
+  if (remote) {
+    await createOverleafProjectFromTemplate(context, registry, noteGroups, treeProvider, projectName, pickedTemplate.template.id, output, style.stylePreset, placement);
+    return;
   }
 
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id, stylePreset: style.stylePreset }, context.extensionPath);
@@ -523,8 +535,9 @@ async function createProjectWizard(
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
+  let created: LocalNoteProject;
   try {
-    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => (
+    created = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => (
       runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset)
     ));
   } catch (err) {
@@ -539,9 +552,77 @@ async function createProjectWizard(
     if (action === "Show Log") output.show(true);
     return;
   }
+  await placeNewProject(noteGroups, created, placement);
   treeProvider.refresh();
   vscode.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3000);
   await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(preflight.rootPath), { forceNewWindow: false });
+}
+
+/** Asks for the folder a new project goes in, offering the folder a group's notes share first. */
+async function pickProjectParent(recent: string[], group?: { groupName: string; folderPath?: string }): Promise<string | undefined> {
+  const suggested = new Set<string>();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme === "file") {
+      suggested.add(folder.uri.fsPath);
+      suggested.add(path.dirname(folder.uri.fsPath));
+    }
+  }
+  for (const item of recent) suggested.add(item);
+  const groupFolder = group?.folderPath;
+  if (groupFolder) suggested.delete(groupFolder);
+  const location = await vscode.window.showQuickPick(
+    [
+      ...(group && groupFolder
+        ? [{ label: path.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }]
+        : []),
+      ...[...suggested].map((folderPath) => ({ label: path.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      { label: "$(folder-opened) Browse…", description: "Choose another parent folder", folderPath: "" }
+    ],
+    { title: "Create Project: Location", placeHolder: "Choose the parent folder for the new project" }
+  );
+  if (!location) return undefined;
+  if (location.folderPath) return location.folderPath;
+  const selected = await vscode.window.showOpenDialog({
+    title: "Create Project: Choose Parent Folder",
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Use as Parent Folder"
+  });
+  if (!selected?.[0]) return undefined;
+  if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
+  return selected[0].fsPath;
+}
+
+/**
+ * What is wrong with a project name, checked as it is typed. Given `parentPath`, a name already
+ * taken there by a file or a non-empty folder is refused now rather than at the end of the wizard;
+ * an empty folder is fine, since the wizard offers to use it.
+ */
+async function projectNameError(value: string, parentPath: string | undefined): Promise<string | undefined> {
+  const name = value.trim();
+  if (!name) return "Project name is required.";
+  if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
+  if (!parentPath) return undefined;
+  const target = path.resolve(parentPath, name);
+  try {
+    const stat = await fs.promises.lstat(target);
+    if (!stat.isDirectory()) return `A file named '${name}' already exists here.`;
+    if ((await fs.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
+  } catch {
+    // Nothing there yet, or nothing readable; the preflight reports the latter in full.
+  }
+  return undefined;
+}
+
+/** Folders a group's notes can share without the user having picked them, like the mirrors root. */
+function overleafMirrorsRoots(): string[] {
+  try {
+    return overleafService ? [overleafService.mirrorManager.getConfiguredProjectsRoot()] : [];
+  } catch {
+    return [];
+  }
 }
 
 async function restoreLastToolkitChange(
