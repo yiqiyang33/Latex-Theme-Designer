@@ -15,6 +15,8 @@ import { ToolkitService } from "./toolkitService";
 import { OverleafService } from "./overleaf/overleafService";
 import { formatUnknownError } from "./overleaf/util";
 import type { LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
+import { localResourceNode, projectIdFromArgument, type ToolkitTreeNode } from "./treeNodes";
+import { localProjectNode } from "./localNotesTree";
 import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
 import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
 import { SyncStandbyError } from "./overleaf/syncOwnerCoordinator";
@@ -786,9 +788,8 @@ async function clearMissingLocalProjects(registry: LocalProjectRegistry, treePro
 }
 
 async function localProjectFromArgument(registry: LocalProjectRegistry, value: unknown): Promise<LocalNoteProjectStatus | undefined> {
-  if (value && typeof value === "object" && typeof (value as { projectId?: unknown }).projectId === "string") {
-    return registry.findById((value as { projectId: string }).projectId);
-  }
+  const projectId = projectIdFromArgument(value);
+  if (projectId) return registry.findById(projectId);
   const projectPath = localProjectPathFromArgument(value);
   return projectPath ? registry.find(projectPath) : undefined;
 }
@@ -1034,22 +1035,6 @@ function formatPointSize(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-interface ToolkitTreeNode {
-  id: string;
-  label: string;
-  kind?: "workspace" | "group" | "action" | "info";
-  description?: string;
-  tooltip?: string;
-  iconId?: string;
-  commandId?: string;
-  commandArgs?: unknown[];
-  children?: ToolkitTreeNode[];
-  collapsibleState?: vscode.TreeItemCollapsibleState;
-  contextValue?: string;
-  resourceUri?: vscode.Uri;
-  folderUri?: vscode.Uri;
-}
-
 class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<ToolkitTreeNode | undefined | void>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
@@ -1126,27 +1111,27 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       ? [
           ...await Promise.all(mirrors.map(async mirror => {
             if (mirror.missing) {
-              return this.localResourceNode({
+              return localResourceNode({
                 id: `overleaf-mirror:${mirror.id}`,
+                identity: { mirrorId: mirror.id },
                 label: mirror.name,
                 description: "Missing",
                 tooltip: "Overleaf mirror is not available in this environment",
                 iconId: "warning",
                 commandId: "overleafCodex.openLocalMirror",
-                commandArgs: [{ mirrorId: mirror.id }],
                 contextValue: "overleafMirrorMissing"
               });
             }
             const state = await overleafService!.state(mirror.root).catch(() => undefined);
             const status = !state ? "Needs attention" : state.conflicts.length > 0 ? "Conflict" : state.syncStatus?.hasBlocking ? "Needs attention" : state.running ? "Syncing" : "Ready";
             const icon = !state ? "warning" : state.conflicts.length > 0 ? "warning" : state.syncStatus?.hasBlocking ? "git-compare" : state.running ? "cloud-upload" : "cloud";
-            return this.localResourceNode({
+            return localResourceNode({
               id: `overleaf-mirror:${mirror.id}`,
+              identity: { mirrorId: mirror.id },
               label: mirror.name,
               description: `${status} · ${path.basename(path.dirname(mirror.root))}`,
               iconId: icon,
               commandId: "overleafCodex.openLocalMirror",
-              commandArgs: [{ mirrorId: mirror.id }],
               contextValue: "overleafMirror"
             });
           })),
@@ -1168,7 +1153,7 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
     )).filter((project): project is NonNullable<typeof project> => Boolean(project)).map((project) => project.id));
     const children = projects.length > 0
       ? [
-          ...projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))),
+          ...projects.map((project) => localProjectNode(project, openProjectIds.has(project.id))),
           ...(projects.some((project) => project.missing)
             ? [this.actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects", [])]
             : [])
@@ -1184,48 +1169,6 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
       children,
       vscode.TreeItemCollapsibleState.Expanded
     );
-  }
-
-  private localProjectNode(project: LocalNoteProjectStatus, isOpen: boolean): ToolkitTreeNode {
-    const parent = path.basename(path.dirname(project.rootPath)) || path.dirname(project.rootPath);
-    const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
-    const presentationDescription = project.templateId === "beamer-generic"
-      ? "Beamer · Generic Beamer · main.tex"
-      : template?.kind === "beamer"
-        ? `Beamer · ${template.label} · main.tex`
-        : undefined;
-    return this.localResourceNode({
-      id: `local-project:${project.id}`,
-      label: project.label,
-      description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open · ${parent}` : parent),
-      tooltip: project.missing ? "Project folder not found in this environment" : "Local note project",
-      iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
-      commandId: "latexEditingToolkit.openLocalProject",
-      commandArgs: [{ projectId: project.id }],
-      contextValue: project.missing ? "localProjectMissing" : "localProject"
-    });
-  }
-
-  private localResourceNode(options: {
-    id: string;
-    label: string;
-    description?: string;
-    tooltip?: string;
-    iconId: string;
-    commandId: string;
-    commandArgs: unknown[];
-    contextValue: string;
-  }): ToolkitTreeNode {
-    return {
-      id: options.id,
-      label: options.label,
-      description: options.description,
-      tooltip: options.tooltip ?? options.label,
-      iconId: options.iconId,
-      commandId: options.commandId,
-      commandArgs: options.commandArgs,
-      contextValue: options.contextValue
-    };
   }
 
   private async workspaceNode(folder: vscode.WorkspaceFolder): Promise<ToolkitTreeNode> {

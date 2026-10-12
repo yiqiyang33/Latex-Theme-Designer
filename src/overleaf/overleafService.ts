@@ -31,6 +31,7 @@ import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from "
 import { describeSyncHolder, SyncOwnerCoordinator, SyncStandbyError, type SyncDemotion, type SyncHolder } from "./syncOwnerCoordinator";
 import { executeSyncCommand, syncOperationRequiresForce, type SyncCommandBackend } from "./syncCommandCore";
 import type { ProjectSyncGate } from "./syncGate";
+import { mirrorIdFromArgument } from "../treeNodes";
 
 export interface OverleafState {
   available: boolean;
@@ -1679,9 +1680,8 @@ export class OverleafService implements vscode.Disposable {
 
   private async mirrorFromArgument(value: unknown): Promise<LocalMirrorStatus | undefined> {
     const candidate = (value && typeof value === "object" && "mirror" in value) ? (value as { mirror?: unknown }).mirror : value;
-    if (candidate && typeof candidate === "object" && typeof (candidate as { mirrorId?: unknown }).mirrorId === "string") {
-      return (await this.mirrorManager.findLocalMirrorById((candidate as { mirrorId: string }).mirrorId)) ?? undefined;
-    }
+    const mirrorId = mirrorIdFromArgument(candidate);
+    if (mirrorId) return (await this.mirrorManager.findLocalMirrorById(mirrorId)) ?? undefined;
     if (candidate && typeof candidate === "object" && typeof (candidate as LocalMirrorRecord).root === "string") {
       return (await this.mirrorManager.findLocalMirrorByRoot((candidate as LocalMirrorRecord).root)) ?? undefined;
     }
