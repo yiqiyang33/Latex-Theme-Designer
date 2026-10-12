@@ -1008,10 +1008,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename21, pattern) {
+function matchesGlob(relPath, basename23, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename21);
+    return globToRegExp(pattern).test(basename23);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -1725,7 +1725,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path46, checkUnignored, mode) {
+      test(path49, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1734,7 +1734,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path46);
+          const matched = rule[mode].test(path49);
           if (!matched) {
             return;
           }
@@ -1755,17 +1755,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path46, originalPath, doThrow) => {
-      if (!isString(path46)) {
+    var checkPath = (path49, originalPath, doThrow) => {
+      if (!isString(path49)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path46) {
+      if (!path49) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path46)) {
+      if (checkPath.isNotRelative(path49)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1774,7 +1774,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path46) => REGEX_TEST_INVALID_PATH.test(path46);
+    var isNotRelative = (path49) => REGEX_TEST_INVALID_PATH.test(path49);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1804,19 +1804,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path46 = originalPath && checkPath.convert(originalPath);
+        const path49 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path46,
+          path49,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path46, cache, checkUnignored, slices);
+        return this._t(path49, cache, checkUnignored, slices);
       }
-      checkIgnore(path46) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path46)) {
-          return this.test(path46);
+      checkIgnore(path49) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path49)) {
+          return this.test(path49);
         }
-        const slices = path46.split(SLASH).filter(Boolean);
+        const slices = path49.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1829,18 +1829,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path46, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path49, false, MODE_CHECK_IGNORE);
       }
-      _t(path46, cache, checkUnignored, slices) {
-        if (path46 in cache) {
-          return cache[path46];
+      _t(path49, cache, checkUnignored, slices) {
+        if (path49 in cache) {
+          return cache[path49];
         }
         if (!slices) {
-          slices = path46.split(SLASH).filter(Boolean);
+          slices = path49.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path46] = this._rules.test(path46, checkUnignored, MODE_IGNORE);
+          return cache[path49] = this._rules.test(path49, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1848,29 +1848,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path46] = parent.ignored ? parent : this._rules.test(path46, checkUnignored, MODE_IGNORE);
+        return cache[path49] = parent.ignored ? parent : this._rules.test(path49, checkUnignored, MODE_IGNORE);
       }
-      ignores(path46) {
-        return this._test(path46, this._ignoreCache, false).ignored;
+      ignores(path49) {
+        return this._test(path49, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path46) => !this.ignores(path46);
+        return (path49) => !this.ignores(path49);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path46) {
-        return this._test(path46, this._testCache, true);
+      test(path49) {
+        return this._test(path49, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path46) => checkPath(path46 && checkPath.convert(path46), path46, RETURN_FALSE);
+    var isPathValid = (path49) => checkPath(path49 && checkPath.convert(path49), path49, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path46) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path46) || isNotRelative(path46);
+      checkPath.isNotRelative = (path49) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path49) || isNotRelative(path49);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10732,11 +10732,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path46) {
-      if (!path46 || typeof path46 !== "string") {
+    function lookup2(path49) {
+      if (!path49 || typeof path49 !== "string") {
         return false;
       }
-      var extension2 = extname9("x." + path46).toLowerCase().substr(1);
+      var extension2 = extname9("x." + path49).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11841,11 +11841,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path46 = require("path");
+    var path49 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs39 = require("fs");
+    var fs40 = require("fs");
     var Stream = require("stream").Stream;
     var crypto8 = require("crypto");
     var mime2 = require_mime_types();
@@ -11912,7 +11912,7 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs39.stat(value.path, function(err, stat13) {
+          fs40.stat(value.path, function(err, stat13) {
             if (err) {
               callback(err);
               return;
@@ -11969,11 +11969,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path46.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path49.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path46.basename(options.filename || value && (value.name || value.path));
+        filename = path49.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path46.basename(value.client._httpMessage.path || "");
+        filename = path49.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12345,7 +12345,7 @@ var require_tr46 = __commonJS({
       TRANSITIONAL: 0,
       NONTRANSITIONAL: 1
     };
-    function normalize5(str) {
+    function normalize7(str) {
       return str.split("\0").map(function(s) {
         return s.normalize("NFC");
       }).join("\0");
@@ -12425,7 +12425,7 @@ var require_tr46 = __commonJS({
         processing_option = PROCESSING_OPTIONS.NONTRANSITIONAL;
       }
       var error = false;
-      if (normalize5(label) !== label || label[3] === "-" && label[4] === "-" || label[0] === "-" || label[label.length - 1] === "-" || label.indexOf(".") !== -1 || label.search(combiningMarksRegex) === 0) {
+      if (normalize7(label) !== label || label[3] === "-" && label[4] === "-" || label[0] === "-" || label[label.length - 1] === "-" || label.indexOf(".") !== -1 || label.search(combiningMarksRegex) === 0) {
         error = true;
       }
       var len = countSymbols(label);
@@ -12443,7 +12443,7 @@ var require_tr46 = __commonJS({
     }
     function processing(domain_name, useSTD3, processing_option) {
       var result = mapChars(domain_name, useSTD3, processing_option);
-      result.string = normalize5(result.string);
+      result.string = normalize7(result.string);
       var labels = result.string.split(".");
       for (var i = 0; i < labels.length; ++i) {
         try {
@@ -12886,14 +12886,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path46 = url.path;
-      if (path46.length === 0) {
+      const path49 = url.path;
+      if (path49.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path46.length === 1 && isNormalizedWindowsDriveLetter(path46[0])) {
+      if (url.scheme === "file" && path49.length === 1 && isNormalizedWindowsDriveLetter(path49[0])) {
         return;
       }
-      path46.pop();
+      path49.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -16629,9 +16629,9 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs38 = __toESM(require("node:fs"));
-var path45 = __toESM(require("node:path"));
-var vscode13 = __toESM(require("vscode"));
+var fs39 = __toESM(require("node:fs"));
+var path48 = __toESM(require("node:path"));
+var vscode15 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
 var import_node_crypto = require("node:crypto");
@@ -17409,15 +17409,25 @@ var LocalProjectRegistry = class {
   async list() {
     return (await this.registry.list()).map((status) => ({ ...status.record, missing: status.missing }));
   }
-  async add(rootPath, templateId) {
+  /** Registers a project. `label` is the name to show, when it should not be the folder's. */
+  async add(rootPath, templateId, options = {}) {
     const normalizedPath = normalizeProjectPath(rootPath);
-    return this.registry.upsertForRoot(normalizedPath, (existing) => existing ? { ...existing, templateId: String(templateId || existing.templateId || "unknown") } : {
+    const label = options.label?.trim();
+    return this.registry.upsertForRoot(normalizedPath, (existing) => existing ? { ...existing, templateId: String(templateId || existing.templateId || "unknown"), ...label ? { label } : {} } : {
       id: (0, import_node_crypto4.randomUUID)(),
       rootPath: normalizedPath,
-      label: path4.basename(normalizedPath),
+      label: label || path4.basename(normalizedPath),
       templateId: String(templateId || "unknown"),
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+  }
+  /** Changes the name Local Notes shows; the folder keeps its own. An empty name goes back to the folder's. */
+  async rename(id, label) {
+    const current = await this.registry.findById(id);
+    if (!current) throw new Error("The local note project is no longer registered.");
+    const nextLabel = label?.trim() || path4.basename(current.record.rootPath);
+    if (nextLabel.length > LOCAL_PROJECT_LABEL_MAX_LENGTH) throw new Error(`Use at most ${LOCAL_PROJECT_LABEL_MAX_LENGTH} characters.`);
+    return this.registry.upsert({ ...current.record, label: nextLabel });
   }
   async find(rootPath) {
     const status = await this.registry.findByRoot(normalizeProjectPath(rootPath));
@@ -17442,8 +17452,9 @@ var LocalProjectRegistry = class {
     if (!current) throw new Error("The local note project is no longer registered.");
     const duplicate = await this.registry.findByRoot(newPath);
     if (duplicate && duplicate.record.id !== current.record.id) throw new Error(`The selected directory is already registered as '${duplicate.record.label}'.`);
+    const label = current.record.label === path4.basename(current.record.rootPath) ? path4.basename(newPath) : current.record.label;
     await this.registry.removeByRoot(oldPath);
-    return this.registry.upsert({ ...current.record, rootPath: newPath, label: path4.basename(newPath) });
+    return this.registry.upsert({ ...current.record, rootPath: newPath, label });
   }
 };
 function normalizeProjectPath(rawPath) {
@@ -17793,7 +17804,7 @@ function templateFilePlanPaths(templateId, outputTarget = "main.tex") {
 
 // src/projectWorkflow.ts
 init_utils();
-async function runCreateProjectWorkflow(service, registry, rootPath, templateId, stylePreset) {
+async function runCreateProjectWorkflow(service, registry, rootPath, templateId, stylePreset, options = {}) {
   await import_node_fs7.promises.mkdir(rootPath, { recursive: true });
   await service.handle("initialize-workspace", { template_id: templateId });
   await service.handle("template-bootstrap", {
@@ -17802,7 +17813,7 @@ async function runCreateProjectWorkflow(service, registry, rootPath, templateId,
     overwrite: false,
     style_preset: stylePreset
   });
-  await registry.add(rootPath, templateId);
+  return registry.add(rootPath, templateId, options);
 }
 var WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 async function validateTemplateAndParent(templateId, parentPath, extensionDir) {
@@ -17891,7 +17902,7 @@ var path9 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path46, callback = (err) => {
+function openExplorer(path49, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -17900,7 +17911,7 @@ function openExplorer(path46, callback = (err) => {
     "darwin": ".",
     "linux": "."
   };
-  let commands7 = {
+  let commands8 = {
     "win32": "explorer",
     "darwin": "open",
     "linux": "xdg-open"
@@ -17908,8 +17919,8 @@ function openExplorer(path46, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path46 = path46 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands7[platform3], [path46]);
+  path49 = path49 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands8[platform3], [path49]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -17994,26 +18005,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path46) {
+  function parse_path(path49) {
     if (platform3 == "win32") {
-      path46 = RegReplace(path46, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path49 = RegReplace(path49, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path46 = RegReplace(path46, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path49 = RegReplace(path49, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path46 = path46.replace(/\//g, "\\");
+      path49 = path49.replace(/\//g, "\\");
     }
-    return path46;
+    return path49;
   }
   if (platform3 == "win32") {
-    let path46 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path46 ? parse_path(path46) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path49 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path49 ? parse_path(path49) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path46 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path46 ? parse_path(path46) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path49 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path49 ? parse_path(path49) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path46 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path46 ? parse_path(path46) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path49 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path49 ? parse_path(path49) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -19633,8 +19644,8 @@ var snippetOutput;
 function isLatexLikeDocument(document) {
   return ["latex", "tex", "markdown"].includes(document.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path46) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path46);
+function getStringArrayConfiguration(path49) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path49);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -21222,9 +21233,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path13.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename21 = path13.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename21, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename21, pattern))) {
+        const basename23 = path13.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename23, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename23, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -29243,12 +29254,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path46, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path46);
+  setPath(path49, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path49);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path46) {
-    this.paths.delete(toPosixPath2(path46));
+  clearPath(path49) {
+    this.paths.delete(toPosixPath2(path49));
   }
   clearPaths() {
     this.paths.clear();
@@ -29260,23 +29271,23 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path46 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path46, { ...entry, path: path46 });
+      const path49 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path49, { ...entry, path: path49 });
     }
   }
-  canSync(path46) {
+  canSync(path49) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path46) === void 0;
+    return this.findBlocking(path49) === void 0;
   }
   /**
    * True when `path` is held up only by a reconnect or an in-flight check, with nothing
    * path-specific against it. Such work is worth retrying once the gate reopens.
    */
-  isTransientlyBlocked(path46) {
-    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path46) === void 0;
+  isTransientlyBlocked(path49) {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path49) === void 0;
   }
-  findBlocking(path46) {
-    const normalized = toPosixPath2(path46);
+  findBlocking(path49) {
+    const normalized = toPosixPath2(path49);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -29810,13 +29821,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path46) {
-    const normalized = toPosixPath2(path46);
+  forget(path49) {
+    const normalized = toPosixPath2(path49);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path46) {
-    const normalized = toPosixPath2(path46);
+  forgetSubtree(path49) {
+    const normalized = toPosixPath2(path49);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -29855,8 +29866,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path46, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path46);
+      for (const [path49, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path49);
       }
     }
   }
@@ -30140,22 +30151,22 @@ async function executeSyncCommand(backend, command, args = {}) {
       return backend.syncOnce();
     case "push":
     case "pull": {
-      const path46 = requiredPath(args.path);
+      const path49 = requiredPath(args.path);
       const force = Boolean(args.force);
-      await backend.authorize?.(command, path46, force);
-      await backend[command](path46, force);
+      await backend.authorize?.(command, path49, force);
+      await backend[command](path49, force);
       return backend.status({
         refresh: true,
         full: false,
-        paths: [path46],
+        paths: [path49],
         reason: `post-${command}`
       });
     }
     case "conflicts-list":
       return backend.conflicts();
     case "conflicts-resolve": {
-      const path46 = requiredPath(args.path);
-      await backend.resolveConflict(path46, args.use === "remote" ? "remote" : "local");
+      const path49 = requiredPath(args.path);
+      await backend.resolveConflict(path49, args.use === "remote" ? "remote" : "local");
       return backend.conflicts();
     }
     default:
@@ -33415,8 +33426,8 @@ var FallbackCredentialStore = class {
     this.fallbackActive = true;
   }
 };
-function createCredentialStore(platform3 = process.platform, env3 = process.env) {
-  const mode = env3.LATEX_TOOLKIT_CREDENTIAL_STORE?.trim().toLowerCase();
+function createCredentialStore(platform3 = process.platform, env4 = process.env) {
+  const mode = env4.LATEX_TOOLKIT_CREDENTIAL_STORE?.trim().toLowerCase();
   if (mode === "file") return new FileCredentialStore();
   const system = platform3 === "darwin" ? new MacKeychainCredentialStore() : platform3 === "linux" ? new SecretToolCredentialStore() : void 0;
   if (mode === "system") {
@@ -34749,6 +34760,46 @@ function isOwnerEvent(value) {
 }
 function errorResponse(id, code, message) {
   return { version: 1, id, ok: false, error: { code, message } };
+}
+
+// src/treeNodes.ts
+function localResourceNode(options) {
+  return {
+    ...options.identity,
+    id: options.id,
+    label: options.label,
+    description: options.description,
+    tooltip: options.tooltip ?? options.label,
+    iconId: options.iconId,
+    commandId: options.commandId,
+    commandArgs: [{ ...options.identity }],
+    contextValue: options.contextValue
+  };
+}
+function projectIdFromArgument(value) {
+  return stringField(value, "projectId");
+}
+function mirrorIdFromArgument(value) {
+  return stringField(value, "mirrorId");
+}
+function noteGroupIdFromArgument(value) {
+  return projectIdFromArgument(value) ? void 0 : stringField(value, "noteGroupId");
+}
+function localPathFromArgument(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  if (typeof candidate.fsPath === "string") return candidate.fsPath;
+  const resourceUri = candidate.resourceUri;
+  if (resourceUri && typeof resourceUri === "object" && typeof resourceUri.fsPath === "string") {
+    return resourceUri.fsPath;
+  }
+  return void 0;
+}
+function stringField(value, key) {
+  if (!value || typeof value !== "object") return void 0;
+  const field = value[key];
+  return typeof field === "string" && field ? field : void 0;
 }
 
 // src/overleaf/overleafService.ts
@@ -36224,9 +36275,8 @@ var OverleafService = class {
   }
   async mirrorFromArgument(value) {
     const candidate = value && typeof value === "object" && "mirror" in value ? value.mirror : value;
-    if (candidate && typeof candidate === "object" && typeof candidate.mirrorId === "string") {
-      return await this.mirrorManager.findLocalMirrorById(candidate.mirrorId) ?? void 0;
-    }
+    const mirrorId = mirrorIdFromArgument(candidate);
+    if (mirrorId) return await this.mirrorManager.findLocalMirrorById(mirrorId) ?? void 0;
     if (candidate && typeof candidate === "object" && typeof candidate.root === "string") {
       return await this.mirrorManager.findLocalMirrorByRoot(candidate.root) ?? void 0;
     }
@@ -36307,10 +36357,697 @@ async function exists6(filePath) {
   }
 }
 
+// src/localNotesTree.ts
+var path44 = __toESM(require("node:path"));
+var vscode12 = __toESM(require("vscode"));
+
+// src/localNoteGroups.ts
+var import_node_crypto7 = require("node:crypto");
+var path43 = __toESM(require("node:path"));
+var LOCAL_NOTE_GROUPS_STATE_KEY = "latexEditingToolkit.localProjectGroups";
+var LOCAL_NOTE_GROUPS_MAX_ENTRIES = 200;
+var LOCAL_NOTE_GROUP_NAME_MAX_LENGTH = 80;
+function scopedLocalNoteGroupsStateKey(scope) {
+  return scopedStateKey(LOCAL_NOTE_GROUPS_STATE_KEY, scope);
+}
+var LocalNoteGroupRegistry = class {
+  constructor(store, stateKey = LOCAL_NOTE_GROUPS_STATE_KEY) {
+    this.store = store;
+    this.stateKey = stateKey;
+  }
+  store;
+  stateKey;
+  queue = Promise.resolve();
+  /** The stored groups, as stored. Reading never writes, so malformed data is skipped, not repaired. */
+  list() {
+    return this.serialized(() => this.read());
+  }
+  /** Creates a group, moving `noteIds` into it from wherever they were. */
+  create(name, noteIds = []) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      const error = groupNameError(name, groups);
+      if (error) throw new Error(error);
+      return this.writeCreated(groups, name, noteIds);
+    });
+  }
+  /**
+   * Like `create`, but reuses the group of that name when there already is one - another window may
+   * have created it while the name was being typed here.
+   */
+  ensure(name, noteIds = []) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      const existing = findGroupByName(groups, name);
+      if (!existing) {
+        const error = groupNameError(name, groups);
+        if (error) throw new Error(error);
+        return this.writeCreated(groups, name, noteIds);
+      }
+      const next = withNotesMoved(groups, noteIds, existing.id);
+      if (countMoved(groups, next, noteIds) > 0) await this.write(next);
+      return next.find((group) => group.id === existing.id);
+    });
+  }
+  rename(id, name) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      const current = groups.find((group) => group.id === id);
+      if (!current) throw new Error("This group no longer exists.");
+      const error = groupNameError(name, groups, id);
+      if (error) throw new Error(error);
+      const renamed = { ...current, name: normalizeGroupName(name) };
+      await this.write(groups.map((group) => group.id === id ? renamed : group));
+      return renamed;
+    });
+  }
+  /** Deletes a group. Its notes simply become ungrouped. */
+  remove(id) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      const removed = groups.find((group) => group.id === id);
+      if (removed) await this.write(groups.filter((group) => group.id !== id));
+      return removed;
+    });
+  }
+  /**
+   * Puts `noteIds` in the group `groupId`, or in no group when it is undefined. Returns how many of
+   * them changed group.
+   */
+  moveNotes(noteIds, groupId) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      if (groupId !== void 0 && !groups.some((group) => group.id === groupId)) {
+        throw new Error("This group no longer exists.");
+      }
+      const next = withNotesMoved(groups, noteIds, groupId);
+      const moved = countMoved(groups, next, noteIds);
+      if (moved > 0) await this.write(next);
+      return moved;
+    });
+  }
+  /** Drops notes that are no longer registered from every group. */
+  forgetNotes(noteIds) {
+    return this.serialized(async () => {
+      const groups = this.read();
+      const next = withNotesMoved(groups, noteIds, void 0);
+      if (countMoved(groups, next, noteIds) > 0) await this.write(next);
+    });
+  }
+  async writeCreated(groups, name, noteIds) {
+    if (groups.length >= LOCAL_NOTE_GROUPS_MAX_ENTRIES) {
+      throw new Error(`Local Notes can hold at most ${LOCAL_NOTE_GROUPS_MAX_ENTRIES} groups.`);
+    }
+    const created = { id: (0, import_node_crypto7.randomUUID)(), name: normalizeGroupName(name), createdAt: (/* @__PURE__ */ new Date()).toISOString(), noteIds: [] };
+    const next = withNotesMoved([...groups, created], noteIds, created.id);
+    await this.write(next);
+    return next.find((group) => group.id === created.id);
+  }
+  read() {
+    return parseGroups(this.store.get(this.stateKey));
+  }
+  async write(groups) {
+    await this.store.update(this.stateKey, groups);
+  }
+  serialized(task) {
+    const next = this.queue.then(task, task);
+    this.queue = next.catch(() => void 0);
+    return next;
+  }
+};
+function noteCount(count) {
+  return `${count} note${count === 1 ? "" : "s"}`;
+}
+function normalizeGroupName(raw) {
+  return String(raw ?? "").trim();
+}
+function groupNameError(raw, groups, ignoreId) {
+  const name = normalizeGroupName(raw);
+  if (!name) return "Group name is required.";
+  if (name.length > LOCAL_NOTE_GROUP_NAME_MAX_LENGTH) return `Use at most ${LOCAL_NOTE_GROUP_NAME_MAX_LENGTH} characters.`;
+  const existing = findGroupByName(groups, name);
+  if (existing && existing.id !== ignoreId) return `A group named '${existing.name}' already exists.`;
+  return void 0;
+}
+function findGroupByName(groups, raw) {
+  const key = normalizeGroupName(raw).toLocaleLowerCase();
+  return groups.find((group) => group.name.toLocaleLowerCase() === key);
+}
+var naturalOrder = new Intl.Collator(void 0, { numeric: true, sensitivity: "base" });
+function sortGroups(groups) {
+  return [...groups].sort((left, right) => naturalOrder.compare(left.name, right.name) || left.createdAt.localeCompare(right.createdAt));
+}
+function groupOfNote(groups, noteId) {
+  return sortGroups(groups).find((group) => group.noteIds.includes(noteId));
+}
+function arrangeLocalNotes(projects, groups) {
+  const ordered = sortGroups(groups);
+  const owner = /* @__PURE__ */ new Map();
+  for (const group of ordered) {
+    for (const noteId of group.noteIds) if (!owner.has(noteId)) owner.set(noteId, group.id);
+  }
+  const members = new Map(ordered.map((group) => [group.id, []]));
+  const ungrouped = [];
+  for (const project of projects) {
+    const groupId = owner.get(project.id);
+    if (groupId) members.get(groupId).push(project);
+    else ungrouped.push(project);
+  }
+  return {
+    groups: ordered.map((group) => ({
+      group,
+      projects: members.get(group.id).sort((left, right) => naturalOrder.compare(left.label, right.label) || right.createdAt.localeCompare(left.createdAt))
+    })),
+    ungrouped
+  };
+}
+function suggestGroupFolder(projects, excludedParents = []) {
+  const excluded = new Set(excludedParents.map((parent) => caseFoldPath(path43.normalize(parent))));
+  const parents = /* @__PURE__ */ new Map();
+  for (const project of projects) {
+    if (project.missing) continue;
+    const parent = path43.dirname(project.rootPath);
+    const key = caseFoldPath(parent);
+    if (excluded.has(key)) continue;
+    const entry = parents.get(key);
+    if (!entry) parents.set(key, { parent, count: 1, latest: project.createdAt });
+    else {
+      entry.count += 1;
+      if (project.createdAt > entry.latest) entry.latest = project.createdAt;
+    }
+  }
+  return [...parents.values()].sort((left, right) => right.count - left.count || right.latest.localeCompare(left.latest))[0]?.parent;
+}
+function stripOverleafProjectId(folderName) {
+  return folderName.replace(/-[0-9a-f]{24}$/, "");
+}
+function suggestNextNoteName(latestName, isTaken) {
+  const match2 = /^(.*\D)?(\d+)(\D*)$/.exec(stripOverleafProjectId(latestName));
+  if (!match2) return void 0;
+  const [, prefix = "", digits, suffix] = match2;
+  let value = BigInt(digits);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    value += 1n;
+    const candidate = `${prefix}${value.toString().padStart(digits.length, "0")}${suffix}`;
+    if (!isTaken(candidate)) return candidate;
+  }
+  return void 0;
+}
+function withNotesMoved(groups, noteIds, targetId) {
+  const moving = new Set(noteIds);
+  return groups.map((group) => {
+    const kept = group.noteIds.filter((noteId) => !moving.has(noteId));
+    return { ...group, noteIds: group.id === targetId ? [...kept, ...moving] : kept };
+  });
+}
+function countMoved(before, after, noteIds) {
+  const membership = (groups, noteId) => groups.filter((group) => group.noteIds.includes(noteId)).map((group) => group.id).join("\n");
+  return [...new Set(noteIds)].filter((noteId) => membership(before, noteId) !== membership(after, noteId)).length;
+}
+function parseGroups(raw) {
+  if (!Array.isArray(raw)) return [];
+  const groups = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of raw) {
+    if (groups.length >= LOCAL_NOTE_GROUPS_MAX_ENTRIES) break;
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item;
+    const id = typeof record.id === "string" ? record.id : "";
+    const name = typeof record.name === "string" ? normalizeGroupName(record.name) : "";
+    if (!id || id.length > LOCAL_RESOURCE_ID_MAX_LENGTH || seen.has(id)) continue;
+    if (!name || name.length > LOCAL_NOTE_GROUP_NAME_MAX_LENGTH) continue;
+    seen.add(id);
+    const createdAt = typeof record.createdAt === "string" && !Number.isNaN(Date.parse(record.createdAt)) ? new Date(Date.parse(record.createdAt)).toISOString() : (/* @__PURE__ */ new Date(0)).toISOString();
+    const noteIds = Array.isArray(record.noteIds) ? [...new Set(record.noteIds.filter((noteId) => typeof noteId === "string" && noteId.length > 0 && noteId.length <= LOCAL_RESOURCE_ID_MAX_LENGTH))].slice(0, LOCAL_RESOURCE_MAX_ENTRIES) : [];
+    groups.push({ id, name, createdAt, noteIds });
+  }
+  return groups;
+}
+
+// src/localNotesTree.ts
+init_schema();
+var LOCAL_NOTES_CONTEXT = {
+  root: "localNotesRoot",
+  group: "localNoteGroup",
+  emptyGroup: "localNoteGroupEmpty",
+  project: "localProject",
+  missingProject: "localProjectMissing",
+  groupedProject: "localProjectGrouped",
+  missingGroupedProject: "localProjectMissingGrouped"
+};
+function localNotesRootNode(projects, groups, openProjectIds) {
+  return {
+    id: "local-notes",
+    label: "Local Notes",
+    iconId: "book",
+    children: localNotesChildren(projects, groups, openProjectIds),
+    collapsibleState: vscode12.TreeItemCollapsibleState.Expanded,
+    contextValue: LOCAL_NOTES_CONTEXT.root,
+    dropGroupId: null
+  };
+}
+function localNotesChildren(projects, groups, openProjectIds) {
+  if (projects.length === 0 && groups.length === 0) {
+    return [
+      infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
+      actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject")
+    ];
+  }
+  const arranged = arrangeLocalNotes(projects, groups);
+  return [
+    ...arranged.groups.map(({ group, projects: members }) => localNoteGroupNode(group, members, openProjectIds)),
+    ...arranged.ungrouped.map((project) => localProjectNode(project, openProjectIds.has(project.id))),
+    ...projects.some((project) => project.missing) ? [actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects")] : []
+  ];
+}
+function localNoteGroupNode(group, members, openProjectIds) {
+  const missing = members.filter((project) => project.missing).length;
+  const summary = members.length === 0 ? "empty" : `${noteCount(members.length)}${missing > 0 ? ` \xB7 ${missing} missing` : ""}`;
+  return {
+    id: `local-note-group:${group.id}`,
+    label: group.name,
+    description: summary,
+    tooltip: `${group.name}: ${summary}`,
+    iconId: "folder-library",
+    children: members.length > 0 ? members.map((project) => localProjectNode(project, openProjectIds.has(project.id), group.id)) : [emptyGroupNode(group)],
+    collapsibleState: vscode12.TreeItemCollapsibleState.Expanded,
+    contextValue: LOCAL_NOTES_CONTEXT.group,
+    noteGroupId: group.id,
+    dropGroupId: group.id
+  };
+}
+function emptyGroupNode(group) {
+  return {
+    id: `local-note-group-empty:${group.id}`,
+    label: "No notes yet",
+    description: "drag notes here, or click to create one",
+    tooltip: `Drag notes onto '${group.name}', or click to create a project in it`,
+    iconId: "add",
+    commandId: "latexEditingToolkit.createProjectInGroup",
+    commandArgs: [{ noteGroupId: group.id }],
+    contextValue: LOCAL_NOTES_CONTEXT.emptyGroup,
+    noteGroupId: group.id,
+    dropGroupId: group.id
+  };
+}
+function localProjectNode(project, isOpen, groupId) {
+  const folderName = path44.basename(project.rootPath);
+  const parent = path44.basename(path44.dirname(project.rootPath)) || path44.dirname(project.rootPath);
+  const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
+  const presentationDescription = project.templateId === "beamer-generic" ? "Beamer \xB7 Generic Beamer \xB7 main.tex" : template?.kind === "beamer" ? `Beamer \xB7 ${template.label} \xB7 main.tex` : void 0;
+  const contextValue = groupId ? project.missing ? LOCAL_NOTES_CONTEXT.missingGroupedProject : LOCAL_NOTES_CONTEXT.groupedProject : project.missing ? LOCAL_NOTES_CONTEXT.missingProject : LOCAL_NOTES_CONTEXT.project;
+  return {
+    ...localResourceNode({
+      id: `local-project:${project.id}`,
+      identity: { projectId: project.id },
+      label: project.label,
+      description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open \xB7 ${parent}` : parent),
+      tooltip: project.missing ? "Project folder not found in this environment" : project.label === folderName ? "Local note project" : `Local note project in the folder '${folderName}'`,
+      iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
+      commandId: "latexEditingToolkit.openLocalProject",
+      contextValue
+    }),
+    dropGroupId: groupId ?? null
+  };
+}
+function actionNode(id, label, description, iconId, commandId) {
+  return { id, label, description, tooltip: `${label}: ${description}`, iconId, commandId, commandArgs: [], contextValue: "action" };
+}
+function infoNode(id, label, description, iconId) {
+  return { id, label, description, tooltip: `${label}: ${description}`, iconId, contextValue: "info" };
+}
+var LOCAL_NOTES_DRAG_MIME = "application/vnd.latex-editing-toolkit.local-notes";
+function draggedNoteIds(nodes) {
+  return [...new Set(nodes.map((node) => projectIdFromArgument(node)).filter((id) => id !== void 0))];
+}
+var LocalNotesDragAndDrop = class {
+  constructor(moveNotes) {
+    this.moveNotes = moveNotes;
+  }
+  moveNotes;
+  dragMimeTypes = [LOCAL_NOTES_DRAG_MIME];
+  dropMimeTypes = [LOCAL_NOTES_DRAG_MIME];
+  handleDrag(source, dataTransfer) {
+    const noteIds = draggedNoteIds(source);
+    if (noteIds.length > 0) dataTransfer.set(LOCAL_NOTES_DRAG_MIME, new vscode12.DataTransferItem(JSON.stringify(noteIds)));
+  }
+  async handleDrop(target, dataTransfer) {
+    const groupId = target?.dropGroupId;
+    if (groupId === void 0) return;
+    const noteIds = parseNoteIds(await dataTransfer.get(LOCAL_NOTES_DRAG_MIME)?.asString());
+    if (noteIds.length > 0) await this.moveNotes(noteIds, groupId ?? void 0);
+  }
+};
+function parseNoteIds(raw) {
+  try {
+    const parsed = JSON.parse(raw ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+// src/localNotesCommands.ts
+var fs37 = __toESM(require("node:fs"));
+var path45 = __toESM(require("node:path"));
+var vscode13 = __toESM(require("vscode"));
+function registerLocalNotesCommands(register, deps) {
+  return [
+    register("latexEditingToolkit.openLocalProject", (target) => openLocalProject(deps, target, false)),
+    register("latexEditingToolkit.openLocalProjectInNewWindow", (target) => openLocalProject(deps, target, true)),
+    register("latexEditingToolkit.relocateLocalProject", (target) => relocateLocalProject(deps, target)),
+    register("latexEditingToolkit.removeLocalProject", (target) => removeLocalProject(deps, target)),
+    register("latexEditingToolkit.clearMissingLocalProjects", () => clearMissingLocalProjects(deps)),
+    register("latexEditingToolkit.showLocalProjectPath", (target) => showLocalProjectPath(deps, target)),
+    register("latexEditingToolkit.renameLocalProject", (target) => renameLocalProject(deps, target)),
+    register("latexEditingToolkit.moveLocalProjectToGroup", (target) => moveLocalProjectToGroup(deps, target)),
+    register("latexEditingToolkit.removeLocalProjectFromGroup", (target) => removeLocalProjectFromGroup(deps, target)),
+    register("latexEditingToolkit.newLocalNoteGroup", () => newLocalNoteGroup(deps)),
+    register("latexEditingToolkit.renameLocalNoteGroup", (target) => renameLocalNoteGroup(deps, target)),
+    register("latexEditingToolkit.deleteLocalNoteGroup", (target) => deleteLocalNoteGroup(deps, target)),
+    register("latexEditingToolkit.addNotesToGroup", (target) => addNotesToGroup(deps, target)),
+    register("latexEditingToolkit.createProjectInGroup", (target) => createProjectInGroup(deps, target))
+  ];
+}
+async function moveDroppedNotes(deps, noteIds, groupId) {
+  const registered = new Set((await deps.projects.list()).map((project) => project.id));
+  const moved = await deps.groups.moveNotes(noteIds.filter((noteId) => registered.has(noteId)), groupId);
+  deps.refresh();
+  if (moved === 0) return;
+  const group = groupId ? (await deps.groups.list()).find((candidate) => candidate.id === groupId) : void 0;
+  vscode13.window.setStatusBarMessage(group ? `Moved ${noteCount(moved)} to '${group.name}'.` : `Took ${noteCount(moved)} out of its group.`, 2500);
+}
+async function openLocalProject(deps, target, newWindow) {
+  const project = await projectFromArgument(deps.projects, target);
+  const projectPath = project?.rootPath ?? (typeof target === "string" ? localPathFromArgument(target) : void 0);
+  if (!projectPath) {
+    warnUnresolvedProject();
+    return;
+  }
+  try {
+    if (!(await fs37.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
+  } catch {
+    vscode13.window.showWarningMessage("Local note project is not available in this environment. Relocate or forget it from Local Notes.");
+    return;
+  }
+  await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(projectPath), { forceNewWindow: newWindow });
+}
+async function relocateLocalProject(deps, target) {
+  const oldProject = await projectFromArgument(deps.projects, target);
+  const oldPath = oldProject?.rootPath ?? (typeof target === "string" ? localPathFromArgument(target) : void 0);
+  if (!oldPath) {
+    warnUnresolvedProject();
+    return;
+  }
+  const selected = await vscode13.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Relocate Toolkit Project Here"
+  });
+  if (!selected?.[0]) return;
+  if (selected[0].scheme !== "file") {
+    vscode13.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
+    return;
+  }
+  const updated = await deps.projects.relocate(oldPath, selected[0].fsPath);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
+}
+async function removeLocalProject(deps, target) {
+  const project = await projectFromArgument(deps.projects, target);
+  const projectPath = project?.rootPath ?? (typeof target === "string" ? localPathFromArgument(target) : void 0);
+  if (!projectPath) {
+    warnUnresolvedProject();
+    return;
+  }
+  const label = project?.label ?? path45.basename(path45.normalize(projectPath));
+  const choice = await vscode13.window.showWarningMessage(
+    `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
+    { modal: true },
+    "Forget"
+  );
+  if (choice !== "Forget") return;
+  const removed = await deps.projects.remove(projectPath);
+  if (project) await deps.groups.forgetNotes([project.id]);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
+}
+async function clearMissingLocalProjects(deps) {
+  const missing = (await deps.projects.list()).filter((project) => project.missing);
+  if (missing.length === 0) {
+    vscode13.window.showInformationMessage("No missing local note projects to clear.");
+    return;
+  }
+  const choice = await vscode13.window.showWarningMessage(
+    `Forget ${missing.length} missing local note project${missing.length === 1 ? "" : "s"}? This only removes registry metadata and does not delete files.`,
+    { modal: true },
+    "Clear Missing"
+  );
+  if (choice !== "Clear Missing") return;
+  const removed = await deps.projects.removeMissing();
+  const registered = new Set((await deps.projects.list()).map((project) => project.id));
+  await deps.groups.forgetNotes(missing.map((project) => project.id).filter((noteId) => !registered.has(noteId)));
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Cleared ${removed} missing local note project${removed === 1 ? "" : "s"}.`, 2500);
+}
+async function showLocalProjectPath(deps, target) {
+  const project = await projectFromArgument(deps.projects, target);
+  if (!project) {
+    warnUnresolvedProject();
+    return;
+  }
+  const copy = "Copy Path";
+  const reveal = process.platform === "darwin" ? "Reveal in Finder" : process.platform === "win32" ? "Reveal in File Explorer" : "Open Containing Folder";
+  const action = await vscode13.window.showInformationMessage(project.rootPath, copy, ...project.missing ? [] : [reveal]);
+  if (action === copy) {
+    await vscode13.env.clipboard.writeText(project.rootPath);
+    vscode13.window.setStatusBarMessage("Copied the project path.", 2e3);
+  } else if (action === reveal) {
+    await vscode13.commands.executeCommand("revealFileInOS", vscode13.Uri.file(project.rootPath));
+  }
+}
+async function renameLocalProject(deps, target) {
+  const project = await projectFromArgument(deps.projects, target);
+  if (!project) {
+    warnUnresolvedProject();
+    return;
+  }
+  const label = await vscode13.window.showInputBox({
+    title: "Rename Note",
+    prompt: `The name shown in Local Notes; the folder stays '${path45.basename(project.rootPath)}'. Leave empty to use the folder's name.`,
+    value: project.label,
+    valueSelection: [0, project.label.length],
+    validateInput: (value) => value.trim().length > LOCAL_PROJECT_LABEL_MAX_LENGTH ? `Use at most ${LOCAL_PROJECT_LABEL_MAX_LENGTH} characters.` : void 0
+  });
+  if (label === void 0) return;
+  const renamed = await deps.projects.rename(project.id, label);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Renamed to '${renamed.label}'.`, 2500);
+}
+async function moveLocalProjectToGroup(deps, target) {
+  const project = await projectFromArgument(deps.projects, target);
+  if (!project) {
+    warnUnresolvedProject();
+    return;
+  }
+  const groups = await deps.groups.list();
+  if (groups.length === 0) {
+    await newLocalNoteGroup(deps, [project.id]);
+    return;
+  }
+  const current = groupOfNote(groups, project.id);
+  const items = [
+    ...sortGroups(groups).map((group) => ({
+      label: `$(folder-library) ${group.name}`,
+      description: group.id === current?.id ? "current group" : void 0,
+      group
+    })),
+    { label: "", kind: vscode13.QuickPickItemKind.Separator },
+    { label: "$(new-collection) New Group\u2026", action: "new" },
+    ...current ? [{ label: "$(circle-slash) Remove from Group", description: `take it out of '${current.name}'`, action: "ungroup" }] : []
+  ];
+  const picked = await vscode13.window.showQuickPick(items, { title: `Move '${project.label}' to a Group`, placeHolder: "Choose a group" });
+  if (!picked) return;
+  if (picked.action === "new") {
+    await newLocalNoteGroup(deps, [project.id]);
+    return;
+  }
+  const destination = picked.action === "ungroup" ? void 0 : picked.group;
+  if (destination && destination.id === current?.id) return;
+  await deps.groups.moveNotes([project.id], destination?.id);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(
+    destination ? `Moved '${project.label}' to '${destination.name}'.` : `Removed '${project.label}' from '${current?.name}'.`,
+    2500
+  );
+}
+async function removeLocalProjectFromGroup(deps, target) {
+  const project = await projectFromArgument(deps.projects, target);
+  if (!project) {
+    warnUnresolvedProject();
+    return;
+  }
+  const current = groupOfNote(await deps.groups.list(), project.id);
+  if (!current) return;
+  await deps.groups.moveNotes([project.id], void 0);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Removed '${project.label}' from '${current.name}'.`, 2500);
+}
+async function newLocalNoteGroup(deps, noteIds = []) {
+  const name = await askGroupName(await deps.groups.list(), { title: "New Group" });
+  if (name === void 0) return;
+  const group = await deps.groups.create(name, noteIds);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(
+    noteIds.length > 0 ? `Moved ${noteCount(noteIds.length)} to the new group '${group.name}'.` : `Created the group '${group.name}'.`,
+    2500
+  );
+}
+async function renameLocalNoteGroup(deps, target) {
+  const groups = await deps.groups.list();
+  const group = groupFromArgument(groups, target);
+  if (!group) {
+    warnMissingGroup();
+    return;
+  }
+  const name = await askGroupName(groups, { title: "Rename Group", value: group.name, ignoreId: group.id });
+  if (name === void 0) return;
+  const renamed = await deps.groups.rename(group.id, name);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Renamed the group to '${renamed.name}'.`, 2500);
+}
+async function deleteLocalNoteGroup(deps, target) {
+  const [groups, projects] = await Promise.all([deps.groups.list(), deps.projects.list()]);
+  const group = groupFromArgument(groups, target);
+  if (!group) {
+    warnMissingGroup();
+    return;
+  }
+  const members = notesInGroup(projects, groups, group.id).length;
+  if (members > 0) {
+    const choice = await vscode13.window.showWarningMessage(
+      `Delete the group '${group.name}'? ${members === 1 ? "Its note moves" : `Its ${members} notes move`} back to Local Notes; no files are deleted.`,
+      { modal: true },
+      "Delete Group"
+    );
+    if (choice !== "Delete Group") return;
+  }
+  await deps.groups.remove(group.id);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Deleted the group '${group.name}'.`, 2500);
+}
+async function addNotesToGroup(deps, target) {
+  const [groups, projects] = await Promise.all([deps.groups.list(), deps.projects.list()]);
+  const group = groupFromArgument(groups, target);
+  if (!group) {
+    warnMissingGroup();
+    return;
+  }
+  const items = [];
+  const section = (heading, members) => {
+    if (members.length === 0) return;
+    items.push({ label: heading, kind: vscode13.QuickPickItemKind.Separator });
+    for (const project of members) items.push({ label: project.label, description: project.missing ? "Missing" : void 0, projectId: project.id });
+  };
+  const arranged = arrangeLocalNotes(projects, groups);
+  section("Not in a group", arranged.ungrouped);
+  for (const entry of arranged.groups) {
+    if (entry.group.id !== group.id) section(`In '${entry.group.name}'`, entry.projects);
+  }
+  if (!items.some((item) => item.projectId)) {
+    vscode13.window.showInformationMessage(projects.length === 0 ? "There are no notes to add yet." : `Every note is already in '${group.name}'.`);
+    return;
+  }
+  const picked = await vscode13.window.showQuickPick(items, {
+    title: `Add Notes to '${group.name}'`,
+    placeHolder: "Pick the notes to put in this group",
+    canPickMany: true
+  });
+  const noteIds = (picked ?? []).flatMap((item) => item.projectId ? [item.projectId] : []);
+  if (noteIds.length === 0) return;
+  const moved = await deps.groups.moveNotes(noteIds, group.id);
+  deps.refresh();
+  vscode13.window.setStatusBarMessage(`Added ${noteCount(moved)} to '${group.name}'.`, 2500);
+}
+async function createProjectInGroup(deps, target) {
+  const groupId = noteGroupIdFromArgument(target);
+  if (!groupId) {
+    warnMissingGroup();
+    return;
+  }
+  await deps.createProjectInGroup(groupId);
+}
+async function projectFromArgument(projects, value) {
+  const projectId = projectIdFromArgument(value);
+  if (projectId) return projects.findById(projectId);
+  const projectPath = localPathFromArgument(value);
+  return projectPath ? projects.find(projectPath) : void 0;
+}
+function groupFromArgument(groups, value) {
+  const groupId = noteGroupIdFromArgument(value);
+  return groupId ? groups.find((group) => group.id === groupId) : void 0;
+}
+function warnUnresolvedProject() {
+  vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
+}
+function warnMissingGroup() {
+  vscode13.window.showWarningMessage("This group no longer exists.");
+}
+function notesInGroup(projects, groups, groupId) {
+  const entry = arrangeLocalNotes(projects, groups).groups.find((candidate) => candidate.group.id === groupId);
+  return [...entry?.projects ?? []].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+async function openNoteGroup(projects, groups) {
+  for (const folder of vscode13.workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme !== "file") continue;
+    const project = await projects.find(folder.uri.fsPath);
+    const group = project ? groupOfNote(groups, project.id) : void 0;
+    if (group) return group;
+  }
+  return void 0;
+}
+async function pickGroupForNewProject(groups, projects, openGroup, title) {
+  const lastUsed = (group) => notesInGroup(projects, groups, group.id)[0]?.createdAt ?? group.createdAt;
+  const groupItem = (group, description) => ({ label: `$(folder-library) ${group.name}`, description, choice: { group } });
+  const others = groups.filter((group) => group.id !== openGroup?.id).sort((left, right) => lastUsed(right).localeCompare(lastUsed(left)));
+  const items = [
+    ...openGroup ? [groupItem(openGroup, "group of the open note")] : [],
+    { label: "$(circle-slash) No group", description: "directly under Local Notes", choice: {} },
+    ...others.map((group) => groupItem(group, noteCount(notesInGroup(projects, groups, group.id).length))),
+    { label: "", kind: vscode13.QuickPickItemKind.Separator },
+    { label: "$(new-collection) New Group\u2026", choice: "new" }
+  ];
+  const picked = await vscode13.window.showQuickPick(items, { title, placeHolder: "Put the new project in a group" });
+  if (!picked?.choice) return void 0;
+  if (picked.choice !== "new") return picked.choice;
+  const name = await askGroupName(groups, { title: "New Group", prompt: "The group is created together with the project." });
+  return name === void 0 ? void 0 : { newGroupName: name };
+}
+function askGroupName(groups, options) {
+  return vscode13.window.showInputBox({
+    title: options.title,
+    prompt: options.prompt ?? "Groups only organize Local Notes: no folder is created or moved.",
+    placeHolder: "e.g. LP Homework",
+    value: options.value,
+    valueSelection: options.value ? [0, options.value.length] : void 0,
+    validateInput: (value) => groupNameError(value, groups, options.ignoreId)
+  });
+}
+async function placeNewProject(groups, project, choice) {
+  try {
+    if (choice.newGroupName) await groups.ensure(choice.newGroupName, [project.id]);
+    else if (choice.group) await groups.moveNotes([project.id], choice.group.id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    vscode13.window.showWarningMessage(`Created '${project.label}', but could not put it in its group: ${message}`);
+  }
+}
+
 // src/overleaf/cliInstaller.ts
-var fs37 = __toESM(require("fs/promises"));
+var fs38 = __toESM(require("fs/promises"));
 var os9 = __toESM(require("os"));
-var path43 = __toESM(require("path"));
+var path46 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
 var import_util31 = require("util");
 var execFileAsync3 = (0, import_util31.promisify)(import_child_process5.execFile);
@@ -36323,45 +37060,45 @@ async function installCli(extensionRoot, version) {
   await migrateLegacyLinuxPaths();
   const node = await resolveCliNode();
   const supportRoot = cliSupportRoot();
-  const installRoot = path43.join(supportRoot, version);
+  const installRoot = path46.join(supportRoot, version);
   const commandPath = cliCommandPath();
-  const commandDir = path43.dirname(commandPath);
+  const commandDir = path46.dirname(commandPath);
   await assertManagedDestination(commandPath, supportRoot);
-  await fs37.mkdir(supportRoot, { recursive: true });
+  await fs38.mkdir(supportRoot, { recursive: true });
   const scratchId = `${hostTag()}-${process.pid}-${Date.now()}`;
-  const stagingRoot = path43.join(supportRoot, `.staging-${version}-${scratchId}`);
-  const backupRoot = path43.join(supportRoot, `.backup-${version}-${scratchId}`);
-  await fs37.mkdir(stagingRoot, { recursive: true });
+  const stagingRoot = path46.join(supportRoot, `.staging-${version}-${scratchId}`);
+  const backupRoot = path46.join(supportRoot, `.backup-${version}-${scratchId}`);
+  await fs38.mkdir(stagingRoot, { recursive: true });
   try {
     await Promise.all([
-      fs37.copyFile(path43.join(extensionRoot, "dist", "cli.js"), path43.join(stagingRoot, "cli.js")),
-      fs37.cp(path43.join(extensionRoot, "dist", "vendor"), path43.join(stagingRoot, "vendor"), { recursive: true, force: true })
+      fs38.copyFile(path46.join(extensionRoot, "dist", "cli.js"), path46.join(stagingRoot, "cli.js")),
+      fs38.cp(path46.join(extensionRoot, "dist", "vendor"), path46.join(stagingRoot, "vendor"), { recursive: true, force: true })
     ]);
-    await fs37.writeFile(path43.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
+    await fs38.writeFile(path46.join(stagingRoot, MARKER), `${JSON.stringify({ managed: true, version }, null, 2)}
 `, "utf8");
-    await fs37.chmod(path43.join(stagingRoot, "cli.js"), 493);
-    if (await fs37.stat(installRoot).then(() => true, () => false)) await fs37.rename(installRoot, backupRoot);
+    await fs38.chmod(path46.join(stagingRoot, "cli.js"), 493);
+    if (await fs38.stat(installRoot).then(() => true, () => false)) await fs38.rename(installRoot, backupRoot);
     try {
-      await fs37.rename(stagingRoot, installRoot);
+      await fs38.rename(stagingRoot, installRoot);
     } catch (error) {
-      if (await fs37.stat(backupRoot).then(() => true, () => false)) await fs37.rename(backupRoot, installRoot).catch(() => void 0);
+      if (await fs38.stat(backupRoot).then(() => true, () => false)) await fs38.rename(backupRoot, installRoot).catch(() => void 0);
       if (!isOccupied(error) || await installedVersion(installRoot) !== version) throw error;
     }
-    await fs37.rm(backupRoot, { recursive: true, force: true });
+    await fs38.rm(backupRoot, { recursive: true, force: true });
   } finally {
-    await fs37.rm(stagingRoot, { recursive: true, force: true });
+    await fs38.rm(stagingRoot, { recursive: true, force: true });
   }
-  await fs37.mkdir(commandDir, { recursive: true });
+  await fs38.mkdir(commandDir, { recursive: true });
   const temporary = `${commandPath}.tmp-${scratchId}`;
-  await fs37.rm(temporary, { force: true });
-  await fs37.writeFile(temporary, launcherScript(path43.join(installRoot, "cli.js")), { mode: 493 });
-  await fs37.chmod(temporary, 493);
-  await fs37.rename(temporary, commandPath);
+  await fs38.rm(temporary, { force: true });
+  await fs38.writeFile(temporary, launcherScript(path46.join(installRoot, "cli.js")), { mode: 493 });
+  await fs38.chmod(temporary, 493);
+  await fs38.rename(temporary, commandPath);
   const removedVersions = await pruneSupersededInstalls(supportRoot, version);
   return {
     installRoot,
     commandPath,
-    pathConfigured: (process.env.PATH ?? "").split(path43.delimiter).includes(commandDir),
+    pathConfigured: (process.env.PATH ?? "").split(path46.delimiter).includes(commandDir),
     node: node.path,
     removedVersions
   };
@@ -36389,9 +37126,9 @@ function launcherScript(cliPath) {
     ""
   ].join("\n");
 }
-async function resolveCliNode(env3 = process.env) {
+async function resolveCliNode(env4 = process.env) {
   const candidates = [
-    ...env3.LATEX_TOOLKIT_NODE ? [env3.LATEX_TOOLKIT_NODE] : [],
+    ...env4.LATEX_TOOLKIT_NODE ? [env4.LATEX_TOOLKIT_NODE] : [],
     "node",
     // Electron's binary (the local editor's extension host) only runs scripts with
     // ELECTRON_RUN_AS_NODE, so it is no use to a plain shell command.
@@ -36409,10 +37146,10 @@ async function resolveCliNode(env3 = process.env) {
 async function editorServerNodes(home) {
   const found = [];
   for (const base of REMOTE_SERVER_HOMES) {
-    for (const [parent, suffix] of [[path43.join(home, base, "cli", "servers"), ["server", "node"]], [path43.join(home, base, "bin"), ["node"]]]) {
-      const entries = await fs37.readdir(parent, { withFileTypes: true }).catch(() => []);
+    for (const [parent, suffix] of [[path46.join(home, base, "cli", "servers"), ["server", "node"]], [path46.join(home, base, "bin"), ["node"]]]) {
+      const entries = await fs38.readdir(parent, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
-        if (entry.isDirectory()) found.push(path43.join(parent, entry.name, ...suffix));
+        if (entry.isDirectory()) found.push(path46.join(parent, entry.name, ...suffix));
       }
     }
   }
@@ -36424,17 +37161,17 @@ async function nodeMajor(candidate) {
   return Number.isFinite(major) ? major : 0;
 }
 async function pruneSupersededInstalls(supportRoot, keepVersion) {
-  const entries = await fs37.readdir(supportRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await fs38.readdir(supportRoot, { withFileTypes: true }).catch(() => []);
   const removed = [];
   const ownScratch = `-${hostTag()}-${process.pid}-`;
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === keepVersion) continue;
-    const candidate = path43.join(supportRoot, entry.name);
+    const candidate = path46.join(supportRoot, entry.name);
     const scratch = entry.name.startsWith(".staging-") || entry.name.startsWith(".backup-");
     const mine = entry.name.includes(ownScratch) || !SCRATCH_WITH_HOST.test(entry.name) && entry.name.includes(`-${process.pid}-`);
     if (scratch && !mine) continue;
     if (!scratch && !await hasManagedMarker(candidate)) continue;
-    if (await fs37.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
+    if (await fs38.rm(candidate, { recursive: true, force: true }).then(() => true, () => false)) {
       removed.push(entry.name);
     }
   }
@@ -36442,10 +37179,10 @@ async function pruneSupersededInstalls(supportRoot, keepVersion) {
 }
 var SCRATCH_WITH_HOST = /-[0-9a-f]{8}-\d+-\d+$/;
 async function hasManagedMarker(installRoot) {
-  return fs37.stat(path43.join(installRoot, MARKER)).then(() => true, () => false);
+  return fs38.stat(path46.join(installRoot, MARKER)).then(() => true, () => false);
 }
 async function installedVersion(installRoot) {
-  const raw = await fs37.readFile(path43.join(installRoot, MARKER), "utf8").catch(() => void 0);
+  const raw = await fs38.readFile(path46.join(installRoot, MARKER), "utf8").catch(() => void 0);
   try {
     const parsed = JSON.parse(raw ?? "");
     return typeof parsed.version === "string" ? parsed.version : void 0;
@@ -36463,8 +37200,8 @@ async function uninstallCli() {
   const commandPath = cliCommandPath();
   const managed = await isManagedCommand(commandPath, supportRoot);
   if (!managed) return { removed: false, commandPath };
-  await fs37.rm(commandPath, { force: true });
-  await fs37.rm(supportRoot, { recursive: true, force: true });
+  await fs38.rm(commandPath, { force: true });
+  await fs38.rm(supportRoot, { recursive: true, force: true });
   return { removed: true, commandPath };
 }
 async function updateManagedCliIfInstalled(extensionRoot, version) {
@@ -36475,36 +37212,36 @@ async function updateManagedCliIfInstalled(extensionRoot, version) {
   return installCli(extensionRoot, version);
 }
 function cliSupportRoot() {
-  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path43.join(os9.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path43.join(
-    process.env.XDG_DATA_HOME || path43.join(os9.homedir(), ".local", "share"),
+  return process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME ? path46.resolve(process.env.LATEX_TOOLKIT_CLI_SUPPORT_HOME) : process.platform === "darwin" ? path46.join(os9.homedir(), "Library", "Application Support", "latex-editing-toolkit", "cli") : path46.join(
+    process.env.XDG_DATA_HOME || path46.join(os9.homedir(), ".local", "share"),
     "latex-editing-toolkit",
     "cli"
   );
 }
 function cliCommandPath() {
-  return path43.join(
-    process.env.LATEX_TOOLKIT_BIN_HOME ? path43.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path43.join(os9.homedir(), ".local", "bin"),
+  return path46.join(
+    process.env.LATEX_TOOLKIT_BIN_HOME ? path46.resolve(process.env.LATEX_TOOLKIT_BIN_HOME) : path46.join(os9.homedir(), ".local", "bin"),
     "latex-toolkit"
   );
 }
 async function assertManagedDestination(commandPath, supportRoot) {
-  const stat13 = await fs37.lstat(commandPath).catch(() => void 0);
+  const stat13 = await fs38.lstat(commandPath).catch(() => void 0);
   if (!stat13) return;
   if (!await isManagedCommand(commandPath, supportRoot)) {
     throw new Error(`Refusing to overwrite non-managed command: ${commandPath}`);
   }
 }
 async function isManagedCommand(commandPath, supportRoot) {
-  const stat13 = await fs37.lstat(commandPath).catch(() => void 0);
+  const stat13 = await fs38.lstat(commandPath).catch(() => void 0);
   if (!stat13) return false;
-  const canonicalSupportRoot = await fs37.realpath(supportRoot).catch(() => path43.resolve(supportRoot));
+  const canonicalSupportRoot = await fs38.realpath(supportRoot).catch(() => path46.resolve(supportRoot));
   if (stat13.isSymbolicLink()) {
-    const target2 = await fs37.realpath(commandPath).catch(() => void 0);
+    const target2 = await fs38.realpath(commandPath).catch(() => void 0);
     if (!target2 || !isWithin2(canonicalSupportRoot, target2)) return false;
-    return hasManagedMarker(path43.dirname(target2));
+    return hasManagedMarker(path46.dirname(target2));
   }
   if (!stat13.isFile() || stat13.size > MAX_LAUNCHER_BYTES) return false;
-  const content = await fs37.readFile(commandPath, "utf8").catch(() => "");
+  const content = await fs38.readFile(commandPath, "utf8").catch(() => "");
   if (!content.includes(LAUNCHER_MARKER)) return false;
   const declared = /^# target: (".*")$/m.exec(content)?.[1];
   let target;
@@ -36514,21 +37251,21 @@ async function isManagedCommand(commandPath, supportRoot) {
     target = void 0;
   }
   if (!target) return false;
-  const resolved = await fs37.realpath(target).catch(() => path43.resolve(target));
-  return isWithin2(canonicalSupportRoot, resolved) || isWithin2(path43.resolve(supportRoot), path43.resolve(target));
+  const resolved = await fs38.realpath(target).catch(() => path46.resolve(target));
+  return isWithin2(canonicalSupportRoot, resolved) || isWithin2(path46.resolve(supportRoot), path46.resolve(target));
 }
 function isWithin2(root, candidate) {
-  const relative10 = path43.relative(path43.resolve(root), path43.resolve(candidate));
-  return relative10 === "" || !relative10.startsWith("..") && !path43.isAbsolute(relative10);
+  const relative10 = path46.relative(path46.resolve(root), path46.resolve(candidate));
+  return relative10 === "" || !relative10.startsWith("..") && !path46.isAbsolute(relative10);
 }
 function shellQuote2(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // src/overleaf/sharedConfigBridge.ts
-var path44 = __toESM(require("path"));
+var path47 = __toESM(require("path"));
 var os10 = __toESM(require("os"));
-var vscode12 = __toESM(require("vscode"));
+var vscode14 = __toESM(require("vscode"));
 var MIGRATION_KEY = "latexEditingToolkit.overleaf.sharedStateMigrated.v1";
 var applyingSharedSettings = false;
 async function initializeSharedConfigBridge(context, mirrorManager) {
@@ -36538,7 +37275,7 @@ async function initializeSharedConfigBridge(context, mirrorManager) {
     await context.globalState.update(MIGRATION_KEY, true);
   }
   await applySharedSettings();
-  context.subscriptions.push(vscode12.workspace.onDidChangeConfiguration((event) => {
+  context.subscriptions.push(vscode14.workspace.onDidChangeConfiguration((event) => {
     if (applyingSharedSettings) return;
     if (event.affectsConfiguration("overleafCodex") || event.affectsConfiguration("latexEditingToolkit.overleaf")) {
       void syncExplicitSettings().catch(() => void 0);
@@ -36547,8 +37284,8 @@ async function initializeSharedConfigBridge(context, mirrorManager) {
 }
 async function applySharedSettings() {
   const state = await readSharedState();
-  const legacy = vscode12.workspace.getConfiguration("overleafCodex");
-  const modern = vscode12.workspace.getConfiguration("latexEditingToolkit.overleaf");
+  const legacy = vscode14.workspace.getConfiguration("overleafCodex");
+  const modern = vscode14.workspace.getConfiguration("latexEditingToolkit.overleaf");
   applyingSharedSettings = true;
   try {
     await Promise.all([
@@ -36575,15 +37312,15 @@ async function updateGlobalIfChanged(configuration, section, value) {
     configuration.get(section),
     value
   )) return;
-  await configuration.update(section, value, vscode12.ConfigurationTarget.Global);
+  await configuration.update(section, value, vscode14.ConfigurationTarget.Global);
 }
 async function clearGlobalIfSet(configuration, section) {
   if (configuration.inspect(section)?.globalValue === void 0) return;
-  await configuration.update(section, void 0, vscode12.ConfigurationTarget.Global);
+  await configuration.update(section, void 0, vscode14.ConfigurationTarget.Global);
 }
 async function syncExplicitSettings() {
-  const legacy = vscode12.workspace.getConfiguration("overleafCodex");
-  const modern = vscode12.workspace.getConfiguration("latexEditingToolkit.overleaf");
+  const legacy = vscode14.workspace.getConfiguration("overleafCodex");
+  const modern = vscode14.workspace.getConfiguration("latexEditingToolkit.overleaf");
   await updateSharedState((state) => {
     const server = explicitValue(legacy, "serverUrl");
     if (server) state.serverUrl = normalizeServerUrl(server);
@@ -36617,7 +37354,7 @@ function explicitValue(configuration, section) {
 }
 function expandHome2(value) {
   if (value === "~") return os10.homedir();
-  return value.startsWith("~/") ? path44.join(os10.homedir(), value.slice(2)) : path44.resolve(value);
+  return value.startsWith("~/") ? path47.join(os10.homedir(), value.slice(2)) : path47.resolve(value);
 }
 
 // src/extension.ts
@@ -36628,31 +37365,47 @@ var overleafService;
 var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents";
 function authorityScope(context) {
   return [
-    vscode13.env.remoteName || "local",
-    vscode13.env.machineId || "unknown-machine",
+    vscode15.env.remoteName || "local",
+    vscode15.env.machineId || "unknown-machine",
     context.globalStorageUri.authority || "local"
   ].join("|");
 }
 function activate(context) {
-  const output = vscode13.window.createOutputChannel("LaTeX Editing Toolkit");
+  const output = vscode15.window.createOutputChannel("LaTeX Editing Toolkit");
   const scope = authorityScope(context);
   const projectRegistry = new LocalProjectRegistry(
     context.globalState,
     scopedLocalProjectsStateKey(scope)
   );
+  const noteGroups = new LocalNoteGroupRegistry(context.globalState, scopedLocalNoteGroupsStateKey(scope));
   const recentProjectParentsKey = scopedStateKey(RECENT_PROJECT_PARENTS_KEY, scope);
   personalStyles = new PersonalStyleRegistry(context.globalState);
-  const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
+  const treeProvider = new ToolkitTreeProvider(context, projectRegistry, noteGroups);
   const command = (id, handler) => registerToolkitCommand(output, id, handler);
-  overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode13.env.remoteName);
+  const localNotes = {
+    projects: projectRegistry,
+    groups: noteGroups,
+    refresh: () => treeProvider.refresh(),
+    createProjectInGroup: (groupId) => createProjectWizard(context, projectRegistry, noteGroups, treeProvider, output, recentProjectParentsKey, { groupId })
+  };
+  const dragAndDropController = new LocalNotesDragAndDrop(async (noteIds, groupId) => {
+    try {
+      await moveDroppedNotes(localNotes, noteIds, groupId);
+    } catch (err) {
+      logToolkitError(output, "latexEditingToolkit.dropLocalNotes", "(Local Notes)", err);
+      treeProvider.refresh();
+      vscode15.window.showErrorMessage(`LaTeX Editing Toolkit: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+  overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode15.env.remoteName);
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
   context.subscriptions.push(
     output,
     treeProvider,
-    vscode13.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
-    vscode13.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
-    vscode13.window.onDidChangeWindowState((state) => {
+    vscode15.window.createTreeView("latexEditingToolkit.actions", { treeDataProvider: treeProvider, dragAndDropController }),
+    vscode15.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
+    vscode15.window.onDidChangeWindowState((state) => {
       if (state.focused) treeProvider.refresh();
     }),
     command("latexEditingToolkit.openToolkit", async (folderUri) => {
@@ -36662,14 +37415,14 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path45.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path48.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
       const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
-      vscode13.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
+      vscode15.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();
-      vscode13.window.showInformationMessage(result.removed ? `Removed LaTeX Toolkit CLI from ${result.commandPath}.` : `No managed LaTeX Toolkit CLI was found at ${result.commandPath}.`);
+      vscode15.window.showInformationMessage(result.removed ? `Removed LaTeX Toolkit CLI from ${result.commandPath}.` : `No managed LaTeX Toolkit CLI was found at ${result.commandPath}.`);
     }),
     command("latexEditingToolkit.openSync", async (folderUri) => {
       const folder = await selectWorkspaceFolder(folderUri);
@@ -36678,43 +37431,24 @@ function activate(context) {
       await activePanel.openSection("sync");
     }),
     command("overleafCodex.publishFolder", async (candidate) => {
-      const target = candidate instanceof vscode13.Uri && candidate.scheme === "file" ? candidate : void 0;
-      const folder = target ? vscode13.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
+      const target = candidate instanceof vscode15.Uri && candidate.scheme === "file" ? candidate : void 0;
+      const folder = target ? vscode15.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
       if (!folder) {
-        if (target) vscode13.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
+        if (target) vscode15.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
         return;
       }
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
       await activePanel.openPublishForm((target ?? folder.uri).fsPath);
     }),
     command("hsnips.openSnippetManager", async (folderUri) => {
-      const folder = folderUri instanceof vscode13.Uri ? vscode13.workspace.getWorkspaceFolder(folderUri) : vscode13.window.activeTextEditor ? vscode13.workspace.getWorkspaceFolder(vscode13.window.activeTextEditor.document.uri) : vscode13.workspace.workspaceFolders?.[0];
+      const folder = folderUri instanceof vscode15.Uri ? vscode15.workspace.getWorkspaceFolder(folderUri) : vscode15.window.activeTextEditor ? vscode15.workspace.getWorkspaceFolder(vscode15.window.activeTextEditor.document.uri) : vscode15.workspace.workspaceFolders?.[0];
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
       await activePanel.openSection("snippets");
     }),
     command("latexEditingToolkit.createProject", async () => {
-      await createProjectWizard(context, projectRegistry, treeProvider, output, recentProjectParentsKey);
+      await createProjectWizard(context, projectRegistry, noteGroups, treeProvider, output, recentProjectParentsKey);
     }),
-    command("latexEditingToolkit.openLocalProject", async (projectPath) => {
-      await openLocalProject(projectRegistry, projectPath);
-    }),
-    command("latexEditingToolkit.relocateLocalProject", async (projectPath) => {
-      await relocateLocalProject(projectRegistry, treeProvider, projectPath);
-    }),
-    command("latexEditingToolkit.removeLocalProject", async (projectPath) => {
-      await removeLocalProject(projectRegistry, treeProvider, projectPath);
-    }),
-    command("latexEditingToolkit.clearMissingLocalProjects", async () => {
-      await clearMissingLocalProjects(projectRegistry, treeProvider);
-    }),
-    command("latexEditingToolkit.showLocalProjectPath", async (projectArg) => {
-      const project = await localProjectFromArgument(projectRegistry, projectArg);
-      if (!project) {
-        vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
-        return;
-      }
-      vscode13.window.showInformationMessage(project.rootPath);
-    }),
+    ...registerLocalNotesCommands(command, localNotes),
     command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
     }),
@@ -36765,32 +37499,32 @@ function activate(context) {
       const templateId = current.state?.workspace_template?.templateId;
       const result = await service.handle("initialize-workspace", templateId && templateId !== "unknown" ? { template_id: templateId } : {});
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
+      vscode15.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
     }),
     command("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const choice = await vscode13.window.showWarningMessage(
+      const choice = await vscode15.window.showWarningMessage(
         "Upgrade bundled theme assets? Existing files are backed up first. Preserve Colors keeps all current settings; Reset to Default only replaces the complete color/style package.",
         { modal: true },
         "Preserve Colors",
         "Reset to Default"
       );
       if (!choice) return;
-      const result = await vscode13.window.withProgress(
-        { location: vscode13.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
+      const result = await vscode15.window.withProgress(
+        { location: vscode15.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
         () => service.handle("upgrade-theme-assets", { color_policy: choice === "Reset to Default" ? "default" : "preserve" })
       );
       const resetSuffix = result.updated_override_files?.length ? ` Updated ${result.updated_override_files.length} color state file(s).` : " Colors preserved.";
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
+      vscode15.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
     }),
     command("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {});
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
+      vscode15.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
     }),
     command("latexEditingToolkit.saveOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -36798,12 +37532,12 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("save", response.state);
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
+      vscode15.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
     }),
     command("latexEditingToolkit.resetOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode13.window.showWarningMessage(
+      const ok = await vscode15.window.showWarningMessage(
         "Reset all Toolkit overrides? This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, and status settings.",
         { modal: true },
         "Reset All"
@@ -36811,30 +37545,30 @@ function activate(context) {
       if (ok !== "Reset All") return;
       await service.handle("reset", {});
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
+      vscode15.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
     }),
     command("latexEditingToolkit.compilePdf", async (folderUri) => {
       const scoped = await folderAndServiceForCommand(context, folderUri);
       if (!scoped) return;
       const response = await scoped.service.handle("state", {});
-      const result = await vscode13.window.withProgress({ location: vscode13.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
+      const result = await vscode15.window.withProgress({ location: vscode15.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
       logCompileResult(output, scoped.folder.uri.fsPath, result);
       const success = Boolean(result.success);
       treeProvider.refresh();
-      if (success) vscode13.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
+      if (success) vscode15.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
       else {
-        const action = await vscode13.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
+        const action = await vscode15.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
         if (action === "Show Log") output.show(true);
       }
     }),
     command("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode13.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
+      const ok = await vscode15.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {});
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
+      vscode15.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
     }),
     command("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -36842,7 +37576,7 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage("Split current LaTeX target.", 2500);
+      vscode15.window.setStatusBarMessage("Split current LaTeX target.", 2500);
     }),
     command("latexEditingToolkit.renumberUnits", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -36850,17 +37584,17 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage("Renumbered referenced units.", 2500);
+      vscode15.window.setStatusBarMessage("Renumbered referenced units.", 2500);
     }),
     command("latexEditingToolkit.unsplitUnit", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
-      const ok = await vscode13.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
+      const ok = await vscode15.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
       treeProvider.refresh();
-      vscode13.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
+      vscode15.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
   overleafService.registerCommands((id, handler) => command(id, handler));
@@ -36871,7 +37605,7 @@ function activate(context) {
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CLI auto-update skipped: ${formatUnknownError(error)}`);
   });
   void autoStartOverleafMirror(overleafService, output);
-  context.subscriptions.push(vscode13.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
+  context.subscriptions.push(vscode15.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
 }
 async function deactivate() {
   activePanel?.dispose();
@@ -36885,8 +37619,8 @@ async function autoStartOverleafMirror(service, output) {
   try {
     const state = await service.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
-    if (!vscode13.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
-    await vscode13.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
+    if (!vscode15.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
+    await vscode15.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
   } catch (error) {
     const message = formatUnknownError(error);
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf auto-sync skipped: ${message}`);
@@ -36895,20 +37629,20 @@ async function autoStartOverleafMirror(service, output) {
 var LEGACY_SNIPS_NOTICE_KEY = "latexEditingToolkit.legacySnipsNotice.v1";
 async function warnAboutLegacySnips(context, output) {
   const legacyId = "yiqiyang33.yiqis-latexsnips";
-  const legacy = vscode13.extensions.getExtension(legacyId);
+  const legacy = vscode15.extensions.getExtension(legacyId);
   if (!legacy || context.globalState.get(LEGACY_SNIPS_NOTICE_KEY)) return;
   await context.globalState.update(LEGACY_SNIPS_NOTICE_KEY, true);
   output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Legacy extension detected: ${legacyId}`);
-  const action = await vscode13.window.showWarningMessage(
+  const action = await vscode15.window.showWarningMessage(
     "Yiqi's LatexSnips is also installed. LaTeX Editing Toolkit 1.0 now includes the same snippet engine; disable the old extension to avoid duplicate completions and Enter/Tab behavior.",
     "Open Extension",
     "Continue"
   );
   if (action === "Open Extension") {
-    await vscode13.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
+    await vscode15.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
   }
 }
-async function createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, templateId, output, stylePreset) {
+async function createOverleafProjectFromTemplate(context, registry, noteGroups, treeProvider, projectName, templateId, output, stylePreset, placement) {
   const service = overleafService;
   if (!service) return;
   const parentRoot = service.mirrorManager.getConfiguredProjectsRoot();
@@ -36916,171 +37650,222 @@ async function createOverleafProjectFromTemplate(context, registry, treeProvider
   if (earlyErrors.length > 0) {
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PREFLIGHT`);
     for (const error of earlyErrors) output.appendLine(`- ${error}`);
-    const action = await vscode13.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
+    const action = await vscode15.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
     if (action === "Show Log") output.show(true);
     return;
   }
   try {
-    const result = await vscode13.window.withProgress(
-      { location: vscode13.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
+    const registered = {};
+    const result = await vscode15.window.withProgress(
+      { location: vscode15.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
       () => service.createProjectFromTemplate(projectName, async (root) => {
         const scoped = new ToolkitService(root, context.extensionPath, {
           additionalStylePresets: personalStyles?.definitions() ?? []
         });
-        await runCreateProjectWorkflow(scoped, registry, root, templateId, stylePreset);
+        registered.project = await runCreateProjectWorkflow(scoped, registry, root, templateId, stylePreset, { label: projectName });
       })
     );
+    if (registered.project) await placeNewProject(noteGroups, registered.project, placement);
     treeProvider.refresh();
     if (!result.published) {
       output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PUBLISH FAILED`);
       output.appendLine(`- ${result.publishError?.message ?? "unknown error"}`);
-      const action2 = await vscode13.window.showWarningMessage(
+      const action2 = await vscode15.window.showWarningMessage(
         `Created '${projectName}' on Overleaf, but not every file finished uploading. The folder is a working mirror, so running a sync will retry.`,
         "Open Folder",
         "Show Log"
       );
-      if (action2 === "Open Folder") await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(result.root), true);
+      if (action2 === "Open Folder") await vscode15.commands.executeCommand("vscode.openFolder", vscode15.Uri.file(result.root), true);
       if (action2 === "Show Log") output.show(true);
       return;
     }
-    const action = await vscode13.window.showInformationMessage(
+    const action = await vscode15.window.showInformationMessage(
       `Created '${projectName}' on Overleaf and mirrored it locally.`,
       "Open Folder"
     );
-    if (action === "Open Folder") await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(result.root), true);
+    if (action === "Open Folder") await vscode15.commands.executeCommand("vscode.openFolder", vscode15.Uri.file(result.root), true);
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", parentRoot, err);
     const message = err instanceof Error ? err.message : String(err);
-    const action = await vscode13.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
+    const action = await vscode15.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
     if (action === "Show Log") output.show(true);
   }
 }
-async function createProjectWizard(context, registry, treeProvider, output, recentProjectParentsKey) {
+async function createProjectWizard(context, registry, noteGroups, treeProvider, output, recentProjectParentsKey, options = {}) {
+  const [projects, groups] = await Promise.all([registry.list(), noteGroups.list()]);
+  let placement = {};
+  if (options.groupId) {
+    const group = groups.find((candidate) => candidate.id === options.groupId);
+    if (!group) {
+      vscode15.window.showWarningMessage("This group no longer exists.");
+      return;
+    }
+    placement = { group };
+  } else if (groups.length > 0) {
+    const picked = await pickGroupForNewProject(groups, projects, await openNoteGroup(registry, groups), "Create Project: Group");
+    if (!picked) return;
+    placement = picked;
+  }
+  const groupNotes = placement.group ? notesInGroup(projects, groups, placement.group.id) : [];
+  const overleafState = await overleafService?.state().catch(() => void 0);
+  let remote = false;
+  if (overleafState?.available && overleafState.authenticated) {
+    const target = await vscode15.window.showQuickPick(
+      [
+        { label: "Local only", description: "Create the project in a folder you choose", remote: false },
+        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
+      ],
+      { title: "Create Project: Destination", placeHolder: "Where should this project live?" }
+    );
+    if (!target) return;
+    remote = target.remote;
+  }
   const recent = sanitizeRecentProjectParents(context.globalState.get(recentProjectParentsKey));
-  const suggested = /* @__PURE__ */ new Set();
-  for (const folder of vscode13.workspace.workspaceFolders ?? []) {
-    if (folder.uri.scheme === "file") {
-      suggested.add(folder.uri.fsPath);
-      suggested.add(path45.dirname(folder.uri.fsPath));
-    }
+  let parentPath = "";
+  if (!remote) {
+    const groupFolder = placement.group ? { groupName: placement.group.name, folderPath: suggestGroupFolder(groupNotes, overleafMirrorsRoots()) } : void 0;
+    const picked = await pickProjectParent(recent, groupFolder);
+    if (!picked) return;
+    parentPath = picked;
   }
-  for (const item of recent) suggested.add(item);
-  const location = await vscode13.window.showQuickPick(
-    [
-      ...[...suggested].map((folderPath) => ({ label: path45.basename(folderPath) || folderPath, description: folderPath, folderPath })),
-      { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
-    ],
-    { title: "Create Project (1/3): Location", placeHolder: "Choose the parent folder for the new project" }
+  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path48.basename(project.rootPath))));
+  const nextInSeries = groupNotes[0] && suggestNextNoteName(
+    path48.basename(groupNotes[0].rootPath),
+    (candidate) => takenInGroup.has(candidate) || !remote && fs39.existsSync(path48.join(parentPath, candidate))
   );
-  if (!location) return;
-  let parentPath = location.folderPath;
-  if (!parentPath) {
-    const selected = await vscode13.window.showOpenDialog({
-      title: "Create Project (1/3): Choose Parent Folder",
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Use as Parent Folder"
-    });
-    if (!selected?.[0]) return;
-    if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
-    parentPath = selected[0].fsPath;
-  }
-  const projectName = await vscode13.window.showInputBox({
-    title: "Create Project (2/3): Project Name",
-    prompt: `A new folder will be created inside ${parentPath}`,
-    value: "New Notes",
-    valueSelection: [0, "New Notes".length],
-    validateInput: (value) => {
-      const name = value.trim();
-      if (!name) return "Project name is required.";
-      if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
-      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
-      return void 0;
-    }
+  const defaultName = nextInSeries || "New Notes";
+  const projectName = await vscode15.window.showInputBox({
+    title: "Create Project: Project Name",
+    prompt: remote ? "The name of the new Overleaf project" : `A new folder will be created inside ${parentPath}`,
+    value: defaultName,
+    valueSelection: [0, defaultName.length],
+    validateInput: (value) => projectNameError2(value, remote ? void 0 : parentPath)
   });
   if (!projectName) return;
-  const pickedKind = await vscode13.window.showQuickPick(
+  const pickedKind = await vscode15.window.showQuickPick(
     [
       { label: "Book", description: "Long-form notes with chapters", documentKind: "book" },
       { label: "Article", description: "Article and homework notes", documentKind: "article" },
       { label: "Beamer Slides", description: "Presentation notes with a child theme", documentKind: "beamer" }
     ],
-    { title: "Create Project (3/4): Document Type", placeHolder: "Choose the document type" }
+    { title: "Create Project: Document Type", placeHolder: "Choose the document type" }
   );
   if (!pickedKind) return;
-  const pickedTemplate = await vscode13.window.showQuickPick(
+  const pickedTemplate = await vscode15.window.showQuickPick(
     STARTER_TEMPLATE_DEFINITIONS.filter((template) => template.kind === pickedKind.documentKind).map((template) => ({
       label: template.label,
       description: template.id,
       detail: template.description,
       template
     })),
-    { title: "Create Project (4/4): Template", placeHolder: `Choose a ${pickedKind.label} starter` }
+    { title: "Create Project: Template", placeHolder: `Choose a ${pickedKind.label} starter` }
   );
   if (!pickedTemplate) return;
-  let step = 4;
   const style = await pickStylePresetForTemplate(
     pickedTemplate.template,
     [...STYLE_PRESET_DEFINITIONS, ...personalStyles?.definitions() ?? []],
-    `Create Project (${step + 1}/${step + 1}): Theme`
+    "Create Project: Theme"
   );
   if (style.cancelled) return;
-  if (style.stylePreset) step += 1;
-  const overleafState = await overleafService?.state().catch(() => void 0);
-  if (overleafState?.available && overleafState.authenticated) {
-    const target = await vscode13.window.showQuickPick(
-      [
-        { label: "Local only", description: "Create the project in the folder you chose", remote: false },
-        { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
-      ],
-      { title: `Create Project (${step + 1}/${step + 1}): Destination`, placeHolder: "Where should this project live?" }
-    );
-    if (!target) return;
-    if (target.remote) {
-      await createOverleafProjectFromTemplate(context, registry, treeProvider, projectName, pickedTemplate.template.id, output, style.stylePreset);
-      return;
-    }
+  if (remote) {
+    await createOverleafProjectFromTemplate(context, registry, noteGroups, treeProvider, projectName, pickedTemplate.template.id, output, style.stylePreset, placement);
+    return;
   }
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id, stylePreset: style.stylePreset }, context.extensionPath);
   if (!preflight.ok) {
-    const action = await vscode13.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
+    const action = await vscode15.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE PROJECT PREFLIGHT`);
     for (const error of preflight.errors) output.appendLine(`- ${error}`);
     if (action === "Show Log") output.show(true);
     return;
   }
   if (preflight.targetExists && preflight.targetEmpty) {
-    const choice = await vscode13.window.showWarningMessage(
+    const choice = await vscode15.window.showWarningMessage(
       `The folder '${preflight.rootPath}' already exists and is empty. Use it for the new project?`,
       { modal: true },
       "Use Empty Folder"
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const normalizedParent = path45.normalize(path45.resolve(parentPath));
-  const nextRecent = [normalizedParent, ...recent.filter((item) => path45.normalize(item) !== normalizedParent)].slice(0, 8);
+  const normalizedParent = path48.normalize(path48.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path48.normalize(item) !== normalizedParent)].slice(0, 8);
   await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
+  let created;
   try {
-    await vscode13.window.withProgress({ location: vscode13.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset));
+    created = await vscode15.window.withProgress({ location: vscode15.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset));
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
     const message = err instanceof Error ? err.message : String(err);
-    const action = await vscode13.window.showErrorMessage(
+    const action = await vscode15.window.showErrorMessage(
       `Project creation failed: ${message}. The folder may contain partially generated resources.`,
       "Open Folder",
       "Show Log"
     );
-    if (action === "Open Folder") await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(preflight.rootPath), { forceNewWindow: false });
+    if (action === "Open Folder") await vscode15.commands.executeCommand("vscode.openFolder", vscode15.Uri.file(preflight.rootPath), { forceNewWindow: false });
     if (action === "Show Log") output.show(true);
     return;
   }
+  await placeNewProject(noteGroups, created, placement);
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
-  await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(preflight.rootPath), { forceNewWindow: false });
+  vscode15.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
+  await vscode15.commands.executeCommand("vscode.openFolder", vscode15.Uri.file(preflight.rootPath), { forceNewWindow: false });
+}
+async function pickProjectParent(recent, group) {
+  const suggested = /* @__PURE__ */ new Set();
+  for (const folder of vscode15.workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme === "file") {
+      suggested.add(folder.uri.fsPath);
+      suggested.add(path48.dirname(folder.uri.fsPath));
+    }
+  }
+  for (const item of recent) suggested.add(item);
+  const groupFolder = group?.folderPath;
+  if (groupFolder) suggested.delete(groupFolder);
+  const location = await vscode15.window.showQuickPick(
+    [
+      ...group && groupFolder ? [{ label: path48.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
+      ...[...suggested].map((folderPath) => ({ label: path48.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
+    ],
+    { title: "Create Project: Location", placeHolder: "Choose the parent folder for the new project" }
+  );
+  if (!location) return void 0;
+  if (location.folderPath) return location.folderPath;
+  const selected = await vscode15.window.showOpenDialog({
+    title: "Create Project: Choose Parent Folder",
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: "Use as Parent Folder"
+  });
+  if (!selected?.[0]) return void 0;
+  if (selected[0].scheme !== "file") throw new Error("Create Project only supports local parent folders.");
+  return selected[0].fsPath;
+}
+async function projectNameError2(value, parentPath) {
+  const name = value.trim();
+  if (!name) return "Project name is required.";
+  if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
+  if (!parentPath) return void 0;
+  const target = path48.resolve(parentPath, name);
+  try {
+    const stat13 = await fs39.promises.lstat(target);
+    if (!stat13.isDirectory()) return `A file named '${name}' already exists here.`;
+    if ((await fs39.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
+  } catch {
+  }
+  return void 0;
+}
+function overleafMirrorsRoots() {
+  try {
+    return overleafService ? [overleafService.mirrorManager.getConfiguredProjectsRoot()] : [];
+  } catch {
+    return [];
+  }
 }
 async function restoreLastToolkitChange(context, treeProvider, output, direction, folderUri) {
   const scoped = await folderAndServiceForCommand(context, folderUri);
@@ -37090,7 +37875,7 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, {});
   } catch (err) {
     if (!(err instanceof HistoryConflictError)) throw err;
-    const choice = await vscode13.window.showWarningMessage(
+    const choice = await vscode15.window.showWarningMessage(
       `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
       { modal: true },
       "Show Conflicts",
@@ -37106,11 +37891,11 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, { force: true });
   }
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
+  vscode15.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
   if (activePanel?.folder?.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
 }
 function registerToolkitCommand(output, commandId, handler) {
-  return vscode13.commands.registerCommand(commandId, async (...args) => {
+  return vscode15.commands.registerCommand(commandId, async (...args) => {
     try {
       return await handler(...args);
     } catch (err) {
@@ -37119,30 +37904,30 @@ function registerToolkitCommand(output, commandId, handler) {
       if (err instanceof SyncStandbyError) {
         output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${commandId}: ${err.message}`);
         const takeOver = "Take Over Sync Here";
-        const action2 = await vscode13.window.showWarningMessage(err.message, takeOver);
+        const action2 = await vscode15.window.showWarningMessage(err.message, takeOver);
         if (action2 === takeOver) {
-          await vscode13.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
+          await vscode15.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
         }
         return void 0;
       }
       logToolkitError(output, commandId, workspacePath, err);
       const message = err instanceof Error ? err.message : String(err);
-      const action = await vscode13.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
+      const action = await vscode15.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
       if (action === "Show Log") output.show(true);
       return void 0;
     }
   });
 }
 function isUserCancellation(err) {
-  return err instanceof vscode13.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
+  return err instanceof vscode15.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
 }
 function workspacePathFromArguments(args) {
   for (const arg of args) {
-    if (arg instanceof vscode13.Uri && arg.scheme === "file") return arg.fsPath;
-    const projectPath = localProjectPathFromArgument(arg);
+    if (arg instanceof vscode15.Uri && arg.scheme === "file") return arg.fsPath;
+    const projectPath = localPathFromArgument(arg);
     if (projectPath) return projectPath;
   }
-  return vscode13.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
+  return vscode15.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
 }
 function logToolkitError(output, commandId, workspacePath, err) {
   const error = err instanceof Error ? err : new Error(String(err));
@@ -37158,14 +37943,14 @@ function logCompileResult(output, workspacePath, result) {
   output.appendLine("");
 }
 async function selectWorkspaceFolder(preferredFolderUri) {
-  const folders = vscode13.workspace.workspaceFolders ?? [];
+  const folders = vscode15.workspace.workspaceFolders ?? [];
   if (folders.length === 0) {
-    vscode13.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
+    vscode15.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
     return void 0;
   }
   const localFolders = folders.filter((folder) => folder.uri.scheme === "file");
   if (localFolders.length === 0) {
-    vscode13.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
+    vscode15.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
     return void 0;
   }
   if (preferredFolderUri?.scheme === "file") {
@@ -37173,7 +37958,7 @@ async function selectWorkspaceFolder(preferredFolderUri) {
     if (matched) return matched;
   }
   if (localFolders.length === 1) return localFolders[0];
-  const picked = await vscode13.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
+  const picked = await vscode15.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
   return picked?.folder;
 }
 async function serviceForCommand(context, preferredFolderUri) {
@@ -37185,9 +37970,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path45.resolve(rootPath);
+  let canonical = path48.resolve(rootPath);
   try {
-    canonical = fs38.realpathSync.native(canonical);
+    canonical = fs39.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -37219,99 +38004,9 @@ function pdfForTarget(target) {
 function currentPdfPath(state) {
   return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
 }
-async function openLocalProject(registry, projectPathArg) {
-  const project = await localProjectFromArgument(registry, projectPathArg);
-  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
-  if (!projectPath) {
-    vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  try {
-    if (!(await fs38.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
-  } catch {
-    vscode13.window.showWarningMessage("Local note project is not available in this environment. Relocate or forget it from Local Notes.");
-    return;
-  }
-  await vscode13.commands.executeCommand("vscode.openFolder", vscode13.Uri.file(projectPath), { forceNewWindow: false });
-}
-async function relocateLocalProject(registry, treeProvider, projectPathArg) {
-  const oldProject = await localProjectFromArgument(registry, projectPathArg);
-  const oldPath = oldProject?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
-  if (!oldPath) {
-    vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  const target = await vscode13.window.showOpenDialog({
-    canSelectFiles: false,
-    canSelectFolders: true,
-    canSelectMany: false,
-    openLabel: "Relocate Toolkit Project Here"
-  });
-  if (!target?.[0]) return;
-  if (target[0].scheme !== "file") {
-    vscode13.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
-    return;
-  }
-  const updated = await registry.relocate(oldPath, target[0].fsPath);
-  treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
-}
-async function removeLocalProject(registry, treeProvider, projectPathArg) {
-  const project = await localProjectFromArgument(registry, projectPathArg);
-  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : void 0);
-  if (!projectPath) {
-    vscode13.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  const label = project?.label ?? path45.basename(path45.normalize(projectPath));
-  const choice = await vscode13.window.showWarningMessage(
-    `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
-    { modal: true },
-    "Forget"
-  );
-  if (choice !== "Forget") return;
-  const removed = await registry.remove(projectPath);
-  treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
-}
-async function clearMissingLocalProjects(registry, treeProvider) {
-  const projects = await registry.list();
-  const missingCount = projects.filter((project) => project.missing).length;
-  if (missingCount === 0) {
-    vscode13.window.showInformationMessage("No missing local note projects to clear.");
-    return;
-  }
-  const choice = await vscode13.window.showWarningMessage(
-    `Forget ${missingCount} missing local note project${missingCount === 1 ? "" : "s"}? This only removes registry metadata and does not delete files.`,
-    { modal: true },
-    "Clear Missing"
-  );
-  if (choice !== "Clear Missing") return;
-  const removed = await registry.removeMissing();
-  treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Cleared ${removed} missing local note project${removed === 1 ? "" : "s"}.`, 2500);
-}
-async function localProjectFromArgument(registry, value) {
-  if (value && typeof value === "object" && typeof value.projectId === "string") {
-    return registry.findById(value.projectId);
-  }
-  const projectPath = localProjectPathFromArgument(value);
-  return projectPath ? registry.find(projectPath) : void 0;
-}
-function localProjectPathFromArgument(value) {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return void 0;
-  const candidate = value;
-  if (typeof candidate.fsPath === "string") return candidate.fsPath;
-  const resourceUri = candidate.resourceUri;
-  if (resourceUri && typeof resourceUri === "object" && typeof resourceUri.fsPath === "string") {
-    return resourceUri.fsPath;
-  }
-  return void 0;
-}
 async function pickStylePresetForTemplate(template, presets, title, activePreset) {
   if (!(template.capabilities || []).includes("toolkit-theme") || presets.length === 0) return { cancelled: false };
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.id === activePreset ? `$(check) ${preset.label}` : preset.label,
       description: preset.id,
@@ -37326,12 +38021,12 @@ async function pickStylePresetForTemplate(template, presets, title, activePreset
 async function createStarterInWorkspace(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
-  const pickedKind = await vscode13.window.showQuickPick(
+  const pickedKind = await vscode15.window.showQuickPick(
     scoped.response.schema.starter_template_groups.filter((group) => group.templates.length > 0).map((group) => ({ label: group.label, description: `${group.templates.length} starter(s)`, group })),
     { title: "Select document type", placeHolder: "Choose the starter family" }
   );
   if (!pickedKind) return;
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     pickedKind.group.templates.map((template) => ({
       label: template.label,
       description: template.id,
@@ -37341,15 +38036,15 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     { title: `Select ${pickedKind.label} starter`, placeHolder: "Choose starter template" }
   );
   if (!picked) return;
-  const outputTarget = await vscode13.window.showInputBox({
+  const outputTarget = await vscode15.window.showInputBox({
     title: "Generate Starter",
     prompt: "Workspace-relative .tex file to create",
     value: scoped.response.schema.starter_default_output_target || "main.tex"
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs38.existsSync(path45.resolve(scoped.folder.uri.fsPath, outputTarget))) {
-    const ok = await vscode13.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
+  if (fs39.existsSync(path48.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+    const ok = await vscode15.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
   }
@@ -37367,17 +38062,17 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     style_preset: style.stylePreset
   });
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
+  vscode15.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
 }
 async function pickCompileTarget(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const targets = scoped.response.state.compile_targets;
   if (targets.length === 0) {
-    vscode13.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
+    vscode15.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
     return;
   }
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     targets.map((target) => ({
       label: target,
       description: target === scoped.response.state.compile_target ? "current" : ""
@@ -37387,17 +38082,17 @@ async function pickCompileTarget(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("target", { compile_target: picked.label });
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
 }
 async function pickCompileRecipe(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const recipes = scoped.response.state.compile_recipes;
   if (recipes.length === 0) {
-    vscode13.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
+    vscode15.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
     return;
   }
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     recipes.map((recipe) => ({
       label: recipe.name,
       description: recipe.id === scoped.response.state.compile_recipe ? "current" : recipe.id,
@@ -37412,7 +38107,7 @@ async function pickCompileRecipe(context, treeProvider, folderUri) {
     compile_use_internal_fallback: false
   });
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
 }
 async function toggleInternalFallback(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -37423,7 +38118,7 @@ async function toggleInternalFallback(context, treeProvider, folderUri) {
     compile_use_internal_fallback: next
   });
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
 }
 async function openCurrentPdf(context, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -37431,9 +38126,9 @@ async function openCurrentPdf(context, folderUri) {
   const rawPath = currentPdfPath(scoped.response.state);
   try {
     const pdfPath = await scoped.service.readPdfIfExists(rawPath);
-    await vscode13.commands.executeCommand("vscode.open", vscode13.Uri.file(pdfPath));
+    await vscode15.commands.executeCommand("vscode.open", vscode15.Uri.file(pdfPath));
   } catch {
-    vscode13.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
+    vscode15.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
   }
 }
 async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
@@ -37445,7 +38140,7 @@ async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
   state.toggles[toggleId] = !state.toggles[toggleId];
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
 }
 async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const scoped = await responseForCommand(context, folderUri);
@@ -37453,7 +38148,7 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const field = scoped.response.schema.class_config.find((item) => item.id === fieldId);
   if (!field) return;
   const current = scoped.response.state.class_config[field.id];
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     field.options.map((option) => ({
       label: option.label,
       description: option.value === current ? "current" : option.value,
@@ -37466,14 +38161,14 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   state.class_config[field.id] = picked.option.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
 }
 async function pickStylePreset(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const presets = scoped.response.schema.style_presets;
   const current = scoped.response.state.style_preset;
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.label,
       description: preset.id === current ? "current" : preset.id,
@@ -37485,7 +38180,7 @@ async function pickStylePreset(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
 }
 async function pickBodyFontSize(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -37496,7 +38191,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
     values.push(Number(value.toFixed(2)));
   }
   const current = scoped.response.state.body_font_size_pt;
-  const picked = await vscode13.window.showQuickPick(
+  const picked = await vscode15.window.showQuickPick(
     values.map((value) => ({
       label: `${formatPointSize(value)} pt`,
       description: value === current ? "current" : "",
@@ -37509,19 +38204,21 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
   state.body_font_size_pt = picked.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode13.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
+  vscode15.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
 }
 function formatPointSize(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 var ToolkitTreeProvider = class {
-  constructor(context, projectRegistry) {
+  constructor(context, projectRegistry, noteGroups) {
     this.context = context;
     this.projectRegistry = projectRegistry;
+    this.noteGroups = noteGroups;
   }
   context;
   projectRegistry;
-  changeEmitter = new vscode13.EventEmitter();
+  noteGroups;
+  changeEmitter = new vscode15.EventEmitter();
   onDidChangeTreeData = this.changeEmitter.event;
   refresh() {
     this.changeEmitter.fire();
@@ -37530,14 +38227,14 @@ var ToolkitTreeProvider = class {
     this.changeEmitter.dispose();
   }
   getTreeItem(node) {
-    const collapsibleState = node.collapsibleState ?? (node.children ? vscode13.TreeItemCollapsibleState.Collapsed : vscode13.TreeItemCollapsibleState.None);
-    const item = new vscode13.TreeItem(node.label, collapsibleState);
+    const collapsibleState = node.collapsibleState ?? (node.children ? vscode15.TreeItemCollapsibleState.Collapsed : vscode15.TreeItemCollapsibleState.None);
+    const item = new vscode15.TreeItem(node.label, collapsibleState);
     item.id = node.id;
     item.description = node.description;
     item.tooltip = node.tooltip ?? node.label;
     item.contextValue = node.contextValue;
     item.resourceUri = node.resourceUri;
-    if (node.iconId) item.iconPath = new vscode13.ThemeIcon(node.iconId);
+    if (node.iconId) item.iconPath = new vscode15.ThemeIcon(node.iconId);
     if (node.commandId) {
       item.command = {
         command: node.commandId,
@@ -37552,7 +38249,7 @@ var ToolkitTreeProvider = class {
     return this.rootNodes();
   }
   async rootNodes() {
-    const localFolders = (vscode13.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
+    const localFolders = (vscode15.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes = [];
     nodes.push(await this.localNotesNode());
     nodes.push(await this.overleafMirrorsNode());
@@ -37575,7 +38272,7 @@ var ToolkitTreeProvider = class {
     if (!overleafService) {
       return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", [
         this.infoNode("overleaf-unavailable", "Overleaf unavailable", "The sync service has not initialized yet.", "warning")
-      ], vscode13.TreeItemCollapsibleState.Collapsed);
+      ], vscode15.TreeItemCollapsibleState.Collapsed);
     }
     const mirrors = await overleafService.listMirrors().catch(() => []);
     const currentRoot = overleafService.realtimeSync.currentRoot;
@@ -37583,81 +38280,41 @@ var ToolkitTreeProvider = class {
     const children = mirrors.length ? [
       ...await Promise.all(mirrors.map(async (mirror) => {
         if (mirror.missing) {
-          return this.localResourceNode({
+          return localResourceNode({
             id: `overleaf-mirror:${mirror.id}`,
+            identity: { mirrorId: mirror.id },
             label: mirror.name,
             description: "Missing",
             tooltip: "Overleaf mirror is not available in this environment",
             iconId: "warning",
             commandId: "overleafCodex.openLocalMirror",
-            commandArgs: [{ mirrorId: mirror.id }],
             contextValue: "overleafMirrorMissing"
           });
         }
         const state = await overleafService.state(mirror.root).catch(() => void 0);
         const status = !state ? "Needs attention" : state.conflicts.length > 0 ? "Conflict" : state.syncStatus?.hasBlocking ? "Needs attention" : state.running ? "Syncing" : "Ready";
         const icon = !state ? "warning" : state.conflicts.length > 0 ? "warning" : state.syncStatus?.hasBlocking ? "git-compare" : state.running ? "cloud-upload" : "cloud";
-        return this.localResourceNode({
+        return localResourceNode({
           id: `overleaf-mirror:${mirror.id}`,
+          identity: { mirrorId: mirror.id },
           label: mirror.name,
-          description: `${status} \xB7 ${path45.basename(path45.dirname(mirror.root))}`,
+          description: `${status} \xB7 ${path48.basename(path48.dirname(mirror.root))}`,
           iconId: icon,
           commandId: "overleafCodex.openLocalMirror",
-          commandArgs: [{ mirrorId: mirror.id }],
           contextValue: "overleafMirror"
         });
       })),
       ...mirrors.some((mirror) => mirror.missing) ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])] : [],
       publishNode
     ] : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud"), publishNode];
-    return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode13.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : void 0);
+    return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode15.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : void 0);
   }
   async localNotesNode() {
-    const projects = await this.projectRegistry.list();
+    const [projects, groups] = await Promise.all([this.projectRegistry.list(), this.noteGroups.list()]);
     const openProjectIds = new Set((await Promise.all(
-      (vscode13.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
+      (vscode15.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project) => Boolean(project)).map((project) => project.id));
-    const children = projects.length > 0 ? [
-      ...projects.map((project) => this.localProjectNode(project, openProjectIds.has(project.id))),
-      ...projects.some((project) => project.missing) ? [this.actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects", [])] : []
-    ] : [
-      this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
-      this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
-    ];
-    return this.groupNode(
-      "local-notes",
-      "Local Notes",
-      "book",
-      children,
-      vscode13.TreeItemCollapsibleState.Expanded
-    );
-  }
-  localProjectNode(project, isOpen) {
-    const parent = path45.basename(path45.dirname(project.rootPath)) || path45.dirname(project.rootPath);
-    const template = STARTER_TEMPLATE_DEFINITIONS.find((entry) => entry.id === project.templateId);
-    const presentationDescription = project.templateId === "beamer-generic" ? "Beamer \xB7 Generic Beamer \xB7 main.tex" : template?.kind === "beamer" ? `Beamer \xB7 ${template.label} \xB7 main.tex` : void 0;
-    return this.localResourceNode({
-      id: `local-project:${project.id}`,
-      label: project.label,
-      description: project.missing ? "Missing" : presentationDescription || (isOpen ? `Open \xB7 ${parent}` : parent),
-      tooltip: project.missing ? "Project folder not found in this environment" : "Local note project",
-      iconId: project.missing ? "warning" : isOpen ? "root-folder-opened" : "folder",
-      commandId: "latexEditingToolkit.openLocalProject",
-      commandArgs: [{ projectId: project.id }],
-      contextValue: project.missing ? "localProjectMissing" : "localProject"
-    });
-  }
-  localResourceNode(options) {
-    return {
-      id: options.id,
-      label: options.label,
-      description: options.description,
-      tooltip: options.tooltip ?? options.label,
-      iconId: options.iconId,
-      commandId: options.commandId,
-      commandArgs: options.commandArgs,
-      contextValue: options.contextValue
-    };
+    return localNotesRootNode(projects, groups, openProjectIds);
   }
   async workspaceNode(folder) {
     const response = await this.loadWorkspaceState(folder);
@@ -37669,7 +38326,7 @@ var ToolkitTreeProvider = class {
       tooltip: folder.uri.fsPath,
       iconId: "root-folder",
       resourceUri: folder.uri,
-      collapsibleState: vscode13.TreeItemCollapsibleState.Expanded,
+      collapsibleState: vscode15.TreeItemCollapsibleState.Expanded,
       contextValue: "workspace",
       children: response instanceof Error ? this.workspaceErrorGroups(folder, response) : this.workspaceGroups(folder, response)
     };
@@ -37690,8 +38347,8 @@ var ToolkitTreeProvider = class {
     ];
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
-    const activeSnippetProfile = vscode13.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path45.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const activeSnippetProfile = vscode15.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path48.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -37704,7 +38361,7 @@ var ToolkitTreeProvider = class {
         ),
         this.actionNode("select-snippet-profile", "Select Profile", "base + profile + workspace", "account", "hsnips.selectProfile", folderArg),
         this.actionNode("reload-snippets", "Reload Snippets", ".hsnips files", "refresh", "hsnips.reloadSnippets", folderArg)
-      ], vscode13.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} \xB7 ${snippetFileCount} files`),
+      ], vscode15.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} \xB7 ${snippetFileCount} files`),
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
@@ -37712,7 +38369,7 @@ var ToolkitTreeProvider = class {
         this.actionNode("pick-recipe", "Pick Recipe", `${state.compile_recipes.length} found`, "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
-      ], vscode13.TreeItemCollapsibleState.Expanded),
+      ], vscode15.TreeItemCollapsibleState.Expanded),
       ...state.workspace_template.kind === "beamer" ? [
         this.groupNode(`presentation:${folder.uri.toString()}`, "Presentation", "preview", [
           this.infoNode(`presentation-template:${folder.uri.toString()}`, "Template", this.templateLabel(schema, state.workspace_template.templateId), "symbol-color"),
@@ -37774,7 +38431,7 @@ var ToolkitTreeProvider = class {
         this.actionNode("sync-stop", "Stop Realtime Sync", "pause remote updates", "debug-stop", "overleafCodex.stopRealtimeSync", folderArg),
         this.actionNode("sync-conflicts", "Show Conflicts", "manual resolution", "warning", "overleafCodex.showConflicts", folderArg),
         this.actionNode("sync-refresh", "Refresh Sync", "remote status", "refresh", "overleafCodex.refreshViews", folderArg)
-      ], vscode13.TreeItemCollapsibleState.Collapsed));
+      ], vscode15.TreeItemCollapsibleState.Collapsed));
     }
     if (state.config_warnings.length > 0 || state.compile_last_success === false) {
       const diagnostics = [this.infoNode(`last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state))];
@@ -37782,7 +38439,7 @@ var ToolkitTreeProvider = class {
         ...this.infoNode(`config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
         tooltip: state.config_warnings.join("\n")
       });
-      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode13.TreeItemCollapsibleState.Expanded));
+      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode15.TreeItemCollapsibleState.Expanded));
     }
     return nodes;
   }
@@ -37800,16 +38457,16 @@ var ToolkitTreeProvider = class {
       this.actionNode("open-toolkit", "Open Toolkit", "visual workbench", "tools", "latexEditingToolkit.openToolkit", folderArg),
       this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", [
         this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error")
-      ], vscode13.TreeItemCollapsibleState.Expanded),
+      ], vscode15.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
         this.actionNode("generate-starter", "Generate Starter", "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
         this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
-      ], vscode13.TreeItemCollapsibleState.Expanded)
+      ], vscode15.TreeItemCollapsibleState.Expanded)
     ];
   }
-  groupNode(id, label, iconId, children, collapsibleState = vscode13.TreeItemCollapsibleState.Collapsed, description) {
+  groupNode(id, label, iconId, children, collapsibleState = vscode15.TreeItemCollapsibleState.Collapsed, description) {
     return {
       id,
       label,
@@ -37902,21 +38559,21 @@ var ToolkitPanel = class _ToolkitPanel {
     const panelKey = folder?.uri.toString() || "global-snippets";
     if (activePanel) {
       if (activePanel.panelKey === panelKey) {
-        activePanel.panel.reveal(vscode13.ViewColumn.One);
+        activePanel.panel.reveal(vscode15.ViewColumn.One);
         return activePanel;
       }
       activePanel.dispose();
     }
-    const panel = vscode13.window.createWebviewPanel(
+    const panel = vscode15.window.createWebviewPanel(
       "latexEditingToolkit.toolkit",
       "LaTeX Editing Toolkit",
-      vscode13.ViewColumn.One,
+      vscode15.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode13.Uri.file(path45.join(context.extensionPath, "dist")),
-          vscode13.Uri.file(path45.join(context.extensionPath, "dist", "monaco"))
+          vscode15.Uri.file(path48.join(context.extensionPath, "dist")),
+          vscode15.Uri.file(path48.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -37949,11 +38606,11 @@ var ToolkitPanel = class _ToolkitPanel {
     await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
   }
   async openSection(section) {
-    this.panel.reveal(vscode13.ViewColumn.One);
+    this.panel.reveal(vscode15.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
   }
   async openPublishForm(folder) {
-    this.panel.reveal(vscode13.ViewColumn.One);
+    this.panel.reveal(vscode15.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-publish", folder });
   }
   async handleMessage(message) {
@@ -37965,7 +38622,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const action = request.payload?.action;
         if (!isConfirmAction(action)) throw new Error("Unknown Toolkit confirmation action.");
         const spec = confirmationSpec(action, String(request.payload?.detail ?? ""));
-        const choice = await vscode13.window.showWarningMessage(
+        const choice = await vscode15.window.showWarningMessage(
           spec.message,
           { modal: true, detail: spec.detail },
           spec.confirmLabel
@@ -37975,7 +38632,7 @@ var ToolkitPanel = class _ToolkitPanel {
         this.output.show(true);
         data = { shown: true };
       } else if (request.command === "snippets-state" || request.command === "snippets-reload") {
-        if (request.command === "snippets-reload") await vscode13.commands.executeCommand("hsnips.reloadSnippets");
+        if (request.command === "snippets-reload") await vscode15.commands.executeCommand("hsnips.reloadSnippets");
         data = await this.snippetService.state();
       } else if (request.command === "snippets-analyze") {
         data = await this.snippetService.analyze(String(request.payload?.file_path ?? ""), String(request.payload?.content ?? ""));
@@ -37997,14 +38654,14 @@ var ToolkitPanel = class _ToolkitPanel {
         const profile = String(request.payload?.profile ?? "").trim();
         const current = await this.snippetService.state();
         if (profile && !current.profiles.includes(profile)) throw new Error("Unknown snippet profile.");
-        await vscode13.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode13.ConfigurationTarget.Global);
-        await vscode13.commands.executeCommand("hsnips.reloadSnippets");
+        await vscode15.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode15.ConfigurationTarget.Global);
+        await vscode15.commands.executeCommand("hsnips.reloadSnippets");
         data = await this.snippetService.state();
       } else if (request.command === "snippets-open-directory") {
         const scope = String(request.payload?.scope ?? "base");
-        if (scope === "base") await vscode13.commands.executeCommand("hsnips.openSnippetsDir");
-        else if (scope === "profile") await vscode13.commands.executeCommand("hsnips.openActiveProfile");
-        else if (scope === "workspace") await vscode13.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
+        if (scope === "base") await vscode15.commands.executeCommand("hsnips.openSnippetsDir");
+        else if (scope === "profile") await vscode15.commands.executeCommand("hsnips.openActiveProfile");
+        else if (scope === "workspace") await vscode15.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
         else throw new Error("Unknown snippet directory scope.");
         data = { opened: true };
       } else if (request.command.startsWith("overleaf-")) {
@@ -38020,23 +38677,23 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists7 = false;
         try {
-          const stat13 = await fs38.promises.stat(pdfPath);
+          const stat13 = await fs39.promises.stat(pdfPath);
           exists7 = stat13.isFile();
         } catch {
           exists7 = false;
         }
-        data = { path: rawPath || path45.basename(pdfPath), exists: exists7 };
+        data = { path: rawPath || path48.basename(pdfPath), exists: exists7 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = await service.readPdfIfExists(rawPath);
-        await vscode13.commands.executeCommand("vscode.open", vscode13.Uri.file(pdfPath));
+        await vscode15.commands.executeCommand("vscode.open", vscode15.Uri.file(pdfPath));
         data = { opened: true };
       } else if (request.command === "personal-style-save") {
         const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
-        const label = await vscode13.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode15.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (!label) {
           data = await service.handle("state", {});
         } else {
@@ -38057,7 +38714,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const label = await vscode13.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode15.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (label) await this.styleRegistry.rename(id, label);
         refreshPersonalStylesOnServices(this.styleRegistry);
         data = await service.handle("state", {});
@@ -38066,7 +38723,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const confirmed = await vscode13.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
+        const confirmed = await vscode15.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
         if (confirmed !== "Delete Style") data = await service.handle("state", {});
         else {
           await this.styleRegistry.remove(id);
@@ -38077,10 +38734,10 @@ var ToolkitPanel = class _ToolkitPanel {
         }
       } else if (request.command === "personal-style-import") {
         const service = this.requireService();
-        const picked = await vscode13.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
+        const picked = await vscode15.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
         if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs38.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs39.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
           data = { ...await service.handle("state", {}), personal_style_import: summary };
@@ -38090,8 +38747,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode13.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode13.Uri.file(path45.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs38.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode15.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode15.Uri.file(path48.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs39.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
@@ -38101,7 +38758,7 @@ var ToolkitPanel = class _ToolkitPanel {
         } catch (err) {
           if (!(err instanceof HistoryConflictError)) throw err;
           const direction = request.command.startsWith("undo") ? "undo" : "redo";
-          const choice = await vscode13.window.showWarningMessage(
+          const choice = await vscode15.window.showWarningMessage(
             `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
             { modal: true },
             "Show Conflicts",
@@ -38132,10 +38789,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode13.Uri.file(path45.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode13.Uri.file(path45.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode13.Uri.file(path45.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode13.Uri.file(path45.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode15.Uri.file(path48.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode15.Uri.file(path48.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode15.Uri.file(path48.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode15.Uri.file(path48.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -38152,7 +38809,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs38.existsSync(path45.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs39.existsSync(path48.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>
