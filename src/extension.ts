@@ -14,11 +14,20 @@ import { SnippetService } from "./snippets/snippetService";
 import { ToolkitService } from "./toolkitService";
 import { OverleafService } from "./overleaf/overleafService";
 import { formatUnknownError } from "./overleaf/util";
-import type { LocalNoteProject, LocalNoteProjectStatus, ResponseState, ToolkitState } from "./types";
-import { localResourceNode, projectIdFromArgument, type ToolkitTreeNode } from "./treeNodes";
-import { localProjectNode } from "./localNotesTree";
+import type { LocalNoteProject, ResponseState, ToolkitState } from "./types";
+import { localPathFromArgument, localResourceNode, type ToolkitTreeNode } from "./treeNodes";
+import { localNotesRootNode, LocalNotesDragAndDrop } from "./localNotesTree";
 import { LocalNoteGroupRegistry, scopedLocalNoteGroupsStateKey, stripOverleafProjectId, suggestGroupFolder, suggestNextNoteName } from "./localNoteGroups";
-import { notesInGroup, openNoteGroup, pickGroupForNewProject, placeNewProject, type NewProjectGroup } from "./localNotesCommands";
+import {
+  moveDroppedNotes,
+  notesInGroup,
+  openNoteGroup,
+  pickGroupForNewProject,
+  placeNewProject,
+  registerLocalNotesCommands,
+  type LocalNotesCommandDeps,
+  type NewProjectGroup
+} from "./localNotesCommands";
 import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
 import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
 import { SyncStandbyError } from "./overleaf/syncOwnerCoordinator";
@@ -48,8 +57,24 @@ export function activate(context: vscode.ExtensionContext): void {
   const noteGroups = new LocalNoteGroupRegistry(context.globalState, scopedLocalNoteGroupsStateKey(scope));
   const recentProjectParentsKey = scopedStateKey(RECENT_PROJECT_PARENTS_KEY, scope);
   personalStyles = new PersonalStyleRegistry(context.globalState);
-  const treeProvider = new ToolkitTreeProvider(context, projectRegistry);
+  const treeProvider = new ToolkitTreeProvider(context, projectRegistry, noteGroups);
   const command = <T extends unknown[]>(id: string, handler: (...args: T) => unknown): vscode.Disposable => registerToolkitCommand(output, id, handler);
+  const localNotes: LocalNotesCommandDeps = {
+    projects: projectRegistry,
+    groups: noteGroups,
+    refresh: () => treeProvider.refresh(),
+    createProjectInGroup: (groupId) => createProjectWizard(context, projectRegistry, noteGroups, treeProvider, output, recentProjectParentsKey, { groupId })
+  };
+  // A drop is not a command, so registerToolkitCommand's error reporting does not cover it.
+  const dragAndDropController = new LocalNotesDragAndDrop(async (noteIds, groupId) => {
+    try {
+      await moveDroppedNotes(localNotes, noteIds, groupId);
+    } catch (err) {
+      logToolkitError(output, "latexEditingToolkit.dropLocalNotes", "(Local Notes)", err);
+      treeProvider.refresh();
+      vscode.window.showErrorMessage(`LaTeX Editing Toolkit: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
 
   overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode.env.remoteName);
 
@@ -59,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     treeProvider,
-    vscode.window.registerTreeDataProvider("latexEditingToolkit.actions", treeProvider),
+    vscode.window.createTreeView("latexEditingToolkit.actions", { treeDataProvider: treeProvider, dragAndDropController }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
     vscode.window.onDidChangeWindowState((state) => {
       if (state.focused) treeProvider.refresh();
@@ -116,26 +141,7 @@ export function activate(context: vscode.ExtensionContext): void {
     command("latexEditingToolkit.createProject", async () => {
       await createProjectWizard(context, projectRegistry, noteGroups, treeProvider, output, recentProjectParentsKey);
     }),
-    command("latexEditingToolkit.openLocalProject", async (projectPath?: unknown) => {
-      await openLocalProject(projectRegistry, projectPath);
-    }),
-    command("latexEditingToolkit.relocateLocalProject", async (projectPath?: unknown) => {
-      await relocateLocalProject(projectRegistry, treeProvider, projectPath);
-    }),
-    command("latexEditingToolkit.removeLocalProject", async (projectPath?: unknown) => {
-      await removeLocalProject(projectRegistry, treeProvider, projectPath);
-    }),
-    command("latexEditingToolkit.clearMissingLocalProjects", async () => {
-      await clearMissingLocalProjects(projectRegistry, treeProvider);
-    }),
-    command("latexEditingToolkit.showLocalProjectPath", async (projectArg?: unknown) => {
-      const project = await localProjectFromArgument(projectRegistry, projectArg);
-      if (!project) {
-        vscode.window.showWarningMessage("The selected local note project could not be resolved.");
-        return;
-      }
-      vscode.window.showInformationMessage(project.rootPath);
-    }),
+    ...registerLocalNotesCommands(command, localNotes),
     command("latexEditingToolkit.refreshTree", () => {
       treeProvider.refresh();
     }),
@@ -696,7 +702,7 @@ function isUserCancellation(err: unknown): boolean {
 function workspacePathFromArguments(args: unknown[]): string {
   for (const arg of args) {
     if (arg instanceof vscode.Uri && arg.scheme === "file") return arg.fsPath;
-    const projectPath = localProjectPathFromArgument(arg);
+    const projectPath = localPathFromArgument(arg);
     if (projectPath) return projectPath;
   }
   return vscode.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
@@ -782,109 +788,6 @@ function pdfForTarget(target: string): string {
 
 function currentPdfPath(state: ToolkitState): string {
   return state.compile_output_pdf || state.compile_output_pdf_expected || pdfForTarget(state.compile_target);
-}
-
-async function openLocalProject(registry: LocalProjectRegistry, projectPathArg: unknown): Promise<void> {
-  const project = await localProjectFromArgument(registry, projectPathArg);
-  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
-  if (!projectPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  try {
-    if (!(await fs.promises.stat(projectPath)).isDirectory()) throw new Error("not a directory");
-  } catch {
-    vscode.window.showWarningMessage("Local note project is not available in this environment. Relocate or forget it from Local Notes.");
-    return;
-  }
-  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectPath), { forceNewWindow: false });
-}
-
-async function relocateLocalProject(
-  registry: LocalProjectRegistry,
-  treeProvider: ToolkitTreeProvider,
-  projectPathArg: unknown
-): Promise<void> {
-  const oldProject = await localProjectFromArgument(registry, projectPathArg);
-  const oldPath = oldProject?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
-  if (!oldPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  const target = await vscode.window.showOpenDialog({
-    canSelectFiles: false,
-    canSelectFolders: true,
-    canSelectMany: false,
-    openLabel: "Relocate Toolkit Project Here"
-  });
-  if (!target?.[0]) return;
-  if (target[0].scheme !== "file") {
-    vscode.window.showErrorMessage("LaTeX Editing Toolkit only supports local project folders.");
-    return;
-  }
-  const updated = await registry.relocate(oldPath, target[0].fsPath);
-  treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Relocated local note project to ${updated.rootPath}.`, 2500);
-}
-
-async function removeLocalProject(
-  registry: LocalProjectRegistry,
-  treeProvider: ToolkitTreeProvider,
-  projectPathArg: unknown
-): Promise<void> {
-  const project = await localProjectFromArgument(registry, projectPathArg);
-  const projectPath = project?.rootPath ?? (typeof projectPathArg === "string" ? localProjectPathFromArgument(projectPathArg) : undefined);
-  if (!projectPath) {
-    vscode.window.showWarningMessage("The selected local note project could not be resolved.");
-    return;
-  }
-  const label = project?.label ?? path.basename(path.normalize(projectPath));
-  const choice = await vscode.window.showWarningMessage(
-    `Forget local note project '${label}'? This only removes it from the Toolkit list and does not delete files.`,
-    { modal: true },
-    "Forget"
-  );
-  if (choice !== "Forget") return;
-  const removed = await registry.remove(projectPath);
-  treeProvider.refresh();
-  vscode.window.setStatusBarMessage(removed ? `Forgot local note project '${label}'.` : "Local note project was already removed.", 2500);
-}
-
-async function clearMissingLocalProjects(registry: LocalProjectRegistry, treeProvider: ToolkitTreeProvider): Promise<void> {
-  const projects = await registry.list();
-  const missingCount = projects.filter((project) => project.missing).length;
-  if (missingCount === 0) {
-    vscode.window.showInformationMessage("No missing local note projects to clear.");
-    return;
-  }
-  const choice = await vscode.window.showWarningMessage(
-    `Forget ${missingCount} missing local note project${missingCount === 1 ? "" : "s"}? This only removes registry metadata and does not delete files.`,
-    { modal: true },
-    "Clear Missing"
-  );
-  if (choice !== "Clear Missing") return;
-  const removed = await registry.removeMissing();
-  treeProvider.refresh();
-  vscode.window.setStatusBarMessage(`Cleared ${removed} missing local note project${removed === 1 ? "" : "s"}.`, 2500);
-}
-
-async function localProjectFromArgument(registry: LocalProjectRegistry, value: unknown): Promise<LocalNoteProjectStatus | undefined> {
-  const projectId = projectIdFromArgument(value);
-  if (projectId) return registry.findById(projectId);
-  const projectPath = localProjectPathFromArgument(value);
-  return projectPath ? registry.find(projectPath) : undefined;
-}
-
-function localProjectPathFromArgument(value: unknown): string | undefined {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return undefined;
-  const candidate = value as { fsPath?: unknown; resourceUri?: unknown };
-  if (typeof candidate.fsPath === "string") return candidate.fsPath;
-  const resourceUri = candidate.resourceUri;
-  if (resourceUri && typeof resourceUri === "object" && typeof (resourceUri as { fsPath?: unknown }).fsPath === "string") {
-    return (resourceUri as { fsPath: string }).fsPath;
-  }
-  return undefined;
 }
 
 /**
@@ -1122,7 +1025,8 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly projectRegistry: LocalProjectRegistry
+    private readonly projectRegistry: LocalProjectRegistry,
+    private readonly noteGroups: LocalNoteGroupRegistry
   ) {}
 
   refresh(): void {
@@ -1226,30 +1130,13 @@ class ToolkitTreeProvider implements vscode.TreeDataProvider<ToolkitTreeNode>, v
   }
 
   private async localNotesNode(): Promise<ToolkitTreeNode> {
-    const projects = await this.projectRegistry.list();
+    const [projects, groups] = await Promise.all([this.projectRegistry.list(), this.noteGroups.list()]);
     const openProjectIds = new Set((await Promise.all(
       (vscode.workspace.workspaceFolders ?? [])
         .filter((folder) => folder.uri.scheme === "file")
         .map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project): project is NonNullable<typeof project> => Boolean(project)).map((project) => project.id));
-    const children = projects.length > 0
-      ? [
-          ...projects.map((project) => localProjectNode(project, openProjectIds.has(project.id))),
-          ...(projects.some((project) => project.missing)
-            ? [this.actionNode("local-notes-clear-missing", "Clear Missing Projects", "remove stale registry entries", "trash", "latexEditingToolkit.clearMissingLocalProjects", [])]
-            : [])
-        ]
-      : [
-          this.infoNode("local-notes-empty", "No local notes yet", "Create a project to add it here.", "info"),
-          this.actionNode("local-notes-create", "Create New Project", "from template", "new-folder", "latexEditingToolkit.createProject", [])
-        ];
-    return this.groupNode(
-      "local-notes",
-      "Local Notes",
-      "book",
-      children,
-      vscode.TreeItemCollapsibleState.Expanded
-    );
+    return localNotesRootNode(projects, groups, openProjectIds);
   }
 
   private async workspaceNode(folder: vscode.WorkspaceFolder): Promise<ToolkitTreeNode> {

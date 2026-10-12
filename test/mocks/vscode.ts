@@ -111,6 +111,28 @@ export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
 export const OverviewRulerLane = { Left: 1, Center: 2, Right: 4, Full: 7 } as const;
 export const DecorationRangeBehavior = { OpenOpen: 0, ClosedClosed: 1, OpenClosed: 2, ClosedOpen: 3 } as const;
 export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 } as const;
+export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 } as const;
+export const QuickPickItemKind = { Separator: -1, Default: 0 } as const;
+
+export class DataTransferItem {
+  constructor(public readonly value: unknown) {}
+  async asString(): Promise<string> {
+    return typeof this.value === 'string' ? this.value : JSON.stringify(this.value);
+  }
+  asFile(): undefined {
+    return undefined;
+  }
+}
+
+export class DataTransfer {
+  private readonly items = new Map<string, DataTransferItem>();
+  get(mimeType: string): DataTransferItem | undefined {
+    return this.items.get(mimeType.toLowerCase());
+  }
+  set(mimeType: string, value: DataTransferItem): void {
+    this.items.set(mimeType.toLowerCase(), value);
+  }
+}
 
 export interface StatusBarItemMock {
   command?: string;
@@ -259,6 +281,10 @@ export default {
   OverviewRulerLane,
   DecorationRangeBehavior,
   DiagnosticSeverity,
+  TreeItemCollapsibleState,
+  QuickPickItemKind,
+  DataTransferItem,
+  DataTransfer,
   window,
   workspace,
   commands,

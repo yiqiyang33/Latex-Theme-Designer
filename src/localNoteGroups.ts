@@ -142,6 +142,10 @@ export class LocalNoteGroupRegistry {
   }
 }
 
+export function noteCount(count: number): string {
+  return `${count} note${count === 1 ? "" : "s"}`;
+}
+
 export function normalizeGroupName(raw: string): string {
   return String(raw ?? "").trim();
 }

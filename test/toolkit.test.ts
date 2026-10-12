@@ -1346,7 +1346,11 @@ describe("TypeScript Toolkit migration", () => {
     expect(manifest.icon).toBe("assets/icon.png");
     expect(manifest.activationEvents).toContain("onCommand:overleafCodex.compile");
     expect(manifest.devDependencies["@vscode/codicons"]).toBeTruthy();
-    expect(manifest.contributes.menus["view/item/context"].every((item: any) => !String(item.group).startsWith("inline"))).toBe(true);
+    // Rows keep their actions in the context menu. Only the Local Notes headings get inline
+    // buttons, and only ones that add something.
+    const inlineActions = manifest.contributes.menus["view/item/context"].filter((item: any) => String(item.group).startsWith("inline"));
+    expect(inlineActions.map((item: any) => item.command).sort()).toEqual(["latexEditingToolkit.createProjectInGroup", "latexEditingToolkit.newLocalNoteGroup"]);
+    expect(inlineActions.every((item: any) => /viewItem == (localNotesRoot|localNoteGroup)$/.test(item.when))).toBe(true);
     const build = await fs.readFile(path.join(repoRoot, "esbuild.mjs"), "utf8");
     expect(build).toContain("dist/codicon.css");
     expect(build).toContain("dist/codicon.ttf");

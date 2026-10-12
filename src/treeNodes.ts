@@ -23,6 +23,13 @@ export interface ToolkitTreeNode {
   projectId?: string;
   /** The Overleaf mirror this node stands for. */
   mirrorId?: string;
+  /** The Local Notes group this node stands for, or sits in as its placeholder. Never set on a note. */
+  noteGroupId?: string;
+  /**
+   * Where notes dropped on this node go: a group id, or null for no group. Absent on nodes that
+   * take no drops.
+   */
+  dropGroupId?: string | null;
 }
 
 /**
@@ -66,6 +73,27 @@ export function projectIdFromArgument(value: unknown): string | undefined {
 /** The mirror id carried by a node or by a node's click arguments. */
 export function mirrorIdFromArgument(value: unknown): string | undefined {
   return stringField(value, "mirrorId");
+}
+
+/**
+ * The Local Notes group a node or its click arguments name. A note's node never names one, even in
+ * a group, so a group command can never be pointed at a note's group by mistake.
+ */
+export function noteGroupIdFromArgument(value: unknown): string | undefined {
+  return projectIdFromArgument(value) ? undefined : stringField(value, "noteGroupId");
+}
+
+/** A local path passed directly, as a Uri, or as an Explorer item's `resourceUri`. */
+export function localPathFromArgument(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { fsPath?: unknown; resourceUri?: unknown };
+  if (typeof candidate.fsPath === "string") return candidate.fsPath;
+  const resourceUri = candidate.resourceUri;
+  if (resourceUri && typeof resourceUri === "object" && typeof (resourceUri as { fsPath?: unknown }).fsPath === "string") {
+    return (resourceUri as { fsPath: string }).fsPath;
+  }
+  return undefined;
 }
 
 function stringField(value: unknown, key: string): string | undefined {

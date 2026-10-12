@@ -66,6 +66,15 @@
     "onCommand:latexEditingToolkit.removeLocalProject",
     "onCommand:latexEditingToolkit.clearMissingLocalProjects",
     "onCommand:latexEditingToolkit.showLocalProjectPath",
+    "onCommand:latexEditingToolkit.openLocalProjectInNewWindow",
+    "onCommand:latexEditingToolkit.renameLocalProject",
+    "onCommand:latexEditingToolkit.moveLocalProjectToGroup",
+    "onCommand:latexEditingToolkit.removeLocalProjectFromGroup",
+    "onCommand:latexEditingToolkit.newLocalNoteGroup",
+    "onCommand:latexEditingToolkit.renameLocalNoteGroup",
+    "onCommand:latexEditingToolkit.deleteLocalNoteGroup",
+    "onCommand:latexEditingToolkit.addNotesToGroup",
+    "onCommand:latexEditingToolkit.createProjectInGroup",
     "onCommand:latexEditingToolkit.refreshTree",
     "onCommand:latexEditingToolkit.undoLastChange",
     "onCommand:latexEditingToolkit.redoLastChange",
@@ -155,27 +164,86 @@
       },
       {
         "command": "latexEditingToolkit.openLocalProject",
-        "title": "LaTeX Editing Toolkit: Open Local Project"
+        "title": "Open Local Project",
+        "category": "LaTeX Editing Toolkit"
       },
       {
         "command": "latexEditingToolkit.relocateLocalProject",
-        "title": "LaTeX Editing Toolkit: Relocate Local Project",
-        "icon": "$(folder-opened)"
+        "title": "Relocate Local Project",
+        "icon": "$(folder-opened)",
+        "category": "LaTeX Editing Toolkit"
       },
       {
         "command": "latexEditingToolkit.removeLocalProject",
-        "title": "LaTeX Editing Toolkit: Remove Local Project",
-        "icon": "$(close)"
+        "title": "Remove Local Project",
+        "icon": "$(close)",
+        "category": "LaTeX Editing Toolkit"
       },
       {
         "command": "latexEditingToolkit.clearMissingLocalProjects",
-        "title": "LaTeX Editing Toolkit: Clear Missing Local Projects",
-        "icon": "$(trash)"
+        "title": "Clear Missing Local Projects",
+        "icon": "$(trash)",
+        "category": "LaTeX Editing Toolkit"
       },
       {
         "command": "latexEditingToolkit.showLocalProjectPath",
-        "title": "LaTeX Editing Toolkit: Show Local Project Path",
-        "icon": "$(info)"
+        "title": "Show Local Project Path",
+        "icon": "$(info)",
+        "category": "LaTeX Editing Toolkit"
+      },
+      {
+        "command": "latexEditingToolkit.openLocalProjectInNewWindow",
+        "title": "Open in New Window",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "latexEditingToolkit.renameLocalProject",
+        "title": "Rename…",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "latexEditingToolkit.moveLocalProjectToGroup",
+        "title": "Move to Group…",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "latexEditingToolkit.removeLocalProjectFromGroup",
+        "title": "Remove from Group",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "latexEditingToolkit.newLocalNoteGroup",
+        "title": "New Group…",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(new-collection)"
+      },
+      {
+        "command": "latexEditingToolkit.renameLocalNoteGroup",
+        "title": "Rename Group…",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "latexEditingToolkit.deleteLocalNoteGroup",
+        "title": "Delete Group",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "latexEditingToolkit.addNotesToGroup",
+        "title": "Add Notes…",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(add)"
+      },
+      {
+        "command": "latexEditingToolkit.createProjectInGroup",
+        "title": "New Project in Group",
+        "category": "LaTeX Editing Toolkit",
+        "icon": "$(add)"
       },
       {
         "command": "latexEditingToolkit.refreshTree",
@@ -821,6 +889,38 @@
           "when": "false"
         },
         {
+          "command": "latexEditingToolkit.openLocalProjectInNewWindow",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.renameLocalProject",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.moveLocalProjectToGroup",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.removeLocalProjectFromGroup",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.renameLocalNoteGroup",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.deleteLocalNoteGroup",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.addNotesToGroup",
+          "when": "false"
+        },
+        {
+          "command": "latexEditingToolkit.createProjectInGroup",
+          "when": "false"
+        },
+        {
           "command": "latexEditingToolkit.refreshTree",
           "when": "false"
         },
@@ -941,19 +1041,74 @@
           "group": "1_modification@4"
         },
         {
-          "command": "latexEditingToolkit.removeLocalProject",
-          "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
-          "group": "1_modification@2"
+          "command": "latexEditingToolkit.newLocalNoteGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNotesRoot",
+          "group": "inline@1"
         },
         {
-          "command": "latexEditingToolkit.showLocalProjectPath",
-          "when": "view == latexEditingToolkit.actions && (viewItem == localProject || viewItem == localProjectMissing)",
-          "group": "1_modification@3"
+          "command": "latexEditingToolkit.newLocalNoteGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNotesRoot",
+          "group": "1_groups@1"
+        },
+        {
+          "command": "latexEditingToolkit.createProjectInGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNoteGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "latexEditingToolkit.createProjectInGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNoteGroup",
+          "group": "1_create@1"
+        },
+        {
+          "command": "latexEditingToolkit.addNotesToGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNoteGroup",
+          "group": "1_create@2"
+        },
+        {
+          "command": "latexEditingToolkit.renameLocalNoteGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNoteGroup",
+          "group": "2_modification@1"
+        },
+        {
+          "command": "latexEditingToolkit.deleteLocalNoteGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem == localNoteGroup",
+          "group": "2_modification@2"
+        },
+        {
+          "command": "latexEditingToolkit.openLocalProjectInNewWindow",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject(Grouped)?$/",
+          "group": "0_open@1"
+        },
+        {
+          "command": "latexEditingToolkit.moveLocalProjectToGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject/",
+          "group": "1_groups@1"
+        },
+        {
+          "command": "latexEditingToolkit.removeLocalProjectFromGroup",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject.*Grouped$/",
+          "group": "1_groups@2"
+        },
+        {
+          "command": "latexEditingToolkit.renameLocalProject",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject/",
+          "group": "2_modification@1"
         },
         {
           "command": "latexEditingToolkit.relocateLocalProject",
-          "when": "view == latexEditingToolkit.actions && viewItem == localProjectMissing",
-          "group": "1_modification@1"
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProjectMissing/",
+          "group": "2_modification@2"
+        },
+        {
+          "command": "latexEditingToolkit.showLocalProjectPath",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject/",
+          "group": "2_modification@3"
+        },
+        {
+          "command": "latexEditingToolkit.removeLocalProject",
+          "when": "view == latexEditingToolkit.actions && viewItem =~ /^localProject/",
+          "group": "3_remove@1"
         }
       ]
     }
