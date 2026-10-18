@@ -891,13 +891,13 @@ async function assertWorkspacePathSafe(rootDir, candidate) {
   let current = root;
   for (const segment of path.relative(root, absolute).split(path.sep)) {
     current = path.join(current, segment);
-    const stat13 = await import_node_fs.promises.lstat(current).catch((error) => {
+    const stat14 = await import_node_fs.promises.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (!stat13) break;
-    if (stat13.isSymbolicLink()) throw new Error(`Refusing to access symlinked workspace path: ${candidate}`);
-    if (!stat13.isDirectory() && current !== absolute) throw new Error(`Workspace path component is not a directory: ${candidate}`);
+    if (!stat14) break;
+    if (stat14.isSymbolicLink()) throw new Error(`Refusing to access symlinked workspace path: ${candidate}`);
+    if (!stat14.isDirectory() && current !== absolute) throw new Error(`Workspace path component is not a directory: ${candidate}`);
   }
   return absolute;
 }
@@ -1008,10 +1008,10 @@ function globToRegExp(pattern) {
   source += "$";
   return new RegExp(source);
 }
-function matchesGlob(relPath, basename23, pattern) {
+function matchesGlob(relPath, basename24, pattern) {
   const normalized = toPosixPath(relPath);
   if (!pattern.includes("/")) {
-    return globToRegExp(pattern).test(basename23);
+    return globToRegExp(pattern).test(basename24);
   }
   return globToRegExp(pattern).test(normalized);
 }
@@ -1725,7 +1725,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path49, checkUnignored, mode) {
+      test(path51, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1734,7 +1734,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path49);
+          const matched = rule[mode].test(path51);
           if (!matched) {
             return;
           }
@@ -1755,17 +1755,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path49, originalPath, doThrow) => {
-      if (!isString(path49)) {
+    var checkPath = (path51, originalPath, doThrow) => {
+      if (!isString(path51)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path49) {
+      if (!path51) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path49)) {
+      if (checkPath.isNotRelative(path51)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1774,7 +1774,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path49) => REGEX_TEST_INVALID_PATH.test(path49);
+    var isNotRelative = (path51) => REGEX_TEST_INVALID_PATH.test(path51);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1804,19 +1804,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path49 = originalPath && checkPath.convert(originalPath);
+        const path51 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path49,
+          path51,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path49, cache, checkUnignored, slices);
+        return this._t(path51, cache, checkUnignored, slices);
       }
-      checkIgnore(path49) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path49)) {
-          return this.test(path49);
+      checkIgnore(path51) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path51)) {
+          return this.test(path51);
         }
-        const slices = path49.split(SLASH).filter(Boolean);
+        const slices = path51.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1829,18 +1829,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path49, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path51, false, MODE_CHECK_IGNORE);
       }
-      _t(path49, cache, checkUnignored, slices) {
-        if (path49 in cache) {
-          return cache[path49];
+      _t(path51, cache, checkUnignored, slices) {
+        if (path51 in cache) {
+          return cache[path51];
         }
         if (!slices) {
-          slices = path49.split(SLASH).filter(Boolean);
+          slices = path51.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path49] = this._rules.test(path49, checkUnignored, MODE_IGNORE);
+          return cache[path51] = this._rules.test(path51, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1848,29 +1848,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path49] = parent.ignored ? parent : this._rules.test(path49, checkUnignored, MODE_IGNORE);
+        return cache[path51] = parent.ignored ? parent : this._rules.test(path51, checkUnignored, MODE_IGNORE);
       }
-      ignores(path49) {
-        return this._test(path49, this._ignoreCache, false).ignored;
+      ignores(path51) {
+        return this._test(path51, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path49) => !this.ignores(path49);
+        return (path51) => !this.ignores(path51);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path49) {
-        return this._test(path49, this._testCache, true);
+      test(path51) {
+        return this._test(path51, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path49) => checkPath(path49 && checkPath.convert(path49), path49, RETURN_FALSE);
+    var isPathValid = (path51) => checkPath(path51 && checkPath.convert(path51), path51, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path49) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path49) || isNotRelative(path49);
+      checkPath.isNotRelative = (path51) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path51) || isNotRelative(path51);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10682,7 +10682,7 @@ var require_mime_types = __commonJS({
   "node_modules/mime-types/index.js"(exports2) {
     "use strict";
     var db = require_mime_db();
-    var extname9 = require("path").extname;
+    var extname10 = require("path").extname;
     var EXTRACT_TYPE_REGEXP = /^\s*([^;\s]*)(?:;|\s|$)/;
     var TEXT_TYPE_REGEXP = /^text\//i;
     exports2.charset = charset;
@@ -10732,11 +10732,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path49) {
-      if (!path49 || typeof path49 !== "string") {
+    function lookup2(path51) {
+      if (!path51 || typeof path51 !== "string") {
         return false;
       }
-      var extension2 = extname9("x." + path49).toLowerCase().substr(1);
+      var extension2 = extname10("x." + path51).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11841,11 +11841,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path49 = require("path");
+    var path51 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs40 = require("fs");
+    var fs41 = require("fs");
     var Stream = require("stream").Stream;
     var crypto8 = require("crypto");
     var mime2 = require_mime_types();
@@ -11912,12 +11912,12 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs40.stat(value.path, function(err, stat13) {
+          fs41.stat(value.path, function(err, stat14) {
             if (err) {
               callback(err);
               return;
             }
-            var fileSize = stat13.size - (value.start ? value.start : 0);
+            var fileSize = stat14.size - (value.start ? value.start : 0);
             callback(null, fileSize);
           });
         }
@@ -11969,11 +11969,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path49.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path51.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path49.basename(options.filename || value && (value.name || value.path));
+        filename = path51.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path49.basename(value.client._httpMessage.path || "");
+        filename = path51.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12886,14 +12886,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path49 = url.path;
-      if (path49.length === 0) {
+      const path51 = url.path;
+      if (path51.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path49.length === 1 && isNormalizedWindowsDriveLetter(path49[0])) {
+      if (url.scheme === "file" && path51.length === 1 && isNormalizedWindowsDriveLetter(path51[0])) {
         return;
       }
-      path49.pop();
+      path51.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -14213,7 +14213,7 @@ var require_lib2 = __commonJS({
       let accum = [];
       let accumBytes = 0;
       let abort = false;
-      return new Body.Promise(function(resolve29, reject) {
+      return new Body.Promise(function(resolve31, reject) {
         let resTimeout;
         if (_this4.timeout) {
           resTimeout = setTimeout(function() {
@@ -14247,7 +14247,7 @@ var require_lib2 = __commonJS({
           }
           clearTimeout(resTimeout);
           try {
-            resolve29(Buffer.concat(accum, accumBytes));
+            resolve31(Buffer.concat(accum, accumBytes));
           } catch (err) {
             reject(new FetchError(`Could not create Buffer from response body for ${_this4.url}: ${err.message}`, "system", err));
           }
@@ -14922,7 +14922,7 @@ var require_lib2 = __commonJS({
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
       Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve29, reject) {
+      return new fetch2.Promise(function(resolve31, reject) {
         const request = new Request(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https2 : http2).request;
@@ -15055,7 +15055,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve29(fetch2(new Request(locationURL, requestOpts)));
+                resolve31(fetch2(new Request(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -15076,7 +15076,7 @@ var require_lib2 = __commonJS({
           const codings = headers.get("Content-Encoding");
           if (!request.compress || request.method === "HEAD" || codings === null || res.statusCode === 204 || res.statusCode === 304) {
             response = new Response2(body, response_options);
-            resolve29(response);
+            resolve31(response);
             return;
           }
           const zlibOptions = {
@@ -15086,7 +15086,7 @@ var require_lib2 = __commonJS({
           if (codings == "gzip" || codings == "x-gzip") {
             body = body.pipe(zlib.createGunzip(zlibOptions));
             response = new Response2(body, response_options);
-            resolve29(response);
+            resolve31(response);
             return;
           }
           if (codings == "deflate" || codings == "x-deflate") {
@@ -15098,12 +15098,12 @@ var require_lib2 = __commonJS({
                 body = body.pipe(zlib.createInflateRaw());
               }
               response = new Response2(body, response_options);
-              resolve29(response);
+              resolve31(response);
             });
             raw.on("end", function() {
               if (!response) {
                 response = new Response2(body, response_options);
-                resolve29(response);
+                resolve31(response);
               }
             });
             return;
@@ -15111,11 +15111,11 @@ var require_lib2 = __commonJS({
           if (codings == "br" && typeof zlib.createBrotliDecompress === "function") {
             body = body.pipe(zlib.createBrotliDecompress());
             response = new Response2(body, response_options);
-            resolve29(response);
+            resolve31(response);
             return;
           }
           response = new Response2(body, response_options);
-          resolve29(response);
+          resolve31(response);
         });
         writeToStream(req, request);
       });
@@ -30755,11 +30755,11 @@ var require_Wrapper3 = __commonJS({
             var i = _h.value;
             if (!width[i])
               continue;
-            var path49 = paths[i];
+            var path51 = paths[i];
             if (style[i] === "dashed" || style[i] === "dotted") {
-              this.addBorderBroken(path49, color[i], style[i], width[i], i);
+              this.addBorderBroken(path51, color[i], style[i], width[i], i);
             } else {
-              this.addBorderSolid(path49, color[i], child);
+              this.addBorderSolid(path51, color[i], child);
             }
           }
         } catch (e_3_1) {
@@ -30772,10 +30772,10 @@ var require_Wrapper3 = __commonJS({
           }
         }
       };
-      SVGWrapper2.prototype.addBorderSolid = function(path49, color, child) {
+      SVGWrapper2.prototype.addBorderSolid = function(path51, color, child) {
         var _this = this;
         var border = this.svg("polygon", {
-          points: path49.map(function(_a2) {
+          points: path51.map(function(_a2) {
             var _b = __read(_a2, 2), x = _b[0], y = _b[1];
             return "".concat(_this.fixed(x - _this.dx), ",").concat(_this.fixed(y));
           }).join(" "),
@@ -30788,11 +30788,11 @@ var require_Wrapper3 = __commonJS({
           this.adaptor.append(this.element, border);
         }
       };
-      SVGWrapper2.prototype.addBorderBroken = function(path49, color, style, t, i) {
+      SVGWrapper2.prototype.addBorderBroken = function(path51, color, style, t, i) {
         var dot = style === "dotted";
         var t2 = t / 2;
         var _a2 = __read([[t2, -t2, -t2, -t2], [-t2, t2, -t2, -t2], [t2, t2, -t2, t2], [t2, t2, t2, -t2]][i], 4), tx1 = _a2[0], ty1 = _a2[1], tx2 = _a2[2], ty2 = _a2[3];
-        var _b = __read(path49, 2), A = _b[0], B = _b[1];
+        var _b = __read(path51, 2), A = _b[0], B = _b[1];
         var x1 = A[0] + tx1 - this.dx, y1 = A[1] + ty1;
         var x2 = B[0] + tx2 - this.dx, y2 = B[1] + ty2;
         var W = Math.abs(i % 2 ? y2 - y1 : x2 - x1);
@@ -30907,8 +30907,8 @@ var require_Wrapper3 = __commonJS({
         var C = n.toString(16).toUpperCase();
         var _b = __read(this.getVariantChar(variant, n), 4), w = _b[2], data = _b[3];
         if ("p" in data) {
-          var path49 = data.p ? "M" + data.p + "Z" : "";
-          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path49)));
+          var path51 = data.p ? "M" + data.p + "Z" : "";
+          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path51)));
         } else if ("c" in data) {
           var g = this.adaptor.append(parent, this.svg("g", { "data-c": C }));
           this.place(x, y, g);
@@ -30935,16 +30935,16 @@ var require_Wrapper3 = __commonJS({
         }
         return w;
       };
-      SVGWrapper2.prototype.charNode = function(variant, C, path49) {
+      SVGWrapper2.prototype.charNode = function(variant, C, path51) {
         var cache = this.jax.options.fontCache;
-        return cache !== "none" ? this.useNode(variant, C, path49) : this.pathNode(C, path49);
+        return cache !== "none" ? this.useNode(variant, C, path51) : this.pathNode(C, path51);
       };
-      SVGWrapper2.prototype.pathNode = function(C, path49) {
-        return this.svg("path", { "data-c": C, d: path49 });
+      SVGWrapper2.prototype.pathNode = function(C, path51) {
+        return this.svg("path", { "data-c": C, d: path51 });
       };
-      SVGWrapper2.prototype.useNode = function(variant, C, path49) {
+      SVGWrapper2.prototype.useNode = function(variant, C, path51) {
         var use = this.svg("use", { "data-c": C });
-        var id = "#" + this.jax.fontCache.cachePath(variant, C, path49);
+        var id = "#" + this.jax.fontCache.cachePath(variant, C, path51);
         this.adaptor.setAttribute(use, "href", id, svg_js_1.XLINKNS);
         return use;
       };
@@ -39972,7 +39972,7 @@ var require_menclose3 = __commonJS({
           "stroke-width": this.fixed(t)
         });
       };
-      SVGmenclose2.prototype.path = function(join37) {
+      SVGmenclose2.prototype.path = function(join38) {
         var _this = this;
         var P = [];
         for (var _i = 1; _i < arguments.length; _i++) {
@@ -39984,7 +39984,7 @@ var require_menclose3 = __commonJS({
           }).join(" "),
           style: { "stroke-width": this.fixed(this.thickness) },
           "stroke-linecap": "round",
-          "stroke-linejoin": join37,
+          "stroke-linejoin": join38,
           fill: "none"
         });
       };
@@ -46957,11 +46957,11 @@ var require_FontCache = __commonJS({
         this.nextID = 0;
         this.jax = jax;
       }
-      FontCache2.prototype.cachePath = function(variant, C, path49) {
+      FontCache2.prototype.cachePath = function(variant, C, path51) {
         var id = "MJX-" + this.localID + (this.jax.font.getVariant(variant).cacheID || "") + "-" + C;
         if (!this.cache.has(id)) {
-          this.cache.set(id, path49);
-          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path49 }));
+          this.cache.set(id, path51);
+          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path51 }));
         }
         return id;
       };
@@ -60424,9 +60424,9 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs39 = __toESM(require("node:fs"));
-var path48 = __toESM(require("node:path"));
-var vscode16 = __toESM(require("vscode"));
+var fs40 = __toESM(require("node:fs"));
+var path50 = __toESM(require("node:path"));
+var vscode17 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
 var import_node_crypto = require("node:crypto");
@@ -60570,18 +60570,18 @@ var ChangeHistoryService = class {
   }
   async captureValue(target) {
     try {
-      const stat13 = await import_node_fs2.promises.lstat(target);
-      if (stat13.isSymbolicLink()) {
+      const stat14 = await import_node_fs2.promises.lstat(target);
+      if (stat14.isSymbolicLink()) {
         const link = await import_node_fs2.promises.readlink(target);
-        return { kind: "symlink", link_target: link, mode: stat13.mode, fingerprint: hash(`symlink:${link}`) };
+        return { kind: "symlink", link_target: link, mode: stat14.mode, fingerprint: hash(`symlink:${link}`) };
       }
-      if (stat13.isDirectory()) {
+      if (stat14.isDirectory()) {
         const entries = (await import_node_fs2.promises.readdir(target)).sort();
-        return { kind: "directory", mode: stat13.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
+        return { kind: "directory", mode: stat14.mode, fingerprint: hash(`directory:${entries.join("\0")}`) };
       }
-      if (stat13.isFile()) {
+      if (stat14.isFile()) {
         const content = await import_node_fs2.promises.readFile(target);
-        return { kind: "file", content_base64: content.toString("base64"), mode: stat13.mode, fingerprint: hashBuffer(content) };
+        return { kind: "file", content_base64: content.toString("base64"), mode: stat14.mode, fingerprint: hashBuffer(content) };
       }
       return { kind: "missing", fingerprint: hash("missing") };
     } catch (err) {
@@ -60613,8 +60613,8 @@ var ChangeHistoryService = class {
     const missing = entries.filter((entry) => entry.value.kind === "missing");
     for (const { target } of missing) {
       try {
-        const stat13 = await import_node_fs2.promises.lstat(target);
-        if (!stat13.isDirectory()) await import_node_fs2.promises.unlink(target);
+        const stat14 = await import_node_fs2.promises.lstat(target);
+        if (!stat14.isDirectory()) await import_node_fs2.promises.unlink(target);
       } catch (err) {
         const code = err.code;
         if (code !== "ENOENT") throw err;
@@ -61615,8 +61615,8 @@ async function validateTemplateAndParent(templateId, parentPath, extensionDir) {
   const errors = [];
   const resolvedParent = path7.resolve(parentPath || "");
   try {
-    const stat13 = await import_node_fs7.promises.stat(resolvedParent);
-    if (!stat13.isDirectory()) errors.push("Selected parent location is not a directory.");
+    const stat14 = await import_node_fs7.promises.stat(resolvedParent);
+    if (!stat14.isDirectory()) errors.push("Selected parent location is not a directory.");
     else await import_node_fs7.promises.access(resolvedParent, import_node_fs7.constants.W_OK);
   } catch (err) {
     errors.push(`Parent location is not writable: ${err.message}`);
@@ -61660,9 +61660,9 @@ async function preflightCreateProject(draft, extensionDir) {
   let targetExists = false;
   let targetEmpty = false;
   try {
-    const stat13 = await import_node_fs7.promises.lstat(rootPath);
+    const stat14 = await import_node_fs7.promises.lstat(rootPath);
     targetExists = true;
-    if (!stat13.isDirectory()) errors.push("A non-directory item already exists at the project path.");
+    if (!stat14.isDirectory()) errors.push("A non-directory item already exists at the project path.");
     else {
       const entries = await import_node_fs7.promises.readdir(rootPath);
       targetEmpty = entries.length === 0;
@@ -61697,7 +61697,7 @@ var path9 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path49, callback = (err) => {
+function openExplorer(path51, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -61714,8 +61714,8 @@ function openExplorer(path49, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path49 = path49 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands8[platform3], [path49]);
+  path51 = path51 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands8[platform3], [path51]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -61800,26 +61800,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path49) {
+  function parse_path(path51) {
     if (platform3 == "win32") {
-      path49 = RegReplace(path49, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path51 = RegReplace(path51, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path49 = RegReplace(path49, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path51 = RegReplace(path51, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path49 = path49.replace(/\//g, "\\");
+      path51 = path51.replace(/\//g, "\\");
     }
-    return path49;
+    return path51;
   }
   if (platform3 == "win32") {
-    let path49 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path49 ? parse_path(path49) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path51 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path51 ? parse_path(path51) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path49 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path49 ? parse_path(path49) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path51 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path51 ? parse_path(path51) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path49 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path49 ? parse_path(path49) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path51 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path51 ? parse_path(path51) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -63446,8 +63446,8 @@ var snippetOutput;
 function isLatexLikeDocument(document2) {
   return ["latex", "tex", "markdown"].includes(document2.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path49) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path49);
+function getStringArrayConfiguration(path51) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path51);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -64899,8 +64899,8 @@ async function loadRecipeCatalog(rootDir) {
 async function generateVscodeSettingsIfMissing(rootDir) {
   const settingsPath = path12.join(rootDir, ".vscode", "settings.json");
   try {
-    const stat13 = await import_node_fs11.promises.stat(settingsPath);
-    if (stat13.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
+    const stat14 = await import_node_fs11.promises.stat(settingsPath);
+    if (stat14.isDirectory()) throw new Error(".vscode/settings.json is a directory.");
     return { generated: false, generated_path: ".vscode/settings.json", message: ".vscode/settings.json already exists; left unchanged." };
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
@@ -65035,9 +65035,9 @@ var CleanupService = class {
       for (const abs of files) {
         const relToScope = safeWorkspaceRel(scopeAbs, abs) || path13.basename(abs);
         const workspaceRelative = workspaceRel(this.rootDir, abs);
-        const basename23 = path13.basename(abs);
-        if (!patterns.some((pattern) => matchesGlob(relToScope, basename23, pattern))) continue;
-        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename23, pattern))) {
+        const basename24 = path13.basename(abs);
+        if (!patterns.some((pattern) => matchesGlob(relToScope, basename24, pattern))) continue;
+        if (protectedPatterns.some((pattern) => matchesGlob(relToScope, basename24, pattern))) {
           skipped.push(workspaceRelative);
           continue;
         }
@@ -65342,7 +65342,7 @@ var CompileService = class {
     logs.push("");
   }
   async runCommand(command, args, cwd) {
-    return new Promise((resolve29) => {
+    return new Promise((resolve31) => {
       const child = (0, import_node_child_process.spawn)(command, [...args], {
         cwd,
         env: { ...process.env, TEXINPUTS: `.:${this.rootDir}//:${process.env.TEXINPUTS ?? ""}`, BIBINPUTS: `.:${this.rootDir}//:${process.env.BIBINPUTS ?? ""}` }
@@ -65361,12 +65361,12 @@ var CompileService = class {
       });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolve29({ code: 127, output: `${output}
+        resolve31({ code: 127, output: `${output}
 ${err.message}` });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolve29({ code: code ?? 1, output });
+        resolve31({ code: code ?? 1, output });
       });
     });
   }
@@ -66765,8 +66765,8 @@ var TemplateService = class {
     await assertWorkspacePathSafe(this.rootDir, targetAbs);
     const existed = await exists(targetAbs);
     if (existed) {
-      const stat13 = await import_node_fs17.promises.stat(targetAbs);
-      if (stat13.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
+      const stat14 = await import_node_fs17.promises.stat(targetAbs);
+      if (stat14.isDirectory()) throw new Error(`Output target is a directory: ${normalizedTarget}`);
       if (!overwrite) throw new Error(`Output target already exists: ${normalizedTarget}. Set overwrite=true to replace it.`);
     }
     const source = await this.stateService.templateSourcePath(template.filename);
@@ -68877,15 +68877,15 @@ async function assertNoSymlinkPath(root, relativePath) {
   let current = absoluteRoot;
   for (const segment of normalized.split("/")) {
     current = path22.join(current, segment);
-    const stat13 = await fs18.lstat(current).catch((error) => {
+    const stat14 = await fs18.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (!stat13) break;
-    if (stat13.isSymbolicLink()) {
+    if (!stat14) break;
+    if (stat14.isSymbolicLink()) {
       throw new Error(`Refusing to access symlinked mirror path: ${relativePath}`);
     }
-    if (!stat13.isDirectory() && current !== path22.join(absoluteRoot, ...normalized.split("/"))) {
+    if (!stat14.isDirectory() && current !== path22.join(absoluteRoot, ...normalized.split("/"))) {
       throw new Error(`Mirror path component is not a directory: ${relativePath}`);
     }
   }
@@ -68898,11 +68898,11 @@ async function assertNoSymlinkAbsolutePath(root, candidate) {
   let current = absoluteRoot;
   for (const segment of relative10 ? relative10.split(path22.sep) : []) {
     current = path22.join(current, segment);
-    const stat13 = await fs18.lstat(current).catch((error) => {
+    const stat14 = await fs18.lstat(current).catch((error) => {
       if (error.code === "ENOENT") return void 0;
       throw error;
     });
-    if (stat13?.isSymbolicLink()) throw new Error(`Refusing to access symlinked path: ${candidate}`);
+    if (stat14?.isSymbolicLink()) throw new Error(`Refusing to access symlinked path: ${candidate}`);
   }
   return absoluteCandidate;
 }
@@ -68944,7 +68944,7 @@ function processAlive(pid) {
   }
 }
 function sleep(ms) {
-  return new Promise((resolve29) => setTimeout(resolve29, ms));
+  return new Promise((resolve31) => setTimeout(resolve31, ms));
 }
 var TRANSIENT_FS_ERROR_CODES = /* @__PURE__ */ new Set([
   "EIO",
@@ -69686,11 +69686,11 @@ async function shortLockIsStale(record, lockAgeMs2, foreignStaleMs, self = curre
   }
   return lockAgeMs2 >= foreignStaleMs;
 }
-function lockAgeMs(createdAt, stat13, now = Date.now()) {
+function lockAgeMs(createdAt, stat14, now = Date.now()) {
   const created = typeof createdAt === "number" ? createdAt : Date.parse(createdAt ?? "");
   const ages = [
     ...Number.isFinite(created) ? [now - created] : [],
-    ...stat13 ? [now - stat13.mtimeMs] : []
+    ...stat14 ? [now - stat14.mtimeMs] : []
   ];
   return ages.length ? Math.max(0, Math.min(...ages)) : 0;
 }
@@ -69814,13 +69814,13 @@ async function acquireCompileLock(outputRoot, options = {}) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for the Overleaf compile lock: ${lock}`);
       }
-      await new Promise((resolve29) => setTimeout(resolve29, 50));
+      await new Promise((resolve31) => setTimeout(resolve31, 50));
     }
   }
 }
 async function lockAge(lock) {
-  const stat13 = await fs20.stat(lock).catch(() => void 0);
-  return stat13 ? Math.max(0, Date.now() - stat13.mtimeMs) : Number.POSITIVE_INFINITY;
+  const stat14 = await fs20.stat(lock).catch(() => void 0);
+  return stat14 ? Math.max(0, Date.now() - stat14.mtimeMs) : Number.POSITIVE_INFINITY;
 }
 async function latestRemotePdf(root) {
   const outputRoot = metadataPath(root, OUTPUT_DIR);
@@ -69990,7 +69990,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
   let nextIndex = 0;
   let reservedBytes = 0;
   const waiters = [];
-  const wake = () => waiters.splice(0).forEach((resolve29) => resolve29());
+  const wake = () => waiters.splice(0).forEach((resolve31) => resolve31());
   const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
     while (nextIndex < items.length) {
       const item = items[nextIndex++];
@@ -70002,7 +70002,7 @@ async function mapWithDynamicByteConcurrency(items, concurrency, maxBytes, handl
           didReserve = true;
           amount = Number.isFinite(bytes) && bytes >= 0 ? Math.max(1, Math.min(bytes, maxBytes)) : maxBytes;
           while (reservedBytes + amount > maxBytes && reservedBytes > 0) {
-            await new Promise((resolve29) => waiters.push(resolve29));
+            await new Promise((resolve31) => waiters.push(resolve31));
           }
           reservedBytes += amount;
         }
@@ -70284,8 +70284,8 @@ async function acquireSharedStateLock() {
       const holder = await readSharedStateLockMetadata(metadataPath2);
       const relation = holder ? hostRelation(holder) : void 0;
       if (holder && !deadlineExtended && (relation === "foreign" || relation === "rebooted")) {
-        const stat13 = await fs21.stat(lockPath).catch(() => void 0);
-        deadline = Date.now() + Math.max(0, SHARED_STATE_FOREIGN_STALE_MS - lockAgeMs(holder.createdAt, stat13)) + 1e3;
+        const stat14 = await fs21.stat(lockPath).catch(() => void 0);
+        deadline = Date.now() + Math.max(0, SHARED_STATE_FOREIGN_STALE_MS - lockAgeMs(holder.createdAt, stat14)) + 1e3;
         deadlineExtended = true;
         continue;
       }
@@ -70313,8 +70313,8 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs21.stat(guardPath).catch(() => void 0);
-  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
+  const stat14 = await fs21.stat(guardPath).catch(() => void 0);
+  if (!stat14 || Date.now() - stat14.mtimeMs < staleMs) return false;
   await fs21.rm(guardPath, { recursive: true, force: true });
   try {
     await fs21.mkdir(guardPath, { mode: 448 });
@@ -70326,9 +70326,9 @@ async function acquireReclaimGuard(guardPath, staleMs = SHARED_STATE_LOCK_TIMEOU
 }
 async function sharedStateLockIsStale(lockPath, metadataPath2) {
   const metadata = await readSharedStateLockMetadata(metadataPath2);
-  const stat13 = await fs21.stat(lockPath).catch(() => void 0);
-  if (metadata) return shortLockIsStale(metadata, lockAgeMs(metadata.createdAt, stat13), SHARED_STATE_FOREIGN_STALE_MS);
-  return Boolean(stat13 && Date.now() - stat13.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
+  const stat14 = await fs21.stat(lockPath).catch(() => void 0);
+  if (metadata) return shortLockIsStale(metadata, lockAgeMs(metadata.createdAt, stat14), SHARED_STATE_FOREIGN_STALE_MS);
+  return Boolean(stat14 && Date.now() - stat14.mtimeMs >= SHARED_STATE_STALE_GRACE_MS);
 }
 async function readSharedStateLockMetadata(target) {
   const raw = await readTextFileBounded(target, 64 * 1024).catch(() => void 0);
@@ -70341,7 +70341,7 @@ async function readSharedStateLockMetadata(target) {
   }
 }
 function delay(ms) {
-  return new Promise((resolve29) => setTimeout(resolve29, ms));
+  return new Promise((resolve31) => setTimeout(resolve31, ms));
 }
 function isMirrorRecord(value) {
   if (!value || typeof value !== "object") return false;
@@ -70817,13 +70817,13 @@ async function scanLocalProject(root, manifest) {
         childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat13 = await runFs(() => fs22.stat(absPath).catch(() => void 0));
-        if (stat13) {
+        const stat14 = await runFs(() => fs22.stat(absPath).catch(() => void 0));
+        if (stat14) {
           fileMetadata.set(relPath, {
-            size: stat13.size,
-            mtimeMs: stat13.mtimeMs,
-            ctimeMs: stat13.ctimeMs,
-            inode: Number(stat13.ino)
+            size: stat14.size,
+            mtimeMs: stat14.mtimeMs,
+            ctimeMs: stat14.ctimeMs,
+            inode: Number(stat14.ino)
           });
         }
       }
@@ -70841,8 +70841,8 @@ function createFsLimiter(concurrency) {
     }
   };
   return function run(task) {
-    return new Promise((resolve29, reject) => {
-      pending.push(() => task().then(resolve29, reject).finally(() => {
+    return new Promise((resolve31, reject) => {
+      pending.push(() => task().then(resolve31, reject).finally(() => {
         active -= 1;
         pump();
       }));
@@ -70865,11 +70865,11 @@ function buildTrackedOrParentPathIndex(manifest) {
 async function fileHash(filePath) {
   try {
     const hash2 = (0, import_fs5.createReadStream)(filePath);
-    const digest = await new Promise((resolve29, reject) => {
+    const digest = await new Promise((resolve31, reject) => {
       const state = (0, import_crypto2.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
-      hash2.on("end", () => resolve29(state.digest("hex")));
+      hash2.on("end", () => resolve31(state.digest("hex")));
     });
     return digest;
   } catch {
@@ -70877,14 +70877,14 @@ async function fileHash(filePath) {
   }
 }
 async function cachedLocalFileHash(filePath, manifestFile, force = false, knownMetadata) {
-  const stat13 = knownMetadata ? {
+  const stat14 = knownMetadata ? {
     isFile: () => true,
     size: knownMetadata.size,
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
   } : await fs22.stat(filePath).catch(() => void 0);
-  if (!stat13?.isFile()) {
+  if (!stat14?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
       delete manifestFile.localHashCache;
@@ -70896,17 +70896,17 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     }
     return { hash: void 0, cacheChanged: false, reused: false };
   }
-  const inode = Number(stat13.ino);
-  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat13.size && manifestFile.localMtimeMs === stat13.mtimeMs && manifestFile.localCtimeMs === stat13.ctimeMs && manifestFile.localInode === inode) {
+  const inode = Number(stat14.ino);
+  if (!force && manifestFile?.localHashCache !== void 0 && manifestFile.localSize === stat14.size && manifestFile.localMtimeMs === stat14.mtimeMs && manifestFile.localCtimeMs === stat14.ctimeMs && manifestFile.localInode === inode) {
     return { hash: manifestFile.localHashCache, cacheChanged: false, reused: true };
   }
   const hash2 = await fileHash(filePath);
   if (!manifestFile) return { hash: hash2, cacheChanged: false, reused: false };
-  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat13.size || manifestFile.localMtimeMs !== stat13.mtimeMs || manifestFile.localCtimeMs !== stat13.ctimeMs || manifestFile.localInode !== inode;
+  const cacheChanged = manifestFile.localHashCache !== hash2 || manifestFile.localSize !== stat14.size || manifestFile.localMtimeMs !== stat14.mtimeMs || manifestFile.localCtimeMs !== stat14.ctimeMs || manifestFile.localInode !== inode;
   manifestFile.localHashCache = hash2;
-  manifestFile.localSize = stat13.size;
-  manifestFile.localMtimeMs = stat13.mtimeMs;
-  manifestFile.localCtimeMs = stat13.ctimeMs;
+  manifestFile.localSize = stat14.size;
+  manifestFile.localMtimeMs = stat14.mtimeMs;
+  manifestFile.localCtimeMs = stat14.ctimeMs;
   manifestFile.localInode = inode;
   return { hash: hash2, cacheChanged, reused: false };
 }
@@ -71191,7 +71191,7 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
   const metadataRoot = metadataPath(root);
   const ignoreFile = path29.join(root, LOCAL_IGNORE_NAME);
   const metadataExisted = await exists4(metadataRoot);
-  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat13) => stat13.size, () => void 0);
+  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat14) => stat14.size, () => void 0);
   const projectId = await client.createProject(projectName);
   let manifestWritten = false;
   let keptFiles = [];
@@ -71745,21 +71745,21 @@ var fs25 = __toESM(require("fs/promises"));
 var path31 = __toESM(require("path"));
 var import_crypto4 = require("crypto");
 async function hashFileDigests(filePath) {
-  const stat13 = await fs25.stat(filePath);
-  if (!stat13.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
+  const stat14 = await fs25.stat(filePath);
+  if (!stat14.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
   const sha12 = (0, import_crypto3.createHash)("sha1");
   const git = (0, import_crypto3.createHash)("sha1");
-  git.update(`blob ${stat13.size}\0`);
-  await new Promise((resolve29, reject) => {
+  git.update(`blob ${stat14.size}\0`);
+  await new Promise((resolve31, reject) => {
     const input = (0, import_fs6.createReadStream)(filePath);
     input.on("data", (chunk) => {
       sha12.update(chunk);
       git.update(chunk);
     });
     input.on("error", reject);
-    input.on("end", resolve29);
+    input.on("end", resolve31);
   });
-  return { size: stat13.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
+  return { size: stat14.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
 }
 async function installStagedFile(stagedPath, targetPath) {
   const token = `${process.pid}-${Date.now()}-${(0, import_crypto4.randomBytes)(4).toString("hex")}`;
@@ -71952,13 +71952,13 @@ var OverleafClient = class {
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadFileFromPath(projectId, parentFolderId, filename, sourcePath) {
-    const stat13 = await fs26.stat(sourcePath);
-    if (!stat13.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
+    const stat14 = await fs26.stat(sourcePath);
+    if (!stat14.isFile()) throw new Error(`Upload source is not a file: ${sourcePath}`);
     const form = new import_form_data.default();
     form.append("targetFolderId", parentFolderId);
     form.append("name", filename);
     form.append("type", mime.lookup(filename) || "application/octet-stream");
-    form.append("qqfile", (0, import_fs7.createReadStream)(sourcePath), { filename, knownLength: stat13.size });
+    form.append("qqfile", (0, import_fs7.createReadStream)(sourcePath), { filename, knownLength: stat14.size });
     return this.uploadForm(projectId, parentFolderId, filename, form);
   }
   async uploadForm(projectId, parentFolderId, filename, form) {
@@ -72382,7 +72382,7 @@ var OverleafSocketSession = class {
   }
   waitForConnect(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.connectMs;
-    return new Promise((resolve29, reject) => {
+    return new Promise((resolve31, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -72395,7 +72395,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve29();
+        error ? reject(error) : resolve31();
       };
       const onConnect = () => finish();
       const onFailed = () => finish(new Error("Failed to connect to Overleaf realtime server."));
@@ -72410,7 +72410,7 @@ var OverleafSocketSession = class {
     });
   }
   async joinProject(projectId, signal) {
-    return new Promise((resolve29, reject) => {
+    return new Promise((resolve31, reject) => {
       let settled = false;
       const onRejected = (error) => finish(new Error(error?.message || "Overleaf rejected the realtime connection."));
       const cleanup = () => this.socket.removeListener("connectionRejected", onRejected);
@@ -72418,7 +72418,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve29(project);
+        error ? reject(error) : resolve31(project);
       };
       this.socket.once("connectionRejected", onRejected);
       void this.emitAck("joinProject", this.timeouts.projectJoinMs, signal, { project_id: projectId }).then((values) => {
@@ -72429,7 +72429,7 @@ var OverleafSocketSession = class {
   }
   waitForJoinProjectResponse(signal, timeoutMs) {
     const ms = timeoutMs ?? this.timeouts.projectJoinMs;
-    return new Promise((resolve29, reject) => {
+    return new Promise((resolve31, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -72441,7 +72441,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve29(project);
+        error ? reject(error) : resolve31(project);
       };
       const onResponse = (result) => {
         this.publicId = result.publicId;
@@ -72499,7 +72499,7 @@ var OverleafSocketSession = class {
     this.socket.disconnect();
   }
   emitAck(event, timeoutMs, signal, ...args) {
-    return new Promise((resolve29, reject) => {
+    return new Promise((resolve31, reject) => {
       let settled = false;
       const cleanup = () => {
         clearTimeout(timer);
@@ -72509,7 +72509,7 @@ var OverleafSocketSession = class {
         if (settled) return;
         settled = true;
         cleanup();
-        error ? reject(error) : resolve29(values ?? []);
+        error ? reject(error) : resolve31(values ?? []);
       };
       const onAbort = () => finish(abortError(signal));
       const timer = setTimeout(() => finish(new Error(`Timed out waiting for ${event} acknowledgement.`)), timeoutMs);
@@ -72802,7 +72802,7 @@ async function requestSocketHandshake(url, options) {
       if (attempt + 1 >= attempts || !isRetryableSocketHandshakeError(error)) {
         throw error;
       }
-      await new Promise((resolve29) => setTimeout(resolve29, 250 * 2 ** attempt));
+      await new Promise((resolve31) => setTimeout(resolve31, 250 * 2 ** attempt));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(formatUnknownError(lastError));
@@ -72834,7 +72834,7 @@ function mergeCookieHeader(cookieHeader, setCookies) {
   return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 function requestSocketHandshakeOnce(url, options) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const transport = url.protocol === "http:" ? http : https;
     const request = transport.request(url, {
       method: "GET",
@@ -72862,7 +72862,7 @@ function requestSocketHandshakeOnce(url, options) {
             const parts = parseSocketHandshakeBody(body);
             settled = true;
             const setCookieHeader = response.headers["set-cookie"];
-            resolve29({
+            resolve31({
               parts,
               setCookies: Array.isArray(setCookieHeader) ? setCookieHeader : setCookieHeader ? [setCookieHeader] : []
             });
@@ -73056,12 +73056,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path49, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path49);
+  setPath(path51, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path51);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path49) {
-    this.paths.delete(toPosixPath2(path49));
+  clearPath(path51) {
+    this.paths.delete(toPosixPath2(path51));
   }
   clearPaths() {
     this.paths.clear();
@@ -73073,23 +73073,23 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path49 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path49, { ...entry, path: path49 });
+      const path51 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path51, { ...entry, path: path51 });
     }
   }
-  canSync(path49) {
+  canSync(path51) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path49) === void 0;
+    return this.findBlocking(path51) === void 0;
   }
   /**
    * True when `path` is held up only by a reconnect or an in-flight check, with nothing
    * path-specific against it. Such work is worth retrying once the gate reopens.
    */
-  isTransientlyBlocked(path49) {
-    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path49) === void 0;
+  isTransientlyBlocked(path51) {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path51) === void 0;
   }
-  findBlocking(path49) {
-    const normalized = toPosixPath2(path49);
+  findBlocking(path51) {
+    const normalized = toPosixPath2(path51);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -73623,13 +73623,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path49) {
-    const normalized = toPosixPath2(path49);
+  forget(path51) {
+    const normalized = toPosixPath2(path51);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path49) {
-    const normalized = toPosixPath2(path49);
+  forgetSubtree(path51) {
+    const normalized = toPosixPath2(path51);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -73668,8 +73668,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path49, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path49);
+      for (const [path51, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path51);
       }
     }
   }
@@ -73698,13 +73698,13 @@ var SyncCheckScheduler = class {
       this.active = true;
       return this.runBatch(request).finally(() => this.pump());
     }
-    return new Promise((resolve29, reject) => {
+    return new Promise((resolve31, reject) => {
       if (!this.pending) {
         this.pending = { request: normalizeRequest(request), waiters: [] };
       } else {
         this.pending.request = mergeRequests(this.pending.request, request);
       }
-      this.pending.waiters.push({ resolve: resolve29, reject });
+      this.pending.waiters.push({ resolve: resolve31, reject });
     });
   }
   schedule(request, delayMs) {
@@ -73953,22 +73953,22 @@ async function executeSyncCommand(backend, command, args = {}) {
       return backend.syncOnce();
     case "push":
     case "pull": {
-      const path49 = requiredPath(args.path);
+      const path51 = requiredPath(args.path);
       const force = Boolean(args.force);
-      await backend.authorize?.(command, path49, force);
-      await backend[command](path49, force);
+      await backend.authorize?.(command, path51, force);
+      await backend[command](path51, force);
       return backend.status({
         refresh: true,
         full: false,
-        paths: [path49],
+        paths: [path51],
         reason: `post-${command}`
       });
     }
     case "conflicts-list":
       return backend.conflicts();
     case "conflicts-resolve": {
-      const path49 = requiredPath(args.path);
-      await backend.resolveConflict(path49, args.use === "remote" ? "remote" : "local");
+      const path51 = requiredPath(args.path);
+      await backend.resolveConflict(path51, args.use === "remote" ? "remote" : "local");
       return backend.conflicts();
     }
     default:
@@ -74981,7 +74981,7 @@ var RealtimeSyncService = class {
     const remoteUri = vscode10.Uri.file(state.conflictPath);
     const localUri = vscode10.Uri.file(this.abs(normalized));
     const basePath = await assertNoSymlinkAbsolutePath(this.root, baseDocPath(this.root, state.docId));
-    const baseExists = await fs33.lstat(basePath).then((stat13) => stat13.isFile(), () => false);
+    const baseExists = await fs33.lstat(basePath).then((stat14) => stat14.isFile(), () => false);
     if (baseExists) {
       const baseUri = vscode10.Uri.file(basePath);
       await vscode10.commands.executeCommand(
@@ -75366,13 +75366,13 @@ var RealtimeSyncService = class {
     const observedAt = Date.now();
     const safePath = await assertNoSymlinkPath(this.root, relPath).catch(() => void 0);
     if (!safePath) return;
-    const stat13 = await fs33.stat(safePath).catch(() => void 0);
-    if (!stat13) return;
+    const stat14 = await fs33.stat(safePath).catch(() => void 0);
+    if (!stat14) return;
     if (this.hasPendingFolderRenameAncestor(relPath)) {
       this.scheduleLocalChange(relPath, "create", 1e3);
       return;
     }
-    if (stat13.isDirectory()) {
+    if (stat14.isDirectory()) {
       this.pendingFolderRenameRoots.add(relPath);
       const detection2 = this.renameDetector.registerCreate({
         path: relPath,
@@ -75933,12 +75933,12 @@ var RealtimeSyncService = class {
       return;
     }
     const absPath = await assertNoSymlinkPath(this.root, relPath);
-    const stat13 = await fs33.stat(absPath).catch(() => void 0);
-    if (!stat13) {
+    const stat14 = await fs33.stat(absPath).catch(() => void 0);
+    if (!stat14) {
       await this.handleLocalDelete(relPath);
       return;
     }
-    if (stat13.isDirectory()) {
+    if (stat14.isDirectory()) {
       await this.handleLocalFolderCreate(relPath);
       return;
     }
@@ -76524,7 +76524,7 @@ var RealtimeSyncService = class {
     if (!file || file.entityType !== "doc") {
       throw new Error(`${relPath} is not an Overleaf document.`);
     }
-    const join37 = (async () => {
+    const join38 = (async () => {
       const joined = await this.session.joinDoc(file.entityId);
       const state = {
         relPath,
@@ -76540,9 +76540,9 @@ var RealtimeSyncService = class {
       this.manifest.files[relPath].version = joined.version;
       return state;
     })();
-    this.pendingDocJoins.set(relPath, join37);
+    this.pendingDocJoins.set(relPath, join38);
     try {
-      return await join37;
+      return await join38;
     } finally {
       this.pendingDocJoins.delete(relPath);
     }
@@ -76577,7 +76577,7 @@ var RealtimeSyncService = class {
       } catch {
         snapshotPath = "";
       }
-      const snapshotExists = Boolean(snapshotPath) && await fs33.lstat(snapshotPath).then((stat13) => stat13.isFile(), () => false);
+      const snapshotExists = Boolean(snapshotPath) && await fs33.lstat(snapshotPath).then((stat14) => stat14.isFile(), () => false);
       if (!state || state.docId !== conflict.docId || !snapshotExists) {
         await this.conflictStore?.remove(normalized);
         continue;
@@ -77291,7 +77291,7 @@ async function restrictToOwner(target) {
   }
 }
 function runCommand(command, args, stdin, timeoutMs) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const child = (0, import_child_process4.spawn)(command, args, { stdio: ["pipe", "pipe", "pipe"] });
     const stdout = [];
     const stderr = [];
@@ -77317,7 +77317,7 @@ function runCommand(command, args, stdin, timeoutMs) {
       if (settled) return;
       settled = true;
       const output = Buffer.concat(stdout).toString("utf8").trim();
-      if (code === 0) resolve29(output);
+      if (code === 0) resolve31(output);
       else {
         const errorText = Buffer.concat(stderr).toString("utf8").trim();
         const error = new Error(errorText || `${command} exited with code ${code}.`);
@@ -77332,7 +77332,7 @@ function runCommand(command, args, stdin, timeoutMs) {
   });
 }
 function withTimeout(promise, timeoutMs, message) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const timer = setTimeout(() => {
       const error = new Error(message);
       error.code = "ETIMEDOUT";
@@ -77341,7 +77341,7 @@ function withTimeout(promise, timeoutMs, message) {
     promise.then(
       (value) => {
         clearTimeout(timer);
-        resolve29(value);
+        resolve31(value);
       },
       (error) => {
         clearTimeout(timer);
@@ -77388,8 +77388,8 @@ function findExecutable(command) {
   for (const entry of entries) {
     const candidate = path39.join(entry, command);
     try {
-      const stat13 = require("fs").statSync(candidate);
-      if (stat13.isFile() && (stat13.mode & 73) !== 0) return candidate;
+      const stat14 = require("fs").statSync(candidate);
+      if (stat14.isFile() && (stat14.mode & 73) !== 0) return candidate;
     } catch {
     }
   }
@@ -77710,7 +77710,7 @@ var SyncOwnerCoordinator = class {
     }
     this.subscriberSockets.add(socket);
     socket.once("close", () => this.subscriberSockets.delete(socket));
-    const subscribed = new Promise((resolve29, reject) => {
+    const subscribed = new Promise((resolve31, reject) => {
       const timer = setTimeout(
         () => finish(new Error(`Timed out waiting for sync owner subscription after ${timeoutMs}ms.`)),
         timeoutMs
@@ -77722,7 +77722,7 @@ var SyncOwnerCoordinator = class {
         clearTimeout(timer);
         socket.off("error", onError);
         socket.off("close", onClose);
-        error ? reject(error) : resolve29();
+        error ? reject(error) : resolve31();
       };
       const onError = (error) => finish(error);
       const onClose = () => finish(new Error("Sync owner closed the socket before confirming the subscription."));
@@ -77767,7 +77767,7 @@ var SyncOwnerCoordinator = class {
     if (this.server) {
       const server = this.server;
       this.server = void 0;
-      await new Promise((resolve29) => server.close(() => resolve29()));
+      await new Promise((resolve31) => server.close(() => resolve31()));
     }
     if (this.metadata && lease) {
       LIVE_OWNER_NONCES.delete(this.metadata.nonce);
@@ -77898,7 +77898,7 @@ var SyncOwnerCoordinator = class {
       this.lease = { paths, nonce: metadata.nonce, seq: 0, renewedMono, renewedWall, failures: 0, lockMissing: 0 };
       this.scheduleTick(this.heartbeatMs);
     } catch (error) {
-      if (server?.listening) await new Promise((resolve29) => server.close(() => resolve29()));
+      if (server?.listening) await new Promise((resolve31) => server.close(() => resolve31()));
       const current = await readJsonFile(paths.metadataPath).catch(() => void 0);
       if (!current || current.status !== "ok" || current.value.nonce === metadata.nonce) {
         await retireLockDirectory(paths.lockPath).catch(() => void 0);
@@ -78028,7 +78028,7 @@ var SyncOwnerCoordinator = class {
       for (const socket of this.clientSockets) socket.destroy();
       this.clientSockets.clear();
       this.eventSockets.clear();
-      if (server) await new Promise((resolve29) => server.close(() => resolve29()));
+      if (server) await new Promise((resolve31) => server.close(() => resolve31()));
       if (reason === "takeover-requested" && this.leaseElapsedMs(lease) < this.leaseMs - this.fenceMarginMs) {
         const current = await withTimeout2(readJsonFile(lease.paths.metadataPath), this.ioTimeoutMs, "owner record read").catch(() => void 0);
         if (current?.status === "ok" && current.value.nonce === metadata.nonce) {
@@ -78275,14 +78275,14 @@ async function tryCreateDirectory(target) {
 async function ensurePrivateDirectory(directory) {
   try {
     await fs35.mkdir(directory, { recursive: true, mode: 448 });
-    let stat13 = await fs35.lstat(directory);
-    if (!stat13.isDirectory() || stat13.isSymbolicLink()) return false;
+    let stat14 = await fs35.lstat(directory);
+    if (!stat14.isDirectory() || stat14.isSymbolicLink()) return false;
     const uid = process.getuid?.();
-    if (uid !== void 0 && stat13.uid !== uid) return false;
-    if ((stat13.mode & 63) !== 0) {
+    if (uid !== void 0 && stat14.uid !== uid) return false;
+    if ((stat14.mode & 63) !== 0) {
       await fs35.chmod(directory, 448);
-      stat13 = await fs35.lstat(directory);
-      if ((stat13.mode & 63) !== 0) return false;
+      stat14 = await fs35.lstat(directory);
+      if ((stat14.mode & 63) !== 0) return false;
     }
     return true;
   } catch {
@@ -78290,11 +78290,11 @@ async function ensurePrivateDirectory(directory) {
   }
 }
 function listen(server, socketPath) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     server.once("error", reject);
     server.listen(socketPath, () => {
       server.removeListener("error", reject);
-      resolve29();
+      resolve31();
     });
   });
 }
@@ -78313,12 +78313,12 @@ async function readJsonFile(target) {
   }
 }
 function withTimeout2(operation, timeoutMs, message) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const timer = setTimeout(() => reject(Object.assign(new Error(message), { code: "ETIMEDOUT" })), timeoutMs);
     operation.then(
       (value) => {
         clearTimeout(timer);
-        resolve29(value);
+        resolve31(value);
       },
       (error) => {
         clearTimeout(timer);
@@ -78346,7 +78346,7 @@ function isTakeoverRecord(value) {
   return record.version === 1 && typeof record.targetNonce === "string" && typeof record.requestedAt === "string" && Boolean(record.requester) && typeof record.requester?.token === "string" && typeof record.requester?.hostname === "string" && typeof record.requester?.pid === "number";
 }
 function sendRequest(socketPath, request, timeoutMs) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const socket = net.createConnection(socketPath);
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
@@ -78355,7 +78355,7 @@ function sendRequest(socketPath, request, timeoutMs) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      error ? reject(error) : resolve29(result);
+      error ? reject(error) : resolve31(result);
     };
     socket.once("error", (error) => finish(error));
     socket.once("connect", () => void writeMessageBounded(socket, request).catch((error) => finish(error)));
@@ -78460,7 +78460,7 @@ function writeFrame(socket, line) {
     socket.destroy(new Error("Sync IPC send queue exceeded its limit."));
     return Promise.reject(new Error("Sync IPC send queue exceeded its limit."));
   }
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     let settled = false;
     const finish = (error) => {
       if (settled) return;
@@ -78468,7 +78468,7 @@ function writeFrame(socket, line) {
       socket.off("drain", onDrain);
       socket.off("error", onError);
       socket.off("close", onClose);
-      error ? reject(error) : resolve29();
+      error ? reject(error) : resolve31();
     };
     const onDrain = () => finish();
     const onError = (error) => finish(error);
@@ -78496,7 +78496,7 @@ function isIpcChunk(value) {
   return Boolean(value) && typeof value === "object" && value.version === 1 && value.kind === "chunk" && typeof value.id === "string" && Number.isInteger(value.index) && Number.isInteger(value.total) && typeof value.payload === "string";
 }
 function onceConnected(socket, timeoutMs) {
-  return new Promise((resolve29, reject) => {
+  return new Promise((resolve31, reject) => {
     const timer = setTimeout(() => finish(new Error(`Timed out connecting to sync owner after ${timeoutMs}ms.`)), timeoutMs);
     let settled = false;
     const finish = (error) => {
@@ -78505,7 +78505,7 @@ function onceConnected(socket, timeoutMs) {
       clearTimeout(timer);
       socket.off("connect", onConnect);
       socket.off("error", onError);
-      error ? reject(error) : resolve29();
+      error ? reject(error) : resolve31();
     };
     const onConnect = () => finish();
     const onError = (error) => finish(error);
@@ -78514,7 +78514,7 @@ function onceConnected(socket, timeoutMs) {
   });
 }
 function canConnect(socketPath, timeoutMs = 500) {
-  return new Promise((resolve29) => {
+  return new Promise((resolve31) => {
     const socket = net.createConnection(socketPath);
     let settled = false;
     const timer = setTimeout(() => finish(false), timeoutMs);
@@ -78523,14 +78523,14 @@ function canConnect(socketPath, timeoutMs = 500) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve29(value);
+      resolve31(value);
     };
     socket.once("connect", () => finish(true));
     socket.once("error", () => finish(false));
   });
 }
 function delay2(ms) {
-  return new Promise((resolve29) => setTimeout(resolve29, ms));
+  return new Promise((resolve31) => setTimeout(resolve31, ms));
 }
 async function acquireReclaimGuard2(guardPath, staleMs) {
   try {
@@ -78539,8 +78539,8 @@ async function acquireReclaimGuard2(guardPath, staleMs) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
-  const stat13 = await fs35.stat(guardPath).catch(() => void 0);
-  if (!stat13 || Date.now() - stat13.mtimeMs < staleMs) return false;
+  const stat14 = await fs35.stat(guardPath).catch(() => void 0);
+  if (!stat14 || Date.now() - stat14.mtimeMs < staleMs) return false;
   await fs35.rm(guardPath, { recursive: true, force: true });
   try {
     await fs35.mkdir(guardPath, { mode: 448 });
@@ -78824,7 +78824,7 @@ var OverleafService = class {
       totalBytes: 0,
       signedIn: (await this.secrets.listServers()).length > 0
     };
-    if (!folder || !await fs36.stat(folder).then((stat13) => stat13.isDirectory(), () => false)) {
+    if (!folder || !await fs36.stat(folder).then((stat14) => stat14.isDirectory(), () => false)) {
       return { ...state, blockedReason: "This folder does not exist." };
     }
     if (await fs36.stat(manifestPath(folder)).then(() => true, () => false)) {
@@ -81027,22 +81027,22 @@ function cliCommandPath() {
   );
 }
 async function assertManagedDestination(commandPath, supportRoot) {
-  const stat13 = await fs38.lstat(commandPath).catch(() => void 0);
-  if (!stat13) return;
+  const stat14 = await fs38.lstat(commandPath).catch(() => void 0);
+  if (!stat14) return;
   if (!await isManagedCommand(commandPath, supportRoot)) {
     throw new Error(`Refusing to overwrite non-managed command: ${commandPath}`);
   }
 }
 async function isManagedCommand(commandPath, supportRoot) {
-  const stat13 = await fs38.lstat(commandPath).catch(() => void 0);
-  if (!stat13) return false;
+  const stat14 = await fs38.lstat(commandPath).catch(() => void 0);
+  if (!stat14) return false;
   const canonicalSupportRoot = await fs38.realpath(supportRoot).catch(() => path46.resolve(supportRoot));
-  if (stat13.isSymbolicLink()) {
+  if (stat14.isSymbolicLink()) {
     const target2 = await fs38.realpath(commandPath).catch(() => void 0);
     if (!target2 || !isWithin2(canonicalSupportRoot, target2)) return false;
     return hasManagedMarker(path46.dirname(target2));
   }
-  if (!stat13.isFile() || stat13.size > MAX_LAUNCHER_BYTES) return false;
+  if (!stat14.isFile() || stat14.size > MAX_LAUNCHER_BYTES) return false;
   const content = await fs38.readFile(commandPath, "utf8").catch(() => "");
   if (!content.includes(LAUNCHER_MARKER)) return false;
   const declared = /^# target: (".*")$/m.exec(content)?.[1];
@@ -81160,7 +81160,550 @@ function expandHome2(value) {
 }
 
 // src/livePreview/controller.ts
+var vscode16 = __toESM(require("vscode"));
+
+// src/livePreview/labelIndex.ts
+var fs39 = __toESM(require("node:fs/promises"));
+var path49 = __toESM(require("node:path"));
 var vscode15 = __toESM(require("vscode"));
+
+// src/livePreview/references.ts
+var path48 = __toESM(require("node:path"));
+
+// src/livePreview/mathRegions.ts
+var DISPLAY_ENVIRONMENTS = /* @__PURE__ */ new Set([
+  "displaymath",
+  "equation",
+  "equation*",
+  "align",
+  "align*",
+  "gather",
+  "gather*",
+  "multline",
+  "multline*",
+  "flalign",
+  "flalign*",
+  "alignat",
+  "alignat*",
+  "eqnarray",
+  "eqnarray*"
+]);
+var VERBATIM_ENVIRONMENTS = new Set(VERBATIM_LIKE_ENVIRONMENTS);
+var DELIMITER_LENGTH = { inlineDollar: 1, paren: 2, displayDollar: 2, bracket: 2 };
+function previewSource(text, languageId) {
+  const sanitized = sanitizeLatexForParsing(text, void 0, masksInlineCodeSpans(languageId));
+  const chars = sanitized.split("");
+  for (const frame of closedEnvironments(sanitized, VERBATIM_ENVIRONMENTS, "literal")) blank(chars, frame.bodyStart, frame.bodyEnd);
+  return chars.join("");
+}
+function findMathRegions(text, languageId, source = previewSource(text, languageId)) {
+  const chars = source.split("");
+  const blocks = [];
+  for (const frame of closedEnvironments(source, DISPLAY_ENVIRONMENTS, "restarts")) {
+    if (!chars.slice(frame.bodyStart, frame.bodyEnd).join("").trim()) continue;
+    const tex = frame.name === "displaymath" ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
+    blocks.push({ start: frame.start, end: frame.end, tex });
+    blank(chars, frame.start, frame.end);
+  }
+  const inline = [];
+  walkMathDelimiters(chars.join(""), (frame, end, depth) => {
+    if (depth !== 0) return;
+    const delimiter4 = DELIMITER_LENGTH[frame.kind];
+    const tex = text.slice(frame.start + delimiter4, end - delimiter4);
+    if (!tex.trim()) return;
+    if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push({ start: frame.start, end, tex });
+    else if (!tex.includes("\n")) inline.push({ start: frame.start, end, tex });
+  });
+  const display = blocks.map((block) => onOwnLines(block, text, source)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
+  return { inline, display };
+}
+function onOwnLines(block, text, source) {
+  const linesStart = text.lastIndexOf("\n", block.start - 1) + 1;
+  const newline = text.indexOf("\n", block.end);
+  const linesEnd = newline === -1 ? text.length : newline;
+  if (source.slice(linesStart, block.start).trim() || source.slice(block.end, linesEnd).trim()) return void 0;
+  let rows = 1;
+  for (let index = text.indexOf("\n", linesStart); index !== -1 && index < linesEnd; index = text.indexOf("\n", index + 1)) rows++;
+  return { ...block, rows, linesStart, linesEnd };
+}
+function closedEnvironments(source, names, inner) {
+  const frames = [];
+  let open2;
+  const pattern = /\\(begin|end)\s*\{([^}]+)\}/g;
+  let match2;
+  while ((match2 = pattern.exec(source)) !== null) {
+    const [whole, kind] = match2;
+    const name = match2[2].trim();
+    if (!names.has(name)) continue;
+    if (kind === "begin") {
+      if (!open2 || inner === "restarts") open2 = { name, start: match2.index, bodyStart: match2.index + whole.length };
+    } else if (open2?.name === name) {
+      frames.push({ ...open2, bodyEnd: match2.index, end: match2.index + whole.length });
+      open2 = void 0;
+    }
+  }
+  return frames;
+}
+function blank(chars, start, end) {
+  for (let i = start; i < end; i++) if (chars[i] !== "\n") chars[i] = " ";
+}
+function regionIsActive(region, selections) {
+  return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
+}
+
+// src/livePreview/references.ts
+function parseAux(text) {
+  const labels = /* @__PURE__ */ new Map();
+  const crefTypes = /* @__PURE__ */ new Map();
+  const inputs = [];
+  const pattern = /\\(newlabel|@input)\s*\{/g;
+  let match2;
+  while ((match2 = pattern.exec(text)) !== null) {
+    const name = readGroup(text, match2.index + match2[0].length - 1);
+    if (!name) continue;
+    pattern.lastIndex = name.next;
+    if (match2[1] === "@input") {
+      inputs.push(name.value.trim());
+      continue;
+    }
+    const value = readGroup(text, name.next);
+    if (!value) continue;
+    pattern.lastIndex = value.next;
+    const fields = readGroups(value.value);
+    const crefKey = /^(.*)@cref$/.exec(name.value)?.[1];
+    if (crefKey !== void 0) {
+      const type = /^\[([^\]]*)\]/.exec(fields[0] ?? "")?.[1];
+      if (type) crefTypes.set(crefKey, type);
+      continue;
+    }
+    const [number = "", page, title, anchor] = fields;
+    labels.set(name.value, {
+      number: plainText(number),
+      page: page === void 0 ? void 0 : plainText(page),
+      title: title ? plainText(title) : void 0,
+      type: anchorType(anchor)
+    });
+  }
+  for (const [key, type] of crefTypes) {
+    const label = labels.get(key);
+    if (label) label.type = type;
+  }
+  return { labels, inputs };
+}
+function readGroup(text, index) {
+  while (index < text.length && /\s/.test(text[index])) index++;
+  if (text[index] !== "{") return void 0;
+  const close = findMatchingBrace(text, index);
+  return close === -1 ? void 0 : { value: text.slice(index + 1, close), next: close + 1 };
+}
+function readGroups(text) {
+  const groups = [];
+  for (let group = readGroup(text, 0); group; group = readGroup(text, group.next)) groups.push(group.value);
+  return groups;
+}
+function anchorType(anchor) {
+  const name = anchor?.split(".")[0];
+  if (!name) return void 0;
+  return { AMS: "equation", Item: "enumi" }[name] ?? name;
+}
+function plainText(tex) {
+  return tex.replace(/\\['`^"~=.](?:\{([A-Za-z])\}|([A-Za-z]))/g, "$1$2").replace(/\\(?:protect|relax|ignorespaces|leavevmode|unskip)(?![A-Za-z])\s*/g, "").replace(/\\nobreakspace\s*(?:\{\})?|~/g, "\xA0").replace(/\\([&%$#_{}])/g, "$1").replace(/\\[A-Za-z@]+\s*/g, "").replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+}
+function rootHint(text, source = previewSource(text)) {
+  const magic = /^\s*%\s*!\s*TeX\s+root\s*=\s*(.+?)\s*$/im.exec(text)?.[1];
+  if (magic) return { root: magic, isRoot: false };
+  const subfiles = /\\documentclass\s*\[([^\]]*)\]\s*\{\s*subfiles\s*\}/.exec(source)?.[1].trim();
+  if (subfiles) return { root: subfiles, isRoot: false };
+  return { isRoot: /\\documentclass/.test(source) && /\\begin\s*\{\s*document\s*\}/.test(source) };
+}
+function expandOutDir(setting, places) {
+  let dir = (setting.trim() || "%DIR%").replace(/%DIR(?:_W32)?%/g, places.rootDir);
+  if (dir.includes("%WORKSPACE_FOLDER%")) {
+    if (!places.workspaceFolder) return void 0;
+    dir = dir.replace(/%WORKSPACE_FOLDER%/g, places.workspaceFolder);
+  }
+  if (/%[A-Z0-9_]+%/.test(dir)) return void 0;
+  return path48.resolve(places.rootDir, dir);
+}
+var REFERENCE = /\\(ref|eqref|cref|Cref|labelcref|autoref|pageref|nameref)\*?\s*\{([^{}\n]*)\}/g;
+var MULTI_KEY = /* @__PURE__ */ new Set(["cref", "Cref", "labelcref"]);
+function splitKeys(command, keys) {
+  return (MULTI_KEY.has(command) ? keys.split(",") : [keys]).map((key) => key.trim()).filter(Boolean);
+}
+function findReferences(text, math, languageId, source = previewSource(text, languageId)) {
+  const formulas = [...math.inline, ...math.display].sort((a, b) => a.start - b.start);
+  const regions = [];
+  let formula = 0;
+  for (const match2 of source.matchAll(REFERENCE)) {
+    const start = match2.index;
+    if (isEscaped(source, start)) continue;
+    while (formula < formulas.length && formulas[formula].end <= start) formula++;
+    if (formula < formulas.length && formulas[formula].start <= start) continue;
+    const command = match2[1];
+    const keys = splitKeys(command, match2[2]);
+    if (!keys.length) continue;
+    const tie = source[start - 1] === "~" && !isEscaped(source, start - 1);
+    regions.push({ start: tie ? start - 1 : start, end: start + match2[0].length, command, keys, tie });
+  }
+  return regions;
+}
+function emptyCrefSettings() {
+  return { capitalise: false, noabbrev: false, names: {}, capitalNames: {} };
+}
+function readCrefSettings(text, settings) {
+  const source = previewSource(text);
+  for (const match2 of source.matchAll(/\\usepackage\s*\[([^\]]*)\]\s*\{([^}]*)\}/g)) {
+    if (!match2[2].split(",").some((name) => name.trim() === "cleveref")) continue;
+    const options = match2[1].split(",").map((option) => option.trim());
+    settings.capitalise ||= options.includes("capitalise") || options.includes("capitalize");
+    settings.noabbrev ||= options.includes("noabbrev");
+  }
+  for (const match2 of source.matchAll(/\\(crefname|Crefname)\s*\{([^{}]*)\}\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g)) {
+    const names = match2[1] === "crefname" ? settings.names : settings.capitalNames;
+    names[match2[2].trim()] = [plainText(match2[3]), plainText(match2[4])];
+  }
+}
+var CREF_NAMES = {
+  equation: { name: ["equation", "equations"], short: ["eq.", "eqs."] },
+  figure: { name: ["figure", "figures"], short: ["fig.", "figs."] },
+  table: { name: ["table", "tables"] },
+  page: { name: ["page", "pages"] },
+  part: { name: ["part", "parts"] },
+  chapter: { name: ["chapter", "chapters"] },
+  section: { name: ["section", "sections"] },
+  appendix: { name: ["appendix", "appendices"] },
+  enumi: { name: ["item", "items"] },
+  footnote: { name: ["footnote", "footnotes"] },
+  theorem: { name: ["theorem", "theorems"] },
+  lemma: { name: ["lemma", "lemmas"] },
+  corollary: { name: ["corollary", "corollaries"] },
+  proposition: { name: ["proposition", "propositions"] },
+  definition: { name: ["definition", "definitions"] },
+  result: { name: ["result", "results"] },
+  example: { name: ["example", "examples"] },
+  remark: { name: ["remark", "remarks"] },
+  note: { name: ["note", "notes"] },
+  algorithm: { name: ["algorithm", "algorithms"] },
+  listing: { name: ["listing", "listings"] },
+  line: { name: ["line", "lines"] }
+};
+var CREF_ALIASES = {
+  subsection: "section",
+  subsubsection: "section",
+  subappendix: "appendix",
+  subsubappendix: "appendix",
+  enumii: "enumi",
+  enumiii: "enumi",
+  enumiv: "enumi"
+};
+var MISSING = "??";
+function formatReference(reference, labels, cref = emptyCrefSettings()) {
+  const found = reference.keys.map((key) => labels.get(key));
+  const label = found[0];
+  switch (reference.command) {
+    case "ref":
+      return { text: label?.number ?? MISSING, labels: found };
+    case "eqref":
+      return { text: `(${label?.number ?? MISSING})`, labels: found };
+    case "pageref":
+      return { text: label?.page ?? MISSING, labels: found };
+    case "nameref":
+      return { text: label ? label.title || label.number : MISSING, labels: found };
+    case "autoref": {
+      const counter = label?.type && (CREF_ALIASES[label.type] ?? label.type);
+      const name = counter && capitalised(CREF_NAMES[counter]?.name[0] ?? counter);
+      return { text: label ? [name, label.number].filter(Boolean).join("\xA0") : MISSING, labels: found };
+    }
+    default:
+      return { text: formatCref(reference.command, found, cref), labels: found };
+  }
+}
+function formatCref(command, found, settings) {
+  const parts = found.map((label) => ({
+    type: label?.type,
+    text: !label ? MISSING : (CREF_ALIASES[label.type ?? ""] ?? label.type) === "equation" ? `(${label.number})` : label.number
+  }));
+  if (command === "labelcref") return joinList(parts.map((part) => part.text));
+  const groups = [];
+  for (const part of parts) {
+    const last = groups[groups.length - 1];
+    if (last && part.type && last.type === part.type) last.texts.push(part.text);
+    else groups.push({ type: part.type, texts: [part.text] });
+  }
+  return joinList(groups.map((group, index) => {
+    const list = joinList(group.texts);
+    if (!group.type) return list;
+    return `${crefName(group.type, group.texts.length > 1, command === "Cref" && index === 0, settings)}\xA0${list}`;
+  }));
+}
+function crefName(type, plural, sentenceStart, settings) {
+  const counter = CREF_ALIASES[type] ?? type;
+  const index = plural ? 1 : 0;
+  if (sentenceStart) {
+    if (settings.capitalNames[counter]) return settings.capitalNames[counter][index];
+    if (settings.names[counter]) return capitalised(settings.names[counter][index]);
+  } else if (settings.names[counter]) {
+    return settings.names[counter][index];
+  }
+  const capital = sentenceStart || settings.capitalise;
+  const known = CREF_NAMES[counter];
+  if (!known) return capital ? capitalised(counter) : counter;
+  const name = !sentenceStart && !settings.noabbrev && known.short ? known.short[index] : known.name[index];
+  return capital ? capitalised(name) : name;
+}
+function capitalised(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+function joinList(items) {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+function escapeText(text) {
+  return text.replace(/[\\^]/g, "").replace(/([#$%&_{}])/g, "\\$1").replace(/~/g, "\xA0");
+}
+function substituteReferences(tex, print) {
+  return tex.replace(REFERENCE, (whole, command, keys, offset) => {
+    if (isEscaped(tex, offset)) return whole;
+    const printed = escapeText(print({ command, keys: splitKeys(command, keys) }));
+    return inTextMode(tex, offset) ? printed : `\\text{${printed}}`;
+  });
+}
+var TEXT_ARGUMENT = /* @__PURE__ */ new Set([
+  "text",
+  "textrm",
+  "textnormal",
+  "textit",
+  "textbf",
+  "textsf",
+  "texttt",
+  "textup",
+  "textsl",
+  "textsc",
+  "emph",
+  "mbox",
+  "hbox",
+  "fbox",
+  "intertext",
+  "shortintertext",
+  "tag"
+]);
+function inTextMode(tex, offset) {
+  const modes = [{ text: false, dollar: false }];
+  let textArgument = false;
+  for (let i = 0; i < offset; i++) {
+    const char = tex[i];
+    const mode = modes[modes.length - 1];
+    if (char === "\\") {
+      const name = /^[A-Za-z]+/.exec(tex.slice(i + 1, i + 32))?.[0];
+      textArgument = !!name && TEXT_ARGUMENT.has(name);
+      i += name ? name.length : 1;
+    } else if (char === "{") {
+      modes.push({ text: textArgument || mode.text, dollar: false });
+      textArgument = false;
+    } else if (char === "}") {
+      while (modes.length > 1 && modes[modes.length - 1].dollar) modes.pop();
+      if (modes.length > 1) modes.pop();
+    } else if (char === "$") {
+      if (mode.dollar) modes.pop();
+      else if (mode.text) modes.push({ text: false, dollar: true });
+    } else if (!/\s/.test(char)) {
+      textArgument = false;
+    }
+  }
+  return modes[modes.length - 1].text;
+}
+var ONE_NUMBER = /* @__PURE__ */ new Set(["equation", "multline"]);
+var NUMBER_PER_ROW = /* @__PURE__ */ new Set(["align", "gather", "flalign", "alignat", "eqnarray"]);
+var SPLIT_ROWS = /\\begin\s*\{\s*(?:split|aligned|alignedat|gathered|multlined)\s*\}/;
+function equationTags(tex, labels) {
+  const begin = /^\s*\\begin\s*\{([^}]*)\}/.exec(tex);
+  const environment = begin?.[1].trim() ?? "";
+  const base = environment.replace(/\*$/, "");
+  const numbered = environment === base && (ONE_NUMBER.has(base) || NUMBER_PER_ROW.has(base));
+  let body = begin ? tex.slice(begin[0].length, tex.lastIndexOf("\\end")) : tex;
+  if (base === "alignat") body = body.replace(/^\s*\{[^{}]*\}/, "");
+  const rows = splitRows(body);
+  if (NUMBER_PER_ROW.has(base)) {
+    return rows.flatMap((row2, index) => {
+      const number2 = rowNumber(row2, numbered, labels);
+      return number2 === void 0 ? [] : [{ tex: number2, row: index }];
+    });
+  }
+  const number = rowNumber(body, numbered, labels);
+  if (number === void 0) return [];
+  const row = base === "multline" ? rows.length - 1 : rows.length > 1 || SPLIT_ROWS.test(body) ? void 0 : 0;
+  return [{ tex: number, row }];
+}
+function rowNumber(row, numbered, labels) {
+  const code = row.replace(/(^|[^\\])%.*$/gm, "$1");
+  const tag = /\\tag(\*?)\s*\{/.exec(code);
+  const close = tag ? findMatchingBrace(code, tag.index + tag[0].length - 1) : -1;
+  if (tag && close !== -1) {
+    const content = code.slice(tag.index + tag[0].length, close);
+    return tag[1] ? `\\text{${content}}` : `\\text{(${content})}`;
+  }
+  if (!numbered || /\\(?:nonumber|notag)(?![A-Za-z])/.test(code)) return void 0;
+  const key = /\\label\s*\{([^{}]*)\}/.exec(code)?.[1].trim();
+  if (!key || !labels) return void 0;
+  return `\\text{(${escapeText(labels.get(key)?.number ?? MISSING)})}`;
+}
+function splitRows(body) {
+  const rows = [];
+  let start = 0;
+  let depth = 0;
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i];
+    if (char === "%") {
+      const newline = body.indexOf("\n", i);
+      i = newline === -1 ? body.length : newline;
+    } else if (char === "{") {
+      const close = findMatchingBrace(body, i);
+      if (close !== -1) i = close;
+    } else if (char === "\\") {
+      if (/^\\begin(?![A-Za-z])/.test(body.slice(i, i + 7))) depth++;
+      else if (/^\\end(?![A-Za-z])/.test(body.slice(i, i + 5))) depth--;
+      else if (body[i + 1] === "\\" && depth === 0) {
+        rows.push(body.slice(start, i));
+        start = i + 2;
+      }
+      i++;
+    }
+  }
+  rows.push(body.slice(start));
+  if (rows.length > 1 && !rows[rows.length - 1].replace(/(^|[^\\])%.*$/gm, "$1").trim()) rows.pop();
+  return rows;
+}
+
+// src/livePreview/labelIndex.ts
+var RELOAD_DELAY_MS = 300;
+var MAX_INPUT_DEPTH = 8;
+var LabelIndex = class {
+  constructor(output) {
+    this.output = output;
+    this.disposables.push(vscode15.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("latex-workshop.latex.outDir") || event.affectsConfiguration("latex-workshop.latex.search.rootFiles.include")) {
+        this.roots.clear();
+        this.bump();
+      }
+    }));
+  }
+  output;
+  changed = new vscode15.EventEmitter();
+  /** Fires when labels are read, so what shows them can refresh. */
+  onDidChange = this.changed.event;
+  /** Changes whenever any labels do. */
+  generation = 0;
+  roots = /* @__PURE__ */ new Map();
+  labels = /* @__PURE__ */ new Map();
+  watchers = /* @__PURE__ */ new Map();
+  reloadTimers = /* @__PURE__ */ new Map();
+  disposables = [this.changed];
+  /** The labels of the document's root, once read; undefined before that and when nothing was compiled. */
+  labelsFor(document2, hint) {
+    if (document2.uri.scheme !== "file") return void 0;
+    const key = document2.uri.toString();
+    const hintKey = JSON.stringify(hint);
+    let root = this.roots.get(key);
+    if (!root || root.hint !== hintKey) {
+      root = { hint: hintKey };
+      this.roots.set(key, root);
+      void this.locate(document2, hint, root);
+    }
+    return root.aux ? this.labels.get(root.aux) : void 0;
+  }
+  dispose() {
+    for (const timer of this.reloadTimers.values()) clearTimeout(timer);
+    for (const watcher of this.watchers.values()) watcher.dispose();
+    while (this.disposables.length) this.disposables.pop()?.dispose();
+  }
+  async locate(document2, hint, root) {
+    const rootFile = await this.findRoot(document2, hint);
+    const aux = rootFile && await this.findAux(rootFile);
+    if (!aux || this.roots.get(document2.uri.toString()) !== root) return;
+    root.aux = aux;
+    this.watch(aux);
+    if (!this.labels.has(aux)) await this.load(aux);
+    this.bump();
+  }
+  /**
+   * The root, in the order LaTeX Workshop looks for it: a root the document names, the document
+   * itself, the roots the workspace lists, then main.tex at the top of the workspace.
+   */
+  async findRoot(document2, hint) {
+    const documentDir = path49.dirname(document2.uri.fsPath);
+    if (hint.root) {
+      const named = path49.resolve(documentDir, hint.root);
+      for (const candidate of [named, `${named}.tex`]) if (await isFile(candidate)) return candidate;
+    }
+    if (hint.isRoot) return document2.uri.fsPath;
+    const folder = vscode15.workspace.getWorkspaceFolder(document2.uri)?.uri.fsPath;
+    if (!folder) return void 0;
+    const listed = vscode15.workspace.getConfiguration("latex-workshop", document2.uri).get("latex.search.rootFiles.include", []);
+    for (const entry of listed.filter((entry2) => !/[*?[\]{}]/.test(entry2))) {
+      const candidate = path49.resolve(folder, entry);
+      if (await isFile(candidate)) return candidate;
+    }
+    const main = path49.join(folder, "main.tex");
+    return await isFile(main) ? main : void 0;
+  }
+  /** The root's aux file in LaTeX Workshop's output folder, else beside the root. */
+  async findAux(rootFile) {
+    const rootDir = path49.dirname(rootFile);
+    const name = `${path49.basename(rootFile, path49.extname(rootFile))}.aux`;
+    const uri = vscode15.Uri.file(rootFile);
+    const setting = vscode15.workspace.getConfiguration("latex-workshop", uri).get("latex.outDir", "%DIR%");
+    const outDir = expandOutDir(setting, { rootDir, workspaceFolder: vscode15.workspace.getWorkspaceFolder(uri)?.uri.fsPath });
+    const candidates = [...new Set([outDir, rootDir].filter((dir) => !!dir).map((dir) => path49.join(dir, name)))];
+    for (const candidate of candidates) if (await isFile(candidate)) return candidate;
+    for (const candidate of candidates) if (await isDirectory3(path49.dirname(candidate))) return candidate;
+    return void 0;
+  }
+  /** LaTeX rewrites the root's aux file on every run, so watching it alone catches every compile. */
+  watch(aux) {
+    if (this.watchers.has(aux)) return;
+    const watcher = vscode15.workspace.createFileSystemWatcher(new vscode15.RelativePattern(vscode15.Uri.file(path49.dirname(aux)), path49.basename(aux)));
+    const reload = () => {
+      clearTimeout(this.reloadTimers.get(aux));
+      this.reloadTimers.set(aux, setTimeout(() => {
+        this.reloadTimers.delete(aux);
+        void this.load(aux).then(() => this.bump());
+      }, RELOAD_DELAY_MS));
+    };
+    watcher.onDidCreate(reload);
+    watcher.onDidChange(reload);
+    watcher.onDidDelete(reload);
+    this.watchers.set(aux, watcher);
+  }
+  /** Reads the aux file and those of \include'd parts, which a compile writes beside it. */
+  async load(aux) {
+    const labels = /* @__PURE__ */ new Map();
+    const read = async (file, depth) => {
+      const text = await fs39.readFile(file, "utf8").catch(() => void 0);
+      if (text === void 0) return false;
+      const parsed = parseAux(text);
+      for (const [key, label] of parsed.labels) labels.set(key, label);
+      if (depth < MAX_INPUT_DEPTH) {
+        for (const input of parsed.inputs) await read(path49.resolve(path49.dirname(aux), input), depth + 1);
+      }
+      return true;
+    };
+    if (await read(aux, 0)) {
+      this.labels.set(aux, labels);
+      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live preview read ${labels.size} labels from ${aux}.`);
+    } else {
+      this.labels.delete(aux);
+    }
+  }
+  bump() {
+    this.generation += 1;
+    this.changed.fire();
+  }
+};
+async function isFile(file) {
+  return fs39.stat(file).then((stat14) => stat14.isFile(), () => false);
+}
+async function isDirectory3(dir) {
+  return fs39.stat(dir).then((stat14) => stat14.isDirectory(), () => false);
+}
 
 // src/livePreview/macros.ts
 var DEFINITION = /\\(newcommand|renewcommand|providecommand|DeclareMathOperator|def)(\*?)(?![A-Za-z])/g;
@@ -81200,7 +81743,7 @@ function readName(source, index) {
   const name = /^\\([A-Za-z]+)$/.exec(raw)?.[1];
   return name ? { name, next } : void 0;
 }
-function readGroup(source, index) {
+function readGroup2(source, index) {
   index = skipSpaces(source, index);
   if (source[index] !== "{") return void 0;
   const close = findMatchingBrace(source, index);
@@ -81217,13 +81760,13 @@ function readCommandBody(source, index) {
   const args = count ? Number(count.value.trim()) : 0;
   if (!Number.isInteger(args) || args < 0 || args > 9) return void 0;
   const fallback = count ? readOptional(source, count.next) : void 0;
-  const body = readGroup(source, (fallback ?? count)?.next ?? index);
+  const body = readGroup2(source, (fallback ?? count)?.next ?? index);
   if (!body) return void 0;
   const value = args === 0 ? body.value : fallback ? [body.value, args, fallback.value] : [body.value, args];
   return { value, next: body.next };
 }
 function readOperatorBody(source, index, limits) {
-  const body = readGroup(source, index);
+  const body = readGroup2(source, index);
   return body && { value: `\\operatorname${limits ? "*" : ""}{${body.value}}`, next: body.next };
 }
 function readDefBody(source, index) {
@@ -81231,89 +81774,10 @@ function readDefBody(source, index) {
   if (open2 === -1) return void 0;
   const parameters = source.slice(index, open2);
   if (!/^(\s*#[1-9])*\s*$/.test(parameters)) return void 0;
-  const body = readGroup(source, open2);
+  const body = readGroup2(source, open2);
   if (!body) return void 0;
   const args = (parameters.match(/#/g) ?? []).length;
   return { value: args ? [body.value, args] : body.value, next: body.next };
-}
-
-// src/livePreview/mathRegions.ts
-var DISPLAY_ENVIRONMENTS = /* @__PURE__ */ new Set([
-  "displaymath",
-  "equation",
-  "equation*",
-  "align",
-  "align*",
-  "gather",
-  "gather*",
-  "multline",
-  "multline*",
-  "flalign",
-  "flalign*",
-  "alignat",
-  "alignat*",
-  "eqnarray",
-  "eqnarray*"
-]);
-var VERBATIM_ENVIRONMENTS = new Set(VERBATIM_LIKE_ENVIRONMENTS);
-var DELIMITER_LENGTH = { inlineDollar: 1, paren: 2, displayDollar: 2, bracket: 2 };
-function findMathRegions(text, languageId) {
-  const sanitized = sanitizeLatexForParsing(text, void 0, masksInlineCodeSpans(languageId));
-  const chars = sanitized.split("");
-  for (const frame of outermostEnvironments(sanitized, VERBATIM_ENVIRONMENTS)) blank(chars, frame.bodyStart, frame.bodyEnd);
-  const blocks = [];
-  for (const frame of outermostEnvironments(chars.join(""), DISPLAY_ENVIRONMENTS)) {
-    if (!chars.slice(frame.bodyStart, frame.bodyEnd).join("").trim()) continue;
-    const tex = frame.name === "displaymath" ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
-    blocks.push({ start: frame.start, end: frame.end, tex });
-    blank(chars, frame.start, frame.end);
-  }
-  const inline = [];
-  walkMathDelimiters(chars.join(""), (frame, end, depth) => {
-    if (depth !== 0) return;
-    const delimiter4 = DELIMITER_LENGTH[frame.kind];
-    const tex = text.slice(frame.start + delimiter4, end - delimiter4);
-    if (!tex.trim()) return;
-    if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push({ start: frame.start, end, tex });
-    else if (!tex.includes("\n")) inline.push({ start: frame.start, end, tex });
-  });
-  const display = blocks.map((block) => onOwnLines(block, text, sanitized)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
-  return { inline, display };
-}
-function onOwnLines(block, text, sanitized) {
-  const linesStart = text.lastIndexOf("\n", block.start - 1) + 1;
-  const newline = text.indexOf("\n", block.end);
-  const linesEnd = newline === -1 ? text.length : newline;
-  if (sanitized.slice(linesStart, block.start).trim() || sanitized.slice(block.end, linesEnd).trim()) return void 0;
-  let rows = 1;
-  for (let index = text.indexOf("\n", linesStart); index !== -1 && index < linesEnd; index = text.indexOf("\n", index + 1)) rows++;
-  return { ...block, rows, linesStart, linesEnd };
-}
-function outermostEnvironments(sanitized, names) {
-  const frames = [];
-  const open2 = [];
-  const pattern = /\\(begin|end)\s*\{([^}]+)\}/g;
-  let match2;
-  while ((match2 = pattern.exec(sanitized)) !== null) {
-    const [whole, kind] = match2;
-    const name = match2[2].trim();
-    if (!names.has(name)) continue;
-    if (kind === "begin") {
-      open2.push({ name, start: match2.index, bodyStart: match2.index + whole.length });
-      continue;
-    }
-    const index = open2.map((frame2) => frame2.name).lastIndexOf(name);
-    if (index === -1) continue;
-    const [frame] = open2.splice(index);
-    if (open2.length === 0) frames.push({ ...frame, bodyEnd: match2.index, end: match2.index + whole.length });
-  }
-  return frames;
-}
-function blank(chars, start, end) {
-  for (let i = start; i < end; i++) if (chars[i] !== "\n") chars[i] = " ";
-}
-function regionIsActive(region, selections) {
-  return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
 }
 
 // src/livePreview/mathRenderer.ts
@@ -81323,6 +81787,8 @@ var ENGINE_LIMIT = 4;
 var EXCLUDED_PACKAGES = /* @__PURE__ */ new Set(["noerrors", "noundefined"]);
 var DEFAULT_MACROS = { qedhere: "" };
 var SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
+var TAG_GAP_EM = 2;
+var NO_FIXED_SIZE = "MathJax gave this formula no fixed size.";
 var modules;
 function loadMathJax() {
   modules ??= (async () => {
@@ -81356,19 +81822,27 @@ var MathRenderer = class {
   /** An inline formula, scaled down if needed to fit one line. */
   render(tex, options) {
     return this.cached(["inline", tex], options, (engine) => {
-      const svg = typeset(engine, tex, false);
-      if (!svg.ok) return svg;
-      const image = sizeForEditor(svg.image, options);
-      return image ? { ok: true, image } : { ok: false, error: "MathJax gave this formula no fixed size." };
+      const formula = typeset(engine, tex, false);
+      if (!formula.ok) return formula;
+      const image = sizeForEditor(formula.image.svg, options);
+      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
     });
   }
-  /** A display formula laid out over the `rows` lines of its block. */
-  renderBlock(tex, rows, options) {
-    return this.cached(["block", String(rows), tex], options, (engine) => {
-      const svg = typeset(engine, withoutTags(tex), rows > 1);
-      if (!svg.ok) return svg;
-      const image = sliceForLines(svg.image, rows, options);
-      return image ? { ok: true, image } : { ok: false, error: "MathJax gave this formula no fixed size." };
+  /** A display formula laid out over the `rows` lines of its block, with its numbers on the right. */
+  renderBlock(tex, rows, options, tags = []) {
+    const tagKey = tags.map((tag) => `${tag.row ?? ""}:${tag.tex}`).join("");
+    return this.cached(["block", String(rows), tex, tagKey], options, (engine) => {
+      const formula = typeset(engine, withoutTags(tex), rows > 1);
+      if (!formula.ok) return formula;
+      const { baselines } = formula.image;
+      const numbers = [];
+      for (const tag of tags) {
+        if (tag.row !== void 0 && tag.row >= baselines.length && tags.length > 1) continue;
+        const number = typeset(engine, tag.tex, false);
+        if (number.ok) numbers.push({ svg: number.image.svg, baseline: tag.row === void 0 ? void 0 : baselines[tag.row] });
+      }
+      const image = sliceForLines(formula.image.svg, rows, options, numbers);
+      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
     });
   }
   clearCache() {
@@ -81422,12 +81896,33 @@ function typeset(engine, tex, display) {
   try {
     engine.tex.parseOptions.tags.reset();
     const container = engine.document.convert(tex, { display });
+    const baselines = rowBaselines(engine.adaptor, container);
     const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, "");
-    return { ok: true, image: svg };
+    return { ok: true, image: { svg, baselines } };
   } catch (error) {
     const message = error?.message;
     return { ok: false, error: typeof message === "string" ? message : String(error) };
   }
+}
+function rowBaselines(adaptor, container) {
+  const role = (node) => adaptor.getAttribute(node, "data-mml-node");
+  const elements = (node) => adaptor.childNodes(node).filter((child) => adaptor.kind(child) !== "#text" && adaptor.kind(child) !== "#comment");
+  const find = (node) => role(node) === "math" ? node : elements(node).map(find).find(Boolean);
+  let offset = 0;
+  for (let node = find(container); node; ) {
+    offset += translateY(adaptor.getAttribute(node, "transform"));
+    const children = elements(node);
+    if (role(node) === "mtable") {
+      return children.filter((row) => role(row) === "mtr" || role(row) === "mlabeledtr").map((row) => -(offset + translateY(adaptor.getAttribute(row, "transform"))));
+    }
+    node = children.length === 1 ? children[0] : void 0;
+  }
+  return [0];
+}
+function translateY(transform) {
+  let y = 0;
+  for (const match2 of (transform ?? "").matchAll(/translate\(\s*[-\d.e]+(?:[\s,]+([-\d.e]+))?\s*\)/g)) y += Number(match2[1] ?? 0);
+  return y;
 }
 function imageSize(image) {
   return "slices" in image ? image.slices.reduce((total, slice) => total + slice.dataUri.length, 0) : image.dataUri.length;
@@ -81474,24 +81969,49 @@ function sizeForEditor(svg, options) {
     verticalAlignPx: size.verticalAlign * exPx * scale
   };
 }
-function sliceForLines(svg, rows, options) {
+function piece(svg) {
   const size = exSize(svg);
   const viewBox = size && /\sviewBox="([^"]*)"/.exec(size.root)?.[1];
   if (!size || !viewBox) return void 0;
-  const exPx = options.fontSizePx * EX_PER_EM;
+  const [, minY, , viewHeight] = viewBox.trim().split(/[\s,]+/).map(Number);
+  if (!Number.isFinite(minY) || !(viewHeight > 0)) return void 0;
+  const content = svg.slice(size.root.length, svg.lastIndexOf("</svg>"));
+  return { width: size.width, height: size.height, verticalAlign: size.verticalAlign, viewBox, minY, viewHeight, content };
+}
+function place(part, x, y, width, height) {
+  return `<svg x="${px(x)}" y="${px(y)}" width="${px(width)}" height="${px(height)}" viewBox="${part.viewBox}" overflow="visible">${part.content}</svg>`;
+}
+function sliceForLines(svg, rows, options, tags = []) {
+  const formula = piece(svg);
+  if (!formula) return void 0;
+  const numbers = tags.flatMap((tag) => {
+    const part = piece(tag.svg);
+    return part ? [{ part, baseline: tag.baseline }] : [];
+  });
   const lineHeight = options.lineHeightPx;
   const boxHeight = rows * lineHeight;
-  const scale = Math.min(1, boxHeight / (size.height * exPx));
-  const width = size.width * exPx * scale;
-  const height = size.height * exPx * scale;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
+  const height = formula.height * unit;
   const top = (boxHeight - height) / 2;
-  const content = svg.slice(size.root.length, svg.lastIndexOf("</svg>"));
-  const formula = `<svg x="0" y="${px(top)}" width="${px(width)}" height="${px(height)}" viewBox="${viewBox}" overflow="visible">${content}</svg>`;
+  const numbersWidth = Math.max(0, ...numbers.map((number) => number.part.width * unit));
+  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
+  let content = place(formula, 0, top, formula.width * unit, height);
+  let inkTop = top;
+  let inkBottom = top + height;
+  for (const { part, baseline } of numbers) {
+    const numberWidth = part.width * unit;
+    const numberHeight = part.height * unit;
+    const y = baseline === void 0 ? top + (height - numberHeight) / 2 : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
+    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
+    inkTop = Math.min(inkTop, y);
+    inkBottom = Math.max(inkBottom, y + numberHeight);
+  }
   const slices = [];
   for (let row = 0; row < rows; row++) {
     const y = row * lineHeight;
-    if (top >= y + lineHeight || top + height <= y) continue;
-    const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${formula}</svg>`;
+    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
+    const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, dataUri: toDataUri(slice) });
   }
   return { widthPx: width, slices };
@@ -81508,44 +82028,50 @@ var EDIT_PREVIEW_GAP = 4;
 var LiveMathPreview = class {
   constructor(output) {
     this.output = output;
-    const watcher = vscode15.workspace.createFileSystemWatcher("**/*.{tex,sty}");
+    this.labels = new LabelIndex(output);
+    const watcher = vscode16.workspace.createFileSystemWatcher("**/*.{tex,sty}");
     this.disposables.push(
       this.hidden,
       this.inlineImages,
       this.blockImages,
       this.blockBackgrounds,
       this.errors,
+      this.referenceText,
+      this.labels,
+      this.labels.onDidChange(() => this.updateAll()),
       watcher,
       watcher.onDidCreate(() => this.scheduleMacroScan()),
       watcher.onDidChange(() => this.scheduleMacroScan()),
       watcher.onDidDelete(() => this.scheduleMacroScan()),
-      vscode15.window.onDidChangeTextEditorSelection((event) => this.update(event.textEditor)),
-      vscode15.window.onDidChangeTextEditorVisibleRanges((event) => this.update(event.textEditor)),
-      vscode15.window.onDidChangeTextEditorOptions((event) => this.update(event.textEditor)),
-      vscode15.window.onDidChangeVisibleTextEditors(() => this.updateAll()),
-      vscode15.workspace.onDidChangeTextDocument((event) => this.scheduleRescan(event.document)),
-      vscode15.window.onDidChangeActiveColorTheme(() => this.refresh()),
-      vscode15.workspace.onDidChangeConfiguration((event) => this.onConfigurationChanged(event))
+      vscode16.window.onDidChangeTextEditorSelection((event) => this.update(event.textEditor)),
+      vscode16.window.onDidChangeTextEditorVisibleRanges((event) => this.update(event.textEditor)),
+      vscode16.window.onDidChangeTextEditorOptions((event) => this.update(event.textEditor)),
+      vscode16.window.onDidChangeVisibleTextEditors(() => this.updateAll()),
+      vscode16.workspace.onDidChangeTextDocument((event) => this.scheduleRescan(event.document)),
+      vscode16.window.onDidChangeActiveColorTheme(() => this.refresh()),
+      vscode16.workspace.onDidChangeConfiguration((event) => this.onConfigurationChanged(event))
     );
     this.setEnabled(this.readEnabled());
   }
   output;
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
-  hidden = vscode15.window.createTextEditorDecorationType({ textDecoration: "none; display: none;" });
-  inlineImages = vscode15.window.createTextEditorDecorationType({});
+  hidden = vscode16.window.createTextEditorDecorationType({ textDecoration: "none; display: none;" });
+  inlineImages = vscode16.window.createTextEditorDecorationType({});
   // Display images are large; keeping them apart means moving through inline math does not resend them.
-  blockImages = vscode15.window.createTextEditorDecorationType({});
+  blockImages = vscode16.window.createTextEditorDecorationType({});
   // The editor still draws indent guides for a block's hidden source, and on lines carrying an image
   // it measures them from the image's right edge. Painting the lines in the editor's background
   // covers them; rulers are drawn above this layer, so they stay.
-  blockBackgrounds = vscode15.window.createTextEditorDecorationType({
+  blockBackgrounds = vscode16.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: new vscode15.ThemeColor("editor.background")
+    backgroundColor: new vscode16.ThemeColor("editor.background")
   });
-  errors = vscode15.window.createTextEditorDecorationType({
+  errors = vscode16.window.createTextEditorDecorationType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
   });
+  referenceText = vscode16.window.createTextEditorDecorationType({});
   renderer = new MathRenderer();
+  labels;
   scans = /* @__PURE__ */ new WeakMap();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   applied = /* @__PURE__ */ new WeakMap();
@@ -81555,12 +82081,13 @@ var LiveMathPreview = class {
   uris = /* @__PURE__ */ new WeakMap();
   disposables = [];
   workspaceMacros = {};
+  cref = emptyCrefSettings();
   macroGeneration = 0;
   macroTimer;
   enabled = false;
   starting;
   async toggle() {
-    await vscode15.workspace.getConfiguration("latexEditingToolkit.livePreview").update("enabled", !this.enabled, vscode15.ConfigurationTarget.Global);
+    await vscode16.workspace.getConfiguration("latexEditingToolkit.livePreview").update("enabled", !this.enabled, vscode16.ConfigurationTarget.Global);
   }
   dispose() {
     this.enabled = false;
@@ -81569,12 +82096,12 @@ var LiveMathPreview = class {
     while (this.disposables.length) this.disposables.pop()?.dispose();
   }
   readEnabled() {
-    return vscode15.workspace.getConfiguration("latexEditingToolkit.livePreview").get("enabled", false);
+    return vscode16.workspace.getConfiguration("latexEditingToolkit.livePreview").get("enabled", false);
   }
   setEnabled(enabled) {
     this.enabled = enabled;
     if (!enabled) {
-      for (const editor of vscode15.window.visibleTextEditors) this.clear(editor);
+      for (const editor of vscode16.window.visibleTextEditors) this.clear(editor);
       return;
     }
     if (this.starting) this.scheduleMacroScan();
@@ -81604,7 +82131,7 @@ var LiveMathPreview = class {
     this.updateAll();
   }
   updateAll() {
-    for (const editor of vscode15.window.visibleTextEditors) this.update(editor);
+    for (const editor of vscode16.window.visibleTextEditors) this.update(editor);
   }
   scheduleRescan(document2) {
     if (!this.enabled || !LANGUAGES.has(document2.languageId)) return;
@@ -81612,7 +82139,7 @@ var LiveMathPreview = class {
     clearTimeout(this.rescanTimers.get(key));
     this.rescanTimers.set(key, setTimeout(() => {
       this.rescanTimers.delete(key);
-      for (const editor of vscode15.window.visibleTextEditors) {
+      for (const editor of vscode16.window.visibleTextEditors) {
         if (editor.document === document2) this.update(editor);
       }
     }, RESCAN_DELAY_MS));
@@ -81623,10 +82150,12 @@ var LiveMathPreview = class {
       return existing;
     }
     const text = document2.getText();
-    const regions = existing?.version === document2.version ? existing.regions : findMathRegions(text, document2.languageId);
+    const parsed = existing?.version === document2.version ? existing : parseDocument(text, document2.languageId);
     const scan = {
       version: document2.version,
-      regions,
+      regions: parsed.regions,
+      references: parsed.references,
+      root: parsed.root,
       macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
       macroGeneration: this.macroGeneration
     };
@@ -81648,21 +82177,24 @@ var LiveMathPreview = class {
       end: document2.offsetAt(selection.end)
     }));
     const visible = editor.visibleRanges.map((range) => ({
-      start: document2.offsetAt(new vscode15.Position(Math.max(0, range.start.line - VISIBLE_MARGIN_LINES), 0)),
-      end: document2.offsetAt(new vscode15.Position(range.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
+      start: document2.offsetAt(new vscode16.Position(Math.max(0, range.start.line - VISIBLE_MARGIN_LINES), 0)),
+      end: document2.offsetAt(new vscode16.Position(range.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
     }));
     const isVisible = (start, end) => visible.some((range) => end >= range.start && start <= range.end);
     const options = { ...this.renderSizing(document2), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 4;
+    const labels = this.labels.labelsFor(document2, scan.root);
+    const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.cref).text) : tex;
     const hidden = new Decorations();
     const inlineImages = new Decorations();
     const blockImages = new Decorations();
     const blockBackgrounds = new Decorations();
     const errors = new Decorations();
+    const referenceText = new Decorations();
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
-      const range = new vscode15.Range(document2.positionAt(region.start), document2.positionAt(region.end));
-      const result = this.renderer.render(region.tex, options);
+      const range = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
+      const result = this.renderer.render(withNumbers(region.tex), options);
       if (!result.ok) {
         errors.add(`i${index}`, { range, hoverMessage: `Live math preview: ${result.error}` });
         return;
@@ -81670,7 +82202,7 @@ var LiveMathPreview = class {
       const { widthPx, heightPx, verticalAlignPx } = result.image;
       hidden.add(`i${index}`, range);
       inlineImages.add(`i${index}`, {
-        range: new vscode15.Range(range.start, range.start),
+        range: new vscode16.Range(range.start, range.start),
         renderOptions: {
           before: {
             contentIconPath: this.uriFor(result.image),
@@ -81685,14 +82217,14 @@ var LiveMathPreview = class {
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document2.positionAt(region.start).line;
-      const result = this.renderer.renderBlock(region.tex, region.rows, options);
+      const result = this.renderer.renderBlock(withNumbers(region.tex), region.rows, options, equationTags(region.tex, labels));
       if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
         const rendered = result.ok ? result.image : void 0;
         for (const item of this.besideSource(document2, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
         return;
       }
       if (!result.ok) {
-        const opening = new vscode15.Range(document2.positionAt(region.start), document2.lineAt(firstLine).range.end);
+        const opening = new vscode16.Range(document2.positionAt(region.start), document2.lineAt(firstLine).range.end);
         errors.add(`d${index}`, { range: opening, hoverMessage: `Live math preview: ${result.error}` });
         return;
       }
@@ -81700,12 +82232,12 @@ var LiveMathPreview = class {
         const line = document2.lineAt(firstLine + row);
         if (!line.range.isEmpty) hidden.add(`d${index}`, line.range);
       }
-      blockBackgrounds.add(`d${index}`, new vscode15.Range(firstLine, 0, firstLine + region.rows - 1, 0));
+      blockBackgrounds.add(`d${index}`, new vscode16.Range(firstLine, 0, firstLine + region.rows - 1, 0));
       const indent = visualColumn(document2.lineAt(firstLine).text, document2.positionAt(region.start).character, tabSize) + tabSize;
       for (const slice of result.image.slices) {
-        const start = new vscode15.Position(firstLine + slice.row, 0);
+        const start = new vscode16.Position(firstLine + slice.row, 0);
         blockImages.add(`d${index}`, {
-          range: new vscode15.Range(start, start),
+          range: new vscode16.Range(start, start),
           renderOptions: {
             before: {
               contentIconPath: this.uriFor(slice),
@@ -81719,12 +82251,42 @@ var LiveMathPreview = class {
         });
       }
     });
-    const state = `${scan.version}:${scan.macroGeneration}:${options.color}:${options.fontSizePx}:${options.lineHeightPx}:${tabSize}`;
+    if (labels) {
+      scan.references.forEach((region, index) => {
+        if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
+        const formatted = formatReference(region, labels, this.cref);
+        if (!formatted.text) return;
+        const range = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
+        const missing = formatted.labels.some((label) => !label);
+        hidden.add(`r${index}`, range);
+        referenceText.add(`r${index}`, {
+          range,
+          hoverMessage: referenceHover(region, formatted),
+          renderOptions: {
+            before: {
+              contentText: `${region.tie ? "\xA0" : ""}${formatted.text}`,
+              color: new vscode16.ThemeColor(missing ? "editorWarning.foreground" : "textLink.foreground"),
+              fontWeight: missing ? "bold" : void 0
+            }
+          }
+        });
+      });
+    }
+    const state = [
+      scan.version,
+      scan.macroGeneration,
+      this.labels.generation,
+      options.color,
+      options.fontSizePx,
+      options.lineHeightPx,
+      tabSize
+    ].join(":");
     this.apply(editor, this.hidden, hidden, state);
     this.apply(editor, this.inlineImages, inlineImages, state);
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
+    this.apply(editor, this.referenceText, referenceText, state);
   }
   /**
    * While a block is edited its source shows, and its rendering sits to the right of its longest
@@ -81744,7 +82306,7 @@ var LiveMathPreview = class {
     return block.slices.filter((slice) => slice.row < region.rows).map((slice) => {
       const end = document2.lineAt(firstLine + slice.row).range.end;
       return {
-        range: new vscode15.Range(end, end),
+        range: new vscode16.Range(end, end),
         renderOptions: {
           after: {
             contentIconPath: this.uriFor(slice),
@@ -81772,23 +82334,24 @@ var LiveMathPreview = class {
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
     editor.setDecorations(this.errors, []);
+    editor.setDecorations(this.referenceText, []);
   }
   /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
   uriFor(image) {
     let uri = this.uris.get(image);
     if (!uri) {
-      uri = vscode15.Uri.parse(image.dataUri);
+      uri = vscode16.Uri.parse(image.dataUri);
       this.uris.set(image, uri);
     }
     return uri;
   }
   renderSizing(document2) {
-    const editorConfig = vscode15.workspace.getConfiguration("editor", document2);
+    const editorConfig = vscode16.workspace.getConfiguration("editor", document2);
     const fontSizePx = editorConfig.get("fontSize", 14);
     const configuredLineHeight = editorConfig.get("lineHeight", 0);
     const lineHeightPx = configuredLineHeight <= 0 ? Math.round(fontSizePx * (process.platform === "darwin" ? 1.5 : 1.35)) : configuredLineHeight < 8 ? Math.round(configuredLineHeight * fontSizePx) : configuredLineHeight;
-    const configuredColor = vscode15.workspace.getConfiguration("latexEditingToolkit.livePreview").get("mathColor", "").trim();
-    return { fontSizePx, lineHeightPx, color: configuredColor || themeTextColor(vscode15.window.activeColorTheme.kind) };
+    const configuredColor = vscode16.workspace.getConfiguration("latexEditingToolkit.livePreview").get("mathColor", "").trim();
+    return { fontSizePx, lineHeightPx, color: configuredColor || themeTextColor(vscode16.window.activeColorTheme.kind) };
   }
   scheduleMacroScan() {
     if (!this.enabled) return;
@@ -81800,16 +82363,21 @@ var LiveMathPreview = class {
   }
   /** Collects the macros every .tex and .sty file in the workspace defines. */
   async scanWorkspaceMacros() {
-    const files = await vscode15.workspace.findFiles("**/*.{tex,sty}", "**/{.git,.overleaf-codex,node_modules}/**", MAX_MACRO_FILES);
+    const files = await vscode16.workspace.findFiles("**/*.{tex,sty}", "**/{.git,.overleaf-codex,node_modules}/**", MAX_MACRO_FILES);
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros = {};
+    const cref = emptyCrefSettings();
     for (const file of files) {
-      const stat13 = await vscode15.workspace.fs.stat(file).then((value) => value, () => void 0);
-      if (!stat13 || stat13.size > MAX_MACRO_FILE_BYTES) continue;
-      const bytes = await vscode15.workspace.fs.readFile(file).then((value) => value, () => void 0);
-      if (bytes) Object.assign(macros, parseMacroDefinitions(Buffer.from(bytes).toString("utf8")));
+      const stat14 = await vscode16.workspace.fs.stat(file).then((value) => value, () => void 0);
+      if (!stat14 || stat14.size > MAX_MACRO_FILE_BYTES) continue;
+      const bytes = await vscode16.workspace.fs.readFile(file).then((value) => value, () => void 0);
+      if (!bytes) continue;
+      const text = Buffer.from(bytes).toString("utf8");
+      Object.assign(macros, parseMacroDefinitions(text));
+      readCrefSettings(text, cref);
     }
     this.workspaceMacros = macros;
+    this.cref = cref;
     this.macroGeneration += 1;
   }
 };
@@ -81826,13 +82394,28 @@ function visualColumn(text, character, tabSize) {
   for (let i = 0; i < character; i++) column = text[i] === "	" ? column + tabSize - column % tabSize : column + 1;
   return column;
 }
+function parseDocument(text, languageId) {
+  const source = previewSource(text, languageId);
+  const regions = findMathRegions(text, languageId, source);
+  return { regions, references: findReferences(text, regions, languageId, source), root: rootHint(text, source) };
+}
+function referenceHover(region, formatted) {
+  const hover = new vscode16.MarkdownString();
+  region.keys.forEach((key, index) => {
+    const label = formatted.labels[index];
+    const details = label ? [label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(" \xB7 ") : "not numbered by the last compile; compile again to number it";
+    if (index) hover.appendMarkdown("\n\n");
+    hover.appendText(`${key}: ${details}`);
+  });
+  return hover;
+}
 function themeTextColor(kind) {
   switch (kind) {
-    case vscode15.ColorThemeKind.Light:
+    case vscode16.ColorThemeKind.Light:
       return "#3b3b3b";
-    case vscode15.ColorThemeKind.HighContrast:
+    case vscode16.ColorThemeKind.HighContrast:
       return "#ffffff";
-    case vscode15.ColorThemeKind.HighContrastLight:
+    case vscode16.ColorThemeKind.HighContrastLight:
       return "#292929";
     default:
       return "#cccccc";
@@ -81847,13 +82430,13 @@ var overleafService;
 var RECENT_PROJECT_PARENTS_KEY = "latexEditingToolkit.recentProjectParents";
 function authorityScope(context) {
   return [
-    vscode16.env.remoteName || "local",
-    vscode16.env.machineId || "unknown-machine",
+    vscode17.env.remoteName || "local",
+    vscode17.env.machineId || "unknown-machine",
     context.globalStorageUri.authority || "local"
   ].join("|");
 }
 function activate(context) {
-  const output = vscode16.window.createOutputChannel("LaTeX Editing Toolkit");
+  const output = vscode17.window.createOutputChannel("LaTeX Editing Toolkit");
   const scope = authorityScope(context);
   const projectRegistry = new LocalProjectRegistry(
     context.globalState,
@@ -81876,10 +82459,10 @@ function activate(context) {
     } catch (err) {
       logToolkitError(output, "latexEditingToolkit.dropLocalNotes", "(Local Notes)", err);
       treeProvider.refresh();
-      vscode16.window.showErrorMessage(`LaTeX Editing Toolkit: ${err instanceof Error ? err.message : String(err)}`);
+      vscode17.window.showErrorMessage(`LaTeX Editing Toolkit: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
-  overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode16.env.remoteName);
+  overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode17.env.remoteName);
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
   const liveMathPreview = new LiveMathPreview(output);
@@ -81890,9 +82473,9 @@ function activate(context) {
   context.subscriptions.push(
     output,
     treeProvider,
-    vscode16.window.createTreeView("latexEditingToolkit.actions", { treeDataProvider: treeProvider, dragAndDropController }),
-    vscode16.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
-    vscode16.window.onDidChangeWindowState((state) => {
+    vscode17.window.createTreeView("latexEditingToolkit.actions", { treeDataProvider: treeProvider, dragAndDropController }),
+    vscode17.workspace.onDidChangeWorkspaceFolders(() => treeProvider.refresh()),
+    vscode17.window.onDidChangeWindowState((state) => {
       if (state.focused) treeProvider.refresh();
     }),
     command("latexEditingToolkit.openToolkit", async (folderUri) => {
@@ -81902,14 +82485,14 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path48.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path50.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
       const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
-      vscode16.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
+      vscode17.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
     }),
     command("latexEditingToolkit.uninstallCli", async () => {
       const result = await uninstallCli();
-      vscode16.window.showInformationMessage(result.removed ? `Removed LaTeX Toolkit CLI from ${result.commandPath}.` : `No managed LaTeX Toolkit CLI was found at ${result.commandPath}.`);
+      vscode17.window.showInformationMessage(result.removed ? `Removed LaTeX Toolkit CLI from ${result.commandPath}.` : `No managed LaTeX Toolkit CLI was found at ${result.commandPath}.`);
     }),
     command("latexEditingToolkit.openSync", async (folderUri) => {
       const folder = await selectWorkspaceFolder(folderUri);
@@ -81918,17 +82501,17 @@ function activate(context) {
       await activePanel.openSection("sync");
     }),
     command("overleafCodex.publishFolder", async (candidate) => {
-      const target = candidate instanceof vscode16.Uri && candidate.scheme === "file" ? candidate : void 0;
-      const folder = target ? vscode16.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
+      const target = candidate instanceof vscode17.Uri && candidate.scheme === "file" ? candidate : void 0;
+      const folder = target ? vscode17.workspace.getWorkspaceFolder(target) : await selectWorkspaceFolder();
       if (!folder) {
-        if (target) vscode16.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
+        if (target) vscode17.window.showErrorMessage("Open the folder in VS Code before publishing it to Overleaf.");
         return;
       }
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
       await activePanel.openPublishForm((target ?? folder.uri).fsPath);
     }),
     command("hsnips.openSnippetManager", async (folderUri) => {
-      const folder = folderUri instanceof vscode16.Uri ? vscode16.workspace.getWorkspaceFolder(folderUri) : vscode16.window.activeTextEditor ? vscode16.workspace.getWorkspaceFolder(vscode16.window.activeTextEditor.document.uri) : vscode16.workspace.workspaceFolders?.[0];
+      const folder = folderUri instanceof vscode17.Uri ? vscode17.workspace.getWorkspaceFolder(folderUri) : vscode17.window.activeTextEditor ? vscode17.workspace.getWorkspaceFolder(vscode17.window.activeTextEditor.document.uri) : vscode17.workspace.workspaceFolders?.[0];
       activePanel = ToolkitPanel.createOrShow(context, folder, output, personalStyles, () => treeProvider.refresh());
       await activePanel.openSection("snippets");
     }),
@@ -81986,32 +82569,32 @@ function activate(context) {
       const templateId = current.state?.workspace_template?.templateId;
       const result = await service.handle("initialize-workspace", templateId && templateId !== "unknown" ? { template_id: templateId } : {});
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
+      vscode17.window.setStatusBarMessage(`Initialized LaTeX Toolkit workspace: ${JSON.stringify(result)}`, 3e3);
     }),
     command("latexEditingToolkit.upgradeWorkspaceThemeAssets", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const choice = await vscode16.window.showWarningMessage(
+      const choice = await vscode17.window.showWarningMessage(
         "Upgrade bundled theme assets? Existing files are backed up first. Preserve Colors keeps all current settings; Reset to Default only replaces the complete color/style package.",
         { modal: true },
         "Preserve Colors",
         "Reset to Default"
       );
       if (!choice) return;
-      const result = await vscode16.window.withProgress(
-        { location: vscode16.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
+      const result = await vscode17.window.withProgress(
+        { location: vscode17.ProgressLocation.Notification, title: "Upgrading LaTeX Toolkit theme assets" },
         () => service.handle("upgrade-theme-assets", { color_policy: choice === "Reset to Default" ? "default" : "preserve" })
       );
       const resetSuffix = result.updated_override_files?.length ? ` Updated ${result.updated_override_files.length} color state file(s).` : " Colors preserved.";
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
+      vscode17.window.setStatusBarMessage(`Upgraded ${result.upgraded_files?.length ?? 0} theme asset(s).${resetSuffix}`, 3e3);
     }),
     command("latexEditingToolkit.generateVscodeSettings", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const result = await service.handle("vscode-settings-generate", {});
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
+      vscode17.window.setStatusBarMessage(result.message ?? "VS Code settings checked.", 2500);
     }),
     command("latexEditingToolkit.saveOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -82019,12 +82602,12 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("save", response.state);
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
+      vscode17.window.setStatusBarMessage("Saved LaTeX Toolkit overrides.", 2e3);
     }),
     command("latexEditingToolkit.resetOverrides", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode16.window.showWarningMessage(
+      const ok = await vscode17.window.showWarningMessage(
         "Reset all Toolkit overrides? This deletes theme.ui.json, theme.overrides.tex, and theme.colors.tex, including theme, compile, class, toggle, and status settings.",
         { modal: true },
         "Reset All"
@@ -82032,30 +82615,30 @@ function activate(context) {
       if (ok !== "Reset All") return;
       await service.handle("reset", {});
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
+      vscode17.window.setStatusBarMessage("Reset all LaTeX Toolkit override files.", 2500);
     }),
     command("latexEditingToolkit.compilePdf", async (folderUri) => {
       const scoped = await folderAndServiceForCommand(context, folderUri);
       if (!scoped) return;
       const response = await scoped.service.handle("state", {});
-      const result = await vscode16.window.withProgress({ location: vscode16.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
+      const result = await vscode17.window.withProgress({ location: vscode17.ProgressLocation.Notification, title: "Compiling LaTeX PDF" }, () => scoped.service.handle("compile", response.state));
       logCompileResult(output, scoped.folder.uri.fsPath, result);
       const success = Boolean(result.success);
       treeProvider.refresh();
-      if (success) vscode16.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
+      if (success) vscode17.window.setStatusBarMessage("LaTeX compile succeeded.", 2500);
       else {
-        const action = await vscode16.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
+        const action = await vscode17.window.showErrorMessage("LaTeX compile failed. The complete log is available in LaTeX Editing Toolkit output.", "Show Log");
         if (action === "Show Log") output.show(true);
       }
     }),
     command("latexEditingToolkit.cleanArtifacts", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
-      const ok = await vscode16.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
+      const ok = await vscode17.window.showWarningMessage("Clean LaTeX build artifacts in the workspace?", { modal: true }, "Clean");
       if (ok !== "Clean") return;
       const result = await service.handle("clean", {});
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
+      vscode17.window.setStatusBarMessage(`Cleaned ${result.deleted_count ?? 0} file(s).${result.errors?.length ? " Some errors occurred." : ""}`, 2500);
     }),
     command("latexEditingToolkit.splitCurrentTarget", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -82063,7 +82646,7 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("split", { compile_target: response.state.compile_target ?? "main.tex", dry_run: false });
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage("Split current LaTeX target.", 2500);
+      vscode17.window.setStatusBarMessage("Split current LaTeX target.", 2500);
     }),
     command("latexEditingToolkit.renumberUnits", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
@@ -82071,17 +82654,17 @@ function activate(context) {
       const response = await service.handle("state", {});
       await service.handle("renumber", { compile_target: response.state.compile_target ?? "main.tex", mode: "add", dry_run: false });
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage("Renumbered referenced units.", 2500);
+      vscode17.window.setStatusBarMessage("Renumbered referenced units.", 2500);
     }),
     command("latexEditingToolkit.unsplitUnit", async (folderUri) => {
       const service = await serviceForCommand(context, folderUri);
       if (!service) return;
       const response = await service.handle("state", {});
-      const ok = await vscode16.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
+      const ok = await vscode17.window.showWarningMessage("Merge selected subfiles unit back to its root and delete the source unit?", { modal: true }, "Merge");
       if (ok !== "Merge") return;
       await service.handle("unsplit", { compile_target: response.state.compile_target ?? "", dry_run: false, delete_source: true });
       treeProvider.refresh();
-      vscode16.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
+      vscode17.window.setStatusBarMessage("Merged selected unit back to root.", 2500);
     })
   );
   overleafService.registerCommands((id, handler) => command(id, handler));
@@ -82092,7 +82675,7 @@ function activate(context) {
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CLI auto-update skipped: ${formatUnknownError(error)}`);
   });
   void autoStartOverleafMirror(overleafService, output);
-  context.subscriptions.push(vscode16.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
+  context.subscriptions.push(vscode17.workspace.onDidChangeWorkspaceFolders(() => void overleafService?.onWorkspaceChanged().catch((error) => output.appendLine(`Overleaf workspace refresh failed: ${formatUnknownError(error)}`))));
 }
 async function deactivate() {
   activePanel?.dispose();
@@ -82106,8 +82689,8 @@ async function autoStartOverleafMirror(service, output) {
   try {
     const state = await service.state();
     if (!state.available || !state.authenticated || !state.mirrorRoot) return;
-    if (!vscode16.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
-    await vscode16.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
+    if (!vscode17.workspace.getConfiguration("latexEditingToolkit.overleaf").get("autoSync", true)) return;
+    await vscode17.commands.executeCommand("overleafCodex.startRealtimeSync", { workspacePath: state.mirrorRoot });
   } catch (error) {
     const message = formatUnknownError(error);
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Overleaf auto-sync skipped: ${message}`);
@@ -82116,17 +82699,17 @@ async function autoStartOverleafMirror(service, output) {
 var LEGACY_SNIPS_NOTICE_KEY = "latexEditingToolkit.legacySnipsNotice.v1";
 async function warnAboutLegacySnips(context, output) {
   const legacyId = "yiqiyang33.yiqis-latexsnips";
-  const legacy = vscode16.extensions.getExtension(legacyId);
+  const legacy = vscode17.extensions.getExtension(legacyId);
   if (!legacy || context.globalState.get(LEGACY_SNIPS_NOTICE_KEY)) return;
   await context.globalState.update(LEGACY_SNIPS_NOTICE_KEY, true);
   output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Legacy extension detected: ${legacyId}`);
-  const action = await vscode16.window.showWarningMessage(
+  const action = await vscode17.window.showWarningMessage(
     "Yiqi's LatexSnips is also installed. LaTeX Editing Toolkit 1.0 now includes the same snippet engine; disable the old extension to avoid duplicate completions and Enter/Tab behavior.",
     "Open Extension",
     "Continue"
   );
   if (action === "Open Extension") {
-    await vscode16.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
+    await vscode17.commands.executeCommand("workbench.extensions.action.showExtensionsWithIds", [legacyId]);
   }
 }
 async function createOverleafProjectFromTemplate(context, registry, noteGroups, treeProvider, projectName, templateId, output, stylePreset, placement) {
@@ -82137,14 +82720,14 @@ async function createOverleafProjectFromTemplate(context, registry, noteGroups, 
   if (earlyErrors.length > 0) {
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PREFLIGHT`);
     for (const error of earlyErrors) output.appendLine(`- ${error}`);
-    const action = await vscode16.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
+    const action = await vscode17.window.showErrorMessage(`Cannot create project: ${earlyErrors.join(" ")}`, "Show Log");
     if (action === "Show Log") output.show(true);
     return;
   }
   try {
     const registered = {};
-    const result = await vscode16.window.withProgress(
-      { location: vscode16.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
+    const result = await vscode17.window.withProgress(
+      { location: vscode17.ProgressLocation.Notification, title: `Creating '${projectName}' on Overleaf`, cancellable: false },
       () => service.createProjectFromTemplate(projectName, async (root) => {
         const scoped = new ToolkitService(root, context.extensionPath, {
           additionalStylePresets: personalStyles?.definitions() ?? []
@@ -82157,24 +82740,24 @@ async function createOverleafProjectFromTemplate(context, registry, noteGroups, 
     if (!result.published) {
       output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE OVERLEAF PROJECT PUBLISH FAILED`);
       output.appendLine(`- ${result.publishError?.message ?? "unknown error"}`);
-      const action2 = await vscode16.window.showWarningMessage(
+      const action2 = await vscode17.window.showWarningMessage(
         `Created '${projectName}' on Overleaf, but not every file finished uploading. The folder is a working mirror, so running a sync will retry.`,
         "Open Folder",
         "Show Log"
       );
-      if (action2 === "Open Folder") await vscode16.commands.executeCommand("vscode.openFolder", vscode16.Uri.file(result.root), true);
+      if (action2 === "Open Folder") await vscode17.commands.executeCommand("vscode.openFolder", vscode17.Uri.file(result.root), true);
       if (action2 === "Show Log") output.show(true);
       return;
     }
-    const action = await vscode16.window.showInformationMessage(
+    const action = await vscode17.window.showInformationMessage(
       `Created '${projectName}' on Overleaf and mirrored it locally.`,
       "Open Folder"
     );
-    if (action === "Open Folder") await vscode16.commands.executeCommand("vscode.openFolder", vscode16.Uri.file(result.root), true);
+    if (action === "Open Folder") await vscode17.commands.executeCommand("vscode.openFolder", vscode17.Uri.file(result.root), true);
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", parentRoot, err);
     const message = err instanceof Error ? err.message : String(err);
-    const action = await vscode16.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
+    const action = await vscode17.window.showErrorMessage(`Could not create the Overleaf project: ${message}`, "Show Log");
     if (action === "Show Log") output.show(true);
   }
 }
@@ -82184,7 +82767,7 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
   if (options.groupId) {
     const group = groups.find((candidate) => candidate.id === options.groupId);
     if (!group) {
-      vscode16.window.showWarningMessage("This group no longer exists.");
+      vscode17.window.showWarningMessage("This group no longer exists.");
       return;
     }
     placement = { group };
@@ -82197,7 +82780,7 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
   const overleafState = await overleafService?.state().catch(() => void 0);
   let remote = false;
   if (overleafState?.available && overleafState.authenticated) {
-    const target = await vscode16.window.showQuickPick(
+    const target = await vscode17.window.showQuickPick(
       [
         { label: "Local only", description: "Create the project in a folder you choose", remote: false },
         { label: "$(cloud-upload) Local and Overleaf", description: "Also create it on Overleaf and keep it in sync", remote: true }
@@ -82215,13 +82798,13 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     if (!picked) return;
     parentPath = picked;
   }
-  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path48.basename(project.rootPath))));
+  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path50.basename(project.rootPath))));
   const nextInSeries = groupNotes[0] && suggestNextNoteName(
-    path48.basename(groupNotes[0].rootPath),
-    (candidate) => takenInGroup.has(candidate) || !remote && fs39.existsSync(path48.join(parentPath, candidate))
+    path50.basename(groupNotes[0].rootPath),
+    (candidate) => takenInGroup.has(candidate) || !remote && fs40.existsSync(path50.join(parentPath, candidate))
   );
   const defaultName = nextInSeries || "New Notes";
-  const projectName = await vscode16.window.showInputBox({
+  const projectName = await vscode17.window.showInputBox({
     title: "Create Project: Project Name",
     prompt: remote ? "The name of the new Overleaf project" : `A new folder will be created inside ${parentPath}`,
     value: defaultName,
@@ -82229,7 +82812,7 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     validateInput: (value) => projectNameError2(value, remote ? void 0 : parentPath)
   });
   if (!projectName) return;
-  const pickedKind = await vscode16.window.showQuickPick(
+  const pickedKind = await vscode17.window.showQuickPick(
     [
       { label: "Book", description: "Long-form notes with chapters", documentKind: "book" },
       { label: "Article", description: "Article and homework notes", documentKind: "article" },
@@ -82238,7 +82821,7 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     { title: "Create Project: Document Type", placeHolder: "Choose the document type" }
   );
   if (!pickedKind) return;
-  const pickedTemplate = await vscode16.window.showQuickPick(
+  const pickedTemplate = await vscode17.window.showQuickPick(
     STARTER_TEMPLATE_DEFINITIONS.filter((template) => template.kind === pickedKind.documentKind).map((template) => ({
       label: template.label,
       description: template.id,
@@ -82260,68 +82843,68 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
   }
   const preflight = await preflightCreateProject({ parentPath, projectName, templateId: pickedTemplate.template.id, stylePreset: style.stylePreset }, context.extensionPath);
   if (!preflight.ok) {
-    const action = await vscode16.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
+    const action = await vscode17.window.showErrorMessage(`Cannot create project: ${preflight.errors.join(" ")}`, "Show Log");
     output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] CREATE PROJECT PREFLIGHT`);
     for (const error of preflight.errors) output.appendLine(`- ${error}`);
     if (action === "Show Log") output.show(true);
     return;
   }
   if (preflight.targetExists && preflight.targetEmpty) {
-    const choice = await vscode16.window.showWarningMessage(
+    const choice = await vscode17.window.showWarningMessage(
       `The folder '${preflight.rootPath}' already exists and is empty. Use it for the new project?`,
       { modal: true },
       "Use Empty Folder"
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const normalizedParent = path48.normalize(path48.resolve(parentPath));
-  const nextRecent = [normalizedParent, ...recent.filter((item) => path48.normalize(item) !== normalizedParent)].slice(0, 8);
+  const normalizedParent = path50.normalize(path50.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path50.normalize(item) !== normalizedParent)].slice(0, 8);
   await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
   });
   let created;
   try {
-    created = await vscode16.window.withProgress({ location: vscode16.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset));
+    created = await vscode17.window.withProgress({ location: vscode17.ProgressLocation.Notification, title: "Creating LaTeX Toolkit project" }, () => runCreateProjectWorkflow(service, registry, preflight.rootPath, pickedTemplate.template.id, style.stylePreset));
   } catch (err) {
     logToolkitError(output, "latexEditingToolkit.createProject", preflight.rootPath, err);
     const message = err instanceof Error ? err.message : String(err);
-    const action = await vscode16.window.showErrorMessage(
+    const action = await vscode17.window.showErrorMessage(
       `Project creation failed: ${message}. The folder may contain partially generated resources.`,
       "Open Folder",
       "Show Log"
     );
-    if (action === "Open Folder") await vscode16.commands.executeCommand("vscode.openFolder", vscode16.Uri.file(preflight.rootPath), { forceNewWindow: false });
+    if (action === "Open Folder") await vscode17.commands.executeCommand("vscode.openFolder", vscode17.Uri.file(preflight.rootPath), { forceNewWindow: false });
     if (action === "Show Log") output.show(true);
     return;
   }
   await placeNewProject(noteGroups, created, placement);
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
-  await vscode16.commands.executeCommand("vscode.openFolder", vscode16.Uri.file(preflight.rootPath), { forceNewWindow: false });
+  vscode17.window.setStatusBarMessage(`Created LaTeX Toolkit project: ${projectName}`, 3e3);
+  await vscode17.commands.executeCommand("vscode.openFolder", vscode17.Uri.file(preflight.rootPath), { forceNewWindow: false });
 }
 async function pickProjectParent(recent, group) {
   const suggested = /* @__PURE__ */ new Set();
-  for (const folder of vscode16.workspace.workspaceFolders ?? []) {
+  for (const folder of vscode17.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path48.dirname(folder.uri.fsPath));
+      suggested.add(path50.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
   const groupFolder = group?.folderPath;
   if (groupFolder) suggested.delete(groupFolder);
-  const location = await vscode16.window.showQuickPick(
+  const location = await vscode17.window.showQuickPick(
     [
-      ...group && groupFolder ? [{ label: path48.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
-      ...[...suggested].map((folderPath) => ({ label: path48.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...group && groupFolder ? [{ label: path50.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
+      ...[...suggested].map((folderPath) => ({ label: path50.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project: Location", placeHolder: "Choose the parent folder for the new project" }
   );
   if (!location) return void 0;
   if (location.folderPath) return location.folderPath;
-  const selected = await vscode16.window.showOpenDialog({
+  const selected = await vscode17.window.showOpenDialog({
     title: "Create Project: Choose Parent Folder",
     canSelectFiles: false,
     canSelectFolders: true,
@@ -82338,11 +82921,11 @@ async function projectNameError2(value, parentPath) {
   if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
   if (!parentPath) return void 0;
-  const target = path48.resolve(parentPath, name);
+  const target = path50.resolve(parentPath, name);
   try {
-    const stat13 = await fs39.promises.lstat(target);
-    if (!stat13.isDirectory()) return `A file named '${name}' already exists here.`;
-    if ((await fs39.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
+    const stat14 = await fs40.promises.lstat(target);
+    if (!stat14.isDirectory()) return `A file named '${name}' already exists here.`;
+    if ((await fs40.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
   } catch {
   }
   return void 0;
@@ -82362,7 +82945,7 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, {});
   } catch (err) {
     if (!(err instanceof HistoryConflictError)) throw err;
-    const choice = await vscode16.window.showWarningMessage(
+    const choice = await vscode17.window.showWarningMessage(
       `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
       { modal: true },
       "Show Conflicts",
@@ -82378,11 +82961,11 @@ async function restoreLastToolkitChange(context, treeProvider, output, direction
     await scoped.service.handle(command, { force: true });
   }
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
+  vscode17.window.setStatusBarMessage(`${direction === "undo" ? "Undid" : "Redid"} last Toolkit change`, 2500);
   if (activePanel?.folder?.uri.toString() === scoped.folder.uri.toString()) await activePanel.refreshState();
 }
 function registerToolkitCommand(output, commandId, handler) {
-  return vscode16.commands.registerCommand(commandId, async (...args) => {
+  return vscode17.commands.registerCommand(commandId, async (...args) => {
     try {
       return await handler(...args);
     } catch (err) {
@@ -82391,30 +82974,30 @@ function registerToolkitCommand(output, commandId, handler) {
       if (err instanceof SyncStandbyError) {
         output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] ${commandId}: ${err.message}`);
         const takeOver = "Take Over Sync Here";
-        const action2 = await vscode16.window.showWarningMessage(err.message, takeOver);
+        const action2 = await vscode17.window.showWarningMessage(err.message, takeOver);
         if (action2 === takeOver) {
-          await vscode16.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
+          await vscode17.commands.executeCommand("overleafCodex.takeOverSync", ...args.slice(0, 1));
         }
         return void 0;
       }
       logToolkitError(output, commandId, workspacePath, err);
       const message = err instanceof Error ? err.message : String(err);
-      const action = await vscode16.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
+      const action = await vscode17.window.showErrorMessage(`LaTeX Editing Toolkit: ${message}`, "Show Log");
       if (action === "Show Log") output.show(true);
       return void 0;
     }
   });
 }
 function isUserCancellation(err) {
-  return err instanceof vscode16.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
+  return err instanceof vscode17.CancellationError || err instanceof Error && /cancelled|canceled/i.test(err.message);
 }
 function workspacePathFromArguments(args) {
   for (const arg of args) {
-    if (arg instanceof vscode16.Uri && arg.scheme === "file") return arg.fsPath;
+    if (arg instanceof vscode17.Uri && arg.scheme === "file") return arg.fsPath;
     const projectPath = localPathFromArgument(arg);
     if (projectPath) return projectPath;
   }
-  return vscode16.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
+  return vscode17.workspace.workspaceFolders?.find((folder) => folder.uri.scheme === "file")?.uri.fsPath ?? "(no local workspace)";
 }
 function logToolkitError(output, commandId, workspacePath, err) {
   const error = err instanceof Error ? err : new Error(String(err));
@@ -82430,14 +83013,14 @@ function logCompileResult(output, workspacePath, result) {
   output.appendLine("");
 }
 async function selectWorkspaceFolder(preferredFolderUri) {
-  const folders = vscode16.workspace.workspaceFolders ?? [];
+  const folders = vscode17.workspace.workspaceFolders ?? [];
   if (folders.length === 0) {
-    vscode16.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
+    vscode17.window.showErrorMessage("Open a local workspace folder before using LaTeX Editing Toolkit.");
     return void 0;
   }
   const localFolders = folders.filter((folder) => folder.uri.scheme === "file");
   if (localFolders.length === 0) {
-    vscode16.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
+    vscode17.window.showErrorMessage("LaTeX Editing Toolkit currently supports local file workspaces only.");
     return void 0;
   }
   if (preferredFolderUri?.scheme === "file") {
@@ -82445,7 +83028,7 @@ async function selectWorkspaceFolder(preferredFolderUri) {
     if (matched) return matched;
   }
   if (localFolders.length === 1) return localFolders[0];
-  const picked = await vscode16.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
+  const picked = await vscode17.window.showQuickPick(localFolders.map((folder) => ({ label: folder.name, folder })), { placeHolder: "Select Toolkit workspace" });
   return picked?.folder;
 }
 async function serviceForCommand(context, preferredFolderUri) {
@@ -82457,9 +83040,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path48.resolve(rootPath);
+  let canonical = path50.resolve(rootPath);
   try {
-    canonical = fs39.realpathSync.native(canonical);
+    canonical = fs40.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -82493,7 +83076,7 @@ function currentPdfPath(state) {
 }
 async function pickStylePresetForTemplate(template, presets, title, activePreset) {
   if (!(template.capabilities || []).includes("toolkit-theme") || presets.length === 0) return { cancelled: false };
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.id === activePreset ? `$(check) ${preset.label}` : preset.label,
       description: preset.id,
@@ -82508,12 +83091,12 @@ async function pickStylePresetForTemplate(template, presets, title, activePreset
 async function createStarterInWorkspace(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
-  const pickedKind = await vscode16.window.showQuickPick(
+  const pickedKind = await vscode17.window.showQuickPick(
     scoped.response.schema.starter_template_groups.filter((group) => group.templates.length > 0).map((group) => ({ label: group.label, description: `${group.templates.length} starter(s)`, group })),
     { title: "Select document type", placeHolder: "Choose the starter family" }
   );
   if (!pickedKind) return;
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     pickedKind.group.templates.map((template) => ({
       label: template.label,
       description: template.id,
@@ -82523,15 +83106,15 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     { title: `Select ${pickedKind.label} starter`, placeHolder: "Choose starter template" }
   );
   if (!picked) return;
-  const outputTarget = await vscode16.window.showInputBox({
+  const outputTarget = await vscode17.window.showInputBox({
     title: "Generate Starter",
     prompt: "Workspace-relative .tex file to create",
     value: scoped.response.schema.starter_default_output_target || "main.tex"
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs39.existsSync(path48.resolve(scoped.folder.uri.fsPath, outputTarget))) {
-    const ok = await vscode16.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
+  if (fs40.existsSync(path50.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+    const ok = await vscode17.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
   }
@@ -82549,17 +83132,17 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
     style_preset: style.stylePreset
   });
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
+  vscode17.window.setStatusBarMessage(`Generated ${result.generated_target ?? outputTarget}.`, 2500);
 }
 async function pickCompileTarget(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const targets = scoped.response.state.compile_targets;
   if (targets.length === 0) {
-    vscode16.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
+    vscode17.window.showWarningMessage("No LaTeX compile targets found in this workspace.");
     return;
   }
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     targets.map((target) => ({
       label: target,
       description: target === scoped.response.state.compile_target ? "current" : ""
@@ -82569,17 +83152,17 @@ async function pickCompileTarget(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("target", { compile_target: picked.label });
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`Compile target set to ${picked.label}.`, 2e3);
 }
 async function pickCompileRecipe(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const recipes = scoped.response.state.compile_recipes;
   if (recipes.length === 0) {
-    vscode16.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
+    vscode17.window.showWarningMessage("No VS Code LaTeX recipes found. Generate VS Code settings or use internal fallback.");
     return;
   }
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     recipes.map((recipe) => ({
       label: recipe.name,
       description: recipe.id === scoped.response.state.compile_recipe ? "current" : recipe.id,
@@ -82594,7 +83177,7 @@ async function pickCompileRecipe(context, treeProvider, folderUri) {
     compile_use_internal_fallback: false
   });
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`Compile recipe set to ${picked.recipe.name}.`, 2e3);
 }
 async function toggleInternalFallback(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -82605,7 +83188,7 @@ async function toggleInternalFallback(context, treeProvider, folderUri) {
     compile_use_internal_fallback: next
   });
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`Internal fallback ${next ? "enabled" : "disabled"}.`, 2e3);
 }
 async function openCurrentPdf(context, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -82613,9 +83196,9 @@ async function openCurrentPdf(context, folderUri) {
   const rawPath = currentPdfPath(scoped.response.state);
   try {
     const pdfPath = await scoped.service.readPdfIfExists(rawPath);
-    await vscode16.commands.executeCommand("vscode.open", vscode16.Uri.file(pdfPath));
+    await vscode17.commands.executeCommand("vscode.open", vscode17.Uri.file(pdfPath));
   } catch {
-    vscode16.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
+    vscode17.window.showWarningMessage(`PDF not found yet: ${rawPath}`);
   }
 }
 async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
@@ -82627,7 +83210,7 @@ async function toggleThemeOption(context, treeProvider, folderUri, toggleId) {
   state.toggles[toggleId] = !state.toggles[toggleId];
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`${toggle.label}: ${state.toggles[toggleId] ? "on" : "off"}.`, 2e3);
 }
 async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const scoped = await responseForCommand(context, folderUri);
@@ -82635,7 +83218,7 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   const field = scoped.response.schema.class_config.find((item) => item.id === fieldId);
   if (!field) return;
   const current = scoped.response.state.class_config[field.id];
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     field.options.map((option) => ({
       label: option.label,
       description: option.value === current ? "current" : option.value,
@@ -82648,14 +83231,14 @@ async function pickClassConfig(context, treeProvider, folderUri, fieldId) {
   state.class_config[field.id] = picked.option.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`${field.label}: ${picked.option.label}.`, 2e3);
 }
 async function pickStylePreset(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
   if (!scoped) return;
   const presets = scoped.response.schema.style_presets;
   const current = scoped.response.state.style_preset;
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     presets.map((preset) => ({
       label: preset.label,
       description: preset.id === current ? "current" : preset.id,
@@ -82667,7 +83250,7 @@ async function pickStylePreset(context, treeProvider, folderUri) {
   if (!picked) return;
   await scoped.service.handle("style-preset", { style_preset: picked.preset.id });
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`Style preset: ${picked.preset.label}.`, 2e3);
 }
 async function pickBodyFontSize(context, treeProvider, folderUri) {
   const scoped = await responseForCommand(context, folderUri);
@@ -82678,7 +83261,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
     values.push(Number(value.toFixed(2)));
   }
   const current = scoped.response.state.body_font_size_pt;
-  const picked = await vscode16.window.showQuickPick(
+  const picked = await vscode17.window.showQuickPick(
     values.map((value) => ({
       label: `${formatPointSize(value)} pt`,
       description: value === current ? "current" : "",
@@ -82691,7 +83274,7 @@ async function pickBodyFontSize(context, treeProvider, folderUri) {
   state.body_font_size_pt = picked.value;
   await scoped.service.handle("save", state);
   treeProvider.refresh();
-  vscode16.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
+  vscode17.window.setStatusBarMessage(`${config.label}: ${picked.label}.`, 2e3);
 }
 function formatPointSize(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -82705,7 +83288,7 @@ var ToolkitTreeProvider = class {
   context;
   projectRegistry;
   noteGroups;
-  changeEmitter = new vscode16.EventEmitter();
+  changeEmitter = new vscode17.EventEmitter();
   onDidChangeTreeData = this.changeEmitter.event;
   refresh() {
     this.changeEmitter.fire();
@@ -82714,14 +83297,14 @@ var ToolkitTreeProvider = class {
     this.changeEmitter.dispose();
   }
   getTreeItem(node) {
-    const collapsibleState = node.collapsibleState ?? (node.children ? vscode16.TreeItemCollapsibleState.Collapsed : vscode16.TreeItemCollapsibleState.None);
-    const item = new vscode16.TreeItem(node.label, collapsibleState);
+    const collapsibleState = node.collapsibleState ?? (node.children ? vscode17.TreeItemCollapsibleState.Collapsed : vscode17.TreeItemCollapsibleState.None);
+    const item = new vscode17.TreeItem(node.label, collapsibleState);
     item.id = node.id;
     item.description = node.description;
     item.tooltip = node.tooltip ?? node.label;
     item.contextValue = node.contextValue;
     item.resourceUri = node.resourceUri;
-    if (node.iconId) item.iconPath = new vscode16.ThemeIcon(node.iconId);
+    if (node.iconId) item.iconPath = new vscode17.ThemeIcon(node.iconId);
     if (node.commandId) {
       item.command = {
         command: node.commandId,
@@ -82736,7 +83319,7 @@ var ToolkitTreeProvider = class {
     return this.rootNodes();
   }
   async rootNodes() {
-    const localFolders = (vscode16.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
+    const localFolders = (vscode17.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file");
     const nodes = [];
     nodes.push(await this.localNotesNode());
     nodes.push(await this.overleafMirrorsNode());
@@ -82759,7 +83342,7 @@ var ToolkitTreeProvider = class {
     if (!overleafService) {
       return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", [
         this.infoNode("overleaf-unavailable", "Overleaf unavailable", "The sync service has not initialized yet.", "warning")
-      ], vscode16.TreeItemCollapsibleState.Collapsed);
+      ], vscode17.TreeItemCollapsibleState.Collapsed);
     }
     const mirrors = await overleafService.listMirrors().catch(() => []);
     const currentRoot = overleafService.realtimeSync.currentRoot;
@@ -82785,7 +83368,7 @@ var ToolkitTreeProvider = class {
           id: `overleaf-mirror:${mirror.id}`,
           identity: { mirrorId: mirror.id },
           label: mirror.name,
-          description: `${status} \xB7 ${path48.basename(path48.dirname(mirror.root))}`,
+          description: `${status} \xB7 ${path50.basename(path50.dirname(mirror.root))}`,
           iconId: icon,
           commandId: "overleafCodex.openLocalMirror",
           contextValue: "overleafMirror"
@@ -82794,12 +83377,12 @@ var ToolkitTreeProvider = class {
       ...mirrors.some((mirror) => mirror.missing) ? [this.actionNode("overleaf-mirrors-clear-missing", "Clear Missing Mirrors", "remove stale registry entries", "trash", "overleafCodex.clearMissingMirrors", [])] : [],
       publishNode
     ] : [this.infoNode("overleaf-mirrors-empty", "No Overleaf mirrors", "Open a remote project to create a local mirror.", "cloud"), publishNode];
-    return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode16.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : void 0);
+    return this.groupNode("overleaf-mirrors", "Overleaf Mirrors", "cloud", children, vscode17.TreeItemCollapsibleState.Expanded, currentRoot ? "Active mirror connected" : void 0);
   }
   async localNotesNode() {
     const [projects, groups] = await Promise.all([this.projectRegistry.list(), this.noteGroups.list()]);
     const openProjectIds = new Set((await Promise.all(
-      (vscode16.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
+      (vscode17.workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === "file").map((folder) => this.projectRegistry.find(folder.uri.fsPath))
     )).filter((project) => Boolean(project)).map((project) => project.id));
     return localNotesRootNode(projects, groups, openProjectIds);
   }
@@ -82813,7 +83396,7 @@ var ToolkitTreeProvider = class {
       tooltip: folder.uri.fsPath,
       iconId: "root-folder",
       resourceUri: folder.uri,
-      collapsibleState: vscode16.TreeItemCollapsibleState.Expanded,
+      collapsibleState: vscode17.TreeItemCollapsibleState.Expanded,
       contextValue: "workspace",
       children: response instanceof Error ? this.workspaceErrorGroups(folder, response) : this.workspaceGroups(folder, response)
     };
@@ -82834,8 +83417,8 @@ var ToolkitTreeProvider = class {
     ];
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
-    const activeSnippetProfile = vscode16.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path48.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const activeSnippetProfile = vscode17.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path50.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -82848,7 +83431,7 @@ var ToolkitTreeProvider = class {
         ),
         this.actionNode("select-snippet-profile", "Select Profile", "base + profile + workspace", "account", "hsnips.selectProfile", folderArg),
         this.actionNode("reload-snippets", "Reload Snippets", ".hsnips files", "refresh", "hsnips.reloadSnippets", folderArg)
-      ], vscode16.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} \xB7 ${snippetFileCount} files`),
+      ], vscode17.TreeItemCollapsibleState.Collapsed, `${activeSnippetProfile || "Base"} \xB7 ${snippetFileCount} files`),
       this.groupNode(`build:${folder.uri.toString()}`, "Build", "play", [
         this.actionNode("compile-pdf", "Compile PDF", state.compile_target || "current target", "play", "latexEditingToolkit.compilePdf", folderArg),
         this.actionNode("open-current-pdf", "Open Current PDF", currentPdfPath(state), "open-preview", "latexEditingToolkit.openCurrentPdf", folderArg),
@@ -82856,7 +83439,7 @@ var ToolkitTreeProvider = class {
         this.actionNode("pick-recipe", "Pick Recipe", `${state.compile_recipes.length} found`, "settings-gear", "latexEditingToolkit.pickCompileRecipe", folderArg),
         this.actionNode("toggle-internal-fallback", "Internal Fallback", state.compile_use_internal_fallback ? "on" : "off", "debug-restart", "latexEditingToolkit.toggleInternalFallback", folderArg),
         this.actionNode("clean-artifacts", "Clean Build Artifacts", "workspace", "trash", "latexEditingToolkit.cleanArtifacts", folderArg)
-      ], vscode16.TreeItemCollapsibleState.Expanded),
+      ], vscode17.TreeItemCollapsibleState.Expanded),
       ...state.workspace_template.kind === "beamer" ? [
         this.groupNode(`presentation:${folder.uri.toString()}`, "Presentation", "preview", [
           this.infoNode(`presentation-template:${folder.uri.toString()}`, "Template", this.templateLabel(schema, state.workspace_template.templateId), "symbol-color"),
@@ -82918,7 +83501,7 @@ var ToolkitTreeProvider = class {
         this.actionNode("sync-stop", "Stop Realtime Sync", "pause remote updates", "debug-stop", "overleafCodex.stopRealtimeSync", folderArg),
         this.actionNode("sync-conflicts", "Show Conflicts", "manual resolution", "warning", "overleafCodex.showConflicts", folderArg),
         this.actionNode("sync-refresh", "Refresh Sync", "remote status", "refresh", "overleafCodex.refreshViews", folderArg)
-      ], vscode16.TreeItemCollapsibleState.Collapsed));
+      ], vscode17.TreeItemCollapsibleState.Collapsed));
     }
     if (state.config_warnings.length > 0 || state.compile_last_success === false) {
       const diagnostics = [this.infoNode(`last-compile:${folder.uri.toString()}`, "Last Compile", this.lastCompileDescription(state), this.lastCompileIcon(state))];
@@ -82926,7 +83509,7 @@ var ToolkitTreeProvider = class {
         ...this.infoNode(`config-warnings:${folder.uri.toString()}`, "Configuration Warnings", `${state.config_warnings.length} warning(s)`, "warning"),
         tooltip: state.config_warnings.join("\n")
       });
-      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode16.TreeItemCollapsibleState.Expanded));
+      nodes.push(this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", diagnostics, vscode17.TreeItemCollapsibleState.Expanded));
     }
     return nodes;
   }
@@ -82944,16 +83527,16 @@ var ToolkitTreeProvider = class {
       this.actionNode("open-toolkit", "Open Toolkit", "visual workbench", "tools", "latexEditingToolkit.openToolkit", folderArg),
       this.groupNode(`diagnostics:${folder.uri.toString()}`, "Diagnostics", "warning", [
         this.infoNode(`state-error:${folder.uri.toString()}`, "State Unavailable", error.message, "error")
-      ], vscode16.TreeItemCollapsibleState.Expanded),
+      ], vscode17.TreeItemCollapsibleState.Expanded),
       this.groupNode(`project:${folder.uri.toString()}`, "Project Tools", "repo", [
         this.actionNode("generate-starter", "Generate Starter", "main.tex", "new-file", "latexEditingToolkit.createStarterInWorkspace", folderArg),
         this.actionNode("initialize-workspace", "Initialize Workspace", "copy", "package", "latexEditingToolkit.initializeWorkspace", folderArg),
         this.actionNode("upgrade-theme-assets", "Upgrade Theme Assets", "backup first", "cloud-download", "latexEditingToolkit.upgradeWorkspaceThemeAssets", folderArg),
         this.actionNode("generate-settings", "Generate VS Code Settings", ".vscode/settings.json", "settings-gear", "latexEditingToolkit.generateVscodeSettings", folderArg)
-      ], vscode16.TreeItemCollapsibleState.Expanded)
+      ], vscode17.TreeItemCollapsibleState.Expanded)
     ];
   }
-  groupNode(id, label, iconId, children, collapsibleState = vscode16.TreeItemCollapsibleState.Collapsed, description) {
+  groupNode(id, label, iconId, children, collapsibleState = vscode17.TreeItemCollapsibleState.Collapsed, description) {
     return {
       id,
       label,
@@ -83046,21 +83629,21 @@ var ToolkitPanel = class _ToolkitPanel {
     const panelKey = folder?.uri.toString() || "global-snippets";
     if (activePanel) {
       if (activePanel.panelKey === panelKey) {
-        activePanel.panel.reveal(vscode16.ViewColumn.One);
+        activePanel.panel.reveal(vscode17.ViewColumn.One);
         return activePanel;
       }
       activePanel.dispose();
     }
-    const panel = vscode16.window.createWebviewPanel(
+    const panel = vscode17.window.createWebviewPanel(
       "latexEditingToolkit.toolkit",
       "LaTeX Editing Toolkit",
-      vscode16.ViewColumn.One,
+      vscode17.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode16.Uri.file(path48.join(context.extensionPath, "dist")),
-          vscode16.Uri.file(path48.join(context.extensionPath, "dist", "monaco"))
+          vscode17.Uri.file(path50.join(context.extensionPath, "dist")),
+          vscode17.Uri.file(path50.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -83093,11 +83676,11 @@ var ToolkitPanel = class _ToolkitPanel {
     await this.panel.webview.postMessage({ type: "toolkit-state-refresh", data });
   }
   async openSection(section) {
-    this.panel.reveal(vscode16.ViewColumn.One);
+    this.panel.reveal(vscode17.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-section", section });
   }
   async openPublishForm(folder) {
-    this.panel.reveal(vscode16.ViewColumn.One);
+    this.panel.reveal(vscode17.ViewColumn.One);
     await this.panel.webview.postMessage({ type: "toolkit-open-publish", folder });
   }
   async handleMessage(message) {
@@ -83109,7 +83692,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const action = request.payload?.action;
         if (!isConfirmAction(action)) throw new Error("Unknown Toolkit confirmation action.");
         const spec = confirmationSpec(action, String(request.payload?.detail ?? ""));
-        const choice = await vscode16.window.showWarningMessage(
+        const choice = await vscode17.window.showWarningMessage(
           spec.message,
           { modal: true, detail: spec.detail },
           spec.confirmLabel
@@ -83119,7 +83702,7 @@ var ToolkitPanel = class _ToolkitPanel {
         this.output.show(true);
         data = { shown: true };
       } else if (request.command === "snippets-state" || request.command === "snippets-reload") {
-        if (request.command === "snippets-reload") await vscode16.commands.executeCommand("hsnips.reloadSnippets");
+        if (request.command === "snippets-reload") await vscode17.commands.executeCommand("hsnips.reloadSnippets");
         data = await this.snippetService.state();
       } else if (request.command === "snippets-analyze") {
         data = await this.snippetService.analyze(String(request.payload?.file_path ?? ""), String(request.payload?.content ?? ""));
@@ -83141,14 +83724,14 @@ var ToolkitPanel = class _ToolkitPanel {
         const profile = String(request.payload?.profile ?? "").trim();
         const current = await this.snippetService.state();
         if (profile && !current.profiles.includes(profile)) throw new Error("Unknown snippet profile.");
-        await vscode16.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode16.ConfigurationTarget.Global);
-        await vscode16.commands.executeCommand("hsnips.reloadSnippets");
+        await vscode17.workspace.getConfiguration("hsnips").update("profiles.activeProfile", profile, vscode17.ConfigurationTarget.Global);
+        await vscode17.commands.executeCommand("hsnips.reloadSnippets");
         data = await this.snippetService.state();
       } else if (request.command === "snippets-open-directory") {
         const scope = String(request.payload?.scope ?? "base");
-        if (scope === "base") await vscode16.commands.executeCommand("hsnips.openSnippetsDir");
-        else if (scope === "profile") await vscode16.commands.executeCommand("hsnips.openActiveProfile");
-        else if (scope === "workspace") await vscode16.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
+        if (scope === "base") await vscode17.commands.executeCommand("hsnips.openSnippetsDir");
+        else if (scope === "profile") await vscode17.commands.executeCommand("hsnips.openActiveProfile");
+        else if (scope === "workspace") await vscode17.commands.executeCommand("hsnips.openWorkspaceSnippetsDir");
         else throw new Error("Unknown snippet directory scope.");
         data = { opened: true };
       } else if (request.command.startsWith("overleaf-")) {
@@ -83164,23 +83747,23 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists7 = false;
         try {
-          const stat13 = await fs39.promises.stat(pdfPath);
-          exists7 = stat13.isFile();
+          const stat14 = await fs40.promises.stat(pdfPath);
+          exists7 = stat14.isFile();
         } catch {
           exists7 = false;
         }
-        data = { path: rawPath || path48.basename(pdfPath), exists: exists7 };
+        data = { path: rawPath || path50.basename(pdfPath), exists: exists7 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
         const pdfPath = await service.readPdfIfExists(rawPath);
-        await vscode16.commands.executeCommand("vscode.open", vscode16.Uri.file(pdfPath));
+        await vscode17.commands.executeCommand("vscode.open", vscode17.Uri.file(pdfPath));
         data = { opened: true };
       } else if (request.command === "personal-style-save") {
         const service = this.requireService();
         const state = request.payload?.state;
         if (!isPlainRecord(state) || !isPlainRecord(state.colors)) throw new Error("Current style state is unavailable.");
-        const label = await vscode16.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode17.window.showInputBox({ title: "Save as Personal Style", prompt: "Style name", validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (!label) {
           data = await service.handle("state", {});
         } else {
@@ -83201,7 +83784,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const label = await vscode16.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
+        const label = await vscode17.window.showInputBox({ title: "Rename Personal Style", value: current.label, validateInput: (value) => value.trim() ? void 0 : "Style name is required." });
         if (label) await this.styleRegistry.rename(id, label);
         refreshPersonalStylesOnServices(this.styleRegistry);
         data = await service.handle("state", {});
@@ -83210,7 +83793,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const current = this.styleRegistry.list().find((style) => style.id === id);
         if (!current) throw new Error("Personal style not found.");
-        const confirmed = await vscode16.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
+        const confirmed = await vscode17.window.showWarningMessage(`Delete personal style '${current.label}'? Project colors will not be deleted.`, { modal: true }, "Delete Style");
         if (confirmed !== "Delete Style") data = await service.handle("state", {});
         else {
           await this.styleRegistry.remove(id);
@@ -83221,10 +83804,10 @@ var ToolkitPanel = class _ToolkitPanel {
         }
       } else if (request.command === "personal-style-import") {
         const service = this.requireService();
-        const picked = await vscode16.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
+        const picked = await vscode17.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
         if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs39.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs40.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
           data = { ...await service.handle("state", {}), personal_style_import: summary };
@@ -83234,8 +83817,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode16.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode16.Uri.file(path48.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs39.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode17.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode17.Uri.file(path50.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs40.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
@@ -83245,7 +83828,7 @@ var ToolkitPanel = class _ToolkitPanel {
         } catch (err) {
           if (!(err instanceof HistoryConflictError)) throw err;
           const direction = request.command.startsWith("undo") ? "undo" : "redo";
-          const choice = await vscode16.window.showWarningMessage(
+          const choice = await vscode17.window.showWarningMessage(
             `Cannot ${direction}: ${err.conflicts.length} tracked item(s) changed outside the recorded operation.`,
             { modal: true },
             "Show Conflicts",
@@ -83276,10 +83859,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode16.Uri.file(path48.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode16.Uri.file(path48.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode16.Uri.file(path48.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode16.Uri.file(path48.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -83296,7 +83879,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs39.existsSync(path48.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs40.existsSync(path50.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

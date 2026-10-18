@@ -66,6 +66,11 @@ describe('findMathRegions: display', () => {
     expect(displayTex('so \\[ x \\]\n\\[\n y\n\\] and\n\\begin{equation}\n\\end{equation}')).toEqual([]);
   });
 
+  it('keeps rendering the blocks below one still being typed', () => {
+    expect(displayTex('\\begin{equation}\n x\n\n\\begin{align}\n a &= b\n\\end{align}')).toEqual(['\\begin{align}\n a &= b\n\\end{align}']);
+    expect(tex('\\begin{verbatim}\n\\begin{lstlisting}\n$a$\n\\end{verbatim}\n$b$')).toEqual(['b']);
+  });
+
   it('skips blocks in verbatim and comments, and the inline math nested in them', () => {
     expect(displayTex('\\begin{verbatim}\n\\[ x \\]\n\\end{verbatim}\n% \\[ y \\]')).toEqual([]);
     expect(findMathRegions('\\begin{equation}\n x \\text{if $c$}\n\\end{equation}', 'latex').inline).toEqual([]);
@@ -213,7 +218,7 @@ describe('sliceForLines', () => {
     expect(sliceForLines(svg, 5, sizing)?.slices.map(slice => slice.row)).toEqual([1, 2, 3]);
     const middle = Buffer.from(sliceForLines(svg, 3, sizing)!.slices[1].dataUri.split(',')[1], 'base64').toString('utf8');
     expect(middle).toContain('viewBox="0 10.00 44.00 10.00"');
-    expect(middle).toContain('<svg x="0" y="4.00" width="44.00" height="22.00" viewBox="0 -500 1000 1000" overflow="visible"><g></g></svg>');
+    expect(middle).toContain('<svg x="0.00" y="4.00" width="44.00" height="22.00" viewBox="0 -500 1000 1000" overflow="visible"><g></g></svg>');
   });
 
   it('scales a formula taller than its block down to fit', () => {

@@ -1,6 +1,8 @@
+import type { LiteElement, LiteNode } from 'mathjax-full/js/adaptors/lite/Element.js';
 import type { LiteAdaptor } from 'mathjax-full/js/adaptors/liteAdaptor.js';
 import type { MathDocument } from 'mathjax-full/js/core/MathDocument.js';
 import { findMatchingBrace } from '../snippets/engine/latexContext';
+import type { EquationTag } from './references';
 
 /** MathJax's macro table: a body, or a body with an argument count and an optional default first argument. */
 export type MathJaxMacros = Record<string, string | [string, number] | [string, number, string]>;
@@ -54,6 +56,9 @@ const EXCLUDED_PACKAGES = new Set(['noerrors', 'noundefined']);
 /** Layout commands MathJax does not know but formulas carry. They draw nothing, so they render as nothing. */
 const DEFAULT_MACROS: MathJaxMacros = { qedhere: '' };
 const SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
+/** Space between a formula and its numbers, in editor ems. */
+const TAG_GAP_EM = 2;
+const NO_FIXED_SIZE = 'MathJax gave this formula no fixed size.';
 
 interface Engine {
   tex: InstanceType<MathJaxModules['TeX']>;
@@ -109,21 +114,31 @@ export class MathRenderer {
   /** An inline formula, scaled down if needed to fit one line. */
   render(tex: string, options: MathRenderOptions): MathRenderResult {
     return this.cached(['inline', tex], options, engine => {
-      const svg = typeset(engine, tex, false);
-      if (!svg.ok) return svg;
-      const image = sizeForEditor(svg.image, options);
-      return image ? { ok: true, image } : { ok: false, error: 'MathJax gave this formula no fixed size.' };
+      const formula = typeset(engine, tex, false);
+      if (!formula.ok) return formula;
+      const image = sizeForEditor(formula.image.svg, options);
+      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
     });
   }
 
-  /** A display formula laid out over the `rows` lines of its block. */
-  renderBlock(tex: string, rows: number, options: MathRenderOptions): BlockRenderResult {
-    return this.cached(['block', String(rows), tex], options, engine => {
+  /** A display formula laid out over the `rows` lines of its block, with its numbers on the right. */
+  renderBlock(tex: string, rows: number, options: MathRenderOptions, tags: readonly EquationTag[] = []): BlockRenderResult {
+    const tagKey = tags.map(tag => `${tag.row ?? ''}:${tag.tex}`).join('\u0001');
+    return this.cached(['block', String(rows), tex, tagKey], options, engine => {
       // Display style is too tall for a single line, so a one-line block is set like inline math.
-      const svg = typeset(engine, withoutTags(tex), rows > 1);
-      if (!svg.ok) return svg;
-      const image = sliceForLines(svg.image, rows, options);
-      return image ? { ok: true, image } : { ok: false, error: 'MathJax gave this formula no fixed size.' };
+      const formula = typeset(engine, withoutTags(tex), rows > 1);
+      if (!formula.ok) return formula;
+      const { baselines } = formula.image;
+      const numbers: TagImage[] = [];
+      for (const tag of tags) {
+        // A row MathJax laid out differently has nowhere to go, unless it is the only number.
+        if (tag.row !== undefined && tag.row >= baselines.length && tags.length > 1) continue;
+        const number = typeset(engine, tag.tex, false);
+        // A number MathJax cannot set is left out rather than costing the formula its rendering.
+        if (number.ok) numbers.push({ svg: number.image.svg, baseline: tag.row === undefined ? undefined : baselines[tag.row] });
+      }
+      const image = sliceForLines(formula.image.svg, rows, options, numbers);
+      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
     });
   }
 
@@ -181,19 +196,55 @@ export class MathRenderer {
   }
 }
 
-function typeset(engine: Engine, tex: string, display: boolean): RenderResult<string> {
+interface Typeset {
+  svg: string;
+  /** Baselines of the formula's rows, in its SVG's units. */
+  baselines: number[];
+}
+
+function typeset(engine: Engine, tex: string, display: boolean): RenderResult<Typeset> {
   try {
     // MathJax remembers labels across formulas, so a labelled one would fail every render after its first.
     engine.tex.parseOptions.tags.reset();
-    const container = engine.document.convert(tex, { display }) as never;
+    const container = engine.document.convert(tex, { display }) as LiteElement;
+    const baselines = rowBaselines(engine.adaptor, container);
     // The data attributes only serve MathJax's own tools and make up a good part of the markup.
     const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, '');
-    return { ok: true, image: svg };
+    return { ok: true, image: { svg, baselines } };
   } catch (error) {
     // MathJax's TexError carries a message but is not an Error.
     const message = (error as { message?: unknown } | undefined)?.message;
     return { ok: false, error: typeof message === 'string' ? message : String(error) };
   }
+}
+
+/**
+ * Where the rows of a formula sit, in its SVG's units, where y points down: the rows of a table at
+ * the top of the formula, as align makes, or else the one baseline MathJax puts at 0.
+ */
+function rowBaselines(adaptor: LiteAdaptor, container: LiteElement): number[] {
+  const role = (node: LiteElement) => adaptor.getAttribute(node, 'data-mml-node') as string | undefined;
+  const elements = (node: LiteElement) => adaptor.childNodes(node).filter((child: LiteNode): child is LiteElement => adaptor.kind(child) !== '#text' && adaptor.kind(child) !== '#comment');
+  const find = (node: LiteElement): LiteElement | undefined => role(node) === 'math' ? node : elements(node).map(find).find(Boolean);
+  // Inside the root MathJax flips y to point up, so a row at offset y has its baseline at -y.
+  let offset = 0;
+  for (let node = find(container); node;) {
+    offset += translateY(adaptor.getAttribute(node, 'transform'));
+    const children = elements(node);
+    if (role(node) === 'mtable') {
+      return children
+        .filter(row => role(row) === 'mtr' || role(row) === 'mlabeledtr')
+        .map(row => -(offset + translateY(adaptor.getAttribute(row, 'transform'))));
+    }
+    node = children.length === 1 ? children[0] : undefined;
+  }
+  return [0];
+}
+
+function translateY(transform: string | undefined): number {
+  let y = 0;
+  for (const match of (transform ?? '').matchAll(/translate\(\s*[-\d.e]+(?:[\s,]+([-\d.e]+))?\s*\)/g)) y += Number(match[1] ?? 0);
+  return y;
 }
 
 function imageSize(image: RenderedMath | RenderedBlock): number {
@@ -267,30 +318,81 @@ export function sizeForEditor(svg: string, options: SizingOptions): RenderedMath
   };
 }
 
-/**
- * Lays a display formula out over the `rows` lines of its block, centred and scaled down if it is
- * taller, then cuts it into one strip per line. The editor only draws the lines on screen, so one
- * tall image hung from the first line would vanish as soon as that line scrolled away.
- */
-export function sliceForLines(svg: string, rows: number, options: SizingOptions): RenderedBlock | undefined {
+/** A number to set beside a display formula. */
+export interface TagImage {
+  /** MathJax's SVG of the number. */
+  svg: string;
+  /** Baseline of the row it numbers, in the formula's SVG units; undefined centres it on the formula. */
+  baseline?: number;
+}
+
+interface Piece {
+  width: number;
+  height: number;
+  verticalAlign: number;
+  viewBox: string;
+  minY: number;
+  viewHeight: number;
+  content: string;
+}
+
+/** An ex-sized MathJax SVG, ready to be placed inside another one. */
+function piece(svg: string): Piece | undefined {
   const size = exSize(svg);
   const viewBox = size && /\sviewBox="([^"]*)"/.exec(size.root)?.[1];
   if (!size || !viewBox) return undefined;
-  const exPx = options.fontSizePx * EX_PER_EM;
+  const [, minY, , viewHeight] = viewBox.trim().split(/[\s,]+/).map(Number);
+  if (!Number.isFinite(minY) || !(viewHeight > 0)) return undefined;
+  const content = svg.slice(size.root.length, svg.lastIndexOf('</svg>'));
+  return { width: size.width, height: size.height, verticalAlign: size.verticalAlign, viewBox, minY, viewHeight, content };
+}
+
+function place(part: Piece, x: number, y: number, width: number, height: number): string {
+  return `<svg x="${px(x)}" y="${px(y)}" width="${px(width)}" height="${px(height)}" viewBox="${part.viewBox}" overflow="visible">${part.content}</svg>`;
+}
+
+/**
+ * Lays a display formula out over the `rows` lines of its block, centred and scaled down if it is
+ * taller, with its numbers right-aligned beside it as LaTeX sets them against the margin. It is
+ * then cut into one strip per line: the editor only draws the lines on screen, so one tall image
+ * hung from the first line would vanish as soon as that line scrolled away.
+ */
+export function sliceForLines(svg: string, rows: number, options: SizingOptions, tags: readonly TagImage[] = []): RenderedBlock | undefined {
+  const formula = piece(svg);
+  if (!formula) return undefined;
+  const numbers = tags.flatMap(tag => {
+    const part = piece(tag.svg);
+    return part ? [{ part, baseline: tag.baseline }] : [];
+  });
   const lineHeight = options.lineHeightPx;
   const boxHeight = rows * lineHeight;
-  const scale = Math.min(1, boxHeight / (size.height * exPx));
-  const width = size.width * exPx * scale;
-  const height = size.height * exPx * scale;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  // px per ex once a formula taller than its block is scaled down; its numbers scale with it.
+  const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
+  const height = formula.height * unit;
   const top = (boxHeight - height) / 2;
-  const content = svg.slice(size.root.length, svg.lastIndexOf('</svg>'));
-  const formula = `<svg x="0" y="${px(top)}" width="${px(width)}" height="${px(height)}" viewBox="${viewBox}" overflow="visible">${content}</svg>`;
+  const numbersWidth = Math.max(0, ...numbers.map(number => number.part.width * unit));
+  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
+  let content = place(formula, 0, top, formula.width * unit, height);
+  let inkTop = top;
+  let inkBottom = top + height;
+  for (const { part, baseline } of numbers) {
+    const numberWidth = part.width * unit;
+    const numberHeight = part.height * unit;
+    // A number's vertical-align is its depth below the baseline, negated.
+    const y = baseline === undefined
+      ? top + (height - numberHeight) / 2
+      : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
+    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
+    inkTop = Math.min(inkTop, y);
+    inkBottom = Math.max(inkBottom, y + numberHeight);
+  }
   const slices: BlockSlice[] = [];
   for (let row = 0; row < rows; row++) {
     const y = row * lineHeight;
-    if (top >= y + lineHeight || top + height <= y) continue;
+    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
     const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" `
-      + `viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${formula}</svg>`;
+      + `viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, dataUri: toDataUri(slice) });
   }
   return { widthPx: width, slices };

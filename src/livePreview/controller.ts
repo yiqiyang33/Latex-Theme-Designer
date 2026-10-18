@@ -1,7 +1,21 @@
 import * as vscode from 'vscode';
+import { LabelIndex } from './labelIndex';
 import { parseMacroDefinitions } from './macros';
-import { findMathRegions, regionIsActive, type DisplayMathRegion, type MathRegions } from './mathRegions';
+import { findMathRegions, previewSource, regionIsActive, type DisplayMathRegion, type MathRegions } from './mathRegions';
 import { MathRenderer, type MathJaxMacros, type MathRenderOptions, type RenderedBlock } from './mathRenderer';
+import {
+  emptyCrefSettings,
+  equationTags,
+  findReferences,
+  formatReference,
+  readCrefSettings,
+  rootHint,
+  substituteReferences,
+  type CrefSettings,
+  type FormattedReference,
+  type ReferenceRegion,
+  type RootHint
+} from './references';
 
 const LANGUAGES = new Set(['latex', 'tex']);
 const RESCAN_DELAY_MS = 150;
@@ -16,6 +30,9 @@ const EDIT_PREVIEW_GAP = 4;
 interface DocumentScan {
   version: number;
   regions: MathRegions;
+  references: ReferenceRegion[];
+  /** What the document says about its root, whose compile numbers its references. */
+  root: RootHint;
   /** Workspace macros overlaid with the document's own, rebuilt only when either changes. */
   macros: MathJaxMacros;
   macroGeneration: number;
@@ -45,7 +62,9 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly errors = vscode.window.createTextEditorDecorationType({
     textDecoration: 'underline wavy var(--vscode-editorError-foreground)'
   });
+  private readonly referenceText = vscode.window.createTextEditorDecorationType({});
   private readonly renderer = new MathRenderer();
+  private readonly labels: LabelIndex;
   private readonly scans = new WeakMap<vscode.TextDocument, DocumentScan>();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   private readonly applied = new WeakMap<vscode.TextEditor, Map<vscode.TextEditorDecorationType, string>>();
@@ -55,12 +74,14 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly uris = new WeakMap<{ dataUri: string }, vscode.Uri>();
   private readonly disposables: vscode.Disposable[] = [];
   private workspaceMacros: MathJaxMacros = {};
+  private cref: CrefSettings = emptyCrefSettings();
   private macroGeneration = 0;
   private macroTimer?: NodeJS.Timeout;
   private enabled = false;
   private starting?: Promise<void>;
 
   constructor(private readonly output: vscode.OutputChannel) {
+    this.labels = new LabelIndex(output);
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.{tex,sty}');
     this.disposables.push(
       this.hidden,
@@ -68,6 +89,9 @@ export class LiveMathPreview implements vscode.Disposable {
       this.blockImages,
       this.blockBackgrounds,
       this.errors,
+      this.referenceText,
+      this.labels,
+      this.labels.onDidChange(() => this.updateAll()),
       watcher,
       watcher.onDidCreate(() => this.scheduleMacroScan()),
       watcher.onDidChange(() => this.scheduleMacroScan()),
@@ -158,10 +182,14 @@ export class LiveMathPreview implements vscode.Disposable {
       return existing;
     }
     const text = document.getText();
-    const regions = existing?.version === document.version ? existing.regions : findMathRegions(text, document.languageId);
+    const parsed: Pick<DocumentScan, 'regions' | 'references' | 'root'> = existing?.version === document.version
+      ? existing
+      : parseDocument(text, document.languageId);
     const scan: DocumentScan = {
       version: document.version,
-      regions,
+      regions: parsed.regions,
+      references: parsed.references,
+      root: parsed.root,
       macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
       macroGeneration: this.macroGeneration
     };
@@ -193,17 +221,23 @@ export class LiveMathPreview implements vscode.Disposable {
     const isVisible = (start: number, end: number) => visible.some(range => end >= range.start && start <= range.end);
     const options: MathRenderOptions = { ...this.renderSizing(document), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
+    // Until the root has been compiled there are no numbers, and references stay as source.
+    const labels = this.labels.labelsFor(document, scan.root);
+    const withNumbers = (tex: string) => labels
+      ? substituteReferences(tex, reference => formatReference(reference, labels, this.cref).text)
+      : tex;
 
     const hidden = new Decorations<vscode.Range>();
     const inlineImages = new Decorations<vscode.DecorationOptions>();
     const blockImages = new Decorations<vscode.DecorationOptions>();
     const blockBackgrounds = new Decorations<vscode.Range>();
     const errors = new Decorations<vscode.DecorationOptions>();
+    const referenceText = new Decorations<vscode.DecorationOptions>();
 
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
       const range = new vscode.Range(document.positionAt(region.start), document.positionAt(region.end));
-      const result = this.renderer.render(region.tex, options);
+      const result = this.renderer.render(withNumbers(region.tex), options);
       if (!result.ok) {
         errors.add(`i${index}`, { range, hoverMessage: `Live math preview: ${result.error}` });
         return;
@@ -227,7 +261,7 @@ export class LiveMathPreview implements vscode.Disposable {
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document.positionAt(region.start).line;
-      const result = this.renderer.renderBlock(region.tex, region.rows, options);
+      const result = this.renderer.renderBlock(withNumbers(region.tex), region.rows, options, equationTags(region.tex, labels));
       if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
         const rendered = result.ok ? result.image : undefined;
         for (const item of this.besideSource(document, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
@@ -263,13 +297,38 @@ export class LiveMathPreview implements vscode.Disposable {
       }
     });
 
+    if (labels) {
+      scan.references.forEach((region, index) => {
+        if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
+        const formatted = formatReference(region, labels, this.cref);
+        if (!formatted.text) return;
+        const range = new vscode.Range(document.positionAt(region.start), document.positionAt(region.end));
+        const missing = formatted.labels.some(label => !label);
+        hidden.add(`r${index}`, range);
+        referenceText.add(`r${index}`, {
+          range,
+          hoverMessage: referenceHover(region, formatted),
+          renderOptions: {
+            before: {
+              contentText: `${region.tie ? '\u00a0' : ''}${formatted.text}`,
+              color: new vscode.ThemeColor(missing ? 'editorWarning.foreground' : 'textLink.foreground'),
+              fontWeight: missing ? 'bold' : undefined
+            }
+          }
+        });
+      });
+    }
+
     // Everything a type shows follows from these, so equal keys mean equal decorations.
-    const state = `${scan.version}:${scan.macroGeneration}:${options.color}:${options.fontSizePx}:${options.lineHeightPx}:${tabSize}`;
+    const state = [
+      scan.version, scan.macroGeneration, this.labels.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize
+    ].join(':');
     this.apply(editor, this.hidden, hidden, state);
     this.apply(editor, this.inlineImages, inlineImages, state);
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
+    this.apply(editor, this.referenceText, referenceText, state);
   }
 
   /**
@@ -331,6 +390,7 @@ export class LiveMathPreview implements vscode.Disposable {
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
     editor.setDecorations(this.errors, []);
+    editor.setDecorations(this.referenceText, []);
   }
 
   /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
@@ -369,13 +429,18 @@ export class LiveMathPreview implements vscode.Disposable {
     const files = await vscode.workspace.findFiles('**/*.{tex,sty}', '**/{.git,.overleaf-codex,node_modules}/**', MAX_MACRO_FILES);
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros: MathJaxMacros = {};
+    const cref = emptyCrefSettings();
     for (const file of files) {
       const stat = await vscode.workspace.fs.stat(file).then(value => value, () => undefined);
       if (!stat || stat.size > MAX_MACRO_FILE_BYTES) continue;
       const bytes = await vscode.workspace.fs.readFile(file).then(value => value, () => undefined);
-      if (bytes) Object.assign(macros, parseMacroDefinitions(Buffer.from(bytes).toString('utf8')));
+      if (!bytes) continue;
+      const text = Buffer.from(bytes).toString('utf8');
+      Object.assign(macros, parseMacroDefinitions(text));
+      readCrefSettings(text, cref);
     }
     this.workspaceMacros = macros;
+    this.cref = cref;
     this.macroGeneration += 1;
   }
 }
@@ -396,6 +461,27 @@ function visualColumn(text: string, character: number, tabSize: number): number 
   let column = 0;
   for (let i = 0; i < character; i++) column = text[i] === '\t' ? column + tabSize - (column % tabSize) : column + 1;
   return column;
+}
+
+/** What a document's text holds for the preview, read in one pass over its TeX. */
+function parseDocument(text: string, languageId: string): Pick<DocumentScan, 'regions' | 'references' | 'root'> {
+  const source = previewSource(text, languageId);
+  const regions = findMathRegions(text, languageId, source);
+  return { regions, references: findReferences(text, regions, languageId, source), root: rootHint(text, source) };
+}
+
+/** Which labels a reference names and where they are, or that the last compile did not record one. */
+function referenceHover(region: ReferenceRegion, formatted: FormattedReference): vscode.MarkdownString {
+  const hover = new vscode.MarkdownString();
+  region.keys.forEach((key, index) => {
+    const label = formatted.labels[index];
+    const details = label
+      ? [label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(' · ')
+      : 'not numbered by the last compile; compile again to number it';
+    if (index) hover.appendMarkdown('\n\n');
+    hover.appendText(`${key}: ${details}`);
+  });
+  return hover;
 }
 
 /** An image cannot take the editor's text colour, so each theme kind gets a close default. */
