@@ -39,7 +39,38 @@ describe('parseAux', () => {
     expect(aux.labels.get('app:proof')).toMatchObject({ number: 'A.1', type: 'subsection' });
     expect(aux.labels.get('plain')).toEqual({ number: '4', page: '9', title: undefined, type: undefined });
     expect(aux.labels.has('eq:loss@cref')).toBe(false);
-    expect(aux.inputs).toEqual(['chapters/one.aux']);
+    expect(aux.inputs).toEqual([{ file: 'chapters/one.aux', at: 0 }]);
+  });
+});
+
+describe('parseAux: citations and contents', () => {
+  const aux = parseAux([
+    '\\bibcite{agrawal2019}{{1}{2019}{{Agrawal et~al.}}{{Agrawal, Avadhanula, Goyal, and Zeevi}}}',
+    "\\bibcite{armstrong2018}{{2}{2018}{{Armstrong and Koles{\\'a}r}}{{}}}",
+    '\\bibcite{numeric}{7}',
+    '\\bibcite{anonymous}{{9}{2001}{{}}{{}}}',
+    '\\@writefile{toc}{\\contentsline {section}{\\numberline {1}Model}{1}{section.1}\\protected@file@percent }',
+    '\\@input{part.aux}',
+    '\\@writefile{toc}{\\contentsline {subsection}{\\numberline {A.1}Score {\\em covariance}}{20}{subsection.A.1}}',
+    '\\@writefile{toc}{\\contentsline {paragraph}{Unnumbered}{3}{paragraph*.4}}',
+    '\\@writefile{lof}{\\contentsline {figure}{\\numberline {1}A figure}{2}{figure.1}}'
+  ].join('\n'));
+
+  it('reads natbib citations in author-year and numeric form, with accents as letters', () => {
+    expect(aux.citations.get('agrawal2019')).toEqual({
+      number: '1', year: '2019', authors: 'Agrawal et al.', fullAuthors: 'Agrawal, Avadhanula, Goyal, and Zeevi'
+    });
+    expect(aux.citations.get('armstrong2018')).toEqual({ number: '2', year: '2018', authors: 'Armstrong and Kolesár', fullAuthors: undefined });
+    expect(aux.citations.get('numeric')).toEqual({ number: '7' });
+    expect(aux.citations.get('anonymous')).toEqual({ number: '9', year: '2001', authors: undefined, fullAuthors: undefined });
+  });
+
+  it('reads numbered headings of the table of contents in order, and where included parts go', () => {
+    expect(aux.contents).toEqual([
+      { level: 'section', number: '1', title: 'Model' },
+      { level: 'subsection', number: 'A.1', title: 'Score {\\em covariance}' }
+    ]);
+    expect(aux.inputs).toEqual([{ file: 'part.aux', at: 1 }]);
   });
 });
 

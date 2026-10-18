@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { findMatchingBrace, isEscaped } from '../snippets/engine/latexContext';
 import { previewSource, type MathRegions } from './mathRegions';
+import { overlay, type Overlay } from './overlays';
 
 /** What the last compile recorded about a label. */
 export interface LabelInfo {
@@ -13,30 +14,73 @@ export interface LabelInfo {
   type?: string;
 }
 
-export interface AuxFile {
-  labels: Map<string, LabelInfo>;
-  /** Aux files of \include'd parts, as the aux file names them. */
-  inputs: string[];
+/** What the last compile recorded about a cited work: its number and, from author-year styles, more. */
+export interface CitationInfo {
+  number: string;
+  year?: string;
+  /** The authors as citations name them, such as "Agrawal et al.". */
+  authors?: string;
+  /** Every author, as a starred citation names them. */
+  fullAuthors?: string;
 }
 
-/** Reads the labels a LaTeX run wrote, in hyperref's five-part form or LaTeX's own two-part one. */
+/** A numbered heading as the table of contents records it. */
+export interface ContentsEntry {
+  /** Its sectioning command, such as section. */
+  level: string;
+  number: string;
+  title: string;
+}
+
+export interface AuxFile {
+  labels: Map<string, LabelInfo>;
+  citations: Map<string, CitationInfo>;
+  /** Numbered headings, in the order of the document. */
+  contents: ContentsEntry[];
+  /** Aux files of \include'd parts, as the aux file names them, with where their headings go in `contents`. */
+  inputs: Array<{ file: string; at: number }>;
+}
+
+/** What a root's last compile recorded, with the aux files of its \include'd parts merged in. */
+export interface AuxData {
+  labels: Map<string, LabelInfo>;
+  citations: Map<string, CitationInfo>;
+  /** Numbered headings, in the order of the document. */
+  contents: ContentsEntry[];
+}
+
+/**
+ * Reads what a LaTeX run wrote: labels, in hyperref's five-part form or LaTeX's own two-part one,
+ * citations, and the numbered headings of the table of contents.
+ */
 export function parseAux(text: string): AuxFile {
   const labels = new Map<string, LabelInfo>();
   const crefTypes = new Map<string, string>();
-  const inputs: string[] = [];
-  const pattern = /\\(newlabel|@input)\s*\{/g;
+  const citations = new Map<string, CitationInfo>();
+  const contents: ContentsEntry[] = [];
+  const inputs: AuxFile['inputs'] = [];
+  const pattern = /\\(newlabel|bibcite|@writefile|@input)\s*\{/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     const name = readGroup(text, match.index + match[0].length - 1);
     if (!name) continue;
     pattern.lastIndex = name.next;
     if (match[1] === '@input') {
-      inputs.push(name.value.trim());
+      inputs.push({ file: name.value.trim(), at: contents.length });
       continue;
     }
     const value = readGroup(text, name.next);
     if (!value) continue;
     pattern.lastIndex = value.next;
+    if (match[1] === 'bibcite') {
+      citations.set(name.value, citation(value.value));
+      continue;
+    }
+    if (match[1] === '@writefile') {
+      const entry = name.value.trim() === 'toc' ? contentsEntry(value.value) : undefined;
+      if (entry) contents.push(entry);
+      continue;
+    }
     const fields = readGroups(value.value);
     const crefKey = /^(.*)@cref$/.exec(name.value)?.[1];
     if (crefKey !== undefined) {
@@ -57,7 +101,31 @@ export function parseAux(text: string): AuxFile {
     const label = labels.get(key);
     if (label) label.type = type;
   }
-  return { labels, inputs };
+  return { labels, citations, contents, inputs };
+}
+
+/** natbib writes {{number}{year}{{authors}}{{all authors}}}; numeric styles only the number. */
+function citation(value: string): CitationInfo {
+  const [number, year, authors, fullAuthors] = readGroups(value);
+  if (number === undefined) return { number: plainText(value) };
+  return {
+    number: plainText(number),
+    year: year === undefined ? undefined : plainText(year),
+    // natbib writes {} for an author list it has nothing more for.
+    authors: (authors && plainText(authors)) || undefined,
+    fullAuthors: (fullAuthors && plainText(fullAuthors)) || undefined
+  };
+}
+
+/** \contentsline {section}{\numberline {1.2}Title}{page}{anchor}; unnumbered headings have no \numberline. */
+function contentsEntry(value: string): ContentsEntry | undefined {
+  const start = /^\s*\\contentsline\s*/.exec(value);
+  const level = start ? readGroup(value, start[0].length) : undefined;
+  const entry = level ? readGroup(value, level.next) : undefined;
+  const numberline = entry ? /^\s*\\numberline\s*/.exec(entry.value) : undefined;
+  const number = entry && numberline ? readGroup(entry.value, numberline[0].length) : undefined;
+  if (!level || !entry || !number) return undefined;
+  return { level: level.value.trim(), number: plainText(number.value), title: entry.value.slice(number.next) };
 }
 
 function readGroup(text: string, index: number): { value: string; next: number } | undefined {
@@ -81,17 +149,32 @@ function anchorType(anchor: string | undefined): string | undefined {
   return ({ AMS: 'equation', Item: 'enumi' } as Record<string, string>)[name] ?? name;
 }
 
-/** TeX as plain text, for the numbers and titles an aux file records. */
-function plainText(tex: string): string {
+/** Combining marks for LaTeX's accent commands. */
+const ACCENTS: Record<string, string> = {
+  "'": '́', '`': '̀', '^': '̂', '"': '̈', '~': '̃', '=': '̄', '.': '̇',
+  u: '̆', v: '̌', H: '̋', c: '̧', k: '̨', r: '̊', d: '̣', b: '̱'
+};
+const LETTERS: Record<string, string> = {
+  ss: 'ß', o: 'ø', O: 'Ø', aa: 'å', AA: 'Å', ae: 'æ', AE: 'Æ', oe: 'œ', OE: 'Œ',
+  l: 'ł', L: 'Ł', i: 'i', j: 'j'
+};
+
+/** TeX as plain text, for what an aux file records: numbers, titles and author names. */
+export function plainText(tex: string): string {
+  const letter = (base: string) => (base.startsWith('\\') ? LETTERS[base.slice(1)] ?? '' : base);
+  const accented = (_: string, accent: string, braced?: string, bare?: string) => letter(braced ?? bare ?? '') + ACCENTS[accent];
   return tex
-    .replace(/\\['`^"~=.](?:\{([A-Za-z])\}|([A-Za-z]))/g, '$1$2')
+    .replace(/\\(['`^"~=.])\s*(?:\{\s*(\\[ij]|[A-Za-z])\s*\}|([A-Za-z]))/g, accented)
+    .replace(/\\([uvHckrdb])(?:\s*\{\s*(\\[ij]|[A-Za-z])\s*\}|\s+([A-Za-z]))/g, accented)
+    .replace(/\\(ss|aa|AA|ae|AE|oe|OE|o|O|l|L)(?![A-Za-z])\s*(?:\{\})?/g, (_, name: string) => LETTERS[name])
     .replace(/\\(?:protect|relax|ignorespaces|leavevmode|unskip)(?![A-Za-z])\s*/g, '')
-    .replace(/\\nobreakspace\s*(?:\{\})?|~/g, '\u00a0')
+    .replace(/\\nobreakspace\s*(?:\{\})?|~/g, ' ')
     .replace(/\\([&%$#_{}])/g, '$1')
     .replace(/\\[A-Za-z@]+\s*/g, '')
     .replace(/[{}]/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .normalize('NFC');
 }
 
 /** What a document says about its root: one it names, or that it is one. */
@@ -159,6 +242,30 @@ export function findReferences(text: string, math: MathRegions, languageId?: str
     regions.push({ start: tie ? start - 1 : start, end: start + match[0].length, command, keys, tie });
   }
   return regions;
+}
+
+/** References shown as they print, in the link colour, with what the compile recorded on hover. */
+export function referenceOverlays(regions: readonly ReferenceRegion[], labels: ReadonlyMap<string, LabelInfo>, cref: CrefSettings): Overlay[] {
+  return regions.flatMap(region => {
+    const formatted = formatReference(region, labels, cref);
+    if (!formatted.text) return [];
+    const missing = formatted.labels.some(label => !label);
+    return [overlay(region.start, region.end, {
+      hide: [[region.start, region.end]],
+      insert: [{
+        at: region.start,
+        text: `${region.tie ? '\u00a0' : ''}${formatted.text}`,
+        color: missing ? 'warning' : 'link',
+        bold: missing
+      }],
+      hover: region.keys.map((key, index) => {
+        const label = formatted.labels[index];
+        return label
+          ? `${key}: ${[label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(' · ')}`
+          : `${key}: not numbered by the last compile; compile again to number it`;
+      })
+    })];
+  });
 }
 
 /** How cleveref names counters, from its package options and the project's \crefname and \Crefname. */

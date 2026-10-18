@@ -1,21 +1,25 @@
 import * as vscode from 'vscode';
-import { LabelIndex } from './labelIndex';
+import { AuxIndex } from './auxIndex';
+import { citationOverlays, findCitations, type CitationRegion } from './citations';
 import { parseMacroDefinitions } from './macros';
 import { findMathRegions, previewSource, regionIsActive, type DisplayMathRegion, type MathRegions } from './mathRegions';
 import { MathRenderer, type MathJaxMacros, type MathRenderOptions, type RenderedBlock } from './mathRenderer';
+import type { Insertion, Overlay, RangeStyle } from './overlays';
 import {
   emptyCrefSettings,
   equationTags,
   findReferences,
   formatReference,
   readCrefSettings,
+  referenceOverlays,
   rootHint,
   substituteReferences,
+  type AuxData,
   type CrefSettings,
-  type FormattedReference,
   type ReferenceRegion,
   type RootHint
 } from './references';
+import { findStructure, readTheoremSettings, structureOverlays, type Structure, type TheoremSettings } from './structure';
 
 const LANGUAGES = new Set(['latex', 'tex']);
 const RESCAN_DELAY_MS = 150;
@@ -31,12 +35,29 @@ interface DocumentScan {
   version: number;
   regions: MathRegions;
   references: ReferenceRegion[];
+  citations: CitationRegion[];
+  structure: Structure;
   /** What the document says about its root, whose compile numbers its references. */
   root: RootHint;
   /** Workspace macros overlaid with the document's own, rebuilt only when either changes. */
   macros: MathJaxMacros;
   macroGeneration: number;
+  /** What to draw over the markup, for the aux files as they were at `generation`. */
+  overlays?: { generation: number; list: Overlay[] };
 }
+
+/** How each style a stretch of source can take is drawn. */
+const RANGE_STYLES: Record<RangeStyle, vscode.DecorationRenderOptions> = {
+  bold: { fontWeight: 'bold' },
+  italic: { fontStyle: 'italic' },
+  underline: { textDecoration: 'underline' },
+  // textDecoration carries CSS the public options do not have, as for hiding.
+  smallCaps: { textDecoration: 'none; font-variant: small-caps;' },
+  dim: { opacity: '0.45' },
+  chapter: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.3em;' },
+  section: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.2em;' },
+  subsection: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.1em;' }
+};
 
 /**
  * Shows formulas rendered in place while the cursor is elsewhere, Obsidian-style. Leaving the
@@ -62,9 +83,12 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly errors = vscode.window.createTextEditorDecorationType({
     textDecoration: 'underline wavy var(--vscode-editorError-foreground)'
   });
-  private readonly referenceText = vscode.window.createTextEditorDecorationType({});
+  /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
+  private readonly insertions = vscode.window.createTextEditorDecorationType({});
+  private readonly rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) =>
+    [style as RangeStyle, vscode.window.createTextEditorDecorationType(options)]));
   private readonly renderer = new MathRenderer();
-  private readonly labels: LabelIndex;
+  private readonly aux: AuxIndex;
   private readonly scans = new WeakMap<vscode.TextDocument, DocumentScan>();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   private readonly applied = new WeakMap<vscode.TextEditor, Map<vscode.TextEditorDecorationType, string>>();
@@ -75,13 +99,14 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private workspaceMacros: MathJaxMacros = {};
   private cref: CrefSettings = emptyCrefSettings();
+  private theorems: TheoremSettings = new Map();
   private macroGeneration = 0;
   private macroTimer?: NodeJS.Timeout;
   private enabled = false;
   private starting?: Promise<void>;
 
   constructor(private readonly output: vscode.OutputChannel) {
-    this.labels = new LabelIndex(output);
+    this.aux = new AuxIndex(output);
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.{tex,sty}');
     this.disposables.push(
       this.hidden,
@@ -89,9 +114,10 @@ export class LiveMathPreview implements vscode.Disposable {
       this.blockImages,
       this.blockBackgrounds,
       this.errors,
-      this.referenceText,
-      this.labels,
-      this.labels.onDidChange(() => this.updateAll()),
+      this.insertions,
+      ...this.rangeStyles.values(),
+      this.aux,
+      this.aux.onDidChange(() => this.updateAll()),
       watcher,
       watcher.onDidCreate(() => this.scheduleMacroScan()),
       watcher.onDidChange(() => this.scheduleMacroScan()),
@@ -182,13 +208,13 @@ export class LiveMathPreview implements vscode.Disposable {
       return existing;
     }
     const text = document.getText();
-    const parsed: Pick<DocumentScan, 'regions' | 'references' | 'root'> = existing?.version === document.version
-      ? existing
-      : parseDocument(text, document.languageId);
+    const parsed: ParsedDocument = existing?.version === document.version ? existing : parseDocument(text, document.languageId);
     const scan: DocumentScan = {
       version: document.version,
       regions: parsed.regions,
       references: parsed.references,
+      citations: parsed.citations,
+      structure: parsed.structure,
       root: parsed.root,
       macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
       macroGeneration: this.macroGeneration
@@ -222,7 +248,8 @@ export class LiveMathPreview implements vscode.Disposable {
     const options: MathRenderOptions = { ...this.renderSizing(document), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
     // Until the root has been compiled there are no numbers, and references stay as source.
-    const labels = this.labels.labelsFor(document, scan.root);
+    const aux = this.aux.auxFor(document, scan.root);
+    const labels = aux?.labels;
     const withNumbers = (tex: string) => labels
       ? substituteReferences(tex, reference => formatReference(reference, labels, this.cref).text)
       : tex;
@@ -232,7 +259,8 @@ export class LiveMathPreview implements vscode.Disposable {
     const blockImages = new Decorations<vscode.DecorationOptions>();
     const blockBackgrounds = new Decorations<vscode.Range>();
     const errors = new Decorations<vscode.DecorationOptions>();
-    const referenceText = new Decorations<vscode.DecorationOptions>();
+    const insertions = new Decorations<vscode.DecorationOptions>();
+    const styled = new Map([...this.rangeStyles.keys()].map(style => [style, new Decorations<vscode.Range>()]));
 
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
@@ -297,38 +325,48 @@ export class LiveMathPreview implements vscode.Disposable {
       }
     });
 
-    if (labels) {
-      scan.references.forEach((region, index) => {
-        if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
-        const formatted = formatReference(region, labels, this.cref);
-        if (!formatted.text) return;
-        const range = new vscode.Range(document.positionAt(region.start), document.positionAt(region.end));
-        const missing = formatted.labels.some(label => !label);
-        hidden.add(`r${index}`, range);
-        referenceText.add(`r${index}`, {
-          range,
-          hoverMessage: referenceHover(region, formatted),
-          renderOptions: {
-            before: {
-              contentText: `${region.tie ? '\u00a0' : ''}${formatted.text}`,
-              color: new vscode.ThemeColor(missing ? 'editorWarning.foreground' : 'textLink.foreground'),
-              fontWeight: missing ? 'bold' : undefined
-            }
-          }
+    const range = (start: number, end: number) => new vscode.Range(document.positionAt(start), document.positionAt(end));
+    this.overlaysFor(document, scan, aux).forEach((item, index) => {
+      if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) return;
+      const key = `o${index}`;
+      for (const [start, end] of item.hide) hidden.add(key, range(start, end));
+      for (const part of item.style) styled.get(part.style)?.add(key, range(part.start, part.end));
+      item.insert.forEach((insertion, position) => {
+        // The hover goes on the whole markup, so pointing at the drawn text finds it.
+        const hover = position === 0 && item.hover ? hoverText(item.hover) : undefined;
+        insertions.add(key, {
+          range: hover ? range(item.start, item.end) : range(insertion.at, insertion.at),
+          hoverMessage: hover,
+          renderOptions: { before: insertionStyle(insertion) }
         });
       });
-    }
+    });
 
     // Everything a type shows follows from these, so equal keys mean equal decorations.
     const state = [
-      scan.version, scan.macroGeneration, this.labels.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize
+      scan.version, scan.macroGeneration, this.aux.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize
     ].join(':');
     this.apply(editor, this.hidden, hidden, state);
     this.apply(editor, this.inlineImages, inlineImages, state);
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
-    this.apply(editor, this.referenceText, referenceText, state);
+    this.apply(editor, this.insertions, insertions, state);
+    for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style)!, state);
+  }
+
+  /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
+  private overlaysFor(document: vscode.TextDocument, scan: DocumentScan, aux: AuxData | undefined): Overlay[] {
+    if (scan.overlays?.generation === this.aux.generation) return scan.overlays.list;
+    const text = document.getText();
+    const list = [
+      // Without a compile there is nothing to number references and citations with, so they stay as source.
+      ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
+      ...aux ? citationOverlays(scan.citations, aux.citations) : [],
+      ...structureOverlays(scan.structure, text, this.theorems, aux)
+    ];
+    scan.overlays = { generation: this.aux.generation, list };
+    return list;
   }
 
   /**
@@ -390,7 +428,8 @@ export class LiveMathPreview implements vscode.Disposable {
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
     editor.setDecorations(this.errors, []);
-    editor.setDecorations(this.referenceText, []);
+    editor.setDecorations(this.insertions, []);
+    for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
 
   /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
@@ -430,6 +469,7 @@ export class LiveMathPreview implements vscode.Disposable {
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros: MathJaxMacros = {};
     const cref = emptyCrefSettings();
+    const theorems: TheoremSettings = new Map();
     for (const file of files) {
       const stat = await vscode.workspace.fs.stat(file).then(value => value, () => undefined);
       if (!stat || stat.size > MAX_MACRO_FILE_BYTES) continue;
@@ -438,9 +478,11 @@ export class LiveMathPreview implements vscode.Disposable {
       const text = Buffer.from(bytes).toString('utf8');
       Object.assign(macros, parseMacroDefinitions(text));
       readCrefSettings(text, cref);
+      readTheoremSettings(text, theorems);
     }
     this.workspaceMacros = macros;
     this.cref = cref;
+    this.theorems = theorems;
     this.macroGeneration += 1;
   }
 }
@@ -463,25 +505,39 @@ function visualColumn(text: string, character: number, tabSize: number): number 
   return column;
 }
 
+type ParsedDocument = Pick<DocumentScan, 'regions' | 'references' | 'citations' | 'structure' | 'root'>;
+
 /** What a document's text holds for the preview, read in one pass over its TeX. */
-function parseDocument(text: string, languageId: string): Pick<DocumentScan, 'regions' | 'references' | 'root'> {
+function parseDocument(text: string, languageId: string): ParsedDocument {
   const source = previewSource(text, languageId);
   const regions = findMathRegions(text, languageId, source);
-  return { regions, references: findReferences(text, regions, languageId, source), root: rootHint(text, source) };
+  return {
+    regions,
+    references: findReferences(text, regions, languageId, source),
+    citations: findCitations(text, regions, languageId, source),
+    structure: findStructure(text, regions, languageId, source),
+    root: rootHint(text, source)
+  };
 }
 
-/** Which labels a reference names and where they are, or that the last compile did not record one. */
-function referenceHover(region: ReferenceRegion, formatted: FormattedReference): vscode.MarkdownString {
+function hoverText(lines: string[]): vscode.MarkdownString {
   const hover = new vscode.MarkdownString();
-  region.keys.forEach((key, index) => {
-    const label = formatted.labels[index];
-    const details = label
-      ? [label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(' · ')
-      : 'not numbered by the last compile; compile again to number it';
+  lines.forEach((line, index) => {
     if (index) hover.appendMarkdown('\n\n');
-    hover.appendText(`${key}: ${details}`);
+    hover.appendText(line);
   });
   return hover;
+}
+
+function insertionStyle(insertion: Insertion): vscode.ThemableDecorationAttachmentRenderOptions {
+  const color = insertion.color === 'link' ? 'textLink.foreground' : insertion.color === 'warning' ? 'editorWarning.foreground' : undefined;
+  return {
+    contentText: insertion.text,
+    color: color && new vscode.ThemeColor(color),
+    fontWeight: insertion.bold ? 'bold' : undefined,
+    fontStyle: insertion.italic ? 'italic' : undefined,
+    textDecoration: insertion.size ? `none; font-size: ${insertion.size}em;` : undefined
+  };
 }
 
 /** An image cannot take the editor's text colour, so each theme kind gets a close default. */

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { expandOutDir, parseAux, type LabelInfo, type RootHint } from './references';
+import { expandOutDir, parseAux, type AuxData, type ContentsEntry, type RootHint } from './references';
 
 const RELOAD_DELAY_MS = 300;
 /** How deep \@input chains are followed, which also stops cycles. */
@@ -14,17 +14,17 @@ interface DocumentRoot {
 }
 
 /**
- * The labels of each document's root, read from the aux file its last compile wrote and read again
- * whenever a compile rewrites it.
+ * What each document's root recorded in the aux file of its last compile, read again whenever a
+ * compile rewrites it.
  */
-export class LabelIndex implements vscode.Disposable {
+export class AuxIndex implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
-  /** Fires when labels are read, so what shows them can refresh. */
+  /** Fires when an aux file is read, so what shows its contents can refresh. */
   readonly onDidChange = this.changed.event;
-  /** Changes whenever any labels do. */
+  /** Changes whenever what any aux file records does. */
   generation = 0;
   private readonly roots = new Map<string, DocumentRoot>();
-  private readonly labels = new Map<string, Map<string, LabelInfo>>();
+  private readonly data = new Map<string, AuxData>();
   private readonly watchers = new Map<string, vscode.FileSystemWatcher>();
   private readonly reloadTimers = new Map<string, NodeJS.Timeout>();
   private readonly disposables: vscode.Disposable[] = [this.changed];
@@ -39,8 +39,8 @@ export class LabelIndex implements vscode.Disposable {
     }));
   }
 
-  /** The labels of the document's root, once read; undefined before that and when nothing was compiled. */
-  labelsFor(document: vscode.TextDocument, hint: RootHint): ReadonlyMap<string, LabelInfo> | undefined {
+  /** What the document's root recorded, once read; undefined before that and when nothing was compiled. */
+  auxFor(document: vscode.TextDocument, hint: RootHint): AuxData | undefined {
     if (document.uri.scheme !== 'file') return undefined;
     const key = document.uri.toString();
     const hintKey = JSON.stringify(hint);
@@ -50,7 +50,7 @@ export class LabelIndex implements vscode.Disposable {
       this.roots.set(key, root);
       void this.locate(document, hint, root);
     }
-    return root.aux ? this.labels.get(root.aux) : undefined;
+    return root.aux ? this.data.get(root.aux) : undefined;
   }
 
   dispose(): void {
@@ -65,7 +65,7 @@ export class LabelIndex implements vscode.Disposable {
     if (!aux || this.roots.get(document.uri.toString()) !== root) return;
     root.aux = aux;
     this.watch(aux);
-    if (!this.labels.has(aux)) await this.load(aux);
+    if (!this.data.has(aux)) await this.load(aux);
     this.bump();
   }
 
@@ -126,22 +126,31 @@ export class LabelIndex implements vscode.Disposable {
 
   /** Reads the aux file and those of \include'd parts, which a compile writes beside it. */
   private async load(aux: string): Promise<void> {
-    const labels = new Map<string, LabelInfo>();
-    const read = async (file: string, depth: number): Promise<boolean> => {
+    const data: AuxData = { labels: new Map(), citations: new Map(), contents: [] };
+    // Returns the headings of the file and its parts, the parts' where they were included.
+    const read = async (file: string, depth: number): Promise<ContentsEntry[] | undefined> => {
       const text = await fs.readFile(file, 'utf8').catch(() => undefined);
-      if (text === undefined) return false;
+      if (text === undefined) return undefined;
       const parsed = parseAux(text);
-      for (const [key, label] of parsed.labels) labels.set(key, label);
-      if (depth < MAX_INPUT_DEPTH) {
-        for (const input of parsed.inputs) await read(path.resolve(path.dirname(aux), input), depth + 1);
+      for (const [key, label] of parsed.labels) data.labels.set(key, label);
+      for (const [key, citation] of parsed.citations) data.citations.set(key, citation);
+      const contents: ContentsEntry[] = [];
+      let copied = 0;
+      for (const input of depth < MAX_INPUT_DEPTH ? parsed.inputs : []) {
+        contents.push(...parsed.contents.slice(copied, input.at), ...await read(path.resolve(path.dirname(aux), input.file), depth + 1) ?? []);
+        copied = input.at;
       }
-      return true;
+      contents.push(...parsed.contents.slice(copied));
+      return contents;
     };
-    if (await read(aux, 0)) {
-      this.labels.set(aux, labels);
-      this.output.appendLine(`[${new Date().toISOString()}] Live preview read ${labels.size} labels from ${aux}.`);
+    const contents = await read(aux, 0);
+    if (contents) {
+      data.contents = contents;
+      this.data.set(aux, data);
+      this.output.appendLine(`[${new Date().toISOString()}] Live preview read ${data.labels.size} labels, `
+        + `${data.citations.size} citations and ${contents.length} headings from ${aux}.`);
     } else {
-      this.labels.delete(aux);
+      this.data.delete(aux);
     }
   }
 

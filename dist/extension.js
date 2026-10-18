@@ -36051,14 +36051,14 @@ var require_munderover2 = __commonJS({
         var nodes = this.childNodes;
         nodes[0].setInheritedAttributes(attributes, display, level, prime || !!nodes[this.over]);
         var force = !!(!display && nodes[0].coreMO().attributes.get("movablelimits"));
-        var ACCENTS = this.constructor.ACCENTS;
-        nodes[1].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS[1], force, level), prime || this.under === 1);
-        this.setInheritedAccent(1, ACCENTS[1], display, level, prime, force);
+        var ACCENTS2 = this.constructor.ACCENTS;
+        nodes[1].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[1], force, level), prime || this.under === 1);
+        this.setInheritedAccent(1, ACCENTS2[1], display, level, prime, force);
         if (!nodes[2]) {
           return;
         }
-        nodes[2].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS[2], force, level), prime || this.under === 2);
-        this.setInheritedAccent(2, ACCENTS[2], display, level, prime, force);
+        nodes[2].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[2], force, level), prime || this.under === 2);
+        this.setInheritedAccent(2, ACCENTS2[2], display, level, prime, force);
       };
       MmlMunderover2.prototype.getScriptlevel = function(accent, force, level) {
         if (force || !this.attributes.get(accent)) {
@@ -81162,7 +81162,7 @@ function expandHome2(value) {
 // src/livePreview/controller.ts
 var vscode16 = __toESM(require("vscode"));
 
-// src/livePreview/labelIndex.ts
+// src/livePreview/auxIndex.ts
 var fs39 = __toESM(require("node:fs/promises"));
 var path49 = __toESM(require("node:path"));
 var vscode15 = __toESM(require("vscode"));
@@ -81251,24 +81251,40 @@ function regionIsActive(region, selections) {
   return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
 }
 
+// src/livePreview/overlays.ts
+function overlay(start, end, parts = {}) {
+  return { start, end, hide: parts.hide ?? [], insert: parts.insert ?? [], style: parts.style ?? [], hover: parts.hover };
+}
+
 // src/livePreview/references.ts
 function parseAux(text) {
   const labels = /* @__PURE__ */ new Map();
   const crefTypes = /* @__PURE__ */ new Map();
+  const citations = /* @__PURE__ */ new Map();
+  const contents = [];
   const inputs = [];
-  const pattern = /\\(newlabel|@input)\s*\{/g;
+  const pattern = /\\(newlabel|bibcite|@writefile|@input)\s*\{/g;
   let match2;
   while ((match2 = pattern.exec(text)) !== null) {
     const name = readGroup(text, match2.index + match2[0].length - 1);
     if (!name) continue;
     pattern.lastIndex = name.next;
     if (match2[1] === "@input") {
-      inputs.push(name.value.trim());
+      inputs.push({ file: name.value.trim(), at: contents.length });
       continue;
     }
     const value = readGroup(text, name.next);
     if (!value) continue;
     pattern.lastIndex = value.next;
+    if (match2[1] === "bibcite") {
+      citations.set(name.value, citation(value.value));
+      continue;
+    }
+    if (match2[1] === "@writefile") {
+      const entry = name.value.trim() === "toc" ? contentsEntry(value.value) : void 0;
+      if (entry) contents.push(entry);
+      continue;
+    }
     const fields = readGroups(value.value);
     const crefKey = /^(.*)@cref$/.exec(name.value)?.[1];
     if (crefKey !== void 0) {
@@ -81288,7 +81304,27 @@ function parseAux(text) {
     const label = labels.get(key);
     if (label) label.type = type;
   }
-  return { labels, inputs };
+  return { labels, citations, contents, inputs };
+}
+function citation(value) {
+  const [number, year, authors, fullAuthors] = readGroups(value);
+  if (number === void 0) return { number: plainText(value) };
+  return {
+    number: plainText(number),
+    year: year === void 0 ? void 0 : plainText(year),
+    // natbib writes {} for an author list it has nothing more for.
+    authors: authors && plainText(authors) || void 0,
+    fullAuthors: fullAuthors && plainText(fullAuthors) || void 0
+  };
+}
+function contentsEntry(value) {
+  const start = /^\s*\\contentsline\s*/.exec(value);
+  const level = start ? readGroup(value, start[0].length) : void 0;
+  const entry = level ? readGroup(value, level.next) : void 0;
+  const numberline = entry ? /^\s*\\numberline\s*/.exec(entry.value) : void 0;
+  const number = entry && numberline ? readGroup(entry.value, numberline[0].length) : void 0;
+  if (!level || !entry || !number) return void 0;
+  return { level: level.value.trim(), number: plainText(number.value), title: entry.value.slice(number.next) };
 }
 function readGroup(text, index) {
   while (index < text.length && /\s/.test(text[index])) index++;
@@ -81306,8 +81342,42 @@ function anchorType(anchor) {
   if (!name) return void 0;
   return { AMS: "equation", Item: "enumi" }[name] ?? name;
 }
+var ACCENTS = {
+  "'": "\u0301",
+  "`": "\u0300",
+  "^": "\u0302",
+  '"': "\u0308",
+  "~": "\u0303",
+  "=": "\u0304",
+  ".": "\u0307",
+  u: "\u0306",
+  v: "\u030C",
+  H: "\u030B",
+  c: "\u0327",
+  k: "\u0328",
+  r: "\u030A",
+  d: "\u0323",
+  b: "\u0331"
+};
+var LETTERS = {
+  ss: "\xDF",
+  o: "\xF8",
+  O: "\xD8",
+  aa: "\xE5",
+  AA: "\xC5",
+  ae: "\xE6",
+  AE: "\xC6",
+  oe: "\u0153",
+  OE: "\u0152",
+  l: "\u0142",
+  L: "\u0141",
+  i: "i",
+  j: "j"
+};
 function plainText(tex) {
-  return tex.replace(/\\['`^"~=.](?:\{([A-Za-z])\}|([A-Za-z]))/g, "$1$2").replace(/\\(?:protect|relax|ignorespaces|leavevmode|unskip)(?![A-Za-z])\s*/g, "").replace(/\\nobreakspace\s*(?:\{\})?|~/g, "\xA0").replace(/\\([&%$#_{}])/g, "$1").replace(/\\[A-Za-z@]+\s*/g, "").replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+  const letter = (base) => base.startsWith("\\") ? LETTERS[base.slice(1)] ?? "" : base;
+  const accented = (_, accent, braced, bare) => letter(braced ?? bare ?? "") + ACCENTS[accent];
+  return tex.replace(/\\(['`^"~=.])\s*(?:\{\s*(\\[ij]|[A-Za-z])\s*\}|([A-Za-z]))/g, accented).replace(/\\([uvHckrdb])(?:\s*\{\s*(\\[ij]|[A-Za-z])\s*\}|\s+([A-Za-z]))/g, accented).replace(/\\(ss|aa|AA|ae|AE|oe|OE|o|O|l|L)(?![A-Za-z])\s*(?:\{\})?/g, (_, name) => LETTERS[name]).replace(/\\(?:protect|relax|ignorespaces|leavevmode|unskip)(?![A-Za-z])\s*/g, "").replace(/\\nobreakspace\s*(?:\{\})?|~/g, "\xA0").replace(/\\([&%$#_{}])/g, "$1").replace(/\\[A-Za-z@]+\s*/g, "").replace(/[{}]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
 }
 function rootHint(text, source = previewSource(text)) {
   const magic = /^\s*%\s*!\s*TeX\s+root\s*=\s*(.+?)\s*$/im.exec(text)?.[1];
@@ -81346,6 +81416,26 @@ function findReferences(text, math, languageId, source = previewSource(text, lan
     regions.push({ start: tie ? start - 1 : start, end: start + match2[0].length, command, keys, tie });
   }
   return regions;
+}
+function referenceOverlays(regions, labels, cref) {
+  return regions.flatMap((region) => {
+    const formatted = formatReference(region, labels, cref);
+    if (!formatted.text) return [];
+    const missing = formatted.labels.some((label) => !label);
+    return [overlay(region.start, region.end, {
+      hide: [[region.start, region.end]],
+      insert: [{
+        at: region.start,
+        text: `${region.tie ? "\xA0" : ""}${formatted.text}`,
+        color: missing ? "warning" : "link",
+        bold: missing
+      }],
+      hover: region.keys.map((key, index) => {
+        const label = formatted.labels[index];
+        return label ? `${key}: ${[label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(" \xB7 ")}` : `${key}: not numbered by the last compile; compile again to number it`;
+      })
+    })];
+  });
 }
 function emptyCrefSettings() {
   return { capitalise: false, noabbrev: false, names: {}, capitalNames: {} };
@@ -81573,10 +81663,10 @@ function splitRows(body) {
   return rows;
 }
 
-// src/livePreview/labelIndex.ts
+// src/livePreview/auxIndex.ts
 var RELOAD_DELAY_MS = 300;
 var MAX_INPUT_DEPTH = 8;
-var LabelIndex = class {
+var AuxIndex = class {
   constructor(output) {
     this.output = output;
     this.disposables.push(vscode15.workspace.onDidChangeConfiguration((event) => {
@@ -81588,17 +81678,17 @@ var LabelIndex = class {
   }
   output;
   changed = new vscode15.EventEmitter();
-  /** Fires when labels are read, so what shows them can refresh. */
+  /** Fires when an aux file is read, so what shows its contents can refresh. */
   onDidChange = this.changed.event;
-  /** Changes whenever any labels do. */
+  /** Changes whenever what any aux file records does. */
   generation = 0;
   roots = /* @__PURE__ */ new Map();
-  labels = /* @__PURE__ */ new Map();
+  data = /* @__PURE__ */ new Map();
   watchers = /* @__PURE__ */ new Map();
   reloadTimers = /* @__PURE__ */ new Map();
   disposables = [this.changed];
-  /** The labels of the document's root, once read; undefined before that and when nothing was compiled. */
-  labelsFor(document2, hint) {
+  /** What the document's root recorded, once read; undefined before that and when nothing was compiled. */
+  auxFor(document2, hint) {
     if (document2.uri.scheme !== "file") return void 0;
     const key = document2.uri.toString();
     const hintKey = JSON.stringify(hint);
@@ -81608,7 +81698,7 @@ var LabelIndex = class {
       this.roots.set(key, root);
       void this.locate(document2, hint, root);
     }
-    return root.aux ? this.labels.get(root.aux) : void 0;
+    return root.aux ? this.data.get(root.aux) : void 0;
   }
   dispose() {
     for (const timer of this.reloadTimers.values()) clearTimeout(timer);
@@ -81621,7 +81711,7 @@ var LabelIndex = class {
     if (!aux || this.roots.get(document2.uri.toString()) !== root) return;
     root.aux = aux;
     this.watch(aux);
-    if (!this.labels.has(aux)) await this.load(aux);
+    if (!this.data.has(aux)) await this.load(aux);
     this.bump();
   }
   /**
@@ -81675,22 +81765,29 @@ var LabelIndex = class {
   }
   /** Reads the aux file and those of \include'd parts, which a compile writes beside it. */
   async load(aux) {
-    const labels = /* @__PURE__ */ new Map();
+    const data = { labels: /* @__PURE__ */ new Map(), citations: /* @__PURE__ */ new Map(), contents: [] };
     const read = async (file, depth) => {
       const text = await fs39.readFile(file, "utf8").catch(() => void 0);
-      if (text === void 0) return false;
+      if (text === void 0) return void 0;
       const parsed = parseAux(text);
-      for (const [key, label] of parsed.labels) labels.set(key, label);
-      if (depth < MAX_INPUT_DEPTH) {
-        for (const input of parsed.inputs) await read(path49.resolve(path49.dirname(aux), input), depth + 1);
+      for (const [key, label] of parsed.labels) data.labels.set(key, label);
+      for (const [key, citation2] of parsed.citations) data.citations.set(key, citation2);
+      const contents2 = [];
+      let copied = 0;
+      for (const input of depth < MAX_INPUT_DEPTH ? parsed.inputs : []) {
+        contents2.push(...parsed.contents.slice(copied, input.at), ...await read(path49.resolve(path49.dirname(aux), input.file), depth + 1) ?? []);
+        copied = input.at;
       }
-      return true;
+      contents2.push(...parsed.contents.slice(copied));
+      return contents2;
     };
-    if (await read(aux, 0)) {
-      this.labels.set(aux, labels);
-      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live preview read ${labels.size} labels from ${aux}.`);
+    const contents = await read(aux, 0);
+    if (contents) {
+      data.contents = contents;
+      this.data.set(aux, data);
+      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live preview read ${data.labels.size} labels, ${data.citations.size} citations and ${contents.length} headings from ${aux}.`);
     } else {
-      this.labels.delete(aux);
+      this.data.delete(aux);
     }
   }
   bump() {
@@ -81703,6 +81800,98 @@ async function isFile(file) {
 }
 async function isDirectory3(dir) {
   return fs39.stat(dir).then((stat14) => stat14.isDirectory(), () => false);
+}
+
+// src/livePreview/citations.ts
+var CITATION = /\\(cite|citet|citep|citealt|citealp|citeauthor|citeyearpar|citeyear|Cite|Citet|Citep|Citealt|Citealp|Citeauthor)(\*?)\s*(?:\[([^\]\n]*)\])?\s*(?:\[([^\]\n]*)\])?\s*\{([^{}\n]*)\}/g;
+function findCitations(text, math, languageId, source = previewSource(text, languageId)) {
+  const formulas = [...math.inline, ...math.display].sort((a, b) => a.start - b.start);
+  const regions = [];
+  let formula = 0;
+  for (const match2 of source.matchAll(CITATION)) {
+    const start = match2.index;
+    if (isEscaped(source, start)) continue;
+    while (formula < formulas.length && formulas[formula].end <= start) formula++;
+    if (formula < formulas.length && formulas[formula].start <= start) continue;
+    const keys = match2[5].split(",").map((key) => key.trim()).filter(Boolean);
+    if (!keys.length) continue;
+    const [pre, post] = match2[4] === void 0 ? [void 0, match2[3]] : [match2[3], match2[4]];
+    const tie = source[start - 1] === "~" && !isEscaped(source, start - 1);
+    regions.push({
+      start: tie ? start - 1 : start,
+      end: start + match2[0].length,
+      command: match2[1].toLowerCase(),
+      capital: /^[A-Z]/.test(match2[1]),
+      starred: match2[2] === "*",
+      pre: pre?.trim() ? pre : void 0,
+      post: post?.trim() ? post : void 0,
+      keys,
+      tie
+    });
+  }
+  return regions;
+}
+function formatCitation(region, citations, authorYear) {
+  const found = region.keys.map((key) => citations.get(key));
+  const pre = region.pre ? `${plainText(region.pre)} ` : "";
+  const post = region.post ? `, ${plainText(region.post)}` : "";
+  if (!authorYear) {
+    const numbers = found.map((work) => work?.number ?? "?").join(", ");
+    if (region.command === "citeauthor") return found.map((work) => work?.authors ?? "?").join("; ");
+    const cited = `[${pre}${numbers}${post}]`;
+    return region.command === "citet" && found[0]?.authors ? `${found[0].authors} ${cited}` : cited;
+  }
+  const groups = [];
+  for (const work of found) {
+    const named = work && (region.starred ? work.fullAuthors || work.authors : work.authors);
+    const authors = named ? region.capital ? named.charAt(0).toUpperCase() + named.slice(1) : named : "?";
+    const last = groups[groups.length - 1];
+    if (work && last && last.authors === authors && last.years.length) last.years.push(work.year ?? "?");
+    else groups.push({ authors, years: work ? [work.year ?? "?"] : [] });
+  }
+  const yearsOf = (group) => group.years.join(", ");
+  switch (region.command) {
+    case "citep":
+      return `(${pre}${groups.map((group) => group.years.length ? `${group.authors}, ${yearsOf(group)}` : group.authors).join("; ")}${post})`;
+    case "citealp":
+      return `${pre}${groups.map((group) => group.years.length ? `${group.authors}, ${yearsOf(group)}` : group.authors).join("; ")}${post}`;
+    case "citealt":
+      return `${pre}${groups.map((group) => [group.authors, yearsOf(group)].filter(Boolean).join(" ")).join("; ")}${post}`;
+    case "citeauthor":
+      return groups.map((group) => group.authors).join("; ");
+    case "citeyear":
+      return found.map((work) => work?.year ?? "?").join(", ");
+    case "citeyearpar":
+      return `(${pre}${found.map((work) => work?.year ?? "?").join(", ")}${post})`;
+    default:
+      return groups.map((group, index) => {
+        if (!group.years.length) return group.authors;
+        const notes = `${index === 0 ? pre : ""}${yearsOf(group)}${index === groups.length - 1 ? post : ""}`;
+        return `${group.authors} (${notes})`;
+      }).join("; ");
+  }
+}
+function citationOverlays(regions, citations) {
+  if (!citations.size) return [];
+  const authorYear = [...citations.values()].some((work) => work.authors);
+  return regions.map((region) => {
+    const missing = region.keys.some((key) => !citations.has(key));
+    return overlay(region.start, region.end, {
+      hide: [[region.start, region.end]],
+      insert: [{
+        at: region.start,
+        text: `${region.tie ? "\xA0" : ""}${formatCitation(region, citations, authorYear)}`,
+        color: missing ? "warning" : "link",
+        bold: missing
+      }],
+      hover: region.keys.map((key) => {
+        const work = citations.get(key);
+        if (!work) return `${key}: not in the last compile; run BibTeX and compile again to cite it`;
+        const names = work.fullAuthors || work.authors;
+        return `${key}: ${[names, work.year && `(${work.year})`].filter(Boolean).join(" ") || `[${work.number}]`}`;
+      })
+    });
+  });
 }
 
 // src/livePreview/macros.ts
@@ -82017,6 +82206,335 @@ function sliceForLines(svg, rows, options, tags = []) {
   return { widthPx: width, slices };
 }
 
+// src/livePreview/structure.ts
+function readTheoremSettings(text, settings) {
+  const source = previewSource(text, "latex");
+  let style = "plain";
+  const asStyle = (value) => value === "definition" || value === "remark" ? value : "plain";
+  for (const match2 of source.matchAll(/\\(theoremstyle|newtheorem|declaretheorem)(\*?)(?![A-Za-z])/g)) {
+    let index = match2.index + match2[0].length;
+    if (match2[1] === "theoremstyle") {
+      const value = readBraces(source, index);
+      if (value) style = asStyle(source.slice(value.start, value.end).trim());
+      continue;
+    }
+    if (match2[1] === "newtheorem") {
+      const env4 = readBraces(source, index);
+      if (!env4) continue;
+      const shared = readBrackets(source, env4.next);
+      const name = readBraces(source, shared?.next ?? env4.next);
+      if (!name) continue;
+      const environment = source.slice(env4.start, env4.end).trim();
+      settings.set(environment, {
+        name: plainText(source.slice(name.start, name.end)),
+        style,
+        counter: shared && source.slice(shared.start, shared.end).trim() || environment,
+        numbered: match2[2] !== "*"
+      });
+      continue;
+    }
+    const options = readBrackets(source, index);
+    if (options) index = options.next;
+    const envs = readBraces(source, index);
+    if (!envs) continue;
+    const values = keyValues(options ? source.slice(options.start, options.end) : "");
+    for (const environment of source.slice(envs.start, envs.end).split(",").map((name) => name.trim()).filter(Boolean)) {
+      settings.set(environment, {
+        name: values.name ? plainText(values.name) : capitalised2(environment),
+        style: asStyle(values.style),
+        counter: values.sibling || values.numberlike || values.sharenumber || environment,
+        numbered: !/^(no|false)$/.test(values.numbered ?? "")
+      });
+    }
+  }
+}
+var HEADING = /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*?)(?![A-Za-z])/g;
+var ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
+var ITEM = /\\item(?![A-Za-z])/g;
+var LABEL = /\\(label)\s*(?=\{)/g;
+var FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
+function findStructure(text, math, languageId, source = previewSource(text, languageId)) {
+  const formulas = [...math.inline, ...math.display].sort((a, b) => a.start - b.start);
+  const inFormula = (offset) => {
+    let low = 0;
+    let high = formulas.length - 1;
+    while (low <= high) {
+      const middle = low + high >> 1;
+      if (formulas[middle].end <= offset) low = middle + 1;
+      else if (formulas[middle].start > offset) high = middle - 1;
+      else return true;
+    }
+    return false;
+  };
+  const marks = (pattern) => [...source.matchAll(pattern)].filter((match2) => !isEscaped(source, match2.index) && !inFormula(match2.index));
+  const headings = [];
+  for (const match2 of marks(HEADING)) {
+    const short = readBrackets(source, match2.index + match2[0].length);
+    const title = readBraces(source, short?.next ?? match2.index + match2[0].length);
+    if (!title) continue;
+    headings.push({
+      start: match2.index,
+      end: title.next,
+      titleStart: title.start,
+      titleEnd: title.end,
+      level: match2[1],
+      starred: match2[2] === "*",
+      tocTitle: text.slice(short?.start ?? title.start, short?.end ?? title.end)
+    });
+  }
+  const environments = marks(ENVIRONMENT).map((match2) => {
+    const begin = match2[1] === "begin";
+    const end = match2.index + match2[0].length;
+    const argument = begin ? readBrackets(source, end) : void 0;
+    return {
+      begin,
+      name: match2[2].trim(),
+      start: match2.index,
+      end: argument?.next ?? end,
+      argument: argument && { start: argument.start, end: argument.end }
+    };
+  });
+  const items = marks(ITEM).map((match2) => {
+    const end = match2.index + match2[0].length;
+    const label = readBrackets(source, end);
+    return { start: match2.index, end: label?.next ?? end, label: label && { start: label.start, end: label.end } };
+  });
+  const commands8 = (pattern) => marks(pattern).flatMap((match2) => {
+    const argument = readBraces(source, match2.index + match2[0].length);
+    return argument ? [{ name: match2[1], start: match2.index, end: argument.next, contentStart: argument.start, contentEnd: argument.end }] : [];
+  });
+  return { headings, environments, items, labels: commands8(LABEL), formats: commands8(FORMAT) };
+}
+var NUMBERED_HEADINGS = /* @__PURE__ */ new Set(["part", "chapter", "section", "subsection", "subsubsection"]);
+var HEADING_STYLES = {
+  part: "chapter",
+  chapter: "chapter",
+  section: "section",
+  subsection: "subsection",
+  subsubsection: "bold",
+  paragraph: "bold",
+  subparagraph: "bold"
+};
+var HEADING_SIZES = { part: 1.3, chapter: 1.3, section: 1.2, subsection: 1.1 };
+var LISTS = /* @__PURE__ */ new Set(["itemize", "enumerate", "description"]);
+var BULLETS = ["\u2022", "\u2013", "\u2217", "\xB7"];
+var FORMAT_STYLES = {
+  textbf: "bold",
+  textit: "italic",
+  emph: "italic",
+  textsl: "italic",
+  underline: "underline",
+  textsc: "smallCaps"
+};
+function structureOverlays(structure, text, theorems, numbers = {}) {
+  const overlays = [];
+  const headingNumbers = numberHeadings(structure.headings, numbers.contents ?? []);
+  structure.headings.forEach((heading, index) => {
+    const number = headingNumbers[index];
+    overlays.push(overlay(heading.start, heading.end, {
+      hide: [[heading.start, heading.titleStart], [heading.titleEnd, heading.end]],
+      insert: number ? [{ at: heading.start, text: `${number}\u2002`, bold: true, size: HEADING_SIZES[heading.level] }] : [],
+      style: [{ start: heading.titleStart, end: heading.titleEnd, style: HEADING_STYLES[heading.level] }]
+    }));
+  });
+  const lists = [];
+  const lastCounts = /* @__PURE__ */ new Map();
+  const marks = [
+    ...structure.environments.map((environment) => ({ at: environment.start, environment })),
+    ...structure.items.map((item) => ({ at: item.start, item }))
+  ].sort((a, b) => a.at - b.at);
+  for (const mark of marks) {
+    if ("item" in mark) {
+      const list = lists[lists.length - 1];
+      if (list) overlays.push(itemOverlay(mark.item, list));
+      continue;
+    }
+    const environment = mark.environment;
+    if (LISTS.has(environment.name)) {
+      if (environment.begin) {
+        const options = keyValues(environment.argument ? text.slice(environment.argument.start, environment.argument.end) : "");
+        const depth = lists.filter((list) => list.kind === environment.name).length + 1;
+        const start = options.start !== void 0 ? Number(options.start) || 1 : "resume" in options ? (lastCounts.get(depth) ?? 0) + 1 : 1;
+        lists.push({ kind: environment.name, depth, count: start - 1, template: options.label });
+      } else {
+        const index = lists.map((list2) => list2.kind).lastIndexOf(environment.name);
+        const [list] = index === -1 ? [] : lists.splice(index);
+        if (list?.kind === "enumerate") lastCounts.set(list.depth, list.count);
+      }
+      overlays.push(dimmed(environment.start, environment.end));
+    } else if (environment.name === "proof") {
+      overlays.push(environment.begin ? proofHead(environment) : overlay(environment.start, environment.end, {
+        hide: [[environment.start, environment.end]],
+        insert: [{ at: environment.start, text: "\u25A1" }]
+      }));
+    } else {
+      const kind = theorems.get(environment.name);
+      if (!kind) continue;
+      overlays.push(environment.begin ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels)) : dimmed(environment.start, environment.end));
+    }
+  }
+  for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
+  for (const format of structure.formats) {
+    const style = FORMAT_STYLES[format.name];
+    overlays.push(overlay(format.start, format.end, {
+      hide: [[format.start, format.contentStart], [format.contentEnd, format.end]],
+      style: style ? [{ start: format.contentStart, end: format.contentEnd, style }] : []
+    }));
+  }
+  return overlays;
+}
+function dimmed(start, end) {
+  return overlay(start, end, { style: [{ start, end, style: "dim" }] });
+}
+function theoremHead(environment, kind, number) {
+  const head = {
+    at: environment.start,
+    text: `${kind.name}${number ? `\xA0${number}` : ""}${environment.argument ? "" : "."}`,
+    ...kind.style === "remark" ? { italic: true } : { bold: true }
+  };
+  const { argument } = environment;
+  if (!argument) return overlay(environment.start, environment.end, { hide: [[environment.start, environment.end]], insert: [head] });
+  return overlay(environment.start, environment.end, {
+    hide: [[environment.start, argument.start], [argument.end, environment.end]],
+    insert: [head, { at: argument.start, text: "\xA0(" }, { at: argument.end, text: ")." }]
+  });
+}
+function proofHead(environment) {
+  const { argument } = environment;
+  if (!argument) {
+    return overlay(environment.start, environment.end, {
+      hide: [[environment.start, environment.end]],
+      insert: [{ at: environment.start, text: "Proof.", italic: true }]
+    });
+  }
+  return overlay(environment.start, environment.end, {
+    hide: [[environment.start, argument.start], [argument.end, environment.end]],
+    insert: [{ at: argument.end, text: ".", italic: true }],
+    style: [{ start: argument.start, end: argument.end, style: "italic" }]
+  });
+}
+function theoremNumber(begin, kind, structure, text, theorems, labels) {
+  if (!kind.numbered || !labels) return void 0;
+  const end = structure.environments.find((mark) => !mark.begin && mark.name === begin.name && mark.start > begin.end);
+  for (const label of structure.labels) {
+    if (label.start < begin.end) continue;
+    if (end && label.start > end.start) break;
+    const info = labels.get(text.slice(label.contentStart, label.contentEnd).trim());
+    if (info?.type && (info.type === begin.name || info.type === kind.counter || theorems.has(info.type))) return info.number;
+  }
+  return void 0;
+}
+function itemOverlay(item, list) {
+  if (item.label) {
+    return overlay(item.start, item.end, {
+      hide: [[item.start, item.label.start], [item.label.end, item.end]],
+      style: list.kind === "description" ? [{ start: item.label.start, end: item.label.end, style: "bold" }] : []
+    });
+  }
+  if (list.kind === "description") return overlay(item.start, item.end, { hide: [[item.start, item.end]] });
+  const label = list.kind === "itemize" ? BULLETS[(list.depth - 1) % BULLETS.length] : enumerateLabel(list.template, list.depth, ++list.count);
+  return overlay(item.start, item.end, { hide: [[item.start, item.end]], insert: [{ at: item.start, text: label }] });
+}
+function enumerateLabel(template, depth, count) {
+  if (template) {
+    const filled = template.replace(/\\(arabic|alph|Alph|roman|Roman)\*/g, (_, style) => counterText(style, count));
+    return plainText(filled);
+  }
+  return [`${count}.`, `(${counterText("alph", count)})`, `${counterText("roman", count)}.`, `${counterText("Alph", count)}.`][(depth - 1) % 4];
+}
+function counterText(style, count) {
+  switch (style) {
+    case "alph":
+      return letters(count);
+    case "Alph":
+      return letters(count).toUpperCase();
+    case "roman":
+      return roman(count);
+    case "Roman":
+      return roman(count).toUpperCase();
+    default:
+      return String(count);
+  }
+}
+function letters(count) {
+  let text = "";
+  for (let n = count; n > 0; n = Math.floor((n - 1) / 26)) text = String.fromCharCode(97 + (n - 1) % 26) + text;
+  return text;
+}
+function roman(count) {
+  const numerals = [[1e3, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]];
+  let text = "";
+  let rest = count;
+  for (const [value, numeral] of numerals) for (; rest >= value; rest -= value) text += numeral;
+  return text;
+}
+function numberHeadings(headings, contents) {
+  const key = (level, title) => `${level}\0${titleKey(title)}`;
+  const entries = /* @__PURE__ */ new Map();
+  contents.forEach((entry, index) => {
+    const entryKey = key(entry.level, entry.title);
+    entries.set(entryKey, [...entries.get(entryKey) ?? [], index]);
+  });
+  let previous = -1;
+  return headings.map((heading) => {
+    if (heading.starred || !NUMBERED_HEADINGS.has(heading.level)) return void 0;
+    let index = entries.get(key(heading.level, heading.tocTitle))?.find((candidate) => candidate > previous) ?? -1;
+    if (index === -1 && contents[previous + 1]?.level === heading.level) index = previous + 1;
+    if (index === -1) return void 0;
+    previous = index;
+    return contents[index].number;
+  });
+}
+function titleKey(title) {
+  let tex = title;
+  for (let at = tex.search(/\\texorpdfstring\s*\{/); at !== -1; at = tex.search(/\\texorpdfstring\s*\{/)) {
+    const first = readBraces(tex, at + "\\texorpdfstring".length, true);
+    const second = first && readBraces(tex, first.next, true);
+    if (!first || !second) break;
+    tex = tex.slice(0, at) + tex.slice(first.start, first.end) + tex.slice(second.next);
+  }
+  return tex.replace(/\\[A-Za-z@]+\s*/g, "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+}
+function readBraces(source, index, anyLine = false) {
+  let at = index;
+  while (source[at] === " " || source[at] === "	") at++;
+  if (source[at] !== "{") return void 0;
+  const close = findMatchingBrace(source, at);
+  if (close === -1 || !anyLine && source.slice(at, close).includes("\n")) return void 0;
+  return { start: at + 1, end: close, next: close + 1 };
+}
+function readBrackets(source, index) {
+  let at = index;
+  while (source[at] === " " || source[at] === "	") at++;
+  if (source[at] !== "[") return void 0;
+  let depth = 0;
+  for (let i = at + 1; i < source.length && source[i] !== "\n"; i++) {
+    if (source[i] === "\\") i++;
+    else if (source[i] === "{") depth++;
+    else if (source[i] === "}") depth--;
+    else if (source[i] === "]" && depth === 0) return { start: at + 1, end: i, next: i + 1 };
+  }
+  return void 0;
+}
+function keyValues(text) {
+  const values = {};
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") depth--;
+    else if (text[i] === "," && depth === 0 || i === text.length) {
+      const [key, ...value] = text.slice(start, i).split("=");
+      if (key.trim()) values[key.trim()] = value.join("=").trim().replace(/^\{([\s\S]*)\}$/, "$1");
+      start = i + 1;
+    }
+  }
+  return values;
+}
+function capitalised2(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 // src/livePreview/controller.ts
 var LANGUAGES = /* @__PURE__ */ new Set(["latex", "tex"]);
 var RESCAN_DELAY_MS = 150;
@@ -82025,10 +82543,21 @@ var MAX_MACRO_FILES = 200;
 var MAX_MACRO_FILE_BYTES = 1024 * 1024;
 var VISIBLE_MARGIN_LINES = 40;
 var EDIT_PREVIEW_GAP = 4;
+var RANGE_STYLES = {
+  bold: { fontWeight: "bold" },
+  italic: { fontStyle: "italic" },
+  underline: { textDecoration: "underline" },
+  // textDecoration carries CSS the public options do not have, as for hiding.
+  smallCaps: { textDecoration: "none; font-variant: small-caps;" },
+  dim: { opacity: "0.45" },
+  chapter: { fontWeight: "bold", textDecoration: "none; font-size: 1.3em;" },
+  section: { fontWeight: "bold", textDecoration: "none; font-size: 1.2em;" },
+  subsection: { fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" }
+};
 var LiveMathPreview = class {
   constructor(output) {
     this.output = output;
-    this.labels = new LabelIndex(output);
+    this.aux = new AuxIndex(output);
     const watcher = vscode16.workspace.createFileSystemWatcher("**/*.{tex,sty}");
     this.disposables.push(
       this.hidden,
@@ -82036,9 +82565,10 @@ var LiveMathPreview = class {
       this.blockImages,
       this.blockBackgrounds,
       this.errors,
-      this.referenceText,
-      this.labels,
-      this.labels.onDidChange(() => this.updateAll()),
+      this.insertions,
+      ...this.rangeStyles.values(),
+      this.aux,
+      this.aux.onDidChange(() => this.updateAll()),
       watcher,
       watcher.onDidCreate(() => this.scheduleMacroScan()),
       watcher.onDidChange(() => this.scheduleMacroScan()),
@@ -82069,9 +82599,11 @@ var LiveMathPreview = class {
   errors = vscode16.window.createTextEditorDecorationType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
   });
-  referenceText = vscode16.window.createTextEditorDecorationType({});
+  /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
+  insertions = vscode16.window.createTextEditorDecorationType({});
+  rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) => [style, vscode16.window.createTextEditorDecorationType(options)]));
   renderer = new MathRenderer();
-  labels;
+  aux;
   scans = /* @__PURE__ */ new WeakMap();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   applied = /* @__PURE__ */ new WeakMap();
@@ -82082,6 +82614,7 @@ var LiveMathPreview = class {
   disposables = [];
   workspaceMacros = {};
   cref = emptyCrefSettings();
+  theorems = /* @__PURE__ */ new Map();
   macroGeneration = 0;
   macroTimer;
   enabled = false;
@@ -82155,6 +82688,8 @@ var LiveMathPreview = class {
       version: document2.version,
       regions: parsed.regions,
       references: parsed.references,
+      citations: parsed.citations,
+      structure: parsed.structure,
       root: parsed.root,
       macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
       macroGeneration: this.macroGeneration
@@ -82176,33 +82711,35 @@ var LiveMathPreview = class {
       start: document2.offsetAt(selection.start),
       end: document2.offsetAt(selection.end)
     }));
-    const visible = editor.visibleRanges.map((range) => ({
-      start: document2.offsetAt(new vscode16.Position(Math.max(0, range.start.line - VISIBLE_MARGIN_LINES), 0)),
-      end: document2.offsetAt(new vscode16.Position(range.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
+    const visible = editor.visibleRanges.map((range2) => ({
+      start: document2.offsetAt(new vscode16.Position(Math.max(0, range2.start.line - VISIBLE_MARGIN_LINES), 0)),
+      end: document2.offsetAt(new vscode16.Position(range2.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
     }));
-    const isVisible = (start, end) => visible.some((range) => end >= range.start && start <= range.end);
+    const isVisible = (start, end) => visible.some((range2) => end >= range2.start && start <= range2.end);
     const options = { ...this.renderSizing(document2), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 4;
-    const labels = this.labels.labelsFor(document2, scan.root);
+    const aux = this.aux.auxFor(document2, scan.root);
+    const labels = aux?.labels;
     const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.cref).text) : tex;
     const hidden = new Decorations();
     const inlineImages = new Decorations();
     const blockImages = new Decorations();
     const blockBackgrounds = new Decorations();
     const errors = new Decorations();
-    const referenceText = new Decorations();
+    const insertions = new Decorations();
+    const styled = new Map([...this.rangeStyles.keys()].map((style) => [style, new Decorations()]));
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
-      const range = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
+      const range2 = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
       const result = this.renderer.render(withNumbers(region.tex), options);
       if (!result.ok) {
-        errors.add(`i${index}`, { range, hoverMessage: `Live math preview: ${result.error}` });
+        errors.add(`i${index}`, { range: range2, hoverMessage: `Live math preview: ${result.error}` });
         return;
       }
       const { widthPx, heightPx, verticalAlignPx } = result.image;
-      hidden.add(`i${index}`, range);
+      hidden.add(`i${index}`, range2);
       inlineImages.add(`i${index}`, {
-        range: new vscode16.Range(range.start, range.start),
+        range: new vscode16.Range(range2.start, range2.start),
         renderOptions: {
           before: {
             contentIconPath: this.uriFor(result.image),
@@ -82251,31 +82788,25 @@ var LiveMathPreview = class {
         });
       }
     });
-    if (labels) {
-      scan.references.forEach((region, index) => {
-        if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
-        const formatted = formatReference(region, labels, this.cref);
-        if (!formatted.text) return;
-        const range = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
-        const missing = formatted.labels.some((label) => !label);
-        hidden.add(`r${index}`, range);
-        referenceText.add(`r${index}`, {
-          range,
-          hoverMessage: referenceHover(region, formatted),
-          renderOptions: {
-            before: {
-              contentText: `${region.tie ? "\xA0" : ""}${formatted.text}`,
-              color: new vscode16.ThemeColor(missing ? "editorWarning.foreground" : "textLink.foreground"),
-              fontWeight: missing ? "bold" : void 0
-            }
-          }
+    const range = (start, end) => new vscode16.Range(document2.positionAt(start), document2.positionAt(end));
+    this.overlaysFor(document2, scan, aux).forEach((item, index) => {
+      if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) return;
+      const key = `o${index}`;
+      for (const [start, end] of item.hide) hidden.add(key, range(start, end));
+      for (const part of item.style) styled.get(part.style)?.add(key, range(part.start, part.end));
+      item.insert.forEach((insertion, position) => {
+        const hover = position === 0 && item.hover ? hoverText(item.hover) : void 0;
+        insertions.add(key, {
+          range: hover ? range(item.start, item.end) : range(insertion.at, insertion.at),
+          hoverMessage: hover,
+          renderOptions: { before: insertionStyle(insertion) }
         });
       });
-    }
+    });
     const state = [
       scan.version,
       scan.macroGeneration,
-      this.labels.generation,
+      this.aux.generation,
       options.color,
       options.fontSizePx,
       options.lineHeightPx,
@@ -82286,7 +82817,21 @@ var LiveMathPreview = class {
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
-    this.apply(editor, this.referenceText, referenceText, state);
+    this.apply(editor, this.insertions, insertions, state);
+    for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style), state);
+  }
+  /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
+  overlaysFor(document2, scan, aux) {
+    if (scan.overlays?.generation === this.aux.generation) return scan.overlays.list;
+    const text = document2.getText();
+    const list = [
+      // Without a compile there is nothing to number references and citations with, so they stay as source.
+      ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
+      ...aux ? citationOverlays(scan.citations, aux.citations) : [],
+      ...structureOverlays(scan.structure, text, this.theorems, aux)
+    ];
+    scan.overlays = { generation: this.aux.generation, list };
+    return list;
   }
   /**
    * While a block is edited its source shows, and its rendering sits to the right of its longest
@@ -82334,7 +82879,8 @@ var LiveMathPreview = class {
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
     editor.setDecorations(this.errors, []);
-    editor.setDecorations(this.referenceText, []);
+    editor.setDecorations(this.insertions, []);
+    for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
   /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
   uriFor(image) {
@@ -82367,6 +82913,7 @@ var LiveMathPreview = class {
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros = {};
     const cref = emptyCrefSettings();
+    const theorems = /* @__PURE__ */ new Map();
     for (const file of files) {
       const stat14 = await vscode16.workspace.fs.stat(file).then((value) => value, () => void 0);
       if (!stat14 || stat14.size > MAX_MACRO_FILE_BYTES) continue;
@@ -82375,9 +82922,11 @@ var LiveMathPreview = class {
       const text = Buffer.from(bytes).toString("utf8");
       Object.assign(macros, parseMacroDefinitions(text));
       readCrefSettings(text, cref);
+      readTheoremSettings(text, theorems);
     }
     this.workspaceMacros = macros;
     this.cref = cref;
+    this.theorems = theorems;
     this.macroGeneration += 1;
   }
 };
@@ -82397,17 +82946,31 @@ function visualColumn(text, character, tabSize) {
 function parseDocument(text, languageId) {
   const source = previewSource(text, languageId);
   const regions = findMathRegions(text, languageId, source);
-  return { regions, references: findReferences(text, regions, languageId, source), root: rootHint(text, source) };
+  return {
+    regions,
+    references: findReferences(text, regions, languageId, source),
+    citations: findCitations(text, regions, languageId, source),
+    structure: findStructure(text, regions, languageId, source),
+    root: rootHint(text, source)
+  };
 }
-function referenceHover(region, formatted) {
+function hoverText(lines) {
   const hover = new vscode16.MarkdownString();
-  region.keys.forEach((key, index) => {
-    const label = formatted.labels[index];
-    const details = label ? [label.type, label.number, label.page && `page ${label.page}`, label.title].filter(Boolean).join(" \xB7 ") : "not numbered by the last compile; compile again to number it";
+  lines.forEach((line, index) => {
     if (index) hover.appendMarkdown("\n\n");
-    hover.appendText(`${key}: ${details}`);
+    hover.appendText(line);
   });
   return hover;
+}
+function insertionStyle(insertion) {
+  const color = insertion.color === "link" ? "textLink.foreground" : insertion.color === "warning" ? "editorWarning.foreground" : void 0;
+  return {
+    contentText: insertion.text,
+    color: color && new vscode16.ThemeColor(color),
+    fontWeight: insertion.bold ? "bold" : void 0,
+    fontStyle: insertion.italic ? "italic" : void 0,
+    textDecoration: insertion.size ? `none; font-size: ${insertion.size}em;` : void 0
+  };
 }
 function themeTextColor(kind) {
   switch (kind) {
