@@ -209,14 +209,6 @@ export function findLatexCommentStart(line: string) {
   return -1;
 }
 
-function maskRange(chars: string[], start: number, end: number) {
-  for (let index = Math.max(start, 0); index < Math.min(end, chars.length); index++) {
-    if (chars[index] != '\n' && chars[index] != '\r') {
-      chars[index] = ' ';
-    }
-  }
-}
-
 function getMarkdownFenceRanges(text: string) {
   let ranges: SourceRange[] = [];
   let open: { start: number; marker: string; length: number } | undefined;
@@ -250,11 +242,28 @@ function getMarkdownFenceRanges(text: string) {
   return ranges;
 }
 
-function maskRegexRanges(chars: string[], text: string, regexp: RegExp) {
+function regexRanges(text: string, regexp: RegExp): Array<[number, number]> {
+  let ranges: Array<[number, number]> = [];
   let match: RegExpExecArray | null;
   while ((match = regexp.exec(text)) !== null) {
-    maskRange(chars, match.index, match.index + match[0].length);
+    ranges.push([match.index, match.index + match[0].length]);
   }
+  return ranges;
+}
+
+/** The text with the ranges blanked, line breaks kept, built from slices rather than one string per character. */
+function maskRanges(text: string, ranges: Array<[number, number]>) {
+  ranges.sort((a, b) => a[0] - b[0]);
+  let masked = '';
+  let copied = 0;
+  for (let [rangeStart, rangeEnd] of ranges) {
+    let start = Math.max(rangeStart, copied, 0);
+    let end = Math.min(rangeEnd, text.length);
+    if (end <= start) continue;
+    masked += text.slice(copied, start) + text.slice(start, end).replace(/[^\n\r]/g, ' ');
+    copied = end;
+  }
+  return masked + text.slice(copied);
 }
 
 export function sanitizeLatexForParsing(
@@ -262,33 +271,28 @@ export function sanitizeLatexForParsing(
   markdownFenceRanges = getMarkdownFenceRanges(text),
   maskInlineCodeSpans = true
 ) {
-  let chars = text.split('');
-
-  for (let range of markdownFenceRanges) {
-    maskRange(chars, range.start, range.end);
-  }
-
-  maskRegexRanges(chars, text, /<!--[\s\S]*?-->/g);
+  let ranges: Array<[number, number]> = markdownFenceRanges.map((range): [number, number] => [range.start, range.end]);
+  ranges.push(...regexRanges(text, /<!--[\s\S]*?-->/g));
   // Backtick code spans are a Markdown construct. In LaTeX a backtick is an opening
   // quote, so two ordinary quotes on one line would be paired into a bogus span and
   // everything between them — including real math — would be masked out.
-  if (maskInlineCodeSpans) maskRegexRanges(chars, text, /`[^`\n]*`/g);
+  if (maskInlineCodeSpans) ranges.push(...regexRanges(text, /`[^`\n]*`/g));
+  let masked = ranges.length ? maskRanges(text, ranges) : text;
 
-  let lineStart = 0;
-  while (lineStart <= chars.length) {
-    let newline = chars.indexOf('\n', lineStart);
-    let lineEnd = newline == -1 ? chars.length : newline;
-    let line = chars.slice(lineStart, lineEnd).join('');
-    let commentStart = findLatexCommentStart(line);
+  // Comments are looked for in what is left, and only on lines with a % at all.
+  let comments: Array<[number, number]> = [];
+  for (let percent = masked.indexOf('%'); percent != -1;) {
+    let lineStart = masked.lastIndexOf('\n', percent - 1) + 1;
+    let newline = masked.indexOf('\n', percent);
+    let lineEnd = newline == -1 ? masked.length : newline;
+    let commentStart = findLatexCommentStart(masked.slice(lineStart, lineEnd));
     if (commentStart != -1) {
-      maskRange(chars, lineStart + commentStart, lineEnd);
+      comments.push([lineStart + commentStart, lineEnd]);
     }
-
-    if (newline == -1) break;
-    lineStart = newline + 1;
+    percent = newline == -1 ? -1 : masked.indexOf('%', newline);
   }
 
-  return chars.join('');
+  return comments.length ? maskRanges(masked, comments) : masked;
 }
 
 function createLatexParsingPrefix(

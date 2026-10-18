@@ -30,8 +30,7 @@ export function emptyTheoremSettings(): TheoremSettings {
  * Adds the theorem-like environments a file declares with \newtheorem or thmtools' \declaretheorem,
  * and notes the theme's theorem commands, which its theorems.tex defines with three arguments.
  */
-export function readTheoremSettings(text: string, settings: TheoremSettings): void {
-  const source = previewSource(text, 'latex');
+export function readTheoremSettings(text: string, settings: TheoremSettings, source = previewSource(text, 'latex')): void {
   if (/\\NewDocumentCommand\s*\{?\s*\\thm\s*\}?\s*\{\s*mm\+m\s*\}/.test(source)) settings.themeCommands = true;
   let style: TheoremStyle = 'plain';
   const asStyle = (value: string | undefined): TheoremStyle => value === 'definition' || value === 'remark' ? value : 'plain';

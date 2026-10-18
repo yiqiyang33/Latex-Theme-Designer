@@ -318,8 +318,7 @@ export function emptyCrefSettings(): CrefSettings {
 }
 
 /** Adds what a file sets for cleveref to `settings`. */
-export function readCrefSettings(text: string, settings: CrefSettings): void {
-  const source = previewSource(text);
+export function readCrefSettings(text: string, settings: CrefSettings, source = previewSource(text)): void {
   for (const match of source.matchAll(/\\usepackage\s*\[([^\]]*)\]\s*\{([^}]*)\}/g)) {
     if (!match[2].split(',').some(name => name.trim() === 'cleveref')) continue;
     const options = match[1].split(',').map(option => option.trim());

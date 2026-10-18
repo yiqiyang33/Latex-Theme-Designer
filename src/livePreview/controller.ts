@@ -53,6 +53,8 @@ interface DocumentScan {
   references: ReferenceRegion[];
   citations: CitationRegion[];
   structure: Structure;
+  /** The text with comments and verbatim blanked. */
+  source: string;
   /** What the document says about its root, whose compile numbers its references. */
   root: RootHint;
   /** Workspace macros overlaid with the document's own, rebuilt only when either changes. */
@@ -253,8 +255,9 @@ export class LiveMathPreview implements vscode.Disposable {
       references: parsed.references,
       citations: parsed.citations,
       structure: parsed.structure,
+      source: parsed.source,
       root: parsed.root,
-      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
+      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text, parsed.source) },
       macroGeneration: this.macroGeneration
     };
     this.scans.set(document, scan);
@@ -428,7 +431,7 @@ export class LiveMathPreview implements vscode.Disposable {
   private markupFor(document: vscode.TextDocument, scan: DocumentScan, aux: AuxData | undefined): Markup {
     if (scan.overlays?.generation === this.aux.generation) return scan.overlays;
     const text = document.getText();
-    const homework = this.homeworkFor(document, text);
+    const homework = this.homeworkFor(document, text, scan.source);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
       ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
@@ -443,7 +446,7 @@ export class LiveMathPreview implements vscode.Disposable {
    * How homework.sty numbers the document: the Homework panel's settings file beside the document
    * or above it, then whatever the document sets after loading that file, as the template allows.
    */
-  private homeworkFor(document: vscode.TextDocument, text: string): HomeworkSettings | undefined {
+  private homeworkFor(document: vscode.TextDocument, text: string, source: string): HomeworkSettings | undefined {
     if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return undefined;
     let settings = defaultHomeworkSettings();
     if (document.uri.scheme === 'file') {
@@ -456,7 +459,6 @@ export class LiveMathPreview implements vscode.Disposable {
         if (path.dirname(dir) === dir) break;
       }
     }
-    const source = previewSource(text, document.languageId);
     const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
     return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
@@ -574,9 +576,11 @@ export class LiveMathPreview implements vscode.Disposable {
       const bytes = await vscode.workspace.fs.readFile(file).then(value => value, () => undefined);
       if (!bytes) continue;
       const text = Buffer.from(bytes).toString('utf8');
-      Object.assign(macros, parseMacroDefinitions(text));
-      readCrefSettings(text, cref);
-      readTheoremSettings(text, theorems);
+      // One pass blanks the comments and verbatim for all three readers.
+      const source = previewSource(text, 'latex');
+      Object.assign(macros, parseMacroDefinitions(text, source));
+      readCrefSettings(text, cref, source);
+      readTheoremSettings(text, theorems, source);
       homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
       if (file.fsPath.endsWith(`${path.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
     }
@@ -607,7 +611,7 @@ function visualColumn(text: string, character: number, tabSize: number): number 
   return column;
 }
 
-type ParsedDocument = Pick<DocumentScan, 'regions' | 'references' | 'citations' | 'structure' | 'root'>;
+type ParsedDocument = Pick<DocumentScan, 'regions' | 'references' | 'citations' | 'structure' | 'source' | 'root'>;
 
 /** What a document's text holds for the preview, read in one pass over its TeX. */
 function parseDocument(text: string, languageId: string): ParsedDocument {
@@ -618,6 +622,7 @@ function parseDocument(text: string, languageId: string): ParsedDocument {
     references: findReferences(text, regions, languageId, source),
     citations: findCitations(text, regions, languageId, source),
     structure: findStructure(text, regions, languageId, source),
+    source,
     root: rootHint(text, source)
   };
 }

@@ -46,9 +46,7 @@ const DELIMITER_LENGTH = { inlineDollar: 1, paren: 2, displayDollar: 2, bracket:
  */
 export function previewSource(text: string, languageId?: string): string {
   const sanitized = sanitizeLatexForParsing(text, undefined, masksInlineCodeSpans(languageId));
-  const chars = sanitized.split('');
-  for (const frame of closedEnvironments(sanitized, VERBATIM_ENVIRONMENTS, 'literal')) blank(chars, frame.bodyStart, frame.bodyEnd);
-  return chars.join('');
+  return blankRanges(sanitized, closedEnvironments(sanitized, VERBATIM_ENVIRONMENTS, 'literal').map(frame => [frame.bodyStart, frame.bodyEnd]));
 }
 
 /**
@@ -58,18 +56,16 @@ export function previewSource(text: string, languageId?: string): string {
  *   A display block sharing a line with text is left as source, since its rendering covers whole lines.
  */
 export function findMathRegions(text: string, languageId?: string, source = previewSource(text, languageId)): MathRegions {
-  const chars = source.split('');
   const blocks: MathRegion[] = [];
   for (const frame of closedEnvironments(source, DISPLAY_ENVIRONMENTS, 'restarts')) {
-    if (!chars.slice(frame.bodyStart, frame.bodyEnd).join('').trim()) continue;
+    if (!source.slice(frame.bodyStart, frame.bodyEnd).trim()) continue;
     // MathJax takes the environments themselves, except displaymath, which it does not know.
     const tex = frame.name === 'displaymath' ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
     blocks.push({ start: frame.start, end: frame.end, tex });
-    // A `$` in here belongs to text nested in the formula, not to a formula of its own.
-    blank(chars, frame.start, frame.end);
   }
   const inline: MathRegion[] = [];
-  walkMathDelimiters(chars.join(''), (frame, end, depth) => {
+  // A `$` in a display environment belongs to text nested in the formula, not to a formula of its own.
+  walkMathDelimiters(blankRanges(source, blocks.map(block => [block.start, block.end])), (frame, end, depth) => {
     if (depth !== 0) return;
     const delimiter = DELIMITER_LENGTH[frame.kind];
     const tex = text.slice(frame.start + delimiter, end - delimiter);
@@ -129,9 +125,16 @@ function closedEnvironments(source: string, names: ReadonlySet<string>, inner: '
   return frames;
 }
 
-/** Blanks a range, keeping offsets and line breaks. */
-function blank(chars: string[], start: number, end: number): void {
-  for (let i = start; i < end; i++) if (chars[i] !== '\n') chars[i] = ' ';
+/** The text with the ranges, which are in order and apart, blanked, keeping offsets and line breaks. */
+function blankRanges(text: string, ranges: Array<[number, number]>): string {
+  if (!ranges.length) return text;
+  let blanked = '';
+  let copied = 0;
+  for (const [start, end] of ranges) {
+    blanked += text.slice(copied, start) + text.slice(start, end).replace(/[^\n]/g, ' ');
+    copied = end;
+  }
+  return blanked + text.slice(copied);
 }
 
 /**

@@ -8,8 +8,7 @@ const DEFINITION = /\\(newcommand|renewcommand|providecommand|DeclareMathOperato
  * project's own notation render instead of failing. Covers \newcommand and its siblings,
  * \DeclareMathOperator and simple \def; anything else is skipped rather than guessed at.
  */
-export function parseMacroDefinitions(text: string): MathJaxMacros {
-  const source = sanitizeLatexForParsing(text, undefined, false);
+export function parseMacroDefinitions(text: string, source = sanitizeLatexForParsing(text, undefined, false)): MathJaxMacros {
   const macros: MathJaxMacros = {};
   let match: RegExpExecArray | null;
   DEFINITION.lastIndex = 0;

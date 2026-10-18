@@ -52,6 +52,7 @@ Regression tests live in `test/snippets.test.ts` unless noted.
 | `environmentConvert.ts` | Split `findLatexEnvironmentPairAt` into `enumerateLatexEnvironmentPairs` + `selectLatexEnvironmentPairAt`; the keystroke path enumerates once | It scanned and sanitized the whole document twice per change event |
 | `environmentConvert.ts` | Imports `findMatchingBrace` from `latexContext.ts` | It was a byte-identical copy apart from a `limit` parameter |
 | `latexContext.ts`, `latexEdit.ts` | Deleted `stripLatexComments`, the `LatexContext` alias, and twelve unused re-exports | Zero consumers anywhere in `src/` or `test/` |
+| `latexContext.ts` `sanitizeLatexForParsing` | Builds the result from slices of the masked ranges instead of a one-string-per-character array, and only looks for comments on lines with a `%` | The live preview runs it over whole documents on every edit; it was 8× slower and allocated a string per character. Output is identical: checked against the old version on 1378 real `.tex`/`.sty`/`.md` files and 30000 random texts |
 
 ## Not done
 

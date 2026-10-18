@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMacroDefinitions } from '../src/livePreview/macros';
-import { findMathRegions, regionIsActive } from '../src/livePreview/mathRegions';
+import { findMathRegions, previewSource, regionIsActive } from '../src/livePreview/mathRegions';
 import { MathRenderer, sizeForEditor, sliceForLines, type MathRenderOptions } from '../src/livePreview/mathRenderer';
 
 const tex = (text: string) => findMathRegions(text, 'latex').inline.map(region => region.tex);
@@ -74,6 +74,16 @@ describe('findMathRegions: display', () => {
   it('skips blocks in verbatim and comments, and the inline math nested in them', () => {
     expect(displayTex('\\begin{verbatim}\n\\[ x \\]\n\\end{verbatim}\n% \\[ y \\]')).toEqual([]);
     expect(findMathRegions('\\begin{equation}\n x \\text{if $c$}\n\\end{equation}', 'latex').inline).toEqual([]);
+  });
+});
+
+describe('previewSource', () => {
+  it('blanks comments and verbatim, keeping every offset and line break, CRLF ones too', () => {
+    const text = 'a $x$ % note\r\n\\% kept\r\n\\begin{verbatim}\r\n$y$\r\n\\end{verbatim}';
+    const source = previewSource(text, 'latex');
+    // A comment keeps its line's \r; a verbatim body is blanked to its line breaks alone.
+    expect(source).toBe('a $x$       \r\n\\% kept\r\n\\begin{verbatim} \n    \n\\end{verbatim}');
+    expect(source).toHaveLength(text.length);
   });
 });
 

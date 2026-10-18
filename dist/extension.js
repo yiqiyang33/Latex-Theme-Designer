@@ -62458,13 +62458,6 @@ function findLatexCommentStart(line) {
   }
   return -1;
 }
-function maskRange(chars, start, end) {
-  for (let index = Math.max(start, 0); index < Math.min(end, chars.length); index++) {
-    if (chars[index] != "\n" && chars[index] != "\r") {
-      chars[index] = " ";
-    }
-  }
-}
 function getMarkdownFenceRanges(text) {
   let ranges = [];
   let open2;
@@ -62492,32 +62485,44 @@ function getMarkdownFenceRanges(text) {
   }
   return ranges;
 }
-function maskRegexRanges(chars, text, regexp) {
+function regexRanges(text, regexp) {
+  let ranges = [];
   let match2;
   while ((match2 = regexp.exec(text)) !== null) {
-    maskRange(chars, match2.index, match2.index + match2[0].length);
+    ranges.push([match2.index, match2.index + match2[0].length]);
   }
+  return ranges;
+}
+function maskRanges(text, ranges) {
+  ranges.sort((a, b) => a[0] - b[0]);
+  let masked = "";
+  let copied = 0;
+  for (let [rangeStart, rangeEnd] of ranges) {
+    let start = Math.max(rangeStart, copied, 0);
+    let end = Math.min(rangeEnd, text.length);
+    if (end <= start) continue;
+    masked += text.slice(copied, start) + text.slice(start, end).replace(/[^\n\r]/g, " ");
+    copied = end;
+  }
+  return masked + text.slice(copied);
 }
 function sanitizeLatexForParsing(text, markdownFenceRanges = getMarkdownFenceRanges(text), maskInlineCodeSpans = true) {
-  let chars = text.split("");
-  for (let range of markdownFenceRanges) {
-    maskRange(chars, range.start, range.end);
-  }
-  maskRegexRanges(chars, text, /<!--[\s\S]*?-->/g);
-  if (maskInlineCodeSpans) maskRegexRanges(chars, text, /`[^`\n]*`/g);
-  let lineStart = 0;
-  while (lineStart <= chars.length) {
-    let newline = chars.indexOf("\n", lineStart);
-    let lineEnd = newline == -1 ? chars.length : newline;
-    let line = chars.slice(lineStart, lineEnd).join("");
-    let commentStart = findLatexCommentStart(line);
+  let ranges = markdownFenceRanges.map((range) => [range.start, range.end]);
+  ranges.push(...regexRanges(text, /<!--[\s\S]*?-->/g));
+  if (maskInlineCodeSpans) ranges.push(...regexRanges(text, /`[^`\n]*`/g));
+  let masked = ranges.length ? maskRanges(text, ranges) : text;
+  let comments = [];
+  for (let percent = masked.indexOf("%"); percent != -1; ) {
+    let lineStart = masked.lastIndexOf("\n", percent - 1) + 1;
+    let newline = masked.indexOf("\n", percent);
+    let lineEnd = newline == -1 ? masked.length : newline;
+    let commentStart = findLatexCommentStart(masked.slice(lineStart, lineEnd));
     if (commentStart != -1) {
-      maskRange(chars, lineStart + commentStart, lineEnd);
+      comments.push([lineStart + commentStart, lineEnd]);
     }
-    if (newline == -1) break;
-    lineStart = newline + 1;
+    percent = newline == -1 ? -1 : masked.indexOf("%", newline);
   }
-  return chars.join("");
+  return comments.length ? maskRanges(masked, comments) : masked;
 }
 function createLatexParsingPrefix(text, offset, maskInlineCodeSpans = true) {
   let original = text.substring(0, offset);
@@ -67679,9 +67684,9 @@ var AST = class {
   }
   #adoptWithSpace(child, index) {
     const gc = child.#parts[0];
-    const blank2 = new _a(null, gc, this.options);
-    blank2.#parts.push("");
-    gc.push(blank2);
+    const blank = new _a(null, gc, this.options);
+    blank.#parts.push("");
+    gc.push(blank);
     this.#adopt(child, index);
   }
   #adopt(child, index) {
@@ -81196,21 +81201,17 @@ var VERBATIM_ENVIRONMENTS = new Set(VERBATIM_LIKE_ENVIRONMENTS);
 var DELIMITER_LENGTH = { inlineDollar: 1, paren: 2, displayDollar: 2, bracket: 2 };
 function previewSource(text, languageId) {
   const sanitized = sanitizeLatexForParsing(text, void 0, masksInlineCodeSpans(languageId));
-  const chars = sanitized.split("");
-  for (const frame of closedEnvironments(sanitized, VERBATIM_ENVIRONMENTS, "literal")) blank(chars, frame.bodyStart, frame.bodyEnd);
-  return chars.join("");
+  return blankRanges(sanitized, closedEnvironments(sanitized, VERBATIM_ENVIRONMENTS, "literal").map((frame) => [frame.bodyStart, frame.bodyEnd]));
 }
 function findMathRegions(text, languageId, source = previewSource(text, languageId)) {
-  const chars = source.split("");
   const blocks = [];
   for (const frame of closedEnvironments(source, DISPLAY_ENVIRONMENTS, "restarts")) {
-    if (!chars.slice(frame.bodyStart, frame.bodyEnd).join("").trim()) continue;
+    if (!source.slice(frame.bodyStart, frame.bodyEnd).trim()) continue;
     const tex = frame.name === "displaymath" ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
     blocks.push({ start: frame.start, end: frame.end, tex });
-    blank(chars, frame.start, frame.end);
   }
   const inline = [];
-  walkMathDelimiters(chars.join(""), (frame, end, depth) => {
+  walkMathDelimiters(blankRanges(source, blocks.map((block) => [block.start, block.end])), (frame, end, depth) => {
     if (depth !== 0) return;
     const delimiter4 = DELIMITER_LENGTH[frame.kind];
     const tex = text.slice(frame.start + delimiter4, end - delimiter4);
@@ -81248,8 +81249,15 @@ function closedEnvironments(source, names, inner) {
   }
   return frames;
 }
-function blank(chars, start, end) {
-  for (let i = start; i < end; i++) if (chars[i] !== "\n") chars[i] = " ";
+function blankRanges(text, ranges) {
+  if (!ranges.length) return text;
+  let blanked = "";
+  let copied = 0;
+  for (const [start, end] of ranges) {
+    blanked += text.slice(copied, start) + text.slice(start, end).replace(/[^\n]/g, " ");
+    copied = end;
+  }
+  return blanked + text.slice(copied);
 }
 function regionIsActive(region, selections) {
   return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
@@ -81461,8 +81469,7 @@ function referenceOverlays(regions, labels, cref) {
 function emptyCrefSettings() {
   return { capitalise: false, noabbrev: false, names: {}, capitalNames: {} };
 }
-function readCrefSettings(text, settings) {
-  const source = previewSource(text);
+function readCrefSettings(text, settings, source = previewSource(text)) {
   for (const match2 of source.matchAll(/\\usepackage\s*\[([^\]]*)\]\s*\{([^}]*)\}/g)) {
     if (!match2[2].split(",").some((name) => name.trim() === "cleveref")) continue;
     const options = match2[1].split(",").map((option) => option.trim());
@@ -81920,8 +81927,7 @@ function citationOverlays(regions, citations) {
 
 // src/livePreview/macros.ts
 var DEFINITION = /\\(newcommand|renewcommand|providecommand|DeclareMathOperator|def)(\*?)(?![A-Za-z])/g;
-function parseMacroDefinitions(text) {
-  const source = sanitizeLatexForParsing(text, void 0, false);
+function parseMacroDefinitions(text, source = sanitizeLatexForParsing(text, void 0, false)) {
   const macros = {};
   let match2;
   DEFINITION.lastIndex = 0;
@@ -82234,8 +82240,7 @@ function sliceForLines(svg, rows, options, tags = []) {
 function emptyTheoremSettings() {
   return { environments: /* @__PURE__ */ new Map(), themeCommands: false };
 }
-function readTheoremSettings(text, settings) {
-  const source = previewSource(text, "latex");
+function readTheoremSettings(text, settings, source = previewSource(text, "latex")) {
   if (/\\NewDocumentCommand\s*\{?\s*\\thm\s*\}?\s*\{\s*mm\+m\s*\}/.test(source)) settings.themeCommands = true;
   let style = "plain";
   const asStyle = (value) => value === "definition" || value === "remark" ? value : "plain";
@@ -82960,8 +82965,9 @@ var LiveMathPreview = class {
       references: parsed.references,
       citations: parsed.citations,
       structure: parsed.structure,
+      source: parsed.source,
       root: parsed.root,
-      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text) },
+      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text, parsed.source) },
       macroGeneration: this.macroGeneration
     };
     this.scans.set(document2, scan);
@@ -83121,7 +83127,7 @@ var LiveMathPreview = class {
   markupFor(document2, scan, aux) {
     if (scan.overlays?.generation === this.aux.generation) return scan.overlays;
     const text = document2.getText();
-    const homework = this.homeworkFor(document2, text);
+    const homework = this.homeworkFor(document2, text, scan.source);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
       ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
@@ -83135,7 +83141,7 @@ var LiveMathPreview = class {
    * How homework.sty numbers the document: the Homework panel's settings file beside the document
    * or above it, then whatever the document sets after loading that file, as the template allows.
    */
-  homeworkFor(document2, text) {
+  homeworkFor(document2, text, source) {
     if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return void 0;
     let settings = defaultHomeworkSettings();
     if (document2.uri.scheme === "file") {
@@ -83148,7 +83154,6 @@ var LiveMathPreview = class {
         if (path50.dirname(dir) === dir) break;
       }
     }
-    const source = previewSource(text, document2.languageId);
     const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
     return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
@@ -83245,9 +83250,10 @@ var LiveMathPreview = class {
       const bytes = await vscode16.workspace.fs.readFile(file).then((value) => value, () => void 0);
       if (!bytes) continue;
       const text = Buffer.from(bytes).toString("utf8");
-      Object.assign(macros, parseMacroDefinitions(text));
-      readCrefSettings(text, cref);
-      readTheoremSettings(text, theorems);
+      const source = previewSource(text, "latex");
+      Object.assign(macros, parseMacroDefinitions(text, source));
+      readCrefSettings(text, cref, source);
+      readTheoremSettings(text, theorems, source);
       homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
       if (file.fsPath.endsWith(`${path50.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
     }
@@ -83280,6 +83286,7 @@ function parseDocument(text, languageId) {
     references: findReferences(text, regions, languageId, source),
     citations: findCitations(text, regions, languageId, source),
     structure: findStructure(text, regions, languageId, source),
+    source,
     root: rootHint(text, source)
   };
 }
