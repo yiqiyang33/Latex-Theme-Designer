@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { HistoryConflictError } from "../src/changeHistory";
 import { beamerHooksEnabled, defaultBeamerSettings, detectTemplateFromSource, detectWorkspaceTemplate, readBeamerSettings, renderBeamerClassOptions, writeBeamerSettings, writeTemplateMetadata } from "../src/beamer";
 import { assetsForTemplate, templateFilePlan, upgradableTemplateExtras } from "../src/templatePlan";
-import { defaultHomeworkSettings, enableHomeworkHooks, homeworkHooksEnabled, homeworkMachineryIsInline, isHomeworkNumberPrefix, normalizeHomeworkSettings, readHomeworkSettings, renderHomeworkSettings, writeHomeworkSettings } from "../src/homework";
+import { defaultHomeworkSettings, enableHomeworkHooks, homeworkHooksEnabled, homeworkMachineryIsInline, isHomeworkNumberPrefix, normalizeHomeworkSettings, parseHomeworkSettings, readHomeworkSettings, renderHomeworkSettings, writeHomeworkSettings } from "../src/homework";
 import { CONFIRM_ACTIONS, confirmationSpec, isConfirmAction } from "../src/confirmations";
 import { CLASS_CONFIG_DEFAULTS, COLOR_ORDER, STARTER_TEMPLATE_DEFINITIONS, STYLE_PRESET_DEFINITIONS } from "../src/schema";
 import { CleanupService } from "../src/cleanup";
@@ -863,6 +863,13 @@ describe("TypeScript Toolkit migration", () => {
     const bare = { ...settings, problemWord: "", sectionWord: "", problemPrefix: "", sectionMode: "standalone" as const };
     await writeHomeworkSettings(root, "main.tex", bare);
     expect(await readHomeworkSettings(root, "main.tex")).toEqual(bare);
+  });
+
+  it("reads homework settings over a base, keeping what the text leaves out", () => {
+    const base = parseHomeworkSettings(["\\renewcommand{\\homeworkProblemName}{}", "\\homeworkProblemPrefix{3}", "\\homeworkSectionNested"].join("\n"));
+    expect(base).toMatchObject({ problemWord: "", problemPrefix: "3", sectionMode: "nested" });
+    expect(parseHomeworkSettings("\\renewcommand{\\homeworkSectionName}{Part}", base)).toEqual({ ...base, sectionWord: "Part" });
+    expect(parseHomeworkSettings("\\homeworkProblemPrefix{}\\homeworkSectionStandalone", base)).toEqual({ ...base, problemPrefix: "", sectionMode: "standalone" });
   });
 
   it("rejects a homework number prefix that LaTeX could not use", () => {

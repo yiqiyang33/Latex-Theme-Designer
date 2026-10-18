@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultHomeworkSettings } from '../src/homework';
 import { findMathRegions } from '../src/livePreview/mathRegions';
 import type { ContentsEntry, LabelInfo } from '../src/livePreview/references';
 import {
@@ -7,9 +8,11 @@ import {
   findStructure,
   numberHeadings,
   readTheoremSettings,
+  solutionBoxes,
   structureOverlays,
   type HeadingMark
 } from '../src/livePreview/structure';
+import type { HomeworkSettings } from '../src/types';
 import { drawn } from './support/drawn';
 
 const theorems = emptyTheoremSettings();
@@ -165,6 +168,62 @@ describe('theme commands', () => {
     expect(show('\\lemp{Bound}{Stmt}{\nPf\n}')).toBe('**Lemma**\u00a0(Bound).\u00a0Stmt**Proof.\u00a0**\nPf\n\u25a1');
     expect(show('\\ex{E} \\rmk{R} \\rmkb{B}')).toBe('**Example.\u00a0**E<dim>}</dim> <italic>R</italic> *Remark.\u00a0*B<dim>}</dim>');
     expect(show('\\question{Q} \\question[Warm-up]{W}')).toBe('**Question.\u00a0**Q<dim>}</dim> <bold>Warm-up</bold>**.\u00a0**W<dim>}</dim>');
+  });
+});
+
+describe('homework', () => {
+  const homework = defaultHomeworkSettings();
+  const show = (text: string, settings = homework) =>
+    drawn(text, structureOverlays(findStructure(text, findMathRegions(text, 'latex'), 'latex'), text, theorems, {}, settings));
+
+  it('heads problems and parts as homework.sty numbers them, keeping their names as source', () => {
+    const text = [
+      '\\begin{homeworkProblem}[Sample $n$]', '\\begin{solution}', 'Solve.', '\\end{solution}', '\\end{homeworkProblem}',
+      '\\begin{homeworkProblem}[5][Renumbered]\\label{prob:five}',
+      '  \\begin{homeworkSection}[First Part]', '  \\end{homeworkSection}',
+      '  \\begin{homeworkSection}[2.3][]', '  \\end{homeworkSection}',
+      '  \\begin{homeworkSection}<Step>', '  \\end{homeworkSection}',
+      '\\end{homeworkProblem}',
+      '\\begin{homeworkProblem}[1.1][]<Bonus>', '  \\begin{homeworkSection}', '  \\end{homeworkSection}', '\\end{homeworkProblem}',
+      '\\begin{homeworkProblem}[][Blank number]', '\\end{homeworkProblem}'
+    ].join('\n');
+    expect(show(text)).toBe([
+      '**Problem\u00a01 \u2014\u00a0**<section>Sample $n$</section>', '**Solution**', 'Solve.', '<dim>\\end{solution}</dim>', '<dim>\\end{homeworkProblem}</dim>',
+      '**Problem\u00a05 \u2014\u00a0**<section>Renumbered</section><dim>\\label{prob:five}</dim>',
+      '  **(a)\u00a0**<subsection>First Part</subsection>', '  <dim>\\end{homeworkSection}</dim>',
+      // A dotted number prefixes the part's later siblings too, until the next problem.
+      '  **(2.c)**', '  <dim>\\end{homeworkSection}</dim>',
+      '  **Step\u00a0(2.d)**', '  <dim>\\end{homeworkSection}</dim>',
+      '<dim>\\end{homeworkProblem}</dim>',
+      '**Bonus\u00a01.1**', '  **(a)**', '  <dim>\\end{homeworkSection}</dim>', '<dim>\\end{homeworkProblem}</dim>',
+      // ...and a problem's prefix stays.
+      '**Problem\u00a01.2 \u2014\u00a0**<section>Blank number</section>', '<dim>\\end{homeworkProblem}</dim>'
+    ].join('\n'));
+  });
+
+  it('follows the Homework panel\'s words, styles, prefix and nested parts', () => {
+    const text = '\\begin{homeworkProblem}\n\\begin{homeworkSection}[Name]\\end{homeworkSection}\n\\end{homeworkProblem}\n\\begin{homeworkProblem}[0][]';
+    const nested: HomeworkSettings = {
+      ...homework, problemWord: 'Question', sectionWord: 'Part', problemStyle: 'Roman', sectionStyle: 'arabic', problemPrefix: '2', sectionMode: 'nested'
+    };
+    expect(show(text, nested)).toBe([
+      '**Question\u00a02.I**', '**Part\u00a02.I.1\u00a0**<subsection>Name</subsection><dim>\\end{homeworkSection}</dim>', '<dim>\\end{homeworkProblem}</dim>',
+      '**Question\u00a02.**'
+    ].join('\n'));
+    // An empty heading word prints the bare number.
+    expect(show(text, { ...homework, problemWord: '' })).toBe([
+      '**1**', '**(a)\u00a0**<subsection>Name</subsection><dim>\\end{homeworkSection}</dim>', '<dim>\\end{homeworkProblem}</dim>', '**0**'
+    ].join('\n'));
+  });
+
+  it('titles solutions, boxes each from its begin to its end, and leaves all of it alone without homework.sty', () => {
+    const text = '\\begin{solution}[Sketch]\nA\n\\begin{solution}\nB\n\\end{solution}\n\\end{solution}\n\\begin{solution}';
+    expect(show(text)).toBe('<bold>Sketch</bold>\nA\n**Solution**\nB\n<dim>\\end{solution}</dim>\n<dim>\\end{solution}</dim>\n**Solution**');
+    const structure = findStructure(text, findMathRegions(text, 'latex'), 'latex');
+    expect(solutionBoxes(structure).map(box => text.slice(box.start, box.end))).toEqual([
+      text.slice(0, text.lastIndexOf('\\begin') - 1), '\\begin{solution}\nB\n\\end{solution}'
+    ]);
+    expect(render('\\begin{homeworkProblem}[A]\n\\begin{solution}')).toBe('\\begin{homeworkProblem}[A]\n\\begin{solution}');
   });
 });
 

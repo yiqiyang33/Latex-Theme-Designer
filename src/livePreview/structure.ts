@@ -1,4 +1,5 @@
 import { findMatchingBrace, isEscaped } from '../snippets/engine/latexContext';
+import type { HomeworkSettings } from '../types';
 import { previewSource, type MathRegions } from './mathRegions';
 import { overlay, type Insertion, type Overlay, type RangeStyle } from './overlays';
 import { plainText, type ContentsEntry, type LabelInfo } from './references';
@@ -92,6 +93,9 @@ export interface EnvironmentMark {
   end: number;
   /** The optional argument of a begin, inside its brackets, when on the same line. */
   argument?: { start: number; end: number };
+  /** homework.sty's problems and parts: their second optional argument, and their heading word in <...>. */
+  second?: { start: number; end: number };
+  word?: { start: number; end: number };
 }
 
 export interface ItemMark {
@@ -133,6 +137,8 @@ export interface Structure {
 const HEADING = /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*?)(?![A-Za-z])/g;
 const ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
 const ITEM = /\\item(?![A-Za-z])/g;
+/** homework.sty's environments that take [number][name]<word>, as problems and their parts. */
+const HOMEWORK_HEADINGS = new Set(['homeworkProblem', 'homeworkSection']);
 const LABEL = /\\(label)\s*(?=\{)/g;
 const FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
 /** The theme's commands and how many braced arguments each takes. */
@@ -176,14 +182,19 @@ export function findStructure(text: string, math: MathRegions, languageId?: stri
 
   const environments: EnvironmentMark[] = marks(ENVIRONMENT).map(match => {
     const begin = match[1] === 'begin';
-    const end = match.index! + match[0].length;
-    const argument = begin ? readBrackets(source, end) : undefined;
+    const name = match[2].trim();
+    const argument = begin ? readBrackets(source, match.index! + match[0].length) : undefined;
+    const headed = begin && HOMEWORK_HEADINGS.has(name);
+    const second = headed && argument ? readBrackets(source, argument.next) : undefined;
+    const word = headed ? readBrackets(source, second?.next ?? argument?.next ?? match.index! + match[0].length, '<', '>') : undefined;
     return {
       begin,
-      name: match[2].trim(),
+      name,
       start: match.index!,
-      end: argument?.next ?? end,
-      argument: argument && { start: argument.start, end: argument.end }
+      end: word?.next ?? second?.next ?? argument?.next ?? match.index! + match[0].length,
+      argument: argument && { start: argument.start, end: argument.end },
+      second: second && { start: second.start, end: second.end },
+      word: word && { start: word.start, end: word.end }
     };
   });
 
@@ -233,6 +244,7 @@ const HEADING_STYLES: Record<string, RangeStyle> = {
 };
 const HEADING_SIZES: Record<string, number | undefined> = { part: 1.3, chapter: 1.3, section: 1.2, subsection: 1.1 };
 const LISTS = new Set(['itemize', 'enumerate', 'description']);
+const HOMEWORK_ENVIRONMENTS = new Set([...HOMEWORK_HEADINGS, 'solution']);
 /** LaTeX's itemize labels, by depth. */
 const BULLETS = ['•', '–', '∗', '·'];
 const FORMAT_STYLES: Record<string, RangeStyle | undefined> = {
@@ -241,10 +253,18 @@ const FORMAT_STYLES: Record<string, RangeStyle | undefined> = {
 
 /**
  * Headings with their numbers, theorem heads, proofs and lists as they print, labels and the lines
- * that only open or close an environment dimmed, and text formatting without its commands.
+ * that only open or close an environment dimmed, and text formatting without its commands. With
+ * homework.sty's settings, its problems, parts and solutions too.
  */
-export function structureOverlays(structure: Structure, text: string, theorems: TheoremSettings, numbers: StructureNumbers = {}): Overlay[] {
+export function structureOverlays(
+  structure: Structure,
+  text: string,
+  theorems: TheoremSettings,
+  numbers: StructureNumbers = {},
+  homework?: HomeworkSettings
+): Overlay[] {
   const overlays: Overlay[] = [];
+  const homeworkMark = homework && homeworkMarks(homework, text);
   const headingNumbers = numberHeadings(structure.headings, numbers.contents ?? []);
   structure.headings.forEach((heading, index) => {
     const number = headingNumbers[index];
@@ -268,7 +288,9 @@ export function structureOverlays(structure: Structure, text: string, theorems: 
       continue;
     }
     const environment = mark.environment;
-    if (LISTS.has(environment.name)) {
+    if (homeworkMark && HOMEWORK_ENVIRONMENTS.has(environment.name)) {
+      overlays.push(homeworkMark(environment));
+    } else if (LISTS.has(environment.name)) {
       if (environment.begin) {
         const options = keyValues(environment.argument ? text.slice(environment.argument.start, environment.argument.end) : '');
         const depth = lists.filter(list => list.kind === environment.name).length + 1;
@@ -426,6 +448,87 @@ function proofHead(environment: EnvironmentMark): Overlay {
 }
 
 /**
+ * Draws homework.sty's environments in document order, numbering problems and parts as the package
+ * does: a part's counter restarts with each problem, and an explicit [number][name] sets the
+ * counter, a dotted one also the prefix, for good on a problem and until the next problem on a part.
+ */
+function homeworkMarks(settings: HomeworkSettings, text: string): (mark: EnvironmentMark) => Overlay {
+  let problemPrefix = settings.problemPrefix ? `${settings.problemPrefix}.` : '';
+  let problem = 0;
+  let part = 0;
+  let partPrefix: string | undefined;
+  const nested = settings.sectionMode === 'nested';
+  const problemNumber = () => `${problemPrefix}${counterText(settings.problemStyle, problem)}`;
+  return mark => {
+    if (!mark.begin) return dimmed(mark.start, mark.end);
+    if (mark.name === 'solution') return solutionTitle(mark);
+    const [number, name] = mark.second ? [mark.argument, mark.second] : [undefined, mark.argument];
+    const value = number && text.slice(number.start, number.end).trim();
+    const parts = value && /^-?\d+(\.\d+)*$/.test(value) ? value.split('.') : undefined;
+    const explicit = parts && Number(parts.pop());
+    const prefix = parts?.length ? `${parts.join('.')}.` : undefined;
+    const problemHead = mark.name === 'homeworkProblem';
+    const word = plainText(mark.word ? text.slice(mark.word.start, mark.word.end) : problemHead ? settings.problemWord : settings.sectionWord);
+    const lead = word ? `${word}\u00a0` : '';
+    if (problemHead) {
+      problem = explicit ?? problem + 1;
+      if (prefix !== undefined) problemPrefix = prefix;
+      part = 0;
+      partPrefix = undefined;
+      // Problem~1\ --- Name
+      return homeworkHeading(mark, name, text, `${lead}${problemNumber()}`, ' \u2014\u00a0', 'section', 1.2);
+    }
+    part = explicit ?? part + 1;
+    if (prefix !== undefined) partPrefix = prefix;
+    const label = `${partPrefix ?? (nested ? `${problemNumber()}.` : '')}${counterText(settings.sectionStyle, part)}`;
+    // (a)\ Name, or 1.1\ Name when parts are numbered within their problem.
+    return homeworkHeading(mark, name, text, `${lead}${nested ? label : `(${label})`}`, '\u00a0', 'subsection', 1.1);
+  };
+}
+
+/** A problem's or part's heading: its word and number, then its name, left as source so its formulas render. */
+function homeworkHeading(
+  mark: EnvironmentMark,
+  name: { start: number; end: number } | undefined,
+  text: string,
+  head: string,
+  joiner: string,
+  style: RangeStyle,
+  size: number
+): Overlay {
+  if (!name || !text.slice(name.start, name.end).trim()) {
+    return overlay(mark.start, mark.end, { hide: [[mark.start, mark.end]], insert: [{ at: mark.start, text: head, bold: true, size }] });
+  }
+  return overlay(mark.start, mark.end, {
+    hide: [[mark.start, name.start], [name.end, mark.end]],
+    insert: [{ at: mark.start, text: `${head}${joiner}`, bold: true, size }],
+    style: [{ start: name.start, end: name.end, style }]
+  });
+}
+
+/** A solution's title, as its box shows it: Solution, or the title it is given. */
+function solutionTitle(mark: EnvironmentMark): Overlay {
+  const { argument } = mark;
+  if (!argument) return headOnly(mark.start, mark.end, { at: mark.start, text: 'Solution', bold: true });
+  return overlay(mark.start, mark.end, {
+    hide: [[mark.start, argument.start], [argument.end, mark.end]],
+    style: [{ start: argument.start, end: argument.end, style: 'bold' }]
+  });
+}
+
+/** Each solution from its \begin to its \end, which the preview draws in a box as homework.sty does. */
+export function solutionBoxes(structure: Structure): Array<{ start: number; end: number }> {
+  const boxes: Array<{ start: number; end: number }> = [];
+  const open: number[] = [];
+  for (const mark of structure.environments) {
+    if (mark.name !== 'solution') continue;
+    if (mark.begin) open.push(mark.start);
+    else if (open.length) boxes.push({ start: open.pop()!, end: mark.end });
+  }
+  return boxes.sort((a, b) => a.start - b.start);
+}
+
+/**
  * The number of the label inside a theorem that belongs to it: the aux file has to record it with a
  * theorem counter, so an equation or item labelled inside does not number the theorem. Any theorem
  * counter will do, since which ones share is up to declarations the compile may have chosen between.
@@ -542,17 +645,17 @@ function readBraces(source: string, index: number, anyLine = false): { start: nu
   return { start: at + 1, end: close, next: close + 1 };
 }
 
-/** A bracketed optional argument starting at `index` after spaces, on the same line. */
-function readBrackets(source: string, index: number): { start: number; end: number; next: number } | undefined {
+/** A bracketed optional argument starting at `index` after spaces, on the same line; xparse's <...> with other delimiters. */
+function readBrackets(source: string, index: number, open = '[', close = ']'): { start: number; end: number; next: number } | undefined {
   let at = index;
   while (source[at] === ' ' || source[at] === '\t') at++;
-  if (source[at] !== '[') return undefined;
+  if (source[at] !== open) return undefined;
   let depth = 0;
   for (let i = at + 1; i < source.length && source[i] !== '\n'; i++) {
     if (source[i] === '\\') i++;
     else if (source[i] === '{') depth++;
     else if (source[i] === '}') depth--;
-    else if (source[i] === ']' && depth === 0) return { start: at + 1, end: i, next: i + 1 };
+    else if (source[i] === close && depth === 0) return { start: at + 1, end: i, next: i + 1 };
   }
   return undefined;
 }

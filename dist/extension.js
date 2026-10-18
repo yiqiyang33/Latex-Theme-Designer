@@ -1725,7 +1725,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path51, checkUnignored, mode) {
+      test(path52, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1734,7 +1734,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path51);
+          const matched = rule[mode].test(path52);
           if (!matched) {
             return;
           }
@@ -1755,17 +1755,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path51, originalPath, doThrow) => {
-      if (!isString(path51)) {
+    var checkPath = (path52, originalPath, doThrow) => {
+      if (!isString(path52)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path51) {
+      if (!path52) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path51)) {
+      if (checkPath.isNotRelative(path52)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1774,7 +1774,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path51) => REGEX_TEST_INVALID_PATH.test(path51);
+    var isNotRelative = (path52) => REGEX_TEST_INVALID_PATH.test(path52);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1804,19 +1804,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path51 = originalPath && checkPath.convert(originalPath);
+        const path52 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path51,
+          path52,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path51, cache, checkUnignored, slices);
+        return this._t(path52, cache, checkUnignored, slices);
       }
-      checkIgnore(path51) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path51)) {
-          return this.test(path51);
+      checkIgnore(path52) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path52)) {
+          return this.test(path52);
         }
-        const slices = path51.split(SLASH).filter(Boolean);
+        const slices = path52.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1829,18 +1829,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path51, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path52, false, MODE_CHECK_IGNORE);
       }
-      _t(path51, cache, checkUnignored, slices) {
-        if (path51 in cache) {
-          return cache[path51];
+      _t(path52, cache, checkUnignored, slices) {
+        if (path52 in cache) {
+          return cache[path52];
         }
         if (!slices) {
-          slices = path51.split(SLASH).filter(Boolean);
+          slices = path52.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path51] = this._rules.test(path51, checkUnignored, MODE_IGNORE);
+          return cache[path52] = this._rules.test(path52, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1848,29 +1848,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path51] = parent.ignored ? parent : this._rules.test(path51, checkUnignored, MODE_IGNORE);
+        return cache[path52] = parent.ignored ? parent : this._rules.test(path52, checkUnignored, MODE_IGNORE);
       }
-      ignores(path51) {
-        return this._test(path51, this._ignoreCache, false).ignored;
+      ignores(path52) {
+        return this._test(path52, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path51) => !this.ignores(path51);
+        return (path52) => !this.ignores(path52);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path51) {
-        return this._test(path51, this._testCache, true);
+      test(path52) {
+        return this._test(path52, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path51) => checkPath(path51 && checkPath.convert(path51), path51, RETURN_FALSE);
+    var isPathValid = (path52) => checkPath(path52 && checkPath.convert(path52), path52, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path51) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path51) || isNotRelative(path51);
+      checkPath.isNotRelative = (path52) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path52) || isNotRelative(path52);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10732,11 +10732,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path51) {
-      if (!path51 || typeof path51 !== "string") {
+    function lookup2(path52) {
+      if (!path52 || typeof path52 !== "string") {
         return false;
       }
-      var extension2 = extname10("x." + path51).toLowerCase().substr(1);
+      var extension2 = extname10("x." + path52).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11841,7 +11841,7 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path51 = require("path");
+    var path52 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
@@ -11969,11 +11969,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path51.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path52.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path51.basename(options.filename || value && (value.name || value.path));
+        filename = path52.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path51.basename(value.client._httpMessage.path || "");
+        filename = path52.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12886,14 +12886,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path51 = url.path;
-      if (path51.length === 0) {
+      const path52 = url.path;
+      if (path52.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path51.length === 1 && isNormalizedWindowsDriveLetter(path51[0])) {
+      if (url.scheme === "file" && path52.length === 1 && isNormalizedWindowsDriveLetter(path52[0])) {
         return;
       }
-      path51.pop();
+      path52.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -30755,11 +30755,11 @@ var require_Wrapper3 = __commonJS({
             var i = _h.value;
             if (!width[i])
               continue;
-            var path51 = paths[i];
+            var path52 = paths[i];
             if (style[i] === "dashed" || style[i] === "dotted") {
-              this.addBorderBroken(path51, color[i], style[i], width[i], i);
+              this.addBorderBroken(path52, color[i], style[i], width[i], i);
             } else {
-              this.addBorderSolid(path51, color[i], child);
+              this.addBorderSolid(path52, color[i], child);
             }
           }
         } catch (e_3_1) {
@@ -30772,10 +30772,10 @@ var require_Wrapper3 = __commonJS({
           }
         }
       };
-      SVGWrapper2.prototype.addBorderSolid = function(path51, color, child) {
+      SVGWrapper2.prototype.addBorderSolid = function(path52, color, child) {
         var _this = this;
         var border = this.svg("polygon", {
-          points: path51.map(function(_a2) {
+          points: path52.map(function(_a2) {
             var _b = __read(_a2, 2), x = _b[0], y = _b[1];
             return "".concat(_this.fixed(x - _this.dx), ",").concat(_this.fixed(y));
           }).join(" "),
@@ -30788,11 +30788,11 @@ var require_Wrapper3 = __commonJS({
           this.adaptor.append(this.element, border);
         }
       };
-      SVGWrapper2.prototype.addBorderBroken = function(path51, color, style, t, i) {
+      SVGWrapper2.prototype.addBorderBroken = function(path52, color, style, t, i) {
         var dot = style === "dotted";
         var t2 = t / 2;
         var _a2 = __read([[t2, -t2, -t2, -t2], [-t2, t2, -t2, -t2], [t2, t2, -t2, t2], [t2, t2, t2, -t2]][i], 4), tx1 = _a2[0], ty1 = _a2[1], tx2 = _a2[2], ty2 = _a2[3];
-        var _b = __read(path51, 2), A = _b[0], B = _b[1];
+        var _b = __read(path52, 2), A = _b[0], B = _b[1];
         var x1 = A[0] + tx1 - this.dx, y1 = A[1] + ty1;
         var x2 = B[0] + tx2 - this.dx, y2 = B[1] + ty2;
         var W = Math.abs(i % 2 ? y2 - y1 : x2 - x1);
@@ -30907,8 +30907,8 @@ var require_Wrapper3 = __commonJS({
         var C = n.toString(16).toUpperCase();
         var _b = __read(this.getVariantChar(variant, n), 4), w = _b[2], data = _b[3];
         if ("p" in data) {
-          var path51 = data.p ? "M" + data.p + "Z" : "";
-          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path51)));
+          var path52 = data.p ? "M" + data.p + "Z" : "";
+          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path52)));
         } else if ("c" in data) {
           var g = this.adaptor.append(parent, this.svg("g", { "data-c": C }));
           this.place(x, y, g);
@@ -30935,16 +30935,16 @@ var require_Wrapper3 = __commonJS({
         }
         return w;
       };
-      SVGWrapper2.prototype.charNode = function(variant, C, path51) {
+      SVGWrapper2.prototype.charNode = function(variant, C, path52) {
         var cache = this.jax.options.fontCache;
-        return cache !== "none" ? this.useNode(variant, C, path51) : this.pathNode(C, path51);
+        return cache !== "none" ? this.useNode(variant, C, path52) : this.pathNode(C, path52);
       };
-      SVGWrapper2.prototype.pathNode = function(C, path51) {
-        return this.svg("path", { "data-c": C, d: path51 });
+      SVGWrapper2.prototype.pathNode = function(C, path52) {
+        return this.svg("path", { "data-c": C, d: path52 });
       };
-      SVGWrapper2.prototype.useNode = function(variant, C, path51) {
+      SVGWrapper2.prototype.useNode = function(variant, C, path52) {
         var use = this.svg("use", { "data-c": C });
-        var id = "#" + this.jax.fontCache.cachePath(variant, C, path51);
+        var id = "#" + this.jax.fontCache.cachePath(variant, C, path52);
         this.adaptor.setAttribute(use, "href", id, svg_js_1.XLINKNS);
         return use;
       };
@@ -37196,8 +37196,8 @@ var require_mtable = __commonJS({
         };
         class_1.prototype.getPadAlignShift = function(side) {
           var L = this.getTableData().L;
-          var sep13 = this.length2em(this.node.attributes.get("minlabelspacing"));
-          var pad = L + sep13;
+          var sep14 = this.length2em(this.node.attributes.get("minlabelspacing"));
+          var pad = L + sep14;
           var _a2 = __read(this.styles == null ? ["", ""] : [this.styles.get("padding-left"), this.styles.get("padding-right")], 2), lpad = _a2[0], rpad = _a2[1];
           if (lpad || rpad) {
             pad = Math.max(pad, this.length2em(lpad || "0"), this.length2em(rpad || "0"));
@@ -39972,7 +39972,7 @@ var require_menclose3 = __commonJS({
           "stroke-width": this.fixed(t)
         });
       };
-      SVGmenclose2.prototype.path = function(join38) {
+      SVGmenclose2.prototype.path = function(join39) {
         var _this = this;
         var P = [];
         for (var _i = 1; _i < arguments.length; _i++) {
@@ -39984,7 +39984,7 @@ var require_menclose3 = __commonJS({
           }).join(" "),
           style: { "stroke-width": this.fixed(this.thickness) },
           "stroke-linecap": "round",
-          "stroke-linejoin": join38,
+          "stroke-linejoin": join39,
           fill: "none"
         });
       };
@@ -46957,11 +46957,11 @@ var require_FontCache = __commonJS({
         this.nextID = 0;
         this.jax = jax;
       }
-      FontCache2.prototype.cachePath = function(variant, C, path51) {
+      FontCache2.prototype.cachePath = function(variant, C, path52) {
         var id = "MJX-" + this.localID + (this.jax.font.getVariant(variant).cacheID || "") + "-" + C;
         if (!this.cache.has(id)) {
-          this.cache.set(id, path51);
-          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path51 }));
+          this.cache.set(id, path52);
+          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path52 }));
         }
         return id;
       };
@@ -60425,7 +60425,7 @@ __export(extension_exports, {
 });
 module.exports = __toCommonJS(extension_exports);
 var fs40 = __toESM(require("node:fs"));
-var path50 = __toESM(require("node:path"));
+var path51 = __toESM(require("node:path"));
 var vscode17 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
@@ -61697,7 +61697,7 @@ var path9 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path51, callback = (err) => {
+function openExplorer(path52, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -61714,8 +61714,8 @@ function openExplorer(path51, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path51 = path51 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands8[platform3], [path51]);
+  path52 = path52 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands8[platform3], [path52]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -61800,26 +61800,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path51) {
+  function parse_path(path52) {
     if (platform3 == "win32") {
-      path51 = RegReplace(path51, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path52 = RegReplace(path52, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path51 = RegReplace(path51, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path52 = RegReplace(path52, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path51 = path51.replace(/\//g, "\\");
+      path52 = path52.replace(/\//g, "\\");
     }
-    return path51;
+    return path52;
   }
   if (platform3 == "win32") {
-    let path51 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path51 ? parse_path(path51) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path52 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path52 ? parse_path(path52) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path51 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path51 ? parse_path(path51) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path52 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path52 ? parse_path(path52) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path51 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path51 ? parse_path(path51) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path52 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path52 ? parse_path(path52) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -63446,8 +63446,8 @@ var snippetOutput;
 function isLatexLikeDocument(document2) {
   return ["latex", "tex", "markdown"].includes(document2.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path51) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path51);
+function getStringArrayConfiguration(path52) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path52);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -65772,9 +65772,11 @@ function normalizeHomeworkSettings(raw, base = defaultHomeworkSettings()) {
   };
 }
 async function readHomeworkSettings(rootDir, targetRel) {
-  const settings = defaultHomeworkSettings();
   const generated = await import_node_fs15.promises.readFile(homeworkSettingsPath(rootDir, targetRel), "utf8").catch(() => "");
-  if (!generated) return settings;
+  return generated ? parseHomeworkSettings(generated) : defaultHomeworkSettings();
+}
+function parseHomeworkSettings(generated, base = defaultHomeworkSettings()) {
+  const settings = { ...base };
   const metadata = (macro, fallback) => unescapeTexValue(texMacro(generated, macro)) || fallback;
   settings.course = metadata("ToolkitHomeworkCourse", settings.course);
   settings.title = metadata("ToolkitHomeworkTitle", settings.title);
@@ -65792,8 +65794,9 @@ async function readHomeworkSettings(rootDir, targetRel) {
   const sectionStyle = texArgument(generated, "homeworkSectionNumbering");
   if (isHomeworkNumberStyle(sectionStyle)) settings.sectionStyle = sectionStyle;
   const prefix = texArgument(generated, "homeworkProblemPrefix");
-  if (isHomeworkNumberPrefix(prefix)) settings.problemPrefix = prefix;
-  settings.sectionMode = /\\homeworkSectionNested\b/.test(generated) ? "nested" : "standalone";
+  if (/\\homeworkProblemPrefix\s*\{/.test(generated) && isHomeworkNumberPrefix(prefix)) settings.problemPrefix = prefix;
+  if (/\\homeworkSectionNested\b/.test(generated)) settings.sectionMode = "nested";
+  else if (/\\homeworkSectionStandalone\b/.test(generated)) settings.sectionMode = "standalone";
   return settings;
 }
 async function writeHomeworkSettings(rootDir, targetRel, settings) {
@@ -73056,12 +73059,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path51, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path51);
+  setPath(path52, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path52);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path51) {
-    this.paths.delete(toPosixPath2(path51));
+  clearPath(path52) {
+    this.paths.delete(toPosixPath2(path52));
   }
   clearPaths() {
     this.paths.clear();
@@ -73073,23 +73076,23 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path51 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path51, { ...entry, path: path51 });
+      const path52 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path52, { ...entry, path: path52 });
     }
   }
-  canSync(path51) {
+  canSync(path52) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path51) === void 0;
+    return this.findBlocking(path52) === void 0;
   }
   /**
    * True when `path` is held up only by a reconnect or an in-flight check, with nothing
    * path-specific against it. Such work is worth retrying once the gate reopens.
    */
-  isTransientlyBlocked(path51) {
-    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path51) === void 0;
+  isTransientlyBlocked(path52) {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path52) === void 0;
   }
-  findBlocking(path51) {
-    const normalized = toPosixPath2(path51);
+  findBlocking(path52) {
+    const normalized = toPosixPath2(path52);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -73623,13 +73626,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path51) {
-    const normalized = toPosixPath2(path51);
+  forget(path52) {
+    const normalized = toPosixPath2(path52);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path51) {
-    const normalized = toPosixPath2(path51);
+  forgetSubtree(path52) {
+    const normalized = toPosixPath2(path52);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -73668,8 +73671,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path51, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path51);
+      for (const [path52, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path52);
       }
     }
   }
@@ -73953,22 +73956,22 @@ async function executeSyncCommand(backend, command, args = {}) {
       return backend.syncOnce();
     case "push":
     case "pull": {
-      const path51 = requiredPath(args.path);
+      const path52 = requiredPath(args.path);
       const force = Boolean(args.force);
-      await backend.authorize?.(command, path51, force);
-      await backend[command](path51, force);
+      await backend.authorize?.(command, path52, force);
+      await backend[command](path52, force);
       return backend.status({
         refresh: true,
         full: false,
-        paths: [path51],
+        paths: [path52],
         reason: `post-${command}`
       });
     }
     case "conflicts-list":
       return backend.conflicts();
     case "conflicts-resolve": {
-      const path51 = requiredPath(args.path);
-      await backend.resolveConflict(path51, args.use === "remote" ? "remote" : "local");
+      const path52 = requiredPath(args.path);
+      await backend.resolveConflict(path52, args.use === "remote" ? "remote" : "local");
       return backend.conflicts();
     }
     default:
@@ -76524,7 +76527,7 @@ var RealtimeSyncService = class {
     if (!file || file.entityType !== "doc") {
       throw new Error(`${relPath} is not an Overleaf document.`);
     }
-    const join38 = (async () => {
+    const join39 = (async () => {
       const joined = await this.session.joinDoc(file.entityId);
       const state = {
         relPath,
@@ -76540,9 +76543,9 @@ var RealtimeSyncService = class {
       this.manifest.files[relPath].version = joined.version;
       return state;
     })();
-    this.pendingDocJoins.set(relPath, join38);
+    this.pendingDocJoins.set(relPath, join39);
     try {
-      return await join38;
+      return await join39;
     } finally {
       this.pendingDocJoins.delete(relPath);
     }
@@ -81160,6 +81163,7 @@ function expandHome2(value) {
 }
 
 // src/livePreview/controller.ts
+var path50 = __toESM(require("node:path"));
 var vscode16 = __toESM(require("vscode"));
 
 // src/livePreview/auxIndex.ts
@@ -82255,6 +82259,7 @@ function readTheoremSettings(text, settings) {
 var HEADING = /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*?)(?![A-Za-z])/g;
 var ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
 var ITEM = /\\item(?![A-Za-z])/g;
+var HOMEWORK_HEADINGS = /* @__PURE__ */ new Set(["homeworkProblem", "homeworkSection"]);
 var LABEL = /\\(label)\s*(?=\{)/g;
 var FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
 var THEME_ARGUMENTS = {
@@ -82307,14 +82312,19 @@ function findStructure(text, math, languageId, source = previewSource(text, lang
   }
   const environments = marks(ENVIRONMENT).map((match2) => {
     const begin = match2[1] === "begin";
-    const end = match2.index + match2[0].length;
-    const argument = begin ? readBrackets(source, end) : void 0;
+    const name = match2[2].trim();
+    const argument = begin ? readBrackets(source, match2.index + match2[0].length) : void 0;
+    const headed = begin && HOMEWORK_HEADINGS.has(name);
+    const second = headed && argument ? readBrackets(source, argument.next) : void 0;
+    const word = headed ? readBrackets(source, second?.next ?? argument?.next ?? match2.index + match2[0].length, "<", ">") : void 0;
     return {
       begin,
-      name: match2[2].trim(),
+      name,
       start: match2.index,
-      end: argument?.next ?? end,
-      argument: argument && { start: argument.start, end: argument.end }
+      end: word?.next ?? second?.next ?? argument?.next ?? match2.index + match2[0].length,
+      argument: argument && { start: argument.start, end: argument.end },
+      second: second && { start: second.start, end: second.end },
+      word: word && { start: word.start, end: word.end }
     };
   });
   const items = marks(ITEM).map((match2) => {
@@ -82355,6 +82365,7 @@ var HEADING_STYLES = {
 };
 var HEADING_SIZES = { part: 1.3, chapter: 1.3, section: 1.2, subsection: 1.1 };
 var LISTS = /* @__PURE__ */ new Set(["itemize", "enumerate", "description"]);
+var HOMEWORK_ENVIRONMENTS = /* @__PURE__ */ new Set([...HOMEWORK_HEADINGS, "solution"]);
 var BULLETS = ["\u2022", "\u2013", "\u2217", "\xB7"];
 var FORMAT_STYLES = {
   textbf: "bold",
@@ -82364,8 +82375,9 @@ var FORMAT_STYLES = {
   underline: "underline",
   textsc: "smallCaps"
 };
-function structureOverlays(structure, text, theorems, numbers = {}) {
+function structureOverlays(structure, text, theorems, numbers = {}, homework) {
   const overlays = [];
+  const homeworkMark = homework && homeworkMarks(homework, text);
   const headingNumbers = numberHeadings(structure.headings, numbers.contents ?? []);
   structure.headings.forEach((heading, index) => {
     const number = headingNumbers[index];
@@ -82388,7 +82400,9 @@ function structureOverlays(structure, text, theorems, numbers = {}) {
       continue;
     }
     const environment = mark.environment;
-    if (LISTS.has(environment.name)) {
+    if (homeworkMark && HOMEWORK_ENVIRONMENTS.has(environment.name)) {
+      overlays.push(homeworkMark(environment));
+    } else if (LISTS.has(environment.name)) {
       if (environment.begin) {
         const options = keyValues(environment.argument ? text.slice(environment.argument.start, environment.argument.end) : "");
         const depth = lists.filter((list) => list.kind === environment.name).length + 1;
@@ -82520,6 +82534,65 @@ function proofHead(environment) {
     style: [{ start: argument.start, end: argument.end, style: "italic" }]
   });
 }
+function homeworkMarks(settings, text) {
+  let problemPrefix = settings.problemPrefix ? `${settings.problemPrefix}.` : "";
+  let problem = 0;
+  let part = 0;
+  let partPrefix;
+  const nested = settings.sectionMode === "nested";
+  const problemNumber = () => `${problemPrefix}${counterText(settings.problemStyle, problem)}`;
+  return (mark) => {
+    if (!mark.begin) return dimmed(mark.start, mark.end);
+    if (mark.name === "solution") return solutionTitle(mark);
+    const [number, name] = mark.second ? [mark.argument, mark.second] : [void 0, mark.argument];
+    const value = number && text.slice(number.start, number.end).trim();
+    const parts = value && /^-?\d+(\.\d+)*$/.test(value) ? value.split(".") : void 0;
+    const explicit = parts && Number(parts.pop());
+    const prefix = parts?.length ? `${parts.join(".")}.` : void 0;
+    const problemHead = mark.name === "homeworkProblem";
+    const word = plainText(mark.word ? text.slice(mark.word.start, mark.word.end) : problemHead ? settings.problemWord : settings.sectionWord);
+    const lead = word ? `${word}\xA0` : "";
+    if (problemHead) {
+      problem = explicit ?? problem + 1;
+      if (prefix !== void 0) problemPrefix = prefix;
+      part = 0;
+      partPrefix = void 0;
+      return homeworkHeading(mark, name, text, `${lead}${problemNumber()}`, " \u2014\xA0", "section", 1.2);
+    }
+    part = explicit ?? part + 1;
+    if (prefix !== void 0) partPrefix = prefix;
+    const label = `${partPrefix ?? (nested ? `${problemNumber()}.` : "")}${counterText(settings.sectionStyle, part)}`;
+    return homeworkHeading(mark, name, text, `${lead}${nested ? label : `(${label})`}`, "\xA0", "subsection", 1.1);
+  };
+}
+function homeworkHeading(mark, name, text, head, joiner, style, size) {
+  if (!name || !text.slice(name.start, name.end).trim()) {
+    return overlay(mark.start, mark.end, { hide: [[mark.start, mark.end]], insert: [{ at: mark.start, text: head, bold: true, size }] });
+  }
+  return overlay(mark.start, mark.end, {
+    hide: [[mark.start, name.start], [name.end, mark.end]],
+    insert: [{ at: mark.start, text: `${head}${joiner}`, bold: true, size }],
+    style: [{ start: name.start, end: name.end, style }]
+  });
+}
+function solutionTitle(mark) {
+  const { argument } = mark;
+  if (!argument) return headOnly(mark.start, mark.end, { at: mark.start, text: "Solution", bold: true });
+  return overlay(mark.start, mark.end, {
+    hide: [[mark.start, argument.start], [argument.end, mark.end]],
+    style: [{ start: argument.start, end: argument.end, style: "bold" }]
+  });
+}
+function solutionBoxes(structure) {
+  const boxes = [];
+  const open2 = [];
+  for (const mark of structure.environments) {
+    if (mark.name !== "solution") continue;
+    if (mark.begin) open2.push(mark.start);
+    else if (open2.length) boxes.push({ start: open2.pop(), end: mark.end });
+  }
+  return boxes.sort((a, b) => a.start - b.start);
+}
 function theoremNumber(begin, kind, structure, text, theorems, labels) {
   if (!kind.numbered || !labels) return void 0;
   const end = structure.environments.find((mark) => !mark.begin && mark.name === begin.name && mark.start > begin.end);
@@ -82610,16 +82683,16 @@ function readBraces(source, index, anyLine = false) {
   if (close === -1 || !anyLine && source.slice(at, close).includes("\n")) return void 0;
   return { start: at + 1, end: close, next: close + 1 };
 }
-function readBrackets(source, index) {
+function readBrackets(source, index, open2 = "[", close = "]") {
   let at = index;
   while (source[at] === " " || source[at] === "	") at++;
-  if (source[at] !== "[") return void 0;
+  if (source[at] !== open2) return void 0;
   let depth = 0;
   for (let i = at + 1; i < source.length && source[i] !== "\n"; i++) {
     if (source[i] === "\\") i++;
     else if (source[i] === "{") depth++;
     else if (source[i] === "}") depth--;
-    else if (source[i] === "]" && depth === 0) return { start: at + 1, end: i, next: i + 1 };
+    else if (source[i] === close && depth === 0) return { start: at + 1, end: i, next: i + 1 };
   }
   return void 0;
 }
@@ -82650,6 +82723,9 @@ var MAX_MACRO_FILES = 200;
 var MAX_MACRO_FILE_BYTES = 1024 * 1024;
 var VISIBLE_MARGIN_LINES = 40;
 var EDIT_PREVIEW_GAP = 4;
+var SOLUTION_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)";
+var SOLUTION_TITLE_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)";
+var HOMEWORK_PACKAGE = /\\NewDocumentEnvironment\s*\{\s*homeworkProblem\s*\}|\\usepackage\s*(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/;
 var RANGE_STYLES = {
   bold: { fontWeight: "bold" },
   italic: { fontStyle: "italic" },
@@ -82671,6 +82747,9 @@ var LiveMathPreview = class {
       this.inlineImages,
       this.blockImages,
       this.blockBackgrounds,
+      this.solutionTitles,
+      this.solutionBodies,
+      this.solutionBlockBackgrounds,
       this.errors,
       this.insertions,
       ...this.rangeStyles.values(),
@@ -82703,6 +82782,15 @@ var LiveMathPreview = class {
     isWholeLine: true,
     backgroundColor: new vscode16.ThemeColor("editor.background")
   });
+  // Translucent, as decorations are drawn above the selection.
+  solutionTitles = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
+  solutionBodies = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TINT });
+  // A formula's lines in a solution take the box over the editor's background, which covers their
+  // indent guides as blockBackgrounds does; two separate types could be drawn in either order.
+  solutionBlockBackgrounds = vscode16.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT});`
+  });
   errors = vscode16.window.createTextEditorDecorationType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
   });
@@ -82722,6 +82810,9 @@ var LiveMathPreview = class {
   workspaceMacros = {};
   cref = emptyCrefSettings();
   theorems = emptyTheoremSettings();
+  homeworkPackage = false;
+  /** The Homework panel's settings files, by the folder whose documents they number. */
+  homeworkFiles = /* @__PURE__ */ new Map();
   macroGeneration = 0;
   macroTimer;
   enabled = false;
@@ -82832,6 +82923,9 @@ var LiveMathPreview = class {
     const inlineImages = new Decorations();
     const blockImages = new Decorations();
     const blockBackgrounds = new Decorations();
+    const solutionTitles = new Decorations();
+    const solutionBodies = new Decorations();
+    const solutionBlockBackgrounds = new Decorations();
     const errors = new Decorations();
     const insertions = new Decorations();
     const styled = new Map([...this.rangeStyles.keys()].map((style) => [style, new Decorations()]));
@@ -82858,6 +82952,14 @@ var LiveMathPreview = class {
         }
       });
     });
+    const markup = this.markupFor(document2, scan, aux);
+    const boxes = [];
+    markup.boxes.forEach((box, index) => {
+      if (!isVisible(box.start, box.end)) return;
+      const first = document2.positionAt(box.start).line;
+      if (boxes.length && first <= boxes[boxes.length - 1].last) return;
+      boxes.push({ index, first, last: document2.positionAt(box.end).line, formulas: [] });
+    });
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document2.positionAt(region.start).line;
@@ -82876,7 +82978,10 @@ var LiveMathPreview = class {
         const line = document2.lineAt(firstLine + row);
         if (!line.range.isEmpty) hidden.add(`d${index}`, line.range);
       }
-      blockBackgrounds.add(`d${index}`, new vscode16.Range(firstLine, 0, firstLine + region.rows - 1, 0));
+      const lastLine = firstLine + region.rows - 1;
+      const box = boxes.find((item) => item.first < firstLine && lastLine <= item.last);
+      box?.formulas.push({ index, first: firstLine, last: lastLine });
+      (box ? solutionBlockBackgrounds : blockBackgrounds).add(`d${index}`, new vscode16.Range(firstLine, 0, lastLine, 0));
       const indent = visualColumn(document2.lineAt(firstLine).text, document2.positionAt(region.start).character, tabSize) + tabSize;
       for (const slice of result.image.slices) {
         const start = new vscode16.Position(firstLine + slice.row, 0);
@@ -82895,8 +83000,18 @@ var LiveMathPreview = class {
         });
       }
     });
+    for (const box of boxes) {
+      solutionTitles.add(`s${box.index}`, new vscode16.Range(box.first, 0, box.first, 0));
+      const key = `s${box.index}:${box.formulas.map((formula) => formula.index).join(".")}`;
+      let from = box.first + 1;
+      for (const formula of box.formulas) {
+        if (formula.first > from) solutionBodies.add(key, new vscode16.Range(from, 0, formula.first - 1, 0));
+        from = formula.last + 1;
+      }
+      if (from <= box.last) solutionBodies.add(key, new vscode16.Range(from, 0, box.last, 0));
+    }
     const range = (start, end) => new vscode16.Range(document2.positionAt(start), document2.positionAt(end));
-    this.overlaysFor(document2, scan, aux).forEach((item, index) => {
+    markup.list.forEach((item, index) => {
       if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) return;
       const key = `o${index}`;
       for (const [start, end] of item.hide) hidden.add(key, range(start, end));
@@ -82923,22 +83038,47 @@ var LiveMathPreview = class {
     this.apply(editor, this.inlineImages, inlineImages, state);
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
+    this.apply(editor, this.solutionTitles, solutionTitles, state);
+    this.apply(editor, this.solutionBodies, solutionBodies, state);
+    this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style), state);
   }
   /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
-  overlaysFor(document2, scan, aux) {
-    if (scan.overlays?.generation === this.aux.generation) return scan.overlays.list;
+  markupFor(document2, scan, aux) {
+    if (scan.overlays?.generation === this.aux.generation) return scan.overlays;
     const text = document2.getText();
+    const homework = this.homeworkFor(document2, text);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
       ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
       ...aux ? citationOverlays(scan.citations, aux.citations) : [],
-      ...structureOverlays(scan.structure, text, this.theorems, aux)
+      ...structureOverlays(scan.structure, text, this.theorems, aux, homework)
     ];
-    scan.overlays = { generation: this.aux.generation, list };
-    return list;
+    scan.overlays = { generation: this.aux.generation, list, boxes: homework ? solutionBoxes(scan.structure) : [] };
+    return scan.overlays;
+  }
+  /**
+   * How homework.sty numbers the document: the Homework panel's settings file beside the document
+   * or above it, then whatever the document sets after loading that file, as the template allows.
+   */
+  homeworkFor(document2, text) {
+    if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return void 0;
+    let settings = defaultHomeworkSettings();
+    if (document2.uri.scheme === "file") {
+      for (let dir = path50.dirname(document2.uri.fsPath); ; dir = path50.dirname(dir)) {
+        const generated = this.homeworkFiles.get(dir);
+        if (generated !== void 0) {
+          settings = parseHomeworkSettings(generated);
+          break;
+        }
+        if (path50.dirname(dir) === dir) break;
+      }
+    }
+    const source = previewSource(text, document2.languageId);
+    const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
+    return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
   /**
    * While a block is edited its source shows, and its rendering sits to the right of its longest
@@ -82985,6 +83125,9 @@ var LiveMathPreview = class {
     editor.setDecorations(this.inlineImages, []);
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
+    editor.setDecorations(this.solutionTitles, []);
+    editor.setDecorations(this.solutionBodies, []);
+    editor.setDecorations(this.solutionBlockBackgrounds, []);
     editor.setDecorations(this.errors, []);
     editor.setDecorations(this.insertions, []);
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
@@ -83021,6 +83164,9 @@ var LiveMathPreview = class {
     const macros = {};
     const cref = emptyCrefSettings();
     const theorems = emptyTheoremSettings();
+    let homeworkPackage = false;
+    const homeworkFiles = /* @__PURE__ */ new Map();
+    const settingsFile = path50.join(...HOMEWORK_SETTINGS_FILE.split("/"));
     for (const file of files) {
       const stat14 = await vscode16.workspace.fs.stat(file).then((value) => value, () => void 0);
       if (!stat14 || stat14.size > MAX_MACRO_FILE_BYTES) continue;
@@ -83030,10 +83176,14 @@ var LiveMathPreview = class {
       Object.assign(macros, parseMacroDefinitions(text));
       readCrefSettings(text, cref);
       readTheoremSettings(text, theorems);
+      homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
+      if (file.fsPath.endsWith(`${path50.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
     }
     this.workspaceMacros = macros;
     this.cref = cref;
     this.theorems = theorems;
+    this.homeworkPackage = homeworkPackage;
+    this.homeworkFiles = homeworkFiles;
     this.macroGeneration += 1;
   }
 };
@@ -83155,7 +83305,7 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path50.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path51.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
       const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
       vscode17.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
@@ -83468,10 +83618,10 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     if (!picked) return;
     parentPath = picked;
   }
-  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path50.basename(project.rootPath))));
+  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path51.basename(project.rootPath))));
   const nextInSeries = groupNotes[0] && suggestNextNoteName(
-    path50.basename(groupNotes[0].rootPath),
-    (candidate) => takenInGroup.has(candidate) || !remote && fs40.existsSync(path50.join(parentPath, candidate))
+    path51.basename(groupNotes[0].rootPath),
+    (candidate) => takenInGroup.has(candidate) || !remote && fs40.existsSync(path51.join(parentPath, candidate))
   );
   const defaultName = nextInSeries || "New Notes";
   const projectName = await vscode17.window.showInputBox({
@@ -83527,8 +83677,8 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const normalizedParent = path50.normalize(path50.resolve(parentPath));
-  const nextRecent = [normalizedParent, ...recent.filter((item) => path50.normalize(item) !== normalizedParent)].slice(0, 8);
+  const normalizedParent = path51.normalize(path51.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path51.normalize(item) !== normalizedParent)].slice(0, 8);
   await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
@@ -83558,7 +83708,7 @@ async function pickProjectParent(recent, group) {
   for (const folder of vscode17.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path50.dirname(folder.uri.fsPath));
+      suggested.add(path51.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
@@ -83566,8 +83716,8 @@ async function pickProjectParent(recent, group) {
   if (groupFolder) suggested.delete(groupFolder);
   const location = await vscode17.window.showQuickPick(
     [
-      ...group && groupFolder ? [{ label: path50.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
-      ...[...suggested].map((folderPath) => ({ label: path50.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...group && groupFolder ? [{ label: path51.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
+      ...[...suggested].map((folderPath) => ({ label: path51.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project: Location", placeHolder: "Choose the parent folder for the new project" }
@@ -83591,7 +83741,7 @@ async function projectNameError2(value, parentPath) {
   if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
   if (!parentPath) return void 0;
-  const target = path50.resolve(parentPath, name);
+  const target = path51.resolve(parentPath, name);
   try {
     const stat14 = await fs40.promises.lstat(target);
     if (!stat14.isDirectory()) return `A file named '${name}' already exists here.`;
@@ -83710,7 +83860,7 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path50.resolve(rootPath);
+  let canonical = path51.resolve(rootPath);
   try {
     canonical = fs40.realpathSync.native(canonical);
   } catch {
@@ -83783,7 +83933,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs40.existsSync(path50.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs40.existsSync(path51.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode17.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -84038,7 +84188,7 @@ var ToolkitTreeProvider = class {
           id: `overleaf-mirror:${mirror.id}`,
           identity: { mirrorId: mirror.id },
           label: mirror.name,
-          description: `${status} \xB7 ${path50.basename(path50.dirname(mirror.root))}`,
+          description: `${status} \xB7 ${path51.basename(path51.dirname(mirror.root))}`,
           iconId: icon,
           commandId: "overleafCodex.openLocalMirror",
           contextValue: "overleafMirror"
@@ -84088,7 +84238,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     const activeSnippetProfile = vscode17.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path50.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path51.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -84312,8 +84462,8 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode17.Uri.file(path50.join(context.extensionPath, "dist")),
-          vscode17.Uri.file(path50.join(context.extensionPath, "dist", "monaco"))
+          vscode17.Uri.file(path51.join(context.extensionPath, "dist")),
+          vscode17.Uri.file(path51.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -84422,7 +84572,7 @@ var ToolkitPanel = class _ToolkitPanel {
         } catch {
           exists7 = false;
         }
-        data = { path: rawPath || path50.basename(pdfPath), exists: exists7 };
+        data = { path: rawPath || path51.basename(pdfPath), exists: exists7 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
@@ -84487,7 +84637,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode17.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode17.Uri.file(path50.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        const target = await vscode17.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode17.Uri.file(path51.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
         if (target) await fs40.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
@@ -84529,10 +84679,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode17.Uri.file(path50.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -84549,7 +84699,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs40.existsSync(path50.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs40.existsSync(path51.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

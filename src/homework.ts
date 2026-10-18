@@ -53,9 +53,16 @@ export function normalizeHomeworkSettings(raw: unknown, base: HomeworkSettings =
 }
 
 export async function readHomeworkSettings(rootDir: string, targetRel: string): Promise<HomeworkSettings> {
-  const settings = defaultHomeworkSettings();
   const generated = await fs.readFile(homeworkSettingsPath(rootDir, targetRel), "utf8").catch(() => "");
-  if (!generated) return settings;
+  return generated ? parseHomeworkSettings(generated) : defaultHomeworkSettings();
+}
+
+/**
+ * The settings a generated file sets, over `base` for whatever it leaves out. The live preview
+ * also reads a document's own overrides with it, so the panel and the preview number alike.
+ */
+export function parseHomeworkSettings(generated: string, base: HomeworkSettings = defaultHomeworkSettings()): HomeworkSettings {
+  const settings = { ...base };
   const metadata = (macro: string, fallback: string): string => unescapeTexValue(texMacro(generated, macro)) || fallback;
   settings.course = metadata("ToolkitHomeworkCourse", settings.course);
   settings.title = metadata("ToolkitHomeworkTitle", settings.title);
@@ -77,10 +84,12 @@ export async function readHomeworkSettings(rootDir: string, targetRel: string): 
   const sectionStyle = texArgument(generated, "homeworkSectionNumbering");
   if (isHomeworkNumberStyle(sectionStyle)) settings.sectionStyle = sectionStyle;
 
+  // An empty prefix is a real choice too, so only a missing call leaves the base's.
   const prefix = texArgument(generated, "homeworkProblemPrefix");
-  if (isHomeworkNumberPrefix(prefix)) settings.problemPrefix = prefix;
+  if (/\\homeworkProblemPrefix\s*\{/.test(generated) && isHomeworkNumberPrefix(prefix)) settings.problemPrefix = prefix;
 
-  settings.sectionMode = /\\homeworkSectionNested\b/.test(generated) ? "nested" : "standalone";
+  if (/\\homeworkSectionNested\b/.test(generated)) settings.sectionMode = "nested";
+  else if (/\\homeworkSectionStandalone\b/.test(generated)) settings.sectionMode = "standalone";
   return settings;
 }
 

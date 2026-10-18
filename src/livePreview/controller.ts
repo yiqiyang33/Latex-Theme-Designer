@@ -1,4 +1,7 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { defaultHomeworkSettings, HOMEWORK_SETTINGS_FILE, parseHomeworkSettings } from '../homework';
+import type { HomeworkSettings } from '../types';
 import { AuxIndex } from './auxIndex';
 import { citationOverlays, findCitations, type CitationRegion } from './citations';
 import { parseMacroDefinitions } from './macros';
@@ -19,7 +22,15 @@ import {
   type ReferenceRegion,
   type RootHint
 } from './references';
-import { emptyTheoremSettings, findStructure, readTheoremSettings, structureOverlays, type Structure, type TheoremSettings } from './structure';
+import {
+  emptyTheoremSettings,
+  findStructure,
+  readTheoremSettings,
+  solutionBoxes,
+  structureOverlays,
+  type Structure,
+  type TheoremSettings
+} from './structure';
 
 const LANGUAGES = new Set(['latex', 'tex']);
 const RESCAN_DELAY_MS = 150;
@@ -30,6 +41,11 @@ const MAX_MACRO_FILE_BYTES = 1024 * 1024;
 const VISIBLE_MARGIN_LINES = 40;
 /** Columns between the longest line of a block being edited and its rendering. */
 const EDIT_PREVIEW_GAP = 4;
+/** homework.sty's solution box, tinted from the link colour as a callout is, and its title bar more strongly. */
+const SOLUTION_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)';
+const SOLUTION_TITLE_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)';
+/** What says a project numbers its homework with homework.sty: the package itself, an older inline copy, or loading it. */
+const HOMEWORK_PACKAGE = /\\NewDocumentEnvironment\s*\{\s*homeworkProblem\s*\}|\\usepackage\s*(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/;
 
 interface DocumentScan {
   version: number;
@@ -43,7 +59,14 @@ interface DocumentScan {
   macros: MathJaxMacros;
   macroGeneration: number;
   /** What to draw over the markup, for the aux files as they were at `generation`. */
-  overlays?: { generation: number; list: Overlay[] };
+  overlays?: Markup;
+}
+
+interface Markup {
+  generation: number;
+  list: Overlay[];
+  /** Solutions, whose lines are tinted as homework.sty's box. */
+  boxes: Array<{ start: number; end: number }>;
 }
 
 /** How each style a stretch of source can take is drawn. */
@@ -80,6 +103,15 @@ export class LiveMathPreview implements vscode.Disposable {
     isWholeLine: true,
     backgroundColor: new vscode.ThemeColor('editor.background')
   });
+  // Translucent, as decorations are drawn above the selection.
+  private readonly solutionTitles = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
+  private readonly solutionBodies = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TINT });
+  // A formula's lines in a solution take the box over the editor's background, which covers their
+  // indent guides as blockBackgrounds does; two separate types could be drawn in either order.
+  private readonly solutionBlockBackgrounds = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT});`
+  });
   private readonly errors = vscode.window.createTextEditorDecorationType({
     textDecoration: 'underline wavy var(--vscode-editorError-foreground)'
   });
@@ -100,6 +132,9 @@ export class LiveMathPreview implements vscode.Disposable {
   private workspaceMacros: MathJaxMacros = {};
   private cref: CrefSettings = emptyCrefSettings();
   private theorems: TheoremSettings = emptyTheoremSettings();
+  private homeworkPackage = false;
+  /** The Homework panel's settings files, by the folder whose documents they number. */
+  private homeworkFiles = new Map<string, string>();
   private macroGeneration = 0;
   private macroTimer?: NodeJS.Timeout;
   private enabled = false;
@@ -113,6 +148,9 @@ export class LiveMathPreview implements vscode.Disposable {
       this.inlineImages,
       this.blockImages,
       this.blockBackgrounds,
+      this.solutionTitles,
+      this.solutionBodies,
+      this.solutionBlockBackgrounds,
       this.errors,
       this.insertions,
       ...this.rangeStyles.values(),
@@ -258,6 +296,9 @@ export class LiveMathPreview implements vscode.Disposable {
     const inlineImages = new Decorations<vscode.DecorationOptions>();
     const blockImages = new Decorations<vscode.DecorationOptions>();
     const blockBackgrounds = new Decorations<vscode.Range>();
+    const solutionTitles = new Decorations<vscode.Range>();
+    const solutionBodies = new Decorations<vscode.Range>();
+    const solutionBlockBackgrounds = new Decorations<vscode.Range>();
     const errors = new Decorations<vscode.DecorationOptions>();
     const insertions = new Decorations<vscode.DecorationOptions>();
     const styled = new Map([...this.rangeStyles.keys()].map(style => [style, new Decorations<vscode.Range>()]));
@@ -286,6 +327,16 @@ export class LiveMathPreview implements vscode.Disposable {
       });
     });
 
+    const markup = this.markupFor(document, scan, aux);
+    // A solution nested in another lies in its box already.
+    const boxes: Array<{ index: number; first: number; last: number; formulas: Array<{ index: number; first: number; last: number }> }> = [];
+    markup.boxes.forEach((box, index) => {
+      if (!isVisible(box.start, box.end)) return;
+      const first = document.positionAt(box.start).line;
+      if (boxes.length && first <= boxes[boxes.length - 1].last) return;
+      boxes.push({ index, first, last: document.positionAt(box.end).line, formulas: [] });
+    });
+
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document.positionAt(region.start).line;
@@ -304,7 +355,10 @@ export class LiveMathPreview implements vscode.Disposable {
         const line = document.lineAt(firstLine + row);
         if (!line.range.isEmpty) hidden.add(`d${index}`, line.range);
       }
-      blockBackgrounds.add(`d${index}`, new vscode.Range(firstLine, 0, firstLine + region.rows - 1, 0));
+      const lastLine = firstLine + region.rows - 1;
+      const box = boxes.find(item => item.first < firstLine && lastLine <= item.last);
+      box?.formulas.push({ index, first: firstLine, last: lastLine });
+      (box ? solutionBlockBackgrounds : blockBackgrounds).add(`d${index}`, new vscode.Range(firstLine, 0, lastLine, 0));
       // Indented one level from its delimiter, as display math stands out from the text around it.
       const indent = visualColumn(document.lineAt(firstLine).text, document.positionAt(region.start).character, tabSize) + tabSize;
       for (const slice of result.image.slices) {
@@ -325,8 +379,20 @@ export class LiveMathPreview implements vscode.Disposable {
       }
     });
 
+    // The first line as the box's title bar, the rest as its body around the formulas drawn over theirs.
+    for (const box of boxes) {
+      solutionTitles.add(`s${box.index}`, new vscode.Range(box.first, 0, box.first, 0));
+      const key = `s${box.index}:${box.formulas.map(formula => formula.index).join('.')}`;
+      let from = box.first + 1;
+      for (const formula of box.formulas) {
+        if (formula.first > from) solutionBodies.add(key, new vscode.Range(from, 0, formula.first - 1, 0));
+        from = formula.last + 1;
+      }
+      if (from <= box.last) solutionBodies.add(key, new vscode.Range(from, 0, box.last, 0));
+    }
+
     const range = (start: number, end: number) => new vscode.Range(document.positionAt(start), document.positionAt(end));
-    this.overlaysFor(document, scan, aux).forEach((item, index) => {
+    markup.list.forEach((item, index) => {
       if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) return;
       const key = `o${index}`;
       for (const [start, end] of item.hide) hidden.add(key, range(start, end));
@@ -350,23 +416,49 @@ export class LiveMathPreview implements vscode.Disposable {
     this.apply(editor, this.inlineImages, inlineImages, state);
     this.apply(editor, this.blockImages, blockImages, state);
     this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
+    this.apply(editor, this.solutionTitles, solutionTitles, state);
+    this.apply(editor, this.solutionBodies, solutionBodies, state);
+    this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style)!, state);
   }
 
   /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
-  private overlaysFor(document: vscode.TextDocument, scan: DocumentScan, aux: AuxData | undefined): Overlay[] {
-    if (scan.overlays?.generation === this.aux.generation) return scan.overlays.list;
+  private markupFor(document: vscode.TextDocument, scan: DocumentScan, aux: AuxData | undefined): Markup {
+    if (scan.overlays?.generation === this.aux.generation) return scan.overlays;
     const text = document.getText();
+    const homework = this.homeworkFor(document, text);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
       ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
       ...aux ? citationOverlays(scan.citations, aux.citations) : [],
-      ...structureOverlays(scan.structure, text, this.theorems, aux)
+      ...structureOverlays(scan.structure, text, this.theorems, aux, homework)
     ];
-    scan.overlays = { generation: this.aux.generation, list };
-    return list;
+    scan.overlays = { generation: this.aux.generation, list, boxes: homework ? solutionBoxes(scan.structure) : [] };
+    return scan.overlays;
+  }
+
+  /**
+   * How homework.sty numbers the document: the Homework panel's settings file beside the document
+   * or above it, then whatever the document sets after loading that file, as the template allows.
+   */
+  private homeworkFor(document: vscode.TextDocument, text: string): HomeworkSettings | undefined {
+    if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return undefined;
+    let settings = defaultHomeworkSettings();
+    if (document.uri.scheme === 'file') {
+      for (let dir = path.dirname(document.uri.fsPath); ; dir = path.dirname(dir)) {
+        const generated = this.homeworkFiles.get(dir);
+        if (generated !== undefined) {
+          settings = parseHomeworkSettings(generated);
+          break;
+        }
+        if (path.dirname(dir) === dir) break;
+      }
+    }
+    const source = previewSource(text, document.languageId);
+    const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
+    return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
 
   /**
@@ -427,6 +519,9 @@ export class LiveMathPreview implements vscode.Disposable {
     editor.setDecorations(this.inlineImages, []);
     editor.setDecorations(this.blockImages, []);
     editor.setDecorations(this.blockBackgrounds, []);
+    editor.setDecorations(this.solutionTitles, []);
+    editor.setDecorations(this.solutionBodies, []);
+    editor.setDecorations(this.solutionBlockBackgrounds, []);
     editor.setDecorations(this.errors, []);
     editor.setDecorations(this.insertions, []);
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
@@ -470,6 +565,9 @@ export class LiveMathPreview implements vscode.Disposable {
     const macros: MathJaxMacros = {};
     const cref = emptyCrefSettings();
     const theorems = emptyTheoremSettings();
+    let homeworkPackage = false;
+    const homeworkFiles = new Map<string, string>();
+    const settingsFile = path.join(...HOMEWORK_SETTINGS_FILE.split('/'));
     for (const file of files) {
       const stat = await vscode.workspace.fs.stat(file).then(value => value, () => undefined);
       if (!stat || stat.size > MAX_MACRO_FILE_BYTES) continue;
@@ -479,10 +577,14 @@ export class LiveMathPreview implements vscode.Disposable {
       Object.assign(macros, parseMacroDefinitions(text));
       readCrefSettings(text, cref);
       readTheoremSettings(text, theorems);
+      homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
+      if (file.fsPath.endsWith(`${path.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
     }
     this.workspaceMacros = macros;
     this.cref = cref;
     this.theorems = theorems;
+    this.homeworkPackage = homeworkPackage;
+    this.homeworkFiles = homeworkFiles;
     this.macroGeneration += 1;
   }
 }
