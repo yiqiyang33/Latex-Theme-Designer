@@ -25900,7 +25900,7 @@ var require_lengths = __commonJS({
       return m.toFixed(3).replace(/\.?0+$/, "") + "em";
     }
     exports2.emRounded = emRounded;
-    function px(m, M, em2) {
+    function px2(m, M, em2) {
       if (M === void 0) {
         M = -exports2.BIGDIMEN;
       }
@@ -25914,7 +25914,7 @@ var require_lengths = __commonJS({
         return "0";
       return m.toFixed(1).replace(/\.0$/, "") + "px";
     }
-    exports2.px = px;
+    exports2.px = px2;
   }
 });
 
@@ -47116,9 +47116,9 @@ var require_svg = __commonJS({
       };
       SVG2.prototype.createRoot = function(wrapper) {
         var _a2 = wrapper.getOuterBBox(), w = _a2.w, h = _a2.h, d = _a2.d, pwidth = _a2.pwidth;
-        var px = wrapper.metrics.em / 1e3;
-        var W = Math.max(w, px);
-        var H = Math.max(h + d, px);
+        var px2 = wrapper.metrics.em / 1e3;
+        var W = Math.max(w, px2);
+        var H = Math.max(h + d, px2);
         var g = this.svg("g", {
           stroke: "currentColor",
           fill: "currentColor",
@@ -67676,9 +67676,9 @@ var AST = class {
   }
   #adoptWithSpace(child, index) {
     const gc = child.#parts[0];
-    const blank = new _a(null, gc, this.options);
-    blank.#parts.push("");
-    gc.push(blank);
+    const blank2 = new _a(null, gc, this.options);
+    blank2.#parts.push("");
+    gc.push(blank2);
     this.#adopt(child, index);
   }
   #adopt(child, index) {
@@ -81238,41 +81238,79 @@ function readDefBody(source, index) {
 }
 
 // src/livePreview/mathRegions.ts
-var INLINE_DELIMITER_LENGTH = { inlineDollar: 1, paren: 2 };
-function findInlineMathRegions(text, languageId) {
-  let sanitized = sanitizeLatexForParsing(text, void 0, masksInlineCodeSpans(languageId));
-  sanitized = maskEnvironmentBodies(sanitized, [...VERBATIM_LIKE_ENVIRONMENTS, ...MATH_ENVIRONMENTS]);
-  const regions = [];
-  walkMathDelimiters(sanitized, (frame, end, depth) => {
-    if (depth !== 0 || frame.kind !== "inlineDollar" && frame.kind !== "paren") return;
-    const delimiter4 = INLINE_DELIMITER_LENGTH[frame.kind];
-    const tex = text.slice(frame.start + delimiter4, end - delimiter4);
-    if (!tex.trim() || tex.includes("\n")) return;
-    regions.push({ start: frame.start, end, tex });
-  });
-  return regions;
-}
-function maskEnvironmentBodies(sanitized, environments) {
-  const names = new Set(environments);
+var DISPLAY_ENVIRONMENTS = /* @__PURE__ */ new Set([
+  "displaymath",
+  "equation",
+  "equation*",
+  "align",
+  "align*",
+  "gather",
+  "gather*",
+  "multline",
+  "multline*",
+  "flalign",
+  "flalign*",
+  "alignat",
+  "alignat*",
+  "eqnarray",
+  "eqnarray*"
+]);
+var VERBATIM_ENVIRONMENTS = new Set(VERBATIM_LIKE_ENVIRONMENTS);
+var DELIMITER_LENGTH = { inlineDollar: 1, paren: 2, displayDollar: 2, bracket: 2 };
+function findMathRegions(text, languageId) {
+  const sanitized = sanitizeLatexForParsing(text, void 0, masksInlineCodeSpans(languageId));
   const chars = sanitized.split("");
-  const pattern = /\\(begin|end)\s*\{([^}]+)\}/g;
+  for (const frame of outermostEnvironments(sanitized, VERBATIM_ENVIRONMENTS)) blank(chars, frame.bodyStart, frame.bodyEnd);
+  const blocks = [];
+  for (const frame of outermostEnvironments(chars.join(""), DISPLAY_ENVIRONMENTS)) {
+    if (!chars.slice(frame.bodyStart, frame.bodyEnd).join("").trim()) continue;
+    const tex = frame.name === "displaymath" ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
+    blocks.push({ start: frame.start, end: frame.end, tex });
+    blank(chars, frame.start, frame.end);
+  }
+  const inline = [];
+  walkMathDelimiters(chars.join(""), (frame, end, depth) => {
+    if (depth !== 0) return;
+    const delimiter4 = DELIMITER_LENGTH[frame.kind];
+    const tex = text.slice(frame.start + delimiter4, end - delimiter4);
+    if (!tex.trim()) return;
+    if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push({ start: frame.start, end, tex });
+    else if (!tex.includes("\n")) inline.push({ start: frame.start, end, tex });
+  });
+  const display = blocks.map((block) => onOwnLines(block, text, sanitized)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
+  return { inline, display };
+}
+function onOwnLines(block, text, sanitized) {
+  const linesStart = text.lastIndexOf("\n", block.start - 1) + 1;
+  const newline = text.indexOf("\n", block.end);
+  const linesEnd = newline === -1 ? text.length : newline;
+  if (sanitized.slice(linesStart, block.start).trim() || sanitized.slice(block.end, linesEnd).trim()) return void 0;
+  let rows = 1;
+  for (let index = text.indexOf("\n", linesStart); index !== -1 && index < linesEnd; index = text.indexOf("\n", index + 1)) rows++;
+  return { ...block, rows, linesStart, linesEnd };
+}
+function outermostEnvironments(sanitized, names) {
+  const frames = [];
   const open2 = [];
+  const pattern = /\\(begin|end)\s*\{([^}]+)\}/g;
   let match2;
   while ((match2 = pattern.exec(sanitized)) !== null) {
-    const [whole, kind, name] = match2;
+    const [whole, kind] = match2;
+    const name = match2[2].trim();
     if (!names.has(name)) continue;
     if (kind === "begin") {
-      open2.push({ name, bodyStart: match2.index + whole.length });
+      open2.push({ name, start: match2.index, bodyStart: match2.index + whole.length });
       continue;
     }
     const index = open2.map((frame2) => frame2.name).lastIndexOf(name);
     if (index === -1) continue;
     const [frame] = open2.splice(index);
-    if (open2.length === 0) {
-      for (let i = frame.bodyStart; i < match2.index; i++) if (chars[i] !== "\n") chars[i] = " ";
-    }
+    if (open2.length === 0) frames.push({ ...frame, bodyEnd: match2.index, end: match2.index + whole.length });
   }
-  return chars.join("");
+  return frames;
+}
+function blank(chars, start, end) {
+  for (let i = start; i < end; i++) if (chars[i] !== "\n") chars[i] = " ";
 }
 function regionIsActive(region, selections) {
   return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
@@ -81280,9 +81318,11 @@ function regionIsActive(region, selections) {
 
 // src/livePreview/mathRenderer.ts
 var EX_PER_EM = 0.55;
-var CACHE_LIMIT = 500;
+var CACHE_BUDGET = 8 * 1024 * 1024;
 var ENGINE_LIMIT = 4;
 var EXCLUDED_PACKAGES = /* @__PURE__ */ new Set(["noerrors", "noundefined"]);
+var DEFAULT_MACROS = { qedhere: "" };
+var SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
 var modules;
 function loadMathJax() {
   modules ??= (async () => {
@@ -81304,35 +81344,61 @@ var MathRenderer = class {
   engines = /* @__PURE__ */ new Map();
   cache = /* @__PURE__ */ new Map();
   macroKeys = /* @__PURE__ */ new WeakMap();
+  cacheSize = 0;
   loaded;
   get isReady() {
     return this.loaded !== void 0;
   }
-  /** Resolves once MathJax is loaded; render() is synchronous after that. */
+  /** Resolves once MathJax is loaded; rendering is synchronous after that. */
   async load() {
     this.loaded = await loadMathJax();
   }
+  /** An inline formula, scaled down if needed to fit one line. */
   render(tex, options) {
-    if (!this.loaded) throw new Error("MathRenderer.load() must finish before render().");
+    return this.cached(["inline", tex], options, (engine) => {
+      const svg = typeset(engine, tex, false);
+      if (!svg.ok) return svg;
+      const image = sizeForEditor(svg.image, options);
+      return image ? { ok: true, image } : { ok: false, error: "MathJax gave this formula no fixed size." };
+    });
+  }
+  /** A display formula laid out over the `rows` lines of its block. */
+  renderBlock(tex, rows, options) {
+    return this.cached(["block", String(rows), tex], options, (engine) => {
+      const svg = typeset(engine, withoutTags(tex), rows > 1);
+      if (!svg.ok) return svg;
+      const image = sliceForLines(svg.image, rows, options);
+      return image ? { ok: true, image } : { ok: false, error: "MathJax gave this formula no fixed size." };
+    });
+  }
+  clearCache() {
+    this.cache.clear();
+    this.cacheSize = 0;
+  }
+  cached(parts, options, build) {
+    if (!this.loaded) throw new Error("MathRenderer.load() must finish before rendering.");
     let macroKey = this.macroKeys.get(options.macros);
     if (macroKey === void 0) {
       macroKey = JSON.stringify(options.macros);
       this.macroKeys.set(options.macros, macroKey);
     }
-    const key = [macroKey, tex, options.color, options.fontSizePx, options.maxHeightPx].join("\0");
+    const key = [macroKey, ...parts, options.color, options.fontSizePx, options.lineHeightPx].join("\0");
     const cached = this.cache.get(key);
     if (cached) {
       this.cache.delete(key);
       this.cache.set(key, cached);
-      return cached;
+      return cached.result;
     }
-    const result = this.renderUncached(this.engineFor(macroKey, options.macros), tex, options);
-    this.cache.set(key, result);
-    if (this.cache.size > CACHE_LIMIT) this.cache.delete(this.cache.keys().next().value);
+    const result = build(this.engineFor(macroKey, options.macros));
+    const size = result.ok ? imageSize(result.image) : result.error.length;
+    this.cache.set(key, { result, size });
+    this.cacheSize += size;
+    for (const [oldKey, old] of this.cache) {
+      if (this.cacheSize <= CACHE_BUDGET || oldKey === key) break;
+      this.cache.delete(oldKey);
+      this.cacheSize -= old.size;
+    }
     return result;
-  }
-  clearCache() {
-    this.cache.clear();
   }
   engineFor(macroKey, macros) {
     const existing = this.engines.get(macroKey);
@@ -81340,50 +81406,95 @@ var MathRenderer = class {
     const { mathjax, TeX, SVG, adaptor, packages } = this.loaded;
     const tex = new TeX({
       packages,
-      macros,
+      macros: { ...DEFAULT_MACROS, ...macros },
       formatError: (_jax, error) => {
         throw error;
       }
     });
-    const document2 = mathjax.document("", { InputJax: tex, OutputJax: new SVG({ fontCache: "none" }) });
-    const engine = { document: document2, adaptor };
+    const document2 = mathjax.document("", { InputJax: tex, OutputJax: new SVG({ fontCache: "local" }) });
+    const engine = { tex, document: document2, adaptor };
     this.engines.set(macroKey, engine);
     if (this.engines.size > ENGINE_LIMIT) this.engines.delete(this.engines.keys().next().value);
     return engine;
   }
-  renderUncached(engine, tex, options) {
-    let svg;
-    try {
-      const container = engine.document.convert(tex, { display: false });
-      svg = engine.adaptor.innerHTML(container);
-    } catch (error) {
-      const message = error?.message;
-      return { ok: false, error: typeof message === "string" ? message : String(error) };
-    }
-    return { ok: true, image: sizeForEditor(svg, options) };
-  }
 };
-function sizeForEditor(svg, options) {
-  const exPx = options.fontSizePx * EX_PER_EM;
-  const exAttr = (name) => Number(new RegExp(`\\s${name}="(-?[\\d.]+)ex"`).exec(svg)?.[1] ?? 0);
-  const valign = Number(/vertical-align:\s*(-?[\d.]+)ex/.exec(svg)?.[1] ?? 0);
-  let widthPx = exAttr("width") * exPx;
-  let heightPx = exAttr("height") * exPx;
-  let verticalAlignPx = valign * exPx;
-  if (heightPx > options.maxHeightPx && heightPx > 0) {
-    const scale = options.maxHeightPx / heightPx;
-    widthPx *= scale;
-    heightPx *= scale;
-    verticalAlignPx *= scale;
+function typeset(engine, tex, display) {
+  try {
+    engine.tex.parseOptions.tags.reset();
+    const container = engine.document.convert(tex, { display });
+    const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, "");
+    return { ok: true, image: svg };
+  } catch (error) {
+    const message = error?.message;
+    return { ok: false, error: typeof message === "string" ? message : String(error) };
   }
-  const sized = svg.replace(/\swidth="[^"]*ex"/, ` width="${widthPx.toFixed(2)}px"`).replace(/\sheight="[^"]*ex"/, ` height="${heightPx.toFixed(2)}px"`).replace(/\sstyle="[^"]*"/, "").replace(/^<svg/, `<svg style="color:${options.color}"`);
-  const withNamespace = sized.includes("xmlns=") ? sized : sized.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+}
+function imageSize(image) {
+  return "slices" in image ? image.slices.reduce((total, slice) => total + slice.dataUri.length, 0) : image.dataUri.length;
+}
+function withoutTags(tex) {
+  const pattern = /\\tag\*?\s*\{/g;
+  let result = "";
+  let copied = 0;
+  let match2;
+  while ((match2 = pattern.exec(tex)) !== null) {
+    const close = findMatchingBrace(tex, match2.index + match2[0].length - 1);
+    if (close === -1) break;
+    result += tex.slice(copied, match2.index);
+    copied = close + 1;
+    pattern.lastIndex = copied;
+  }
+  return result + tex.slice(copied);
+}
+function exSize(svg) {
+  const root = /^<svg[^>]*>/.exec(svg)?.[0] ?? "";
+  const width = /\swidth="([\d.]+)ex"/.exec(root)?.[1];
+  const height = /\sheight="([\d.]+)ex"/.exec(root)?.[1];
+  if (width === void 0 || height === void 0) return void 0;
+  const verticalAlign = Number(/vertical-align:\s*(-?[\d.]+)ex/.exec(root)?.[1] ?? 0);
+  return { root, width: Number(width), height: Number(height), verticalAlign };
+}
+function toDataUri(svg) {
+  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
+var px = (value) => value.toFixed(2);
+function sizeForEditor(svg, options) {
+  const size = exSize(svg);
+  if (!size) return void 0;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  const scale = Math.min(1, options.lineHeightPx / (size.height * exPx));
+  const widthPx = size.width * exPx * scale;
+  const heightPx = size.height * exPx * scale;
+  const root = size.root.replace(/\swidth="[^"]*"/, ` width="${px(widthPx)}px"`).replace(/\sheight="[^"]*"/, ` height="${px(heightPx)}px"`).replace(/\sstyle="[^"]*"/, "").replace(/^<svg/, `<svg style="color:${options.color}"`);
+  const withNamespace = root.includes("xmlns=") ? root : root.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
   return {
-    dataUri: `data:image/svg+xml;base64,${Buffer.from(withNamespace, "utf8").toString("base64")}`,
+    dataUri: toDataUri(withNamespace + svg.slice(size.root.length)),
     widthPx,
     heightPx,
-    verticalAlignPx
+    verticalAlignPx: size.verticalAlign * exPx * scale
   };
+}
+function sliceForLines(svg, rows, options) {
+  const size = exSize(svg);
+  const viewBox = size && /\sviewBox="([^"]*)"/.exec(size.root)?.[1];
+  if (!size || !viewBox) return void 0;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  const lineHeight = options.lineHeightPx;
+  const boxHeight = rows * lineHeight;
+  const scale = Math.min(1, boxHeight / (size.height * exPx));
+  const width = size.width * exPx * scale;
+  const height = size.height * exPx * scale;
+  const top = (boxHeight - height) / 2;
+  const content = svg.slice(size.root.length, svg.lastIndexOf("</svg>"));
+  const formula = `<svg x="0" y="${px(top)}" width="${px(width)}" height="${px(height)}" viewBox="${viewBox}" overflow="visible">${content}</svg>`;
+  const slices = [];
+  for (let row = 0; row < rows; row++) {
+    const y = row * lineHeight;
+    if (top >= y + lineHeight || top + height <= y) continue;
+    const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${formula}</svg>`;
+    slices.push({ row, dataUri: toDataUri(slice) });
+  }
+  return { widthPx: width, slices };
 }
 
 // src/livePreview/controller.ts
@@ -81393,14 +81504,16 @@ var MACRO_SCAN_DELAY_MS = 1e3;
 var MAX_MACRO_FILES = 200;
 var MAX_MACRO_FILE_BYTES = 1024 * 1024;
 var VISIBLE_MARGIN_LINES = 40;
-var URI_CACHE_LIMIT = 2e3;
+var EDIT_PREVIEW_GAP = 4;
 var LiveMathPreview = class {
   constructor(output) {
     this.output = output;
     const watcher = vscode15.workspace.createFileSystemWatcher("**/*.{tex,sty}");
     this.disposables.push(
       this.hidden,
-      this.images,
+      this.inlineImages,
+      this.blockImages,
+      this.blockBackgrounds,
       this.errors,
       watcher,
       watcher.onDidCreate(() => this.scheduleMacroScan()),
@@ -81408,6 +81521,7 @@ var LiveMathPreview = class {
       watcher.onDidDelete(() => this.scheduleMacroScan()),
       vscode15.window.onDidChangeTextEditorSelection((event) => this.update(event.textEditor)),
       vscode15.window.onDidChangeTextEditorVisibleRanges((event) => this.update(event.textEditor)),
+      vscode15.window.onDidChangeTextEditorOptions((event) => this.update(event.textEditor)),
       vscode15.window.onDidChangeVisibleTextEditors(() => this.updateAll()),
       vscode15.workspace.onDidChangeTextDocument((event) => this.scheduleRescan(event.document)),
       vscode15.window.onDidChangeActiveColorTheme(() => this.refresh()),
@@ -81418,14 +81532,27 @@ var LiveMathPreview = class {
   output;
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
   hidden = vscode15.window.createTextEditorDecorationType({ textDecoration: "none; display: none;" });
-  images = vscode15.window.createTextEditorDecorationType({});
+  inlineImages = vscode15.window.createTextEditorDecorationType({});
+  // Display images are large; keeping them apart means moving through inline math does not resend them.
+  blockImages = vscode15.window.createTextEditorDecorationType({});
+  // The editor still draws indent guides for a block's hidden source, and on lines carrying an image
+  // it measures them from the image's right edge. Painting the lines in the editor's background
+  // covers them; rulers are drawn above this layer, so they stay.
+  blockBackgrounds = vscode15.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: new vscode15.ThemeColor("editor.background")
+  });
   errors = vscode15.window.createTextEditorDecorationType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
   });
   renderer = new MathRenderer();
   scans = /* @__PURE__ */ new WeakMap();
+  /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
+  applied = /* @__PURE__ */ new WeakMap();
+  /** The last block rendered beside its source, kept while an edit leaves it unrenderable. */
+  lastEditPreview = /* @__PURE__ */ new WeakMap();
   rescanTimers = /* @__PURE__ */ new Map();
-  uris = /* @__PURE__ */ new Map();
+  uris = /* @__PURE__ */ new WeakMap();
   disposables = [];
   workspaceMacros = {};
   macroGeneration = 0;
@@ -81474,7 +81601,6 @@ var LiveMathPreview = class {
   /** Re-renders everything, for changes that alter how every formula looks. */
   refresh() {
     this.renderer.clearCache();
-    this.uris.clear();
     this.updateAll();
   }
   updateAll() {
@@ -81497,7 +81623,7 @@ var LiveMathPreview = class {
       return existing;
     }
     const text = document2.getText();
-    const regions = existing?.version === document2.version ? existing.regions : findInlineMathRegions(text, document2.languageId);
+    const regions = existing?.version === document2.version ? existing.regions : findMathRegions(text, document2.languageId);
     const scan = {
       version: document2.version,
       regions,
@@ -81525,26 +81651,29 @@ var LiveMathPreview = class {
       start: document2.offsetAt(new vscode15.Position(Math.max(0, range.start.line - VISIBLE_MARGIN_LINES), 0)),
       end: document2.offsetAt(new vscode15.Position(range.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
     }));
+    const isVisible = (start, end) => visible.some((range) => end >= range.start && start <= range.end);
     const options = { ...this.renderSizing(document2), macros: scan.macros };
-    const hidden = [];
-    const images = [];
-    const errors = [];
-    for (const region of scan.regions) {
-      if (!visible.some((range2) => region.end >= range2.start && region.start <= range2.end)) continue;
-      if (regionIsActive(region, selections)) continue;
+    const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 4;
+    const hidden = new Decorations();
+    const inlineImages = new Decorations();
+    const blockImages = new Decorations();
+    const blockBackgrounds = new Decorations();
+    const errors = new Decorations();
+    scan.regions.inline.forEach((region, index) => {
+      if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
       const range = new vscode15.Range(document2.positionAt(region.start), document2.positionAt(region.end));
       const result = this.renderer.render(region.tex, options);
       if (!result.ok) {
-        errors.push({ range, hoverMessage: `Live math preview: ${result.error}` });
-        continue;
+        errors.add(`i${index}`, { range, hoverMessage: `Live math preview: ${result.error}` });
+        return;
       }
-      const { dataUri, widthPx, heightPx, verticalAlignPx } = result.image;
-      hidden.push(range);
-      images.push({
+      const { widthPx, heightPx, verticalAlignPx } = result.image;
+      hidden.add(`i${index}`, range);
+      inlineImages.add(`i${index}`, {
         range: new vscode15.Range(range.start, range.start),
         renderOptions: {
           before: {
-            contentIconPath: this.uriFor(dataUri),
+            contentIconPath: this.uriFor(result.image),
             width: `${widthPx.toFixed(2)}px`,
             height: `${heightPx.toFixed(2)}px`,
             // The public options have no vertical-align; textDecoration carries it into the CSS.
@@ -81552,22 +81681,104 @@ var LiveMathPreview = class {
           }
         }
       });
+    });
+    scan.regions.display.forEach((region, index) => {
+      if (!isVisible(region.linesStart, region.linesEnd)) return;
+      const firstLine = document2.positionAt(region.start).line;
+      const result = this.renderer.renderBlock(region.tex, region.rows, options);
+      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
+        const rendered = result.ok ? result.image : void 0;
+        for (const item of this.besideSource(document2, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
+        return;
+      }
+      if (!result.ok) {
+        const opening = new vscode15.Range(document2.positionAt(region.start), document2.lineAt(firstLine).range.end);
+        errors.add(`d${index}`, { range: opening, hoverMessage: `Live math preview: ${result.error}` });
+        return;
+      }
+      for (let row = 0; row < region.rows; row++) {
+        const line = document2.lineAt(firstLine + row);
+        if (!line.range.isEmpty) hidden.add(`d${index}`, line.range);
+      }
+      blockBackgrounds.add(`d${index}`, new vscode15.Range(firstLine, 0, firstLine + region.rows - 1, 0));
+      const indent = visualColumn(document2.lineAt(firstLine).text, document2.positionAt(region.start).character, tabSize) + tabSize;
+      for (const slice of result.image.slices) {
+        const start = new vscode15.Position(firstLine + slice.row, 0);
+        blockImages.add(`d${index}`, {
+          range: new vscode15.Range(start, start),
+          renderOptions: {
+            before: {
+              contentIconPath: this.uriFor(slice),
+              width: `${result.image.widthPx.toFixed(2)}px`,
+              height: `${options.lineHeightPx}px`,
+              margin: `0 0 0 ${indent}ch`,
+              // Each strip fills its line exactly, so the strips join into one formula.
+              textDecoration: "none; vertical-align: top;"
+            }
+          }
+        });
+      }
+    });
+    const state = `${scan.version}:${scan.macroGeneration}:${options.color}:${options.fontSizePx}:${options.lineHeightPx}:${tabSize}`;
+    this.apply(editor, this.hidden, hidden, state);
+    this.apply(editor, this.inlineImages, inlineImages, state);
+    this.apply(editor, this.blockImages, blockImages, state);
+    this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
+    this.apply(editor, this.errors, errors, state);
+  }
+  /**
+   * While a block is edited its source shows, and its rendering sits to the right of its longest
+   * line, as Obsidian shows it below. An edit that leaves it unrenderable keeps the last rendering.
+   */
+  besideSource(document2, region, rendered, tabSize, lineHeightPx) {
+    const firstLine = document2.positionAt(region.start).line;
+    const last = this.lastEditPreview.get(document2);
+    const block = rendered ?? (last?.line === firstLine ? last.block : void 0);
+    if (!block) return [];
+    if (rendered) this.lastEditPreview.set(document2, { line: firstLine, block: rendered });
+    let widest = 0;
+    for (let row = 0; row < region.rows; row++) {
+      const text = document2.lineAt(firstLine + row).text;
+      widest = Math.max(widest, visualColumn(text, text.length, tabSize));
     }
-    editor.setDecorations(this.hidden, hidden);
-    editor.setDecorations(this.images, images);
-    editor.setDecorations(this.errors, errors);
+    return block.slices.filter((slice) => slice.row < region.rows).map((slice) => {
+      const end = document2.lineAt(firstLine + slice.row).range.end;
+      return {
+        range: new vscode15.Range(end, end),
+        renderOptions: {
+          after: {
+            contentIconPath: this.uriFor(slice),
+            width: `${block.widthPx.toFixed(2)}px`,
+            height: `${lineHeightPx}px`,
+            // Positioned out of the text flow, so the cursor and line lengths stay as they are.
+            textDecoration: `none; position: absolute; top: 0; left: ${widest + EDIT_PREVIEW_GAP}ch;`
+          }
+        }
+      };
+    });
+  }
+  apply(editor, type, decorations, state) {
+    let applied = this.applied.get(editor);
+    if (!applied) this.applied.set(editor, applied = /* @__PURE__ */ new Map());
+    const key = `${state}|${decorations.keys.join(",")}`;
+    if (applied.get(type) === key) return;
+    applied.set(type, key);
+    editor.setDecorations(type, decorations.items);
   }
   clear(editor) {
+    this.applied.delete(editor);
     editor.setDecorations(this.hidden, []);
-    editor.setDecorations(this.images, []);
+    editor.setDecorations(this.inlineImages, []);
+    editor.setDecorations(this.blockImages, []);
+    editor.setDecorations(this.blockBackgrounds, []);
     editor.setDecorations(this.errors, []);
   }
-  uriFor(dataUri) {
-    let uri = this.uris.get(dataUri);
+  /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
+  uriFor(image) {
+    let uri = this.uris.get(image);
     if (!uri) {
-      if (this.uris.size >= URI_CACHE_LIMIT) this.uris.clear();
-      uri = vscode15.Uri.parse(dataUri);
-      this.uris.set(dataUri, uri);
+      uri = vscode15.Uri.parse(image.dataUri);
+      this.uris.set(image, uri);
     }
     return uri;
   }
@@ -81577,7 +81788,7 @@ var LiveMathPreview = class {
     const configuredLineHeight = editorConfig.get("lineHeight", 0);
     const lineHeightPx = configuredLineHeight <= 0 ? Math.round(fontSizePx * (process.platform === "darwin" ? 1.5 : 1.35)) : configuredLineHeight < 8 ? Math.round(configuredLineHeight * fontSizePx) : configuredLineHeight;
     const configuredColor = vscode15.workspace.getConfiguration("latexEditingToolkit.livePreview").get("mathColor", "").trim();
-    return { fontSizePx, maxHeightPx: lineHeightPx, color: configuredColor || themeTextColor(vscode15.window.activeColorTheme.kind) };
+    return { fontSizePx, lineHeightPx, color: configuredColor || themeTextColor(vscode15.window.activeColorTheme.kind) };
   }
   scheduleMacroScan() {
     if (!this.enabled) return;
@@ -81602,6 +81813,19 @@ var LiveMathPreview = class {
     this.macroGeneration += 1;
   }
 };
+var Decorations = class {
+  items = [];
+  keys = [];
+  add(key, item) {
+    this.items.push(item);
+    if (this.keys[this.keys.length - 1] !== key) this.keys.push(key);
+  }
+};
+function visualColumn(text, character, tabSize) {
+  let column = 0;
+  for (let i = 0; i < character; i++) column = text[i] === "	" ? column + tabSize - column % tabSize : column + 1;
+  return column;
+}
 function themeTextColor(kind) {
   switch (kind) {
     case vscode15.ColorThemeKind.Light:

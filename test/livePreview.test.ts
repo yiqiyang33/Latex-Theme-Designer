@@ -1,14 +1,15 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMacroDefinitions } from '../src/livePreview/macros';
-import { findInlineMathRegions, regionIsActive } from '../src/livePreview/mathRegions';
-import { MathRenderer, sizeForEditor, type MathRenderOptions } from '../src/livePreview/mathRenderer';
+import { findMathRegions, regionIsActive } from '../src/livePreview/mathRegions';
+import { MathRenderer, sizeForEditor, sliceForLines, type MathRenderOptions } from '../src/livePreview/mathRenderer';
 
-const tex = (text: string) => findInlineMathRegions(text, 'latex').map(region => region.tex);
+const tex = (text: string) => findMathRegions(text, 'latex').inline.map(region => region.tex);
+const displayTex = (text: string) => findMathRegions(text, 'latex').display.map(region => region.tex);
 
-describe('findInlineMathRegions', () => {
+describe('findMathRegions: inline', () => {
   it('finds $...$ and \\(...\\) with the offsets of their delimiters', () => {
     const text = 'Let $x$ and \\(y^2\\) be.';
-    expect(findInlineMathRegions(text, 'latex')).toEqual([
+    expect(findMathRegions(text, 'latex').inline).toEqual([
       { start: 4, end: 7, tex: 'x' },
       { start: 12, end: 19, tex: 'y^2' }
     ]);
@@ -32,6 +33,42 @@ describe('findInlineMathRegions', () => {
 
   it('does not blank the rest of the file while an environment is still being typed', () => {
     expect(tex('\\begin{equation}\n x\n\nLater $f$ appears.')).toEqual(['f']);
+  });
+
+  it('finds formulas in tables, which are text with math in their cells', () => {
+    expect(tex('\\begin{tabular}{cc}\n $a$ & $b$ \\\\\n\\end{tabular}')).toEqual(['a', 'b']);
+  });
+});
+
+describe('findMathRegions: display', () => {
+  it('finds display delimiters and environments, with the lines they take', () => {
+    const text = 'Text\n\\[\n  x\n\\]\n$$ y $$\n  \\begin{align*}\n a &= b\n  \\end{align*} % note\nMore';
+    const at = (needle: string) => text.indexOf(needle);
+    expect(findMathRegions(text, 'latex').display).toEqual([
+      { start: at('\\['), end: at('\\]') + 2, tex: '\n  x\n', rows: 3, linesStart: at('\\['), linesEnd: at('\\]') + 2 },
+      { start: at('$$'), end: at('\n  \\begin'), tex: ' y ', rows: 1, linesStart: at('$$'), linesEnd: at('\n  \\begin') },
+      {
+        start: at('\\begin'),
+        end: at(' % note'),
+        tex: '\\begin{align*}\n a &= b\n  \\end{align*}',
+        rows: 3,
+        linesStart: at('  \\begin'),
+        linesEnd: at('\nMore')
+      }
+    ]);
+  });
+
+  it('gives MathJax the body of displaymath, which it does not know', () => {
+    expect(displayTex('\\begin{displaymath}\n x\n\\end{displaymath}')).toEqual(['\n x\n']);
+  });
+
+  it('leaves blocks that share a line with text, and empty ones', () => {
+    expect(displayTex('so \\[ x \\]\n\\[\n y\n\\] and\n\\begin{equation}\n\\end{equation}')).toEqual([]);
+  });
+
+  it('skips blocks in verbatim and comments, and the inline math nested in them', () => {
+    expect(displayTex('\\begin{verbatim}\n\\[ x \\]\n\\end{verbatim}\n% \\[ y \\]')).toEqual([]);
+    expect(findMathRegions('\\begin{equation}\n x \\text{if $c$}\n\\end{equation}', 'latex').inline).toEqual([]);
   });
 });
 
@@ -87,7 +124,7 @@ describe('parseMacroDefinitions', () => {
 describe('MathRenderer', () => {
   const renderer = new MathRenderer();
   const options = (overrides: Partial<MathRenderOptions> = {}): MathRenderOptions => ({
-    macros: {}, color: '#cccccc', fontSizePx: 14, maxHeightPx: 21, ...overrides
+    macros: {}, color: '#cccccc', fontSizePx: 14, lineHeightPx: 21, ...overrides
   });
   const decode = (dataUri: string) => Buffer.from(dataUri.replace(/^data:image\/svg\+xml;base64,/, ''), 'base64').toString('utf8');
 
@@ -119,13 +156,67 @@ describe('MathRenderer', () => {
   it('returns the cached image for the same formula and settings', () => {
     const macros = { R: '\\mathbb{R}' };
     expect(renderer.render('\\R', options({ macros }))).toBe(renderer.render('\\R', options({ macros })));
+    expect(renderer.renderBlock('\\R', 3, options({ macros }))).toBe(renderer.renderBlock('\\R', 3, options({ macros })));
+  });
+
+  it('cuts a display formula into line-tall strips for the lines it reaches', () => {
+    const result = renderer.renderBlock('\\begin{equation}\n x = 1\n\\end{equation}', 3, options());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // One line of math, centred in three lines, stays within the middle one.
+    expect(result.image.slices.map(slice => slice.row)).toEqual([1]);
+    const svg = decode(result.image.slices[0].dataUri);
+    expect(svg).toContain(`viewBox="0 21.00 ${result.image.widthPx.toFixed(2)} 21.00"`);
+    expect(svg).toContain('style="color:#cccccc"');
+  });
+
+  it('sets a one-line block like inline math, so it stays legible at a line\'s height', () => {
+    const sum = '\\sum_{i=1}^n x_i';
+    const oneLine = renderer.renderBlock(sum, 1, options());
+    const twoLines = renderer.renderBlock(sum, 2, options());
+    expect(oneLine.ok && twoLines.ok && oneLine.image.widthPx > twoLines.image.widthPx).toBe(true);
+  });
+
+  it('renders tagged equations without their tag, and lets equation-only commands through', () => {
+    expect(renderer.renderBlock('x = 1 \\tag{$\\star$}', 3, options()).ok).toBe(true);
+    expect(renderer.renderBlock('\\begin{equation}\n x \\qedhere\n\\end{equation}', 3, options()).ok).toBe(true);
+    expect(renderer.renderBlock('\\begin{align}\n a &= \\frac{1}{\n\\end{align}', 3, options())).toMatchObject({ ok: false });
+  });
+
+  it('renders a labelled equation again, as after an edit or a theme change', () => {
+    const labelled = '\\begin{equation}\n x = 1 \\label{eq:x}\n\\end{equation}';
+    expect(renderer.renderBlock(labelled, 3, options()).ok).toBe(true);
+    expect(renderer.renderBlock(labelled, 3, options({ color: '#000000' })).ok).toBe(true);
   });
 });
 
 describe('sizeForEditor', () => {
   it('converts MathJax ex sizes to px and keeps the baseline offset', () => {
     const svg = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 0 1 1"></svg>';
-    const image = sizeForEditor(svg, { color: '#000', fontSizePx: 20, maxHeightPx: 100 });
+    const image = sizeForEditor(svg, { color: '#000', fontSizePx: 20, lineHeightPx: 100 });
     expect(image).toMatchObject({ widthPx: 44, heightPx: 22, verticalAlignPx: -5.5 });
+  });
+
+  it('refuses an SVG MathJax did not give a fixed size', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="2ex" viewBox="0 0 1 1"></svg>';
+    expect(sizeForEditor(svg, { color: '#000', fontSizePx: 20, lineHeightPx: 100 })).toBeUndefined();
+    expect(sliceForLines(svg, 3, { color: '#000', fontSizePx: 20, lineHeightPx: 100 })).toBeUndefined();
+  });
+});
+
+describe('sliceForLines', () => {
+  const sizing = { color: '#000', fontSizePx: 20, lineHeightPx: 10 };
+  // 2ex at 20px is 22px tall: centred in 30px it spans 4px to 26px.
+  const svg = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 -500 1000 1000"><g></g></svg>';
+
+  it('skips the lines the formula does not reach, and centres it in the block', () => {
+    expect(sliceForLines(svg, 5, sizing)?.slices.map(slice => slice.row)).toEqual([1, 2, 3]);
+    const middle = Buffer.from(sliceForLines(svg, 3, sizing)!.slices[1].dataUri.split(',')[1], 'base64').toString('utf8');
+    expect(middle).toContain('viewBox="0 10.00 44.00 10.00"');
+    expect(middle).toContain('<svg x="0" y="4.00" width="44.00" height="22.00" viewBox="0 -500 1000 1000" overflow="visible"><g></g></svg>');
+  });
+
+  it('scales a formula taller than its block down to fit', () => {
+    expect(sliceForLines(svg, 1, sizing)).toMatchObject({ widthPx: 20, slices: [{ row: 0 }] });
   });
 });
