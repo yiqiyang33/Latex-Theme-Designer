@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultHomeworkSettings } from '../src/homework';
 import { findMathRegions } from '../src/livePreview/mathRegions';
-import type { ContentsEntry, LabelInfo } from '../src/livePreview/references';
+import type { ContentsEntry, LabelInfo, TheoremEntry } from '../src/livePreview/references';
 import {
   emptyTheoremSettings,
   enumerateLabel,
@@ -161,6 +161,47 @@ describe('theme commands', () => {
     expect(show('\\defn{Sample}{def:sample}{Body}')).toBe('**Definition\u00a01**\u00a0(Sample).\u00a0<dim>def:sample</dim>Body<dim>}</dim>');
     expect(show('\\thm{}{thm:general}\n{Body}')).toBe('**Theorem\u00a02.1.\u00a0**<dim>thm:general</dim>Body<dim>}</dim>');
     expect(show('\\lem{}{}{Body}')).toBe('**Lemma.\u00a0**Body<dim>}</dim>');
+  });
+
+  it('numbers unlabelled theorems by what the compile recorded of every theorem, in order', () => {
+    const text = '\\lem{}{}{A}\n\\thm{Three Series}{}{B}\n\\rmkb{C}\n\\begin{lemma}[Own]\n\\end{lemma}\n\\lemp{}{S}{P}';
+    // thmtools' list, in the theme's plain amsthm mode.
+    const plain: TheoremEntry[] = [
+      { type: 'lemma', number: '3.1' }, { type: 'theorem', number: '3.1', title: 'Three Series' }, { type: 'remark', number: '3.1' },
+      { type: 'lemma', number: '3.2', title: 'Own' }, { type: 'lemma', number: '3.3' }
+    ];
+    const settings = emptyTheoremSettings();
+    readTheoremSettings('\\NewDocumentCommand{\\thm}{mm+m}{}\n\\newtheorem{lemma}{Lemma}[chapter]', settings);
+    const numbered = (theorems: TheoremEntry[]) => drawn(text, structureOverlays(findStructure(text, findMathRegions(text, 'latex'), 'latex'), text, settings, { labels, theorems }));
+    expect(numbered(plain)).toBe([
+      '**Lemma\u00a03.1.\u00a0**A<dim>}</dim>', '**Theorem\u00a03.1**\u00a0(Three Series).\u00a0B<dim>}</dim>', '*Remark\u00a03.1.\u00a0*C<dim>}</dim>',
+      '**Lemma\u00a03.2**\u00a0(Own).', '<dim>\\end{lemma}</dim>', '**Lemma.\u00a0**S**Proof.\u00a0**P\u25a1'
+    ].join('\n').replace('**Lemma.\u00a0**S', '**Lemma\u00a03.3.\u00a0**S'));
+    // tcolorbox's labels, in the styled mode, where remarks go unrecorded.
+    const styled: TheoremEntry[] = [{ type: 'lem', number: '4' }, { type: 'thm', number: '5', title: 'Three Series' }, { type: 'lem', number: '6' }];
+    const drawnStyled = numbered([...styled, { type: 'lemma', number: '7', title: 'Own' }]);
+    expect(drawnStyled).toContain('**Lemma\u00a04.\u00a0**A');
+    expect(drawnStyled).toContain('**Theorem\u00a05**');
+    expect(drawnStyled).toContain('*Remark.\u00a0*C');
+    expect(drawnStyled).toContain('**Lemma\u00a07**\u00a0(Own).');
+    expect(drawnStyled).toContain('**Lemma\u00a06.\u00a0**S');
+  });
+
+  it('takes only titled theorems from a record that does not match the document', () => {
+    const text = '\\lem{}{}{New}\n\\lem{Known}{}{A}\n\\thm{}{general}{B}';
+    // One lemma short, as after adding one without compiling, and not every theorem: a part of a larger document.
+    const theorems: TheoremEntry[] = [{ type: 'lemma', number: '1.1', title: 'Other' }, { type: 'lemma', number: '1.2', title: 'Known' }, { type: 'theorem', number: '9.9' }, { type: 'theorem', number: '9.8' }];
+    const out = drawn(text, structureOverlays(findStructure(text, findMathRegions(text, 'latex'), 'latex'), text, theme, { labels, theorems }));
+    expect(out.split('\n')).toEqual([
+      '**Lemma.\u00a0**New<dim>}</dim>', '**Lemma\u00a01.2**\u00a0(Known).\u00a0A<dim>}</dim>',
+      // A label still numbers its theorem.
+      '**Theorem\u00a02.1.\u00a0**<dim>general</dim>B<dim>}</dim>'
+    ]);
+    // A repeated title takes the next entry along.
+    const twice = '\\lem{Fubini}{}{A}\n\\lem{Fubini}{}{B}';
+    expect(drawn(twice, structureOverlays(findStructure(twice, findMathRegions(twice, 'latex'), 'latex'), twice, theme, {
+      theorems: [{ type: 'lemma', number: '1.1', title: 'Fubini' }, { type: 'lemma', number: '1.2' }, { type: 'lemma', number: '2.5', title: 'Fubini' }]
+    }))).toBe('**Lemma\u00a01.1**\u00a0(Fubini).\u00a0A<dim>}</dim>\n**Lemma\u00a02.5**\u00a0(Fubini).\u00a0B<dim>}</dim>');
   });
 
   it('draws proofs, examples, remarks and questions as the theme sets them', () => {

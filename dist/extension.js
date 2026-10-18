@@ -81266,6 +81266,7 @@ function parseAux(text) {
   const crefTypes = /* @__PURE__ */ new Map();
   const citations = /* @__PURE__ */ new Map();
   const contents = [];
+  const theorems = [];
   const inputs = [];
   const pattern = /\\(newlabel|bibcite|@writefile|@input)\s*\{/g;
   let match2;
@@ -81274,7 +81275,7 @@ function parseAux(text) {
     if (!name) continue;
     pattern.lastIndex = name.next;
     if (match2[1] === "@input") {
-      inputs.push({ file: name.value.trim(), at: contents.length });
+      inputs.push({ file: name.value.trim(), at: contents.length, theoremsAt: theorems.length });
       continue;
     }
     const value = readGroup(text, name.next);
@@ -81285,8 +81286,11 @@ function parseAux(text) {
       continue;
     }
     if (match2[1] === "@writefile") {
-      const entry = name.value.trim() === "toc" ? contentsEntry(value.value) : void 0;
+      const list = name.value.trim();
+      const entry = list === "toc" ? contentsEntry(value.value) : void 0;
       if (entry) contents.push(entry);
+      const theorem = list === "loe" ? theoremEntry(value.value) : void 0;
+      if (theorem) theorems.push(theorem);
       continue;
     }
     const fields = readGroups(value.value);
@@ -81303,12 +81307,14 @@ function parseAux(text) {
       title: title ? plainText(title) : void 0,
       type: anchorType(anchor)
     });
+    const prefix = anchor?.startsWith("tcb@cnt@") ? /^([^:]+):/.exec(name.value)?.[1] : void 0;
+    if (prefix) theorems.push({ type: prefix, number: plainText(number), title: title || void 0 });
   }
   for (const [key, type] of crefTypes) {
     const label = labels.get(key);
     if (label) label.type = type;
   }
-  return { labels, citations, contents, inputs };
+  return { labels, citations, contents, theorems, inputs };
 }
 function citation(value) {
   const [number, year, authors, fullAuthors] = readGroups(value);
@@ -81329,6 +81335,17 @@ function contentsEntry(value) {
   const number = entry && numberline ? readGroup(entry.value, numberline[0].length) : void 0;
   if (!level || !entry || !number) return void 0;
   return { level: level.value.trim(), number: plainText(number.value), title: entry.value.slice(number.next) };
+}
+function theoremEntry(value) {
+  const start = /^\s*\\contentsline\s*/.exec(value);
+  const type = start ? readGroup(value, start[0].length) : void 0;
+  const entry = type ? readGroup(value, type.next) : void 0;
+  const numberline = entry ? /\\numberline\s*/.exec(entry.value) : void 0;
+  const number = entry && numberline ? readGroup(entry.value, numberline.index + numberline[0].length) : void 0;
+  if (!type || !entry || !number) return void 0;
+  const optional = /\\thmtformatoptarg\s*/.exec(entry.value);
+  const title = optional ? readGroup(entry.value, optional.index + optional[0].length)?.value : void 0;
+  return { type: type.value.trim(), number: plainText(number.value), title };
 }
 function readGroup(text, index) {
   while (index < text.length && /\s/.test(text[index])) index++;
@@ -81769,27 +81786,30 @@ var AuxIndex = class {
   }
   /** Reads the aux file and those of \include'd parts, which a compile writes beside it. */
   async load(aux) {
-    const data = { labels: /* @__PURE__ */ new Map(), citations: /* @__PURE__ */ new Map(), contents: [] };
+    const data = { labels: /* @__PURE__ */ new Map(), citations: /* @__PURE__ */ new Map(), contents: [], theorems: [] };
     const read = async (file, depth) => {
       const text = await fs39.readFile(file, "utf8").catch(() => void 0);
       if (text === void 0) return void 0;
       const parsed = parseAux(text);
       for (const [key, label] of parsed.labels) data.labels.set(key, label);
       for (const [key, citation2] of parsed.citations) data.citations.set(key, citation2);
-      const contents2 = [];
-      let copied = 0;
+      const merged2 = { contents: [], theorems: [] };
+      let copied = { at: 0, theoremsAt: 0 };
       for (const input of depth < MAX_INPUT_DEPTH ? parsed.inputs : []) {
-        contents2.push(...parsed.contents.slice(copied, input.at), ...await read(path49.resolve(path49.dirname(aux), input.file), depth + 1) ?? []);
-        copied = input.at;
+        const part = await read(path49.resolve(path49.dirname(aux), input.file), depth + 1);
+        merged2.contents.push(...parsed.contents.slice(copied.at, input.at), ...part?.contents ?? []);
+        merged2.theorems.push(...parsed.theorems.slice(copied.theoremsAt, input.theoremsAt), ...part?.theorems ?? []);
+        copied = input;
       }
-      contents2.push(...parsed.contents.slice(copied));
-      return contents2;
+      merged2.contents.push(...parsed.contents.slice(copied.at));
+      merged2.theorems.push(...parsed.theorems.slice(copied.theoremsAt));
+      return merged2;
     };
-    const contents = await read(aux, 0);
-    if (contents) {
-      data.contents = contents;
+    const merged = await read(aux, 0);
+    if (merged) {
+      Object.assign(data, merged);
       this.data.set(aux, data);
-      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live preview read ${data.labels.size} labels, ${data.citations.size} citations and ${contents.length} headings from ${aux}.`);
+      this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live preview read ${data.labels.size} labels, ${data.citations.size} citations, ${data.contents.length} headings and ${data.theorems.length} theorems from ${aux}.`);
     } else {
       this.data.delete(aux);
     }
@@ -82378,6 +82398,7 @@ var FORMAT_STYLES = {
 function structureOverlays(structure, text, theorems, numbers = {}, homework) {
   const overlays = [];
   const homeworkMark = homework && homeworkMarks(homework, text);
+  const listed = listedNumbers(structure, text, theorems, numbers.theorems ?? []);
   const headingNumbers = numberHeadings(structure.headings, numbers.contents ?? []);
   structure.headings.forEach((heading, index) => {
     const number = headingNumbers[index];
@@ -82422,11 +82443,11 @@ function structureOverlays(structure, text, theorems, numbers = {}, homework) {
     } else {
       const kind = theorems.environments.get(environment.name);
       if (!kind) continue;
-      overlays.push(environment.begin ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels)) : dimmed(environment.start, environment.end));
+      overlays.push(environment.begin ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels) ?? listed.get(environment.start)) : dimmed(environment.start, environment.end));
     }
   }
   if (theorems.themeCommands) {
-    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels));
+    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels, listed.get(mark.start)));
   }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
@@ -82452,7 +82473,58 @@ var THEME_THEOREMS = {
   lemp: { name: "Lemma", style: "plain" },
   corp: { name: "Corollary", style: "plain" }
 };
-function themeCommandOverlays(mark, text, labels) {
+var LISTED_AS = {
+  defn: { type: "definition", prefix: "defn" },
+  thm: { type: "theorem", prefix: "thm" },
+  lem: { type: "lemma", prefix: "lem" },
+  cor: { type: "corollary", prefix: "cor" },
+  prop: { type: "proposition", prefix: "prop" },
+  clm: { type: "claim", prefix: "clm" },
+  fact: { type: "fact", prefix: "fact" },
+  assumption: { type: "assumption", prefix: "assump" },
+  axiom: { type: "axiom", prefix: "axiom" },
+  lemp: { type: "lemma", prefix: "lem" },
+  corp: { type: "corollary", prefix: "cor" },
+  rmkb: { type: "remark" }
+};
+function listedNumbers(structure, text, theorems, entries) {
+  const numbers = /* @__PURE__ */ new Map();
+  if (!entries.length) return numbers;
+  const listed = /* @__PURE__ */ new Map();
+  for (const entry of entries) listed.set(entry.type, [...listed.get(entry.type) ?? [], entry]);
+  const items = [];
+  for (const mark of structure.environments) {
+    if (!mark.begin || !theorems.environments.get(mark.name)?.numbered) continue;
+    items.push({ start: mark.start, type: mark.name, title: mark.argument ? text.slice(mark.argument.start, mark.argument.end) : "" });
+  }
+  for (const mark of theorems.themeCommands ? structure.shorthands : []) {
+    const as = LISTED_AS[mark.command];
+    if (!as) continue;
+    const type = as.prefix && listed.has(as.prefix) ? as.prefix : as.type;
+    items.push({ start: mark.start, type, title: mark.command === "rmkb" ? "" : text.slice(mark.args[0].start, mark.args[0].end) });
+  }
+  items.sort((a, b) => a.start - b.start);
+  const aligned = /* @__PURE__ */ new Set();
+  for (const [type, list] of listed) {
+    const own = items.filter((item) => item.type === type);
+    if (own.length === list.length && own.every((item, at) => titleKey(item.title) === titleKey(list[at].title ?? ""))) aligned.add(type);
+  }
+  const seen = /* @__PURE__ */ new Map();
+  const next = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const list = listed.get(item.type) ?? [];
+    const position = seen.get(item.type) ?? 0;
+    seen.set(item.type, position + 1);
+    const key = titleKey(item.title);
+    const from = next.get(item.type) ?? 0;
+    const index = aligned.has(item.type) ? position : key ? list.findIndex((entry, at) => at >= from && titleKey(entry.title ?? "") === key) : -1;
+    if (index === -1) continue;
+    next.set(item.type, index + 1);
+    if (list[index].number) numbers.set(item.start, list[index].number);
+  }
+  return numbers;
+}
+function themeCommandOverlays(mark, text, labels, listed) {
   const { args } = mark;
   const last = args[args.length - 1];
   const bold = (at, label2) => ({ at, text: `${label2}\xA0`, bold: true });
@@ -82463,7 +82535,7 @@ function themeCommandOverlays(mark, text, labels) {
     case "ex":
       return [headOnly(mark.start, last.start, bold(mark.start, "Example.")), closing];
     case "rmkb":
-      return [headOnly(mark.start, last.start, { at: mark.start, text: "Remark.\xA0", italic: true }), closing];
+      return [headOnly(mark.start, last.start, { at: mark.start, text: `Remark${listed ? `\xA0${listed}` : ""}.\xA0`, italic: true }), closing];
     case "rmk":
       return [overlay(mark.start, mark.end, {
         hide: [[mark.start, last.start], [last.end, mark.end]],
@@ -82481,7 +82553,7 @@ function themeCommandOverlays(mark, text, labels) {
   const titled = text.slice(title.start, title.end).trim() !== "";
   const label = kind.prefix ? text.slice(second.start, second.end).trim() : "";
   const key = label && (label.startsWith(`${kind.prefix}:`) ? label : `${kind.prefix}:${label}`);
-  const number = key ? labels?.get(key)?.number : void 0;
+  const number = (key ? labels?.get(key)?.number : void 0) ?? listed;
   const head = {
     at: mark.start,
     text: `${kind.name}${number ? `\xA0${number}` : ""}${titled ? "" : ".\xA0"}`,

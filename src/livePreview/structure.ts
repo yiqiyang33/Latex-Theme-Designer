@@ -2,7 +2,7 @@ import { findMatchingBrace, isEscaped } from '../snippets/engine/latexContext';
 import type { HomeworkSettings } from '../types';
 import { previewSource, type MathRegions } from './mathRegions';
 import { overlay, type Insertion, type Overlay, type RangeStyle } from './overlays';
-import { plainText, type ContentsEntry, type LabelInfo } from './references';
+import { plainText, type ContentsEntry, type LabelInfo, type TheoremEntry } from './references';
 
 export type TheoremStyle = 'plain' | 'definition' | 'remark';
 
@@ -236,6 +236,7 @@ export function findStructure(text: string, math: MathRegions, languageId?: stri
 export interface StructureNumbers {
   labels?: ReadonlyMap<string, LabelInfo>;
   contents?: readonly ContentsEntry[];
+  theorems?: readonly TheoremEntry[];
 }
 
 const NUMBERED_HEADINGS = new Set(['part', 'chapter', 'section', 'subsection', 'subsubsection']);
@@ -265,6 +266,7 @@ export function structureOverlays(
 ): Overlay[] {
   const overlays: Overlay[] = [];
   const homeworkMark = homework && homeworkMarks(homework, text);
+  const listed = listedNumbers(structure, text, theorems, numbers.theorems ?? []);
   const headingNumbers = numberHeadings(structure.headings, numbers.contents ?? []);
   structure.headings.forEach((heading, index) => {
     const number = headingNumbers[index];
@@ -311,13 +313,13 @@ export function structureOverlays(
       const kind = theorems.environments.get(environment.name);
       if (!kind) continue;
       overlays.push(environment.begin
-        ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels))
+        ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels) ?? listed.get(environment.start))
         : dimmed(environment.start, environment.end));
     }
   }
 
   if (theorems.themeCommands) {
-    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels));
+    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels, listed.get(mark.start)));
   }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
@@ -347,11 +349,76 @@ const THEME_THEOREMS: Record<string, { name: string; prefix?: string; style: The
 };
 
 /**
- * The theme's commands drawn as the environments they stand for: \thm{title}{label}{body} as
- * "Theorem 2.1 (Title).", numbered by the label the theme writes, prefix:label; \pf{...} as a
- * proof; \ex, \rmkb and \question with their heads, and \rmk in italics.
+ * How the compile records the theme's commands: in its plain amsthm mode, thmtools lists them by
+ * environment; in its styled mode, tcolorbox labels each with the prefix, \lemp and \corp as lem: and cor:.
  */
-function themeCommandOverlays(mark: ShorthandMark, text: string, labels: ReadonlyMap<string, LabelInfo> | undefined): Overlay[] {
+const LISTED_AS: Record<string, { type: string; prefix?: string }> = {
+  defn: { type: 'definition', prefix: 'defn' }, thm: { type: 'theorem', prefix: 'thm' }, lem: { type: 'lemma', prefix: 'lem' },
+  cor: { type: 'corollary', prefix: 'cor' }, prop: { type: 'proposition', prefix: 'prop' }, clm: { type: 'claim', prefix: 'clm' },
+  fact: { type: 'fact', prefix: 'fact' }, assumption: { type: 'assumption', prefix: 'assump' }, axiom: { type: 'axiom', prefix: 'axiom' },
+  lemp: { type: 'lemma', prefix: 'lem' }, corp: { type: 'corollary', prefix: 'cor' }, rmkb: { type: 'remark' }
+};
+
+/**
+ * Theorem numbers from what the compile recorded of every theorem, unlabelled ones too, by where
+ * each theorem starts. When the document has as many theorems of a kind as the compile recorded,
+ * titled where those are, they correspond in order. Otherwise, as in one part of a larger document
+ * or after an edit not yet compiled, a theorem takes a number only by its title.
+ */
+function listedNumbers(structure: Structure, text: string, theorems: TheoremSettings, entries: readonly TheoremEntry[]): Map<number, string> {
+  const numbers = new Map<number, string>();
+  if (!entries.length) return numbers;
+  const listed = new Map<string, TheoremEntry[]>();
+  for (const entry of entries) listed.set(entry.type, [...listed.get(entry.type) ?? [], entry]);
+  const items: Array<{ start: number; type: string; title: string }> = [];
+  for (const mark of structure.environments) {
+    if (!mark.begin || !theorems.environments.get(mark.name)?.numbered) continue;
+    items.push({ start: mark.start, type: mark.name, title: mark.argument ? text.slice(mark.argument.start, mark.argument.end) : '' });
+  }
+  for (const mark of theorems.themeCommands ? structure.shorthands : []) {
+    const as = LISTED_AS[mark.command];
+    if (!as) continue;
+    // Recorded by its label prefix when the theme draws it as a tcolorbox, else as an environment.
+    const type = as.prefix && listed.has(as.prefix) ? as.prefix : as.type;
+    items.push({ start: mark.start, type, title: mark.command === 'rmkb' ? '' : text.slice(mark.args[0].start, mark.args[0].end) });
+  }
+  items.sort((a, b) => a.start - b.start);
+  const aligned = new Set<string>();
+  for (const [type, list] of listed) {
+    const own = items.filter(item => item.type === type);
+    if (own.length === list.length && own.every((item, at) => titleKey(item.title) === titleKey(list[at].title ?? ''))) aligned.add(type);
+  }
+  // Per kind: how many theorems came before, and the first entry a title may still match.
+  const seen = new Map<string, number>();
+  const next = new Map<string, number>();
+  for (const item of items) {
+    const list = listed.get(item.type) ?? [];
+    const position = seen.get(item.type) ?? 0;
+    seen.set(item.type, position + 1);
+    const key = titleKey(item.title);
+    const from = next.get(item.type) ?? 0;
+    const index = aligned.has(item.type)
+      ? position
+      : key ? list.findIndex((entry, at) => at >= from && titleKey(entry.title ?? '') === key) : -1;
+    if (index === -1) continue;
+    next.set(item.type, index + 1);
+    if (list[index].number) numbers.set(item.start, list[index].number);
+  }
+  return numbers;
+}
+
+/**
+ * The theme's commands drawn as the environments they stand for: \thm{title}{label}{body} as
+ * "Theorem 2.1 (Title).", numbered by the label the theme writes, prefix:label, or else by what the
+ * compile recorded of every theorem; \pf{...} as a proof; \ex, \rmkb and \question with their heads,
+ * and \rmk in italics.
+ */
+function themeCommandOverlays(
+  mark: ShorthandMark,
+  text: string,
+  labels: ReadonlyMap<string, LabelInfo> | undefined,
+  listed: string | undefined
+): Overlay[] {
   const { args } = mark;
   const last = args[args.length - 1];
   // Heads end in a space, as the text after them may follow on the same line.
@@ -363,7 +430,7 @@ function themeCommandOverlays(mark: ShorthandMark, text: string, labels: Readonl
     case 'ex':
       return [headOnly(mark.start, last.start, bold(mark.start, 'Example.')), closing];
     case 'rmkb':
-      return [headOnly(mark.start, last.start, { at: mark.start, text: 'Remark.\u00a0', italic: true }), closing];
+      return [headOnly(mark.start, last.start, { at: mark.start, text: `Remark${listed ? `\u00a0${listed}` : ''}.\u00a0`, italic: true }), closing];
     case 'rmk':
       return [overlay(mark.start, mark.end, {
         hide: [[mark.start, last.start], [last.end, mark.end]],
@@ -383,7 +450,7 @@ function themeCommandOverlays(mark: ShorthandMark, text: string, labels: Readonl
   const titled = text.slice(title.start, title.end).trim() !== '';
   const label = kind.prefix ? text.slice(second.start, second.end).trim() : '';
   const key = label && (label.startsWith(`${kind.prefix}:`) ? label : `${kind.prefix}:${label}`);
-  const number = key ? labels?.get(key)?.number : undefined;
+  const number = (key ? labels?.get(key)?.number : undefined) ?? listed;
   const head: Insertion = {
     at: mark.start,
     text: `${kind.name}${number ? `\u00a0${number}` : ''}${titled ? '' : '.\u00a0'}`,

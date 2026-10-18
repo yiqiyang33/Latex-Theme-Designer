@@ -32,13 +32,27 @@ export interface ContentsEntry {
   title: string;
 }
 
+/**
+ * A theorem as the compile records it, unlabelled ones too: thmtools lists every theorem, and
+ * tcolorbox labels every one of its theorems prefix:marker, an unlabelled one prefix:.
+ */
+export interface TheoremEntry {
+  /** Its environment as thmtools lists it, such as lemma, or a tcolorbox theorem's label prefix, such as lem. */
+  type: string;
+  number: string;
+  /** Its optional argument, as TeX. */
+  title?: string;
+}
+
 export interface AuxFile {
   labels: Map<string, LabelInfo>;
   citations: Map<string, CitationInfo>;
   /** Numbered headings, in the order of the document. */
   contents: ContentsEntry[];
-  /** Aux files of \include'd parts, as the aux file names them, with where their headings go in `contents`. */
-  inputs: Array<{ file: string; at: number }>;
+  /** Theorems, in the order of the document. */
+  theorems: TheoremEntry[];
+  /** Aux files of \include'd parts, as the aux file names them, with where their headings and theorems go. */
+  inputs: Array<{ file: string; at: number; theoremsAt: number }>;
 }
 
 /** What a root's last compile recorded, with the aux files of its \include'd parts merged in. */
@@ -47,6 +61,8 @@ export interface AuxData {
   citations: Map<string, CitationInfo>;
   /** Numbered headings, in the order of the document. */
   contents: ContentsEntry[];
+  /** Theorems, in the order of the document. */
+  theorems: TheoremEntry[];
 }
 
 /**
@@ -58,6 +74,7 @@ export function parseAux(text: string): AuxFile {
   const crefTypes = new Map<string, string>();
   const citations = new Map<string, CitationInfo>();
   const contents: ContentsEntry[] = [];
+  const theorems: TheoremEntry[] = [];
   const inputs: AuxFile['inputs'] = [];
   const pattern = /\\(newlabel|bibcite|@writefile|@input)\s*\{/g;
   let match: RegExpExecArray | null;
@@ -66,7 +83,7 @@ export function parseAux(text: string): AuxFile {
     if (!name) continue;
     pattern.lastIndex = name.next;
     if (match[1] === '@input') {
-      inputs.push({ file: name.value.trim(), at: contents.length });
+      inputs.push({ file: name.value.trim(), at: contents.length, theoremsAt: theorems.length });
       continue;
     }
     const value = readGroup(text, name.next);
@@ -77,8 +94,11 @@ export function parseAux(text: string): AuxFile {
       continue;
     }
     if (match[1] === '@writefile') {
-      const entry = name.value.trim() === 'toc' ? contentsEntry(value.value) : undefined;
+      const list = name.value.trim();
+      const entry = list === 'toc' ? contentsEntry(value.value) : undefined;
       if (entry) contents.push(entry);
+      const theorem = list === 'loe' ? theoremEntry(value.value) : undefined;
+      if (theorem) theorems.push(theorem);
       continue;
     }
     const fields = readGroups(value.value);
@@ -96,12 +116,14 @@ export function parseAux(text: string): AuxFile {
       title: title ? plainText(title) : undefined,
       type: anchorType(anchor)
     });
+    const prefix = anchor?.startsWith('tcb@cnt@') ? /^([^:]+):/.exec(name.value)?.[1] : undefined;
+    if (prefix) theorems.push({ type: prefix, number: plainText(number), title: title || undefined });
   }
   for (const [key, type] of crefTypes) {
     const label = labels.get(key);
     if (label) label.type = type;
   }
-  return { labels, citations, contents, inputs };
+  return { labels, citations, contents, theorems, inputs };
 }
 
 /** natbib writes {{number}{year}{{authors}}{{all authors}}}; numeric styles only the number. */
@@ -126,6 +148,19 @@ function contentsEntry(value: string): ContentsEntry | undefined {
   const number = entry && numberline ? readGroup(entry.value, numberline[0].length) : undefined;
   if (!level || !entry || !number) return undefined;
   return { level: level.value.trim(), number: plainText(number.value), title: entry.value.slice(number.next) };
+}
+
+/** thmtools' \contentsline {lemma}{\ifthmt@listswap Lemma~3.1\else \numberline {3.1}Lemma\fi \thmtformatoptarg {Title}}{page}{anchor}. */
+function theoremEntry(value: string): TheoremEntry | undefined {
+  const start = /^\s*\\contentsline\s*/.exec(value);
+  const type = start ? readGroup(value, start[0].length) : undefined;
+  const entry = type ? readGroup(value, type.next) : undefined;
+  const numberline = entry ? /\\numberline\s*/.exec(entry.value) : undefined;
+  const number = entry && numberline ? readGroup(entry.value, numberline.index + numberline[0].length) : undefined;
+  if (!type || !entry || !number) return undefined;
+  const optional = /\\thmtformatoptarg\s*/.exec(entry.value);
+  const title = optional ? readGroup(entry.value, optional.index + optional[0].length)?.value : undefined;
+  return { type: type.value.trim(), number: plainText(number.value), title };
 }
 
 function readGroup(text: string, index: number): { value: string; next: number } | undefined {

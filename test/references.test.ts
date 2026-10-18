@@ -39,7 +39,7 @@ describe('parseAux', () => {
     expect(aux.labels.get('app:proof')).toMatchObject({ number: 'A.1', type: 'subsection' });
     expect(aux.labels.get('plain')).toEqual({ number: '4', page: '9', title: undefined, type: undefined });
     expect(aux.labels.has('eq:loss@cref')).toBe(false);
-    expect(aux.inputs).toEqual([{ file: 'chapters/one.aux', at: 0 }]);
+    expect(aux.inputs).toEqual([{ file: 'chapters/one.aux', at: 0, theoremsAt: 0 }]);
   });
 });
 
@@ -70,7 +70,28 @@ describe('parseAux: citations and contents', () => {
       { level: 'section', number: '1', title: 'Model' },
       { level: 'subsection', number: 'A.1', title: 'Score {\\em covariance}' }
     ]);
-    expect(aux.inputs).toEqual([{ file: 'part.aux', at: 1 }]);
+    expect(aux.inputs).toEqual([{ file: 'part.aux', at: 1, theoremsAt: 0 }]);
+  });
+});
+
+describe('parseAux: theorems', () => {
+  it('reads every theorem thmtools lists and every one tcolorbox labels, unlabelled ones too, in order', () => {
+    const aux = parseAux([
+      '\\@writefile{loe}{\\addvspace {10\\p@ }}',
+      '\\@writefile{loe}{\\contentsline {lemma}{\\ifthmt@listswap Lemma~3.1\\else \\numberline {3.1}Lemma\\fi }{9}{lemma.1}\\protected@file@percent }',
+      '\\@writefile{loe}{\\contentsline {theorem}{\\ifthmt@listswap Theorem~3.1\\else \\numberline {3.1}Theorem\\fi \\thmtformatoptarg {Kolmogorov {$3$} Series}}{9}{theorem.1}\\protected@file@percent }',
+      '\\@input{part.aux}',
+      '\\newlabel{defn:}{{1}{1}{Homogeneous}{tcb@cnt@mydefinition.1}{}}',
+      '\\newlabel{thm:main}{{2}{1}{}{tcb@cnt@mydefinition.2}{}}',
+      '\\newlabel{eq:one}{{3}{1}{}{equation.3}{}}'
+    ].join('\n'));
+    expect(aux.theorems).toEqual([
+      { type: 'lemma', number: '3.1', title: undefined },
+      { type: 'theorem', number: '3.1', title: 'Kolmogorov {$3$} Series' },
+      { type: 'defn', number: '1', title: 'Homogeneous' },
+      { type: 'thm', number: '2', title: undefined }
+    ]);
+    expect(aux.inputs).toEqual([{ file: 'part.aux', at: 0, theoremsAt: 2 }]);
   });
 });
 

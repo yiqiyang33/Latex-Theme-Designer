@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { expandOutDir, parseAux, type AuxData, type ContentsEntry, type RootHint } from './references';
+import { expandOutDir, parseAux, type AuxData, type RootHint } from './references';
 
 const RELOAD_DELAY_MS = 300;
 /** How deep \@input chains are followed, which also stops cycles. */
@@ -126,29 +126,32 @@ export class AuxIndex implements vscode.Disposable {
 
   /** Reads the aux file and those of \include'd parts, which a compile writes beside it. */
   private async load(aux: string): Promise<void> {
-    const data: AuxData = { labels: new Map(), citations: new Map(), contents: [] };
-    // Returns the headings of the file and its parts, the parts' where they were included.
-    const read = async (file: string, depth: number): Promise<ContentsEntry[] | undefined> => {
+    const data: AuxData = { labels: new Map(), citations: new Map(), contents: [], theorems: [] };
+    // Returns the headings and theorems of the file and its parts, the parts' where they were included.
+    const read = async (file: string, depth: number): Promise<Pick<AuxData, 'contents' | 'theorems'> | undefined> => {
       const text = await fs.readFile(file, 'utf8').catch(() => undefined);
       if (text === undefined) return undefined;
       const parsed = parseAux(text);
       for (const [key, label] of parsed.labels) data.labels.set(key, label);
       for (const [key, citation] of parsed.citations) data.citations.set(key, citation);
-      const contents: ContentsEntry[] = [];
-      let copied = 0;
+      const merged: Pick<AuxData, 'contents' | 'theorems'> = { contents: [], theorems: [] };
+      let copied = { at: 0, theoremsAt: 0 };
       for (const input of depth < MAX_INPUT_DEPTH ? parsed.inputs : []) {
-        contents.push(...parsed.contents.slice(copied, input.at), ...await read(path.resolve(path.dirname(aux), input.file), depth + 1) ?? []);
-        copied = input.at;
+        const part = await read(path.resolve(path.dirname(aux), input.file), depth + 1);
+        merged.contents.push(...parsed.contents.slice(copied.at, input.at), ...part?.contents ?? []);
+        merged.theorems.push(...parsed.theorems.slice(copied.theoremsAt, input.theoremsAt), ...part?.theorems ?? []);
+        copied = input;
       }
-      contents.push(...parsed.contents.slice(copied));
-      return contents;
+      merged.contents.push(...parsed.contents.slice(copied.at));
+      merged.theorems.push(...parsed.theorems.slice(copied.theoremsAt));
+      return merged;
     };
-    const contents = await read(aux, 0);
-    if (contents) {
-      data.contents = contents;
+    const merged = await read(aux, 0);
+    if (merged) {
+      Object.assign(data, merged);
       this.data.set(aux, data);
       this.output.appendLine(`[${new Date().toISOString()}] Live preview read ${data.labels.size} labels, `
-        + `${data.citations.size} citations and ${contents.length} headings from ${aux}.`);
+        + `${data.citations.size} citations, ${data.contents.length} headings and ${data.theorems.length} theorems from ${aux}.`);
     } else {
       this.data.delete(aux);
     }
