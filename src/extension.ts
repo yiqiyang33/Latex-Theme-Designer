@@ -81,7 +81,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
-  const liveMathPreview = new LiveMathPreview(output);
+  // Rendered formulas are kept as files when the storage is on disk, so decorations stay small.
+  const liveMathPreview = new LiveMathPreview(
+    output,
+    context.globalStorageUri.scheme === "file" ? path.join(context.globalStorageUri.fsPath, "live-preview") : undefined
+  );
   context.subscriptions.push(
     liveMathPreview,
     command("latexEditingToolkit.toggleLiveMathPreview", () => liveMathPreview.toggle())

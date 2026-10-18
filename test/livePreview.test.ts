@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMacroDefinitions } from '../src/livePreview/macros';
 import { findMathRegions, previewSource, regionIsActive } from '../src/livePreview/mathRegions';
+import { decoratedLines } from '../src/livePreview/lineWindow';
 import { MathRenderer, sizeForEditor, sliceForLines, type MathRenderOptions } from '../src/livePreview/mathRenderer';
 
 const tex = (text: string) => findMathRegions(text, 'latex').inline.map(region => region.tex);
@@ -149,8 +150,8 @@ describe('MathRenderer', () => {
     const result = renderer.render('x^2', options());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.image.dataUri.startsWith('data:image/svg+xml;base64,')).toBe(true);
-    const svg = decode(result.image.dataUri);
+    expect(result.image.uri.startsWith('data:image/svg+xml;base64,')).toBe(true);
+    const svg = decode(result.image.uri);
     expect(svg).toContain(`width="${result.image.widthPx.toFixed(2)}px"`);
     expect(svg).toContain('style="color:#cccccc"');
     expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
@@ -172,6 +173,31 @@ describe('MathRenderer', () => {
     const macros = { R: '\\mathbb{R}' };
     expect(renderer.render('\\R', options({ macros }))).toBe(renderer.render('\\R', options({ macros })));
     expect(renderer.renderBlock('\\R', 3, options({ macros }))).toBe(renderer.renderBlock('\\R', 3, options({ macros })));
+    // A table rebuilt with the same macros, as every edit rebuilds it, keeps the renderings.
+    expect(renderer.render('\\R', options({ macros: { R: '\\mathbb{R}' } }))).toBe(renderer.render('\\R', options({ macros })));
+    expect(renderer.render('\\R', options({ macros: { R: '\\mathbf{R}' } }))).not.toBe(renderer.render('\\R', options({ macros })));
+  });
+
+  it('looks up a rendering without making one, for formulas left to render later', () => {
+    expect(renderer.peek('y_{peek}', options())).toBeUndefined();
+    expect(renderer.peekBlock('y_{peek}', 2, options())).toBeUndefined();
+    const inline = renderer.render('y_{peek}', options());
+    const block = renderer.renderBlock('y_{peek}', 2, options());
+    expect(renderer.peek('y_{peek}', options())).toBe(inline);
+    expect(renderer.peekBlock('y_{peek}', 2, options())).toBe(block);
+    expect(renderer.peek('y_{peek}', options({ fontSizePx: 20 }))).toBeUndefined();
+  });
+
+  it('keeps images where its writer says, in the SVG it would otherwise inline', async () => {
+    const written: string[] = [];
+    const store = new MathRenderer(svg => { written.push(svg); return `file:///images/${written.length}.svg`; });
+    await store.load();
+    const inline = store.render('z^3', options());
+    const block = store.renderBlock('z^3', 3, options());
+    expect(inline.ok && inline.image.uri).toBe('file:///images/1.svg');
+    expect(block.ok && block.image.slices.map(slice => slice.uri)).toEqual(['file:///images/2.svg']);
+    expect(written[0]).toContain('style="color:#cccccc"');
+    expect(written[1]).toContain('viewBox="0 21.00');
   });
 
   it('cuts a display formula into line-tall strips for the lines it reaches', () => {
@@ -180,7 +206,7 @@ describe('MathRenderer', () => {
     if (!result.ok) return;
     // One line of math, centred in three lines, stays within the middle one.
     expect(result.image.slices.map(slice => slice.row)).toEqual([1]);
-    const svg = decode(result.image.slices[0].dataUri);
+    const svg = decode(result.image.slices[0].uri);
     expect(svg).toContain(`viewBox="0 21.00 ${result.image.widthPx.toFixed(2)} 21.00"`);
     expect(svg).toContain('style="color:#cccccc"');
   });
@@ -205,6 +231,20 @@ describe('MathRenderer', () => {
   });
 });
 
+describe('decoratedLines', () => {
+  it('keeps the decorated lines while the viewport stays clear of their edges, and moves them with it otherwise', () => {
+    const first = decoratedLines(undefined, 200, 245, 100, 30);
+    expect(first).toEqual({ first: 100, last: 345 });
+    expect(decoratedLines(first, 230, 275, 100, 30)).toBe(first);
+    expect(decoratedLines(first, 260, 305, 100, 30)).toBe(first);
+    expect(decoratedLines(first, 290, 335, 100, 30)).toEqual({ first: 190, last: 435 });
+    expect(decoratedLines(first, 120, 165, 100, 30)).toEqual({ first: 20, last: 265 });
+    // At the top of the document there is nothing above to keep clear of.
+    const top = decoratedLines(undefined, 0, 45, 100, 30);
+    expect(decoratedLines(top, 3, 48, 100, 30)).toBe(top);
+  });
+});
+
 describe('sizeForEditor', () => {
   it('converts MathJax ex sizes to px and keeps the baseline offset', () => {
     const svg = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 0 1 1"></svg>';
@@ -226,7 +266,7 @@ describe('sliceForLines', () => {
 
   it('skips the lines the formula does not reach, and centres it in the block', () => {
     expect(sliceForLines(svg, 5, sizing)?.slices.map(slice => slice.row)).toEqual([1, 2, 3]);
-    const middle = Buffer.from(sliceForLines(svg, 3, sizing)!.slices[1].dataUri.split(',')[1], 'base64').toString('utf8');
+    const middle = sliceForLines(svg, 3, sizing)!.slices[1].svg;
     expect(middle).toContain('viewBox="0 10.00 44.00 10.00"');
     expect(middle).toContain('<svg x="0.00" y="4.00" width="44.00" height="22.00" viewBox="0 -500 1000 1000" overflow="visible"><g></g></svg>');
   });

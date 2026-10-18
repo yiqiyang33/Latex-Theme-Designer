@@ -1725,7 +1725,7 @@ var require_ignore = __commonJS({
       //   path matching.
       // - check `string` either `MODE_IGNORE` or `MODE_CHECK_IGNORE`
       // @returns {TestResult} true if a file is ignored
-      test(path52, checkUnignored, mode) {
+      test(path54, checkUnignored, mode) {
         let ignored = false;
         let unignored = false;
         let matchedRule;
@@ -1734,7 +1734,7 @@ var require_ignore = __commonJS({
           if (unignored === negative && ignored !== unignored || negative && !ignored && !unignored && !checkUnignored) {
             return;
           }
-          const matched = rule[mode].test(path52);
+          const matched = rule[mode].test(path54);
           if (!matched) {
             return;
           }
@@ -1755,17 +1755,17 @@ var require_ignore = __commonJS({
     var throwError = (message, Ctor) => {
       throw new Ctor(message);
     };
-    var checkPath = (path52, originalPath, doThrow) => {
-      if (!isString(path52)) {
+    var checkPath = (path54, originalPath, doThrow) => {
+      if (!isString(path54)) {
         return doThrow(
           `path must be a string, but got \`${originalPath}\``,
           TypeError
         );
       }
-      if (!path52) {
+      if (!path54) {
         return doThrow(`path must not be empty`, TypeError);
       }
-      if (checkPath.isNotRelative(path52)) {
+      if (checkPath.isNotRelative(path54)) {
         const r = "`path.relative()`d";
         return doThrow(
           `path should be a ${r} string, but got "${originalPath}"`,
@@ -1774,7 +1774,7 @@ var require_ignore = __commonJS({
       }
       return true;
     };
-    var isNotRelative = (path52) => REGEX_TEST_INVALID_PATH.test(path52);
+    var isNotRelative = (path54) => REGEX_TEST_INVALID_PATH.test(path54);
     checkPath.isNotRelative = isNotRelative;
     checkPath.convert = (p) => p;
     var Ignore2 = class {
@@ -1804,19 +1804,19 @@ var require_ignore = __commonJS({
       }
       // @returns {TestResult}
       _test(originalPath, cache, checkUnignored, slices) {
-        const path52 = originalPath && checkPath.convert(originalPath);
+        const path54 = originalPath && checkPath.convert(originalPath);
         checkPath(
-          path52,
+          path54,
           originalPath,
           this._strictPathCheck ? throwError : RETURN_FALSE
         );
-        return this._t(path52, cache, checkUnignored, slices);
+        return this._t(path54, cache, checkUnignored, slices);
       }
-      checkIgnore(path52) {
-        if (!REGEX_TEST_TRAILING_SLASH.test(path52)) {
-          return this.test(path52);
+      checkIgnore(path54) {
+        if (!REGEX_TEST_TRAILING_SLASH.test(path54)) {
+          return this.test(path54);
         }
-        const slices = path52.split(SLASH).filter(Boolean);
+        const slices = path54.split(SLASH).filter(Boolean);
         slices.pop();
         if (slices.length) {
           const parent = this._t(
@@ -1829,18 +1829,18 @@ var require_ignore = __commonJS({
             return parent;
           }
         }
-        return this._rules.test(path52, false, MODE_CHECK_IGNORE);
+        return this._rules.test(path54, false, MODE_CHECK_IGNORE);
       }
-      _t(path52, cache, checkUnignored, slices) {
-        if (path52 in cache) {
-          return cache[path52];
+      _t(path54, cache, checkUnignored, slices) {
+        if (path54 in cache) {
+          return cache[path54];
         }
         if (!slices) {
-          slices = path52.split(SLASH).filter(Boolean);
+          slices = path54.split(SLASH).filter(Boolean);
         }
         slices.pop();
         if (!slices.length) {
-          return cache[path52] = this._rules.test(path52, checkUnignored, MODE_IGNORE);
+          return cache[path54] = this._rules.test(path54, checkUnignored, MODE_IGNORE);
         }
         const parent = this._t(
           slices.join(SLASH) + SLASH,
@@ -1848,29 +1848,29 @@ var require_ignore = __commonJS({
           checkUnignored,
           slices
         );
-        return cache[path52] = parent.ignored ? parent : this._rules.test(path52, checkUnignored, MODE_IGNORE);
+        return cache[path54] = parent.ignored ? parent : this._rules.test(path54, checkUnignored, MODE_IGNORE);
       }
-      ignores(path52) {
-        return this._test(path52, this._ignoreCache, false).ignored;
+      ignores(path54) {
+        return this._test(path54, this._ignoreCache, false).ignored;
       }
       createFilter() {
-        return (path52) => !this.ignores(path52);
+        return (path54) => !this.ignores(path54);
       }
       filter(paths) {
         return makeArray(paths).filter(this.createFilter());
       }
       // @returns {TestResult}
-      test(path52) {
-        return this._test(path52, this._testCache, true);
+      test(path54) {
+        return this._test(path54, this._testCache, true);
       }
     };
     var factory = (options) => new Ignore2(options);
-    var isPathValid = (path52) => checkPath(path52 && checkPath.convert(path52), path52, RETURN_FALSE);
+    var isPathValid = (path54) => checkPath(path54 && checkPath.convert(path54), path54, RETURN_FALSE);
     var setupWindows = () => {
       const makePosix = (str) => /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str) ? str : str.replace(/\\/g, "/");
       checkPath.convert = makePosix;
       const REGEX_TEST_WINDOWS_PATH_ABSOLUTE = /^[a-z]:\//i;
-      checkPath.isNotRelative = (path52) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path52) || isNotRelative(path52);
+      checkPath.isNotRelative = (path54) => REGEX_TEST_WINDOWS_PATH_ABSOLUTE.test(path54) || isNotRelative(path54);
     };
     if (
       // Detect `process` so that it can run in browsers.
@@ -10732,11 +10732,11 @@ var require_mime_types = __commonJS({
       }
       return exts[0];
     }
-    function lookup2(path52) {
-      if (!path52 || typeof path52 !== "string") {
+    function lookup2(path54) {
+      if (!path54 || typeof path54 !== "string") {
         return false;
       }
-      var extension2 = extname10("x." + path52).toLowerCase().substr(1);
+      var extension2 = extname10("x." + path54).toLowerCase().substr(1);
       if (!extension2) {
         return false;
       }
@@ -11841,11 +11841,11 @@ var require_form_data = __commonJS({
     "use strict";
     var CombinedStream = require_combined_stream();
     var util = require("util");
-    var path52 = require("path");
+    var path54 = require("path");
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs41 = require("fs");
+    var fs42 = require("fs");
     var Stream = require("stream").Stream;
     var crypto8 = require("crypto");
     var mime2 = require_mime_types();
@@ -11912,7 +11912,7 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs41.stat(value.path, function(err, stat14) {
+          fs42.stat(value.path, function(err, stat14) {
             if (err) {
               callback(err);
               return;
@@ -11969,11 +11969,11 @@ var require_form_data = __commonJS({
     FormData2.prototype._getContentDisposition = function(value, options) {
       var filename;
       if (typeof options.filepath === "string") {
-        filename = path52.normalize(options.filepath).replace(/\\/g, "/");
+        filename = path54.normalize(options.filepath).replace(/\\/g, "/");
       } else if (options.filename || value && (value.name || value.path)) {
-        filename = path52.basename(options.filename || value && (value.name || value.path));
+        filename = path54.basename(options.filename || value && (value.name || value.path));
       } else if (value && value.readable && hasOwn(value, "httpVersion")) {
-        filename = path52.basename(value.client._httpMessage.path || "");
+        filename = path54.basename(value.client._httpMessage.path || "");
       }
       if (filename) {
         return 'filename="' + filename + '"';
@@ -12886,14 +12886,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path52 = url.path;
-      if (path52.length === 0) {
+      const path54 = url.path;
+      if (path54.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path52.length === 1 && isNormalizedWindowsDriveLetter(path52[0])) {
+      if (url.scheme === "file" && path54.length === 1 && isNormalizedWindowsDriveLetter(path54[0])) {
         return;
       }
-      path52.pop();
+      path54.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -30755,11 +30755,11 @@ var require_Wrapper3 = __commonJS({
             var i = _h.value;
             if (!width[i])
               continue;
-            var path52 = paths[i];
+            var path54 = paths[i];
             if (style[i] === "dashed" || style[i] === "dotted") {
-              this.addBorderBroken(path52, color[i], style[i], width[i], i);
+              this.addBorderBroken(path54, color[i], style[i], width[i], i);
             } else {
-              this.addBorderSolid(path52, color[i], child);
+              this.addBorderSolid(path54, color[i], child);
             }
           }
         } catch (e_3_1) {
@@ -30772,10 +30772,10 @@ var require_Wrapper3 = __commonJS({
           }
         }
       };
-      SVGWrapper2.prototype.addBorderSolid = function(path52, color, child) {
+      SVGWrapper2.prototype.addBorderSolid = function(path54, color, child) {
         var _this = this;
         var border = this.svg("polygon", {
-          points: path52.map(function(_a2) {
+          points: path54.map(function(_a2) {
             var _b = __read(_a2, 2), x = _b[0], y = _b[1];
             return "".concat(_this.fixed(x - _this.dx), ",").concat(_this.fixed(y));
           }).join(" "),
@@ -30788,11 +30788,11 @@ var require_Wrapper3 = __commonJS({
           this.adaptor.append(this.element, border);
         }
       };
-      SVGWrapper2.prototype.addBorderBroken = function(path52, color, style, t, i) {
+      SVGWrapper2.prototype.addBorderBroken = function(path54, color, style, t, i) {
         var dot = style === "dotted";
         var t2 = t / 2;
         var _a2 = __read([[t2, -t2, -t2, -t2], [-t2, t2, -t2, -t2], [t2, t2, -t2, t2], [t2, t2, t2, -t2]][i], 4), tx1 = _a2[0], ty1 = _a2[1], tx2 = _a2[2], ty2 = _a2[3];
-        var _b = __read(path52, 2), A = _b[0], B = _b[1];
+        var _b = __read(path54, 2), A = _b[0], B = _b[1];
         var x1 = A[0] + tx1 - this.dx, y1 = A[1] + ty1;
         var x2 = B[0] + tx2 - this.dx, y2 = B[1] + ty2;
         var W = Math.abs(i % 2 ? y2 - y1 : x2 - x1);
@@ -30907,8 +30907,8 @@ var require_Wrapper3 = __commonJS({
         var C = n.toString(16).toUpperCase();
         var _b = __read(this.getVariantChar(variant, n), 4), w = _b[2], data = _b[3];
         if ("p" in data) {
-          var path52 = data.p ? "M" + data.p + "Z" : "";
-          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path52)));
+          var path54 = data.p ? "M" + data.p + "Z" : "";
+          this.place(x, y, this.adaptor.append(parent, this.charNode(variant, C, path54)));
         } else if ("c" in data) {
           var g = this.adaptor.append(parent, this.svg("g", { "data-c": C }));
           this.place(x, y, g);
@@ -30935,16 +30935,16 @@ var require_Wrapper3 = __commonJS({
         }
         return w;
       };
-      SVGWrapper2.prototype.charNode = function(variant, C, path52) {
+      SVGWrapper2.prototype.charNode = function(variant, C, path54) {
         var cache = this.jax.options.fontCache;
-        return cache !== "none" ? this.useNode(variant, C, path52) : this.pathNode(C, path52);
+        return cache !== "none" ? this.useNode(variant, C, path54) : this.pathNode(C, path54);
       };
-      SVGWrapper2.prototype.pathNode = function(C, path52) {
-        return this.svg("path", { "data-c": C, d: path52 });
+      SVGWrapper2.prototype.pathNode = function(C, path54) {
+        return this.svg("path", { "data-c": C, d: path54 });
       };
-      SVGWrapper2.prototype.useNode = function(variant, C, path52) {
+      SVGWrapper2.prototype.useNode = function(variant, C, path54) {
         var use = this.svg("use", { "data-c": C });
-        var id = "#" + this.jax.fontCache.cachePath(variant, C, path52);
+        var id = "#" + this.jax.fontCache.cachePath(variant, C, path54);
         this.adaptor.setAttribute(use, "href", id, svg_js_1.XLINKNS);
         return use;
       };
@@ -39972,7 +39972,7 @@ var require_menclose3 = __commonJS({
           "stroke-width": this.fixed(t)
         });
       };
-      SVGmenclose2.prototype.path = function(join39) {
+      SVGmenclose2.prototype.path = function(join40) {
         var _this = this;
         var P = [];
         for (var _i = 1; _i < arguments.length; _i++) {
@@ -39984,7 +39984,7 @@ var require_menclose3 = __commonJS({
           }).join(" "),
           style: { "stroke-width": this.fixed(this.thickness) },
           "stroke-linecap": "round",
-          "stroke-linejoin": join39,
+          "stroke-linejoin": join40,
           fill: "none"
         });
       };
@@ -46957,11 +46957,11 @@ var require_FontCache = __commonJS({
         this.nextID = 0;
         this.jax = jax;
       }
-      FontCache2.prototype.cachePath = function(variant, C, path52) {
+      FontCache2.prototype.cachePath = function(variant, C, path54) {
         var id = "MJX-" + this.localID + (this.jax.font.getVariant(variant).cacheID || "") + "-" + C;
         if (!this.cache.has(id)) {
-          this.cache.set(id, path52);
-          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path52 }));
+          this.cache.set(id, path54);
+          this.jax.adaptor.append(this.defs, this.jax.svg("path", { id, d: path54 }));
         }
         return id;
       };
@@ -60424,8 +60424,8 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var fs40 = __toESM(require("node:fs"));
-var path51 = __toESM(require("node:path"));
+var fs41 = __toESM(require("node:fs"));
+var path53 = __toESM(require("node:path"));
 var vscode17 = __toESM(require("vscode"));
 
 // src/changeHistory.ts
@@ -61697,7 +61697,7 @@ var path9 = __toESM(require("path"));
 // src/snippets/engine/openFileExplorer.ts
 var os = __toESM(require("os"));
 var import_child_process = require("child_process");
-function openExplorer(path52, callback = (err) => {
+function openExplorer(path54, callback = (err) => {
   console.log(err);
 }) {
   let platform3 = os.platform();
@@ -61714,8 +61714,8 @@ function openExplorer(path52, callback = (err) => {
   if (!(platform3 == "win32" || platform3 == "darwin" || platform3 == "linux")) {
     return callback(new Error("Platform not supported"));
   }
-  path52 = path52 || defaultPath[platform3];
-  let p = (0, import_child_process.spawn)(commands8[platform3], [path52]);
+  path54 = path54 || defaultPath[platform3];
+  let p = (0, import_child_process.spawn)(commands8[platform3], [path54]);
   p.on("error", (err) => {
     p.kill();
     return callback(err);
@@ -61800,26 +61800,26 @@ function RegReplace(text, reg, replaceFn) {
 }
 function getSnippetDir() {
   let platform3 = os2.platform();
-  function parse_path(path52) {
+  function parse_path(path54) {
     if (platform3 == "win32") {
-      path52 = RegReplace(path52, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
+      path54 = RegReplace(path54, /\%(\w+)\%/g, (match2) => process.env[match2[1]] || "");
     } else {
-      path52 = RegReplace(path52, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
+      path54 = RegReplace(path54, /\$(\w+)/g, (match2) => process.env[match2[1]] || "");
     }
     if (platform3 == "win32") {
-      path52 = path52.replace(/\//g, "\\");
+      path54 = path54.replace(/\//g, "\\");
     }
-    return path52;
+    return path54;
   }
   if (platform3 == "win32") {
-    let path52 = vscode2.workspace.getConfiguration("hsnips").get("windows");
-    return parse_path(path52 ? parse_path(path52) : parse_path("%APPDATA%/Code/User/hsnips"));
+    let path54 = vscode2.workspace.getConfiguration("hsnips").get("windows");
+    return parse_path(path54 ? parse_path(path54) : parse_path("%APPDATA%/Code/User/hsnips"));
   } else if (platform3 == "darwin") {
-    let path52 = vscode2.workspace.getConfiguration("hsnips").get("mac");
-    return parse_path(path52 ? parse_path(path52) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
+    let path54 = vscode2.workspace.getConfiguration("hsnips").get("mac");
+    return parse_path(path54 ? parse_path(path54) : parse_path("$HOME/Library/Application Support/Code/User/hsnips"));
   } else {
-    let path52 = vscode2.workspace.getConfiguration("hsnips").get("linux");
-    return parse_path(path52 ? parse_path(path52) : parse_path("$HOME/.config/Code/User/hsnips"));
+    let path54 = vscode2.workspace.getConfiguration("hsnips").get("linux");
+    return parse_path(path54 ? parse_path(path54) : parse_path("$HOME/.config/Code/User/hsnips"));
   }
 }
 function applyOffset(position, text, indent) {
@@ -63451,8 +63451,8 @@ var snippetOutput;
 function isLatexLikeDocument(document2) {
   return ["latex", "tex", "markdown"].includes(document2.languageId.toLowerCase());
 }
-function getStringArrayConfiguration(path52) {
-  let value = vscode5.workspace.getConfiguration("hsnips").get(path52);
+function getStringArrayConfiguration(path54) {
+  let value = vscode5.workspace.getConfiguration("hsnips").get(path54);
   return Array.isArray(value) ? value.filter((item) => typeof item == "string") : [];
 }
 function getActiveSnippetProfile() {
@@ -73064,12 +73064,12 @@ var SyncGate = class {
     this.projectState = state;
     this.projectReason = reason;
   }
-  setPath(path52, state, reason, subtree = false) {
-    const normalized = toPosixPath2(path52);
+  setPath(path54, state, reason, subtree = false) {
+    const normalized = toPosixPath2(path54);
     this.paths.set(normalized, { path: normalized, state, reason, subtree });
   }
-  clearPath(path52) {
-    this.paths.delete(toPosixPath2(path52));
+  clearPath(path54) {
+    this.paths.delete(toPosixPath2(path54));
   }
   clearPaths() {
     this.paths.clear();
@@ -73081,23 +73081,23 @@ var SyncGate = class {
     for (const entry of [...this.paths.values()]) {
       if (entry.path !== normalizedOld && !(subtree && entry.path.startsWith(oldPrefix))) continue;
       this.paths.delete(entry.path);
-      const path52 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
-      this.paths.set(path52, { ...entry, path: path52 });
+      const path54 = entry.path === normalizedOld ? normalizedNew : `${normalizedNew}/${entry.path.slice(oldPrefix.length)}`;
+      this.paths.set(path54, { ...entry, path: path54 });
     }
   }
-  canSync(path52) {
+  canSync(path54) {
     if (this.projectState !== "ready") return false;
-    return this.findBlocking(path52) === void 0;
+    return this.findBlocking(path54) === void 0;
   }
   /**
    * True when `path` is held up only by a reconnect or an in-flight check, with nothing
    * path-specific against it. Such work is worth retrying once the gate reopens.
    */
-  isTransientlyBlocked(path52) {
-    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path52) === void 0;
+  isTransientlyBlocked(path54) {
+    return TRANSIENT_PROJECT_GATES.has(this.projectState) && this.findBlocking(path54) === void 0;
   }
-  findBlocking(path52) {
-    const normalized = toPosixPath2(path52);
+  findBlocking(path54) {
+    const normalized = toPosixPath2(path54);
     const exact = this.paths.get(normalized);
     if (exact) return exact;
     return [...this.paths.values()].find((entry) => entry.subtree && (normalized === entry.path || normalized.startsWith(`${entry.path}/`)));
@@ -73631,13 +73631,13 @@ var RenameDetector = class {
   registerCreate(candidate) {
     return this.register(this.creates, this.deletes, candidate, false);
   }
-  forget(path52) {
-    const normalized = toPosixPath2(path52);
+  forget(path54) {
+    const normalized = toPosixPath2(path54);
     this.deletes.delete(normalized);
     this.creates.delete(normalized);
   }
-  forgetSubtree(path52) {
-    const normalized = toPosixPath2(path52);
+  forgetSubtree(path54) {
+    const normalized = toPosixPath2(path54);
     const prefix = `${normalized}/`;
     for (const candidates of [this.deletes, this.creates]) {
       for (const candidatePath of [...candidates.keys()]) {
@@ -73676,8 +73676,8 @@ var RenameDetector = class {
   }
   prune(now) {
     for (const candidates of [this.deletes, this.creates]) {
-      for (const [path52, candidate] of candidates) {
-        if (now - candidate.observedAt > this.windowMs) candidates.delete(path52);
+      for (const [path54, candidate] of candidates) {
+        if (now - candidate.observedAt > this.windowMs) candidates.delete(path54);
       }
     }
   }
@@ -73961,22 +73961,22 @@ async function executeSyncCommand(backend, command, args = {}) {
       return backend.syncOnce();
     case "push":
     case "pull": {
-      const path52 = requiredPath(args.path);
+      const path54 = requiredPath(args.path);
       const force = Boolean(args.force);
-      await backend.authorize?.(command, path52, force);
-      await backend[command](path52, force);
+      await backend.authorize?.(command, path54, force);
+      await backend[command](path54, force);
       return backend.status({
         refresh: true,
         full: false,
-        paths: [path52],
+        paths: [path54],
         reason: `post-${command}`
       });
     }
     case "conflicts-list":
       return backend.conflicts();
     case "conflicts-resolve": {
-      const path52 = requiredPath(args.path);
-      await backend.resolveConflict(path52, args.use === "remote" ? "remote" : "local");
+      const path54 = requiredPath(args.path);
+      await backend.resolveConflict(path54, args.use === "remote" ? "remote" : "local");
       return backend.conflicts();
     }
     default:
@@ -76532,7 +76532,7 @@ var RealtimeSyncService = class {
     if (!file || file.entityType !== "doc") {
       throw new Error(`${relPath} is not an Overleaf document.`);
     }
-    const join39 = (async () => {
+    const join40 = (async () => {
       const joined = await this.session.joinDoc(file.entityId);
       const state = {
         relPath,
@@ -76548,9 +76548,9 @@ var RealtimeSyncService = class {
       this.manifest.files[relPath].version = joined.version;
       return state;
     })();
-    this.pendingDocJoins.set(relPath, join39);
+    this.pendingDocJoins.set(relPath, join40);
     try {
-      return await join39;
+      return await join40;
     } finally {
       this.pendingDocJoins.delete(relPath);
     }
@@ -81168,7 +81168,8 @@ function expandHome2(value) {
 }
 
 // src/livePreview/controller.ts
-var path50 = __toESM(require("node:path"));
+var path52 = __toESM(require("node:path"));
+var import_node_perf_hooks = require("node:perf_hooks");
 var vscode16 = __toESM(require("vscode"));
 
 // src/livePreview/auxIndex.ts
@@ -81925,6 +81926,346 @@ function citationOverlays(regions, citations) {
   });
 }
 
+// src/livePreview/imageStore.ts
+var import_node_crypto8 = require("node:crypto");
+var fs40 = __toESM(require("node:fs"));
+var path50 = __toESM(require("node:path"));
+var import_node_url2 = require("node:url");
+
+// src/livePreview/mathRenderer.ts
+var EX_PER_EM = 0.55;
+var CACHE_BUDGET = 8 * 1024 * 1024;
+var ENTRY_COST = 256;
+var MACRO_TABLE_LIMIT = 16;
+var ENGINE_LIMIT = 4;
+var EXCLUDED_PACKAGES = /* @__PURE__ */ new Set(["noerrors", "noundefined"]);
+var DEFAULT_MACROS = { qedhere: "" };
+var SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
+var TAG_GAP_EM = 2;
+var NO_FIXED_SIZE = "MathJax gave this formula no fixed size.";
+var modules;
+function loadMathJax() {
+  modules ??= (async () => {
+    const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }] = await Promise.all([
+      Promise.resolve().then(() => __toESM(require_mathjax())),
+      Promise.resolve().then(() => __toESM(require_tex())),
+      Promise.resolve().then(() => __toESM(require_svg())),
+      Promise.resolve().then(() => __toESM(require_liteAdaptor())),
+      Promise.resolve().then(() => __toESM(require_html())),
+      Promise.resolve().then(() => __toESM(require_AllPackages()))
+    ]);
+    const adaptor = liteAdaptor();
+    RegisterHTMLHandler(adaptor);
+    return { mathjax, TeX, SVG, adaptor, packages: AllPackages.filter((name) => !EXCLUDED_PACKAGES.has(name)) };
+  })();
+  return modules;
+}
+var MathRenderer = class {
+  constructor(store = svgDataUri) {
+    this.store = store;
+  }
+  store;
+  engines = /* @__PURE__ */ new Map();
+  cache = /* @__PURE__ */ new Map();
+  // Cache keys name a macro table by a small id rather than by its text, which can run to many
+  // kilobytes and would otherwise be copied and hashed for every formula on every update.
+  macroIds = /* @__PURE__ */ new WeakMap();
+  idsByTable = /* @__PURE__ */ new Map();
+  nextMacroId = 0;
+  cacheSize = 0;
+  loaded;
+  get isReady() {
+    return this.loaded !== void 0;
+  }
+  /** Resolves once MathJax is loaded; rendering is synchronous after that. */
+  async load() {
+    this.loaded = await loadMathJax();
+  }
+  /** An inline formula, scaled down if needed to fit one line. */
+  render(tex, options) {
+    return this.cached(inlineKey(tex), options, (engine) => {
+      const formula = typeset(engine, tex, false);
+      if (!formula.ok) return formula;
+      const sized = sizeForEditor(formula.image.svg, options);
+      if (!sized) return { ok: false, error: NO_FIXED_SIZE };
+      const { svg, ...size } = sized;
+      return { ok: true, image: { ...size, uri: this.store(svg) } };
+    });
+  }
+  /** An inline formula's rendering if it has one already, without rendering it. */
+  peek(tex, options) {
+    return this.lookup(inlineKey(tex), options);
+  }
+  /** A display formula laid out over the `rows` lines of its block, with its numbers on the right. */
+  renderBlock(tex, rows, options, tags = []) {
+    return this.cached(blockKey(tex, rows, tags), options, (engine) => {
+      const formula = typeset(engine, withoutTags(tex), rows > 1);
+      if (!formula.ok) return formula;
+      const { baselines } = formula.image;
+      const numbers = [];
+      for (const tag of tags) {
+        if (tag.row !== void 0 && tag.row >= baselines.length && tags.length > 1) continue;
+        const number = typeset(engine, tag.tex, false);
+        if (number.ok) numbers.push({ svg: number.image.svg, baseline: tag.row === void 0 ? void 0 : baselines[tag.row] });
+      }
+      const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
+      if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
+      return { ok: true, image: { widthPx: sliced.widthPx, slices: sliced.slices.map((slice) => ({ row: slice.row, uri: this.store(slice.svg) })) } };
+    });
+  }
+  /** A display formula's rendering if it has one already, without rendering it. */
+  peekBlock(tex, rows, options, tags = []) {
+    return this.lookup(blockKey(tex, rows, tags), options);
+  }
+  clearCache() {
+    this.cache.clear();
+    this.cacheSize = 0;
+  }
+  cached(formula, options, build) {
+    if (!this.loaded) throw new Error("MathRenderer.load() must finish before rendering.");
+    const existing = this.lookup(formula, options);
+    if (existing) return existing;
+    const macroId = this.macroId(options.macros);
+    const key = cacheKey(macroId, formula, options);
+    const result = build(this.engineFor(macroId, options.macros));
+    const size = ENTRY_COST + (result.ok ? imageSize(result.image) : result.error.length);
+    this.cache.set(key, { result, size });
+    this.cacheSize += size;
+    for (const [oldKey, old] of this.cache) {
+      if (this.cacheSize <= CACHE_BUDGET || oldKey === key) break;
+      this.cache.delete(oldKey);
+      this.cacheSize -= old.size;
+    }
+    return result;
+  }
+  lookup(formula, options) {
+    const key = cacheKey(this.macroId(options.macros), formula, options);
+    const cached = this.cache.get(key);
+    if (!cached) return void 0;
+    this.cache.delete(key);
+    this.cache.set(key, cached);
+    return cached.result;
+  }
+  macroId(macros) {
+    let id = this.macroIds.get(macros);
+    if (id !== void 0) return id;
+    const table = JSON.stringify(macros);
+    id = this.idsByTable.get(table);
+    if (id === void 0) {
+      id = this.nextMacroId++;
+      this.idsByTable.set(table, id);
+      if (this.idsByTable.size > MACRO_TABLE_LIMIT) this.idsByTable.delete(this.idsByTable.keys().next().value);
+    }
+    this.macroIds.set(macros, id);
+    return id;
+  }
+  engineFor(macroId, macros) {
+    const existing = this.engines.get(macroId);
+    if (existing) return existing;
+    const { mathjax, TeX, SVG, adaptor, packages } = this.loaded;
+    const tex = new TeX({
+      packages,
+      macros: { ...DEFAULT_MACROS, ...macros },
+      formatError: (_jax, error) => {
+        throw error;
+      }
+    });
+    const document2 = mathjax.document("", { InputJax: tex, OutputJax: new SVG({ fontCache: "local" }) });
+    const engine = { tex, document: document2, adaptor };
+    this.engines.set(macroId, engine);
+    if (this.engines.size > ENGINE_LIMIT) this.engines.delete(this.engines.keys().next().value);
+    return engine;
+  }
+};
+function typeset(engine, tex, display) {
+  try {
+    engine.tex.parseOptions.tags.reset();
+    const container = engine.document.convert(tex, { display });
+    const baselines = rowBaselines(engine.adaptor, container);
+    const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, "");
+    return { ok: true, image: { svg, baselines } };
+  } catch (error) {
+    const message = error?.message;
+    return { ok: false, error: typeof message === "string" ? message : String(error) };
+  }
+}
+function rowBaselines(adaptor, container) {
+  const role = (node) => adaptor.getAttribute(node, "data-mml-node");
+  const elements = (node) => adaptor.childNodes(node).filter((child) => adaptor.kind(child) !== "#text" && adaptor.kind(child) !== "#comment");
+  const find = (node) => role(node) === "math" ? node : elements(node).map(find).find(Boolean);
+  let offset = 0;
+  for (let node = find(container); node; ) {
+    offset += translateY(adaptor.getAttribute(node, "transform"));
+    const children = elements(node);
+    if (role(node) === "mtable") {
+      return children.filter((row) => role(row) === "mtr" || role(row) === "mlabeledtr").map((row) => -(offset + translateY(adaptor.getAttribute(row, "transform"))));
+    }
+    node = children.length === 1 ? children[0] : void 0;
+  }
+  return [0];
+}
+function translateY(transform) {
+  let y = 0;
+  for (const match2 of (transform ?? "").matchAll(/translate\(\s*[-\d.e]+(?:[\s,]+([-\d.e]+))?\s*\)/g)) y += Number(match2[1] ?? 0);
+  return y;
+}
+function inlineKey(tex) {
+  return `inline\0${tex}`;
+}
+function blockKey(tex, rows, tags) {
+  return ["block", String(rows), tex, tags.map((tag) => `${tag.row ?? ""}:${tag.tex}`).join("")].join("\0");
+}
+function cacheKey(macroId, formula, options) {
+  return `${macroId}\0${options.color}\0${options.fontSizePx}\0${options.lineHeightPx}\0${formula}`;
+}
+function imageSize(image) {
+  return "slices" in image ? image.slices.reduce((total, slice) => total + slice.uri.length, 0) : image.uri.length;
+}
+function withoutTags(tex) {
+  const pattern = /\\tag\*?\s*\{/g;
+  let result = "";
+  let copied = 0;
+  let match2;
+  while ((match2 = pattern.exec(tex)) !== null) {
+    const close = findMatchingBrace(tex, match2.index + match2[0].length - 1);
+    if (close === -1) break;
+    result += tex.slice(copied, match2.index);
+    copied = close + 1;
+    pattern.lastIndex = copied;
+  }
+  return result + tex.slice(copied);
+}
+function exSize(svg) {
+  const root = /^<svg[^>]*>/.exec(svg)?.[0] ?? "";
+  const width = /\swidth="([\d.]+)ex"/.exec(root)?.[1];
+  const height = /\sheight="([\d.]+)ex"/.exec(root)?.[1];
+  if (width === void 0 || height === void 0) return void 0;
+  const verticalAlign = Number(/vertical-align:\s*(-?[\d.]+)ex/.exec(root)?.[1] ?? 0);
+  return { root, width: Number(width), height: Number(height), verticalAlign };
+}
+function svgDataUri(svg) {
+  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
+var px = (value) => value.toFixed(2);
+function sizeForEditor(svg, options) {
+  const size = exSize(svg);
+  if (!size) return void 0;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  const scale = Math.min(1, options.lineHeightPx / (size.height * exPx));
+  const widthPx = size.width * exPx * scale;
+  const heightPx = size.height * exPx * scale;
+  const root = size.root.replace(/\swidth="[^"]*"/, ` width="${px(widthPx)}px"`).replace(/\sheight="[^"]*"/, ` height="${px(heightPx)}px"`).replace(/\sstyle="[^"]*"/, "").replace(/^<svg/, `<svg style="color:${options.color}"`);
+  const withNamespace = root.includes("xmlns=") ? root : root.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  return {
+    svg: withNamespace + svg.slice(size.root.length),
+    widthPx,
+    heightPx,
+    verticalAlignPx: size.verticalAlign * exPx * scale
+  };
+}
+function piece(svg) {
+  const size = exSize(svg);
+  const viewBox = size && /\sviewBox="([^"]*)"/.exec(size.root)?.[1];
+  if (!size || !viewBox) return void 0;
+  const [, minY, , viewHeight] = viewBox.trim().split(/[\s,]+/).map(Number);
+  if (!Number.isFinite(minY) || !(viewHeight > 0)) return void 0;
+  const content = svg.slice(size.root.length, svg.lastIndexOf("</svg>"));
+  return { width: size.width, height: size.height, verticalAlign: size.verticalAlign, viewBox, minY, viewHeight, content };
+}
+function place(part, x, y, width, height) {
+  return `<svg x="${px(x)}" y="${px(y)}" width="${px(width)}" height="${px(height)}" viewBox="${part.viewBox}" overflow="visible">${part.content}</svg>`;
+}
+function sliceForLines(svg, rows, options, tags = []) {
+  const formula = piece(svg);
+  if (!formula) return void 0;
+  const numbers = tags.flatMap((tag) => {
+    const part = piece(tag.svg);
+    return part ? [{ part, baseline: tag.baseline }] : [];
+  });
+  const lineHeight = options.lineHeightPx;
+  const boxHeight = rows * lineHeight;
+  const exPx = options.fontSizePx * EX_PER_EM;
+  const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
+  const height = formula.height * unit;
+  const top = (boxHeight - height) / 2;
+  const numbersWidth = Math.max(0, ...numbers.map((number) => number.part.width * unit));
+  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
+  let content = place(formula, 0, top, formula.width * unit, height);
+  let inkTop = top;
+  let inkBottom = top + height;
+  for (const { part, baseline } of numbers) {
+    const numberWidth = part.width * unit;
+    const numberHeight = part.height * unit;
+    const y = baseline === void 0 ? top + (height - numberHeight) / 2 : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
+    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
+    inkTop = Math.min(inkTop, y);
+    inkBottom = Math.max(inkBottom, y + numberHeight);
+  }
+  const slices = [];
+  for (let row = 0; row < rows; row++) {
+    const y = row * lineHeight;
+    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
+    const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
+    slices.push({ row, svg: slice });
+  }
+  return { widthPx: width, slices };
+}
+
+// src/livePreview/imageStore.ts
+var ImageStore = class {
+  constructor(root) {
+    this.root = root;
+    this.dir = path50.join(root, String(process.pid));
+    void this.sweep();
+  }
+  root;
+  dir;
+  written = /* @__PURE__ */ new Set();
+  failed = false;
+  /** Where the image is: its file, or the image itself as a data URI once files cannot be written. */
+  write = (svg) => {
+    if (this.failed) return svgDataUri(svg);
+    const file = path50.join(this.dir, `${(0, import_node_crypto8.createHash)("sha1").update(svg).digest("hex")}.svg`);
+    if (!this.written.has(file)) {
+      try {
+        if (!this.written.size) fs40.mkdirSync(this.dir, { recursive: true });
+        fs40.writeFileSync(file, svg);
+      } catch {
+        this.failed = true;
+        return svgDataUri(svg);
+      }
+      this.written.add(file);
+    }
+    return (0, import_node_url2.pathToFileURL)(file).href;
+  };
+  dispose() {
+    fs40.rmSync(this.dir, { recursive: true, force: true });
+  }
+  /** Removes the folders of extension hosts that have ended. */
+  async sweep() {
+    const names = await fs40.promises.readdir(this.root).catch(() => []);
+    for (const name of names) {
+      const pid = Number(name);
+      if (!/^\d+$/.test(name) || pid === process.pid || isRunning(pid)) continue;
+      await fs40.promises.rm(path50.join(this.root, name), { recursive: true, force: true }).catch(() => void 0);
+    }
+  }
+};
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+// src/livePreview/lineWindow.ts
+function decoratedLines(previous, top, bottom, margin, guard) {
+  if (previous && (previous.first === 0 || top >= previous.first + guard) && bottom <= previous.last - guard) return previous;
+  return { first: Math.max(0, top - margin), last: bottom + margin };
+}
+
 // src/livePreview/macros.ts
 var DEFINITION = /\\(newcommand|renewcommand|providecommand|DeclareMathOperator|def)(\*?)(?![A-Za-z])/g;
 function parseMacroDefinitions(text, source = sanitizeLatexForParsing(text, void 0, false)) {
@@ -81997,243 +82338,6 @@ function readDefBody(source, index) {
   if (!body) return void 0;
   const args = (parameters.match(/#/g) ?? []).length;
   return { value: args ? [body.value, args] : body.value, next: body.next };
-}
-
-// src/livePreview/mathRenderer.ts
-var EX_PER_EM = 0.55;
-var CACHE_BUDGET = 8 * 1024 * 1024;
-var ENGINE_LIMIT = 4;
-var EXCLUDED_PACKAGES = /* @__PURE__ */ new Set(["noerrors", "noundefined"]);
-var DEFAULT_MACROS = { qedhere: "" };
-var SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
-var TAG_GAP_EM = 2;
-var NO_FIXED_SIZE = "MathJax gave this formula no fixed size.";
-var modules;
-function loadMathJax() {
-  modules ??= (async () => {
-    const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }] = await Promise.all([
-      Promise.resolve().then(() => __toESM(require_mathjax())),
-      Promise.resolve().then(() => __toESM(require_tex())),
-      Promise.resolve().then(() => __toESM(require_svg())),
-      Promise.resolve().then(() => __toESM(require_liteAdaptor())),
-      Promise.resolve().then(() => __toESM(require_html())),
-      Promise.resolve().then(() => __toESM(require_AllPackages()))
-    ]);
-    const adaptor = liteAdaptor();
-    RegisterHTMLHandler(adaptor);
-    return { mathjax, TeX, SVG, adaptor, packages: AllPackages.filter((name) => !EXCLUDED_PACKAGES.has(name)) };
-  })();
-  return modules;
-}
-var MathRenderer = class {
-  engines = /* @__PURE__ */ new Map();
-  cache = /* @__PURE__ */ new Map();
-  macroKeys = /* @__PURE__ */ new WeakMap();
-  cacheSize = 0;
-  loaded;
-  get isReady() {
-    return this.loaded !== void 0;
-  }
-  /** Resolves once MathJax is loaded; rendering is synchronous after that. */
-  async load() {
-    this.loaded = await loadMathJax();
-  }
-  /** An inline formula, scaled down if needed to fit one line. */
-  render(tex, options) {
-    return this.cached(["inline", tex], options, (engine) => {
-      const formula = typeset(engine, tex, false);
-      if (!formula.ok) return formula;
-      const image = sizeForEditor(formula.image.svg, options);
-      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
-    });
-  }
-  /** A display formula laid out over the `rows` lines of its block, with its numbers on the right. */
-  renderBlock(tex, rows, options, tags = []) {
-    const tagKey = tags.map((tag) => `${tag.row ?? ""}:${tag.tex}`).join("");
-    return this.cached(["block", String(rows), tex, tagKey], options, (engine) => {
-      const formula = typeset(engine, withoutTags(tex), rows > 1);
-      if (!formula.ok) return formula;
-      const { baselines } = formula.image;
-      const numbers = [];
-      for (const tag of tags) {
-        if (tag.row !== void 0 && tag.row >= baselines.length && tags.length > 1) continue;
-        const number = typeset(engine, tag.tex, false);
-        if (number.ok) numbers.push({ svg: number.image.svg, baseline: tag.row === void 0 ? void 0 : baselines[tag.row] });
-      }
-      const image = sliceForLines(formula.image.svg, rows, options, numbers);
-      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
-    });
-  }
-  clearCache() {
-    this.cache.clear();
-    this.cacheSize = 0;
-  }
-  cached(parts, options, build) {
-    if (!this.loaded) throw new Error("MathRenderer.load() must finish before rendering.");
-    let macroKey = this.macroKeys.get(options.macros);
-    if (macroKey === void 0) {
-      macroKey = JSON.stringify(options.macros);
-      this.macroKeys.set(options.macros, macroKey);
-    }
-    const key = [macroKey, ...parts, options.color, options.fontSizePx, options.lineHeightPx].join("\0");
-    const cached = this.cache.get(key);
-    if (cached) {
-      this.cache.delete(key);
-      this.cache.set(key, cached);
-      return cached.result;
-    }
-    const result = build(this.engineFor(macroKey, options.macros));
-    const size = result.ok ? imageSize(result.image) : result.error.length;
-    this.cache.set(key, { result, size });
-    this.cacheSize += size;
-    for (const [oldKey, old] of this.cache) {
-      if (this.cacheSize <= CACHE_BUDGET || oldKey === key) break;
-      this.cache.delete(oldKey);
-      this.cacheSize -= old.size;
-    }
-    return result;
-  }
-  engineFor(macroKey, macros) {
-    const existing = this.engines.get(macroKey);
-    if (existing) return existing;
-    const { mathjax, TeX, SVG, adaptor, packages } = this.loaded;
-    const tex = new TeX({
-      packages,
-      macros: { ...DEFAULT_MACROS, ...macros },
-      formatError: (_jax, error) => {
-        throw error;
-      }
-    });
-    const document2 = mathjax.document("", { InputJax: tex, OutputJax: new SVG({ fontCache: "local" }) });
-    const engine = { tex, document: document2, adaptor };
-    this.engines.set(macroKey, engine);
-    if (this.engines.size > ENGINE_LIMIT) this.engines.delete(this.engines.keys().next().value);
-    return engine;
-  }
-};
-function typeset(engine, tex, display) {
-  try {
-    engine.tex.parseOptions.tags.reset();
-    const container = engine.document.convert(tex, { display });
-    const baselines = rowBaselines(engine.adaptor, container);
-    const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, "");
-    return { ok: true, image: { svg, baselines } };
-  } catch (error) {
-    const message = error?.message;
-    return { ok: false, error: typeof message === "string" ? message : String(error) };
-  }
-}
-function rowBaselines(adaptor, container) {
-  const role = (node) => adaptor.getAttribute(node, "data-mml-node");
-  const elements = (node) => adaptor.childNodes(node).filter((child) => adaptor.kind(child) !== "#text" && adaptor.kind(child) !== "#comment");
-  const find = (node) => role(node) === "math" ? node : elements(node).map(find).find(Boolean);
-  let offset = 0;
-  for (let node = find(container); node; ) {
-    offset += translateY(adaptor.getAttribute(node, "transform"));
-    const children = elements(node);
-    if (role(node) === "mtable") {
-      return children.filter((row) => role(row) === "mtr" || role(row) === "mlabeledtr").map((row) => -(offset + translateY(adaptor.getAttribute(row, "transform"))));
-    }
-    node = children.length === 1 ? children[0] : void 0;
-  }
-  return [0];
-}
-function translateY(transform) {
-  let y = 0;
-  for (const match2 of (transform ?? "").matchAll(/translate\(\s*[-\d.e]+(?:[\s,]+([-\d.e]+))?\s*\)/g)) y += Number(match2[1] ?? 0);
-  return y;
-}
-function imageSize(image) {
-  return "slices" in image ? image.slices.reduce((total, slice) => total + slice.dataUri.length, 0) : image.dataUri.length;
-}
-function withoutTags(tex) {
-  const pattern = /\\tag\*?\s*\{/g;
-  let result = "";
-  let copied = 0;
-  let match2;
-  while ((match2 = pattern.exec(tex)) !== null) {
-    const close = findMatchingBrace(tex, match2.index + match2[0].length - 1);
-    if (close === -1) break;
-    result += tex.slice(copied, match2.index);
-    copied = close + 1;
-    pattern.lastIndex = copied;
-  }
-  return result + tex.slice(copied);
-}
-function exSize(svg) {
-  const root = /^<svg[^>]*>/.exec(svg)?.[0] ?? "";
-  const width = /\swidth="([\d.]+)ex"/.exec(root)?.[1];
-  const height = /\sheight="([\d.]+)ex"/.exec(root)?.[1];
-  if (width === void 0 || height === void 0) return void 0;
-  const verticalAlign = Number(/vertical-align:\s*(-?[\d.]+)ex/.exec(root)?.[1] ?? 0);
-  return { root, width: Number(width), height: Number(height), verticalAlign };
-}
-function toDataUri(svg) {
-  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
-}
-var px = (value) => value.toFixed(2);
-function sizeForEditor(svg, options) {
-  const size = exSize(svg);
-  if (!size) return void 0;
-  const exPx = options.fontSizePx * EX_PER_EM;
-  const scale = Math.min(1, options.lineHeightPx / (size.height * exPx));
-  const widthPx = size.width * exPx * scale;
-  const heightPx = size.height * exPx * scale;
-  const root = size.root.replace(/\swidth="[^"]*"/, ` width="${px(widthPx)}px"`).replace(/\sheight="[^"]*"/, ` height="${px(heightPx)}px"`).replace(/\sstyle="[^"]*"/, "").replace(/^<svg/, `<svg style="color:${options.color}"`);
-  const withNamespace = root.includes("xmlns=") ? root : root.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-  return {
-    dataUri: toDataUri(withNamespace + svg.slice(size.root.length)),
-    widthPx,
-    heightPx,
-    verticalAlignPx: size.verticalAlign * exPx * scale
-  };
-}
-function piece(svg) {
-  const size = exSize(svg);
-  const viewBox = size && /\sviewBox="([^"]*)"/.exec(size.root)?.[1];
-  if (!size || !viewBox) return void 0;
-  const [, minY, , viewHeight] = viewBox.trim().split(/[\s,]+/).map(Number);
-  if (!Number.isFinite(minY) || !(viewHeight > 0)) return void 0;
-  const content = svg.slice(size.root.length, svg.lastIndexOf("</svg>"));
-  return { width: size.width, height: size.height, verticalAlign: size.verticalAlign, viewBox, minY, viewHeight, content };
-}
-function place(part, x, y, width, height) {
-  return `<svg x="${px(x)}" y="${px(y)}" width="${px(width)}" height="${px(height)}" viewBox="${part.viewBox}" overflow="visible">${part.content}</svg>`;
-}
-function sliceForLines(svg, rows, options, tags = []) {
-  const formula = piece(svg);
-  if (!formula) return void 0;
-  const numbers = tags.flatMap((tag) => {
-    const part = piece(tag.svg);
-    return part ? [{ part, baseline: tag.baseline }] : [];
-  });
-  const lineHeight = options.lineHeightPx;
-  const boxHeight = rows * lineHeight;
-  const exPx = options.fontSizePx * EX_PER_EM;
-  const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
-  const height = formula.height * unit;
-  const top = (boxHeight - height) / 2;
-  const numbersWidth = Math.max(0, ...numbers.map((number) => number.part.width * unit));
-  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
-  let content = place(formula, 0, top, formula.width * unit, height);
-  let inkTop = top;
-  let inkBottom = top + height;
-  for (const { part, baseline } of numbers) {
-    const numberWidth = part.width * unit;
-    const numberHeight = part.height * unit;
-    const y = baseline === void 0 ? top + (height - numberHeight) / 2 : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
-    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
-    inkTop = Math.min(inkTop, y);
-    inkBottom = Math.max(inkBottom, y + numberHeight);
-  }
-  const slices = [];
-  for (let row = 0; row < rows; row++) {
-    const y = row * lineHeight;
-    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
-    const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
-    slices.push({ row, dataUri: toDataUri(slice) });
-  }
-  return { widthPx: width, slices };
 }
 
 // src/livePreview/structure.ts
@@ -82792,17 +82896,58 @@ function capitalised2(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// src/livePreview/workspaceSettings.ts
+var path51 = __toESM(require("node:path"));
+var HOMEWORK_PACKAGE = /\\NewDocumentEnvironment\s*\{\s*homeworkProblem\s*\}|\\usepackage\s*(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/;
+var SETTINGS_FILE = path51.join(...HOMEWORK_SETTINGS_FILE.split("/"));
+function emptyWorkspaceSettings() {
+  return { macros: {}, cref: emptyCrefSettings(), theorems: emptyTheoremSettings(), homeworkPackage: false, homeworkFiles: /* @__PURE__ */ new Map() };
+}
+function readFileSettings(file, text) {
+  const settings = emptyWorkspaceSettings();
+  const source = previewSource(text, "latex");
+  settings.macros = parseMacroDefinitions(text, source);
+  readCrefSettings(text, settings.cref, source);
+  readTheoremSettings(text, settings.theorems, source);
+  settings.homeworkPackage = HOMEWORK_PACKAGE.test(text);
+  if (file.endsWith(`${path51.sep}${SETTINGS_FILE}`)) settings.homeworkFiles.set(file.slice(0, -SETTINGS_FILE.length - 1), text);
+  return settings;
+}
+function mergeSettings(parts) {
+  const merged = emptyWorkspaceSettings();
+  for (const part of parts) {
+    Object.assign(merged.macros, part.macros);
+    merged.cref.capitalise ||= part.cref.capitalise;
+    merged.cref.noabbrev ||= part.cref.noabbrev;
+    Object.assign(merged.cref.names, part.cref.names);
+    Object.assign(merged.cref.capitalNames, part.cref.capitalNames);
+    for (const [name, kind] of part.theorems.environments) merged.theorems.environments.set(name, kind);
+    merged.theorems.themeCommands ||= part.theorems.themeCommands;
+    merged.homeworkPackage ||= part.homeworkPackage;
+    for (const [dir, text] of part.homeworkFiles) merged.homeworkFiles.set(dir, text);
+  }
+  return merged;
+}
+function settingsFingerprint(settings) {
+  const { macros, cref, theorems, homeworkPackage, homeworkFiles } = settings;
+  return JSON.stringify([macros, cref, [...theorems.environments], theorems.themeCommands, homeworkPackage, [...homeworkFiles]]);
+}
+
 // src/livePreview/controller.ts
 var LANGUAGES = /* @__PURE__ */ new Set(["latex", "tex"]);
 var RESCAN_DELAY_MS = 150;
 var MACRO_SCAN_DELAY_MS = 1e3;
 var MAX_MACRO_FILES = 200;
 var MAX_MACRO_FILE_BYTES = 1024 * 1024;
-var VISIBLE_MARGIN_LINES = 40;
+var WINDOW_MARGIN_LINES = 100;
+var WINDOW_GUARD_LINES = 30;
+var NEAR_LINES = 10;
+var PREFETCH_LINES = 300;
+var SLICE_MS = 8;
+var SHOW_EVERY_MS = 100;
 var EDIT_PREVIEW_GAP = 4;
 var SOLUTION_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)";
 var SOLUTION_TITLE_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)";
-var HOMEWORK_PACKAGE = /\\NewDocumentEnvironment\s*\{\s*homeworkProblem\s*\}|\\usepackage\s*(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/;
 var RANGE_STYLES = {
   bold: { fontWeight: "bold" },
   italic: { fontStyle: "italic" },
@@ -82815,8 +82960,11 @@ var RANGE_STYLES = {
   subsection: { fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" }
 };
 var LiveMathPreview = class {
-  constructor(output) {
+  /** `imageRoot` is where rendered images are kept as files; without one they travel as data URIs. */
+  constructor(output, imageRoot) {
     this.output = output;
+    this.images = imageRoot ? new ImageStore(imageRoot) : void 0;
+    this.renderer = new MathRenderer(this.images?.write);
     this.aux = new AuxIndex(output);
     const watcher = vscode16.workspace.createFileSystemWatcher("**/*.{tex,sty}");
     this.disposables.push(
@@ -82839,7 +82987,10 @@ var LiveMathPreview = class {
       vscode16.window.onDidChangeTextEditorSelection((event) => this.update(event.textEditor)),
       vscode16.window.onDidChangeTextEditorVisibleRanges((event) => this.update(event.textEditor)),
       vscode16.window.onDidChangeTextEditorOptions((event) => this.update(event.textEditor)),
-      vscode16.window.onDidChangeVisibleTextEditors(() => this.updateAll()),
+      vscode16.window.onDidChangeVisibleTextEditors(() => {
+        this.tasks = this.tasks.filter((task) => vscode16.window.visibleTextEditors.includes(task.editor));
+        this.updateAll();
+      }),
       vscode16.workspace.onDidChangeTextDocument((event) => this.scheduleRescan(event.document)),
       vscode16.window.onDidChangeActiveColorTheme(() => this.refresh()),
       vscode16.workspace.onDidChangeConfiguration((event) => this.onConfigurationChanged(event))
@@ -82874,7 +83025,8 @@ var LiveMathPreview = class {
   /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
   insertions = vscode16.window.createTextEditorDecorationType({});
   rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) => [style, vscode16.window.createTextEditorDecorationType(options)]));
-  renderer = new MathRenderer();
+  images;
+  renderer;
   aux;
   scans = /* @__PURE__ */ new WeakMap();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
@@ -82883,13 +83035,18 @@ var LiveMathPreview = class {
   lastEditPreview = /* @__PURE__ */ new WeakMap();
   rescanTimers = /* @__PURE__ */ new Map();
   uris = /* @__PURE__ */ new WeakMap();
+  /** The lines each editor decorates, kept while it scrolls within them. */
+  windows = /* @__PURE__ */ new WeakMap();
+  /** What each editor's background rendering was planned for, so it is planned again only when that changes. */
+  plans = /* @__PURE__ */ new WeakMap();
+  shownAt = /* @__PURE__ */ new WeakMap();
+  tasks = [];
+  backgroundTimer;
   disposables = [];
-  workspaceMacros = {};
-  cref = emptyCrefSettings();
-  theorems = emptyTheoremSettings();
-  homeworkPackage = false;
-  /** The Homework panel's settings files, by the folder whose documents they number. */
-  homeworkFiles = /* @__PURE__ */ new Map();
+  workspace = emptyWorkspaceSettings();
+  workspaceFingerprint = "";
+  /** What each workspace file sets, kept until the file changes. */
+  fileSettings = /* @__PURE__ */ new Map();
   macroGeneration = 0;
   macroTimer;
   enabled = false;
@@ -82901,7 +83058,10 @@ var LiveMathPreview = class {
     this.enabled = false;
     for (const timer of this.rescanTimers.values()) clearTimeout(timer);
     if (this.macroTimer) clearTimeout(this.macroTimer);
+    if (this.backgroundTimer) clearImmediate(this.backgroundTimer);
+    this.tasks = [];
     while (this.disposables.length) this.disposables.pop()?.dispose();
+    this.images?.dispose();
   }
   readEnabled() {
     return vscode16.workspace.getConfiguration("latexEditingToolkit.livePreview").get("enabled", false);
@@ -82910,6 +83070,8 @@ var LiveMathPreview = class {
     this.enabled = enabled;
     if (!enabled) {
       for (const editor of vscode16.window.visibleTextEditors) this.clear(editor);
+      this.tasks = [];
+      this.plans = /* @__PURE__ */ new WeakMap();
       return;
     }
     if (this.starting) this.scheduleMacroScan();
@@ -82936,6 +83098,7 @@ var LiveMathPreview = class {
   /** Re-renders everything, for changes that alter how every formula looks. */
   refresh() {
     this.renderer.clearCache();
+    this.plans = /* @__PURE__ */ new WeakMap();
     this.updateAll();
   }
   updateAll() {
@@ -82967,7 +83130,7 @@ var LiveMathPreview = class {
       structure: parsed.structure,
       source: parsed.source,
       root: parsed.root,
-      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text, parsed.source) },
+      macros: { ...this.workspace.macros, ...parseMacroDefinitions(text, parsed.source) },
       macroGeneration: this.macroGeneration
     };
     this.scans.set(document2, scan);
@@ -82987,16 +83150,24 @@ var LiveMathPreview = class {
       start: document2.offsetAt(selection.start),
       end: document2.offsetAt(selection.end)
     }));
-    const visible = editor.visibleRanges.map((range2) => ({
-      start: document2.offsetAt(new vscode16.Position(Math.max(0, range2.start.line - VISIBLE_MARGIN_LINES), 0)),
-      end: document2.offsetAt(new vscode16.Position(range2.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
-    }));
-    const isVisible = (start, end) => visible.some((range2) => end >= range2.start && start <= range2.end);
+    const viewport = editor.visibleRanges;
+    const top = viewport.length ? Math.min(...viewport.map((range2) => range2.start.line)) : 0;
+    const bottom = viewport.length ? Math.max(...viewport.map((range2) => range2.end.line)) : 0;
+    const lines = decoratedLines(this.windows.get(editor), top, bottom, WINDOW_MARGIN_LINES, WINDOW_GUARD_LINES);
+    this.windows.set(editor, lines);
+    const span = (first, last) => ({
+      start: document2.offsetAt(new vscode16.Position(Math.max(0, first), 0)),
+      end: document2.offsetAt(new vscode16.Position(Math.max(0, last), Number.MAX_SAFE_INTEGER))
+    });
+    const decorated = span(lines.first, lines.last);
+    const near = viewport.map((range2) => span(range2.start.line - NEAR_LINES, range2.end.line + NEAR_LINES));
+    const isVisible = (start, end) => end >= decorated.start && start <= decorated.end;
+    const isNear = (start, end) => near.some((part) => end >= part.start && start <= part.end);
     const options = { ...this.renderSizing(document2), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 4;
     const aux = this.aux.auxFor(document2, scan.root);
     const labels = aux?.labels;
-    const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.cref).text) : tex;
+    const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.workspace.cref).text) : tex;
     const hidden = new Decorations();
     const inlineImages = new Decorations();
     const blockImages = new Decorations();
@@ -83009,8 +83180,10 @@ var LiveMathPreview = class {
     const styled = new Map([...this.rangeStyles.keys()].map((style) => [style, new Decorations()]));
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
+      const tex = withNumbers(region.tex);
+      const result = isNear(region.start, region.end) ? this.renderer.render(tex, options) : this.renderer.peek(tex, options);
+      if (!result) return;
       const range2 = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
-      const result = this.renderer.render(withNumbers(region.tex), options);
       if (!result.ok) {
         errors.add(`i${index}`, { range: range2, hoverMessage: `Live math preview: ${result.error}` });
         return;
@@ -83041,12 +83214,16 @@ var LiveMathPreview = class {
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document2.positionAt(region.start).line;
-      const result = this.renderer.renderBlock(withNumbers(region.tex), region.rows, options, equationTags(region.tex, labels));
+      const tex = withNumbers(region.tex);
+      const tags = equationTags(region.tex, labels);
       if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
-        const rendered = result.ok ? result.image : void 0;
+        const result2 = this.renderer.renderBlock(tex, region.rows, options, tags);
+        const rendered = result2.ok ? result2.image : void 0;
         for (const item of this.besideSource(document2, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
         return;
       }
+      const result = isNear(region.linesStart, region.linesEnd) ? this.renderer.renderBlock(tex, region.rows, options, tags) : this.renderer.peekBlock(tex, region.rows, options, tags);
+      if (!result) return;
       if (!result.ok) {
         const opening = new vscode16.Range(document2.positionAt(region.start), document2.lineAt(firstLine).range.end);
         errors.add(`d${index}`, { range: opening, hoverMessage: `Live math preview: ${result.error}` });
@@ -83122,7 +83299,74 @@ var LiveMathPreview = class {
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style), state);
+    this.planBackground(editor, scan, lines, options, withNumbers, labels);
   }
+  /**
+   * Queues the formulas of the decorated lines that have not rendered yet, and those of the lines
+   * beyond them, nearest the viewport first, unless the editor's queue is already for these lines,
+   * this text and these settings.
+   */
+  planBackground(editor, scan, lines, options, withNumbers, labels) {
+    const plan = [
+      scan.version,
+      scan.macroGeneration,
+      this.aux.generation,
+      lines.first,
+      lines.last,
+      options.color,
+      options.fontSizePx,
+      options.lineHeightPx
+    ].join(":");
+    if (this.plans.get(editor) === plan) return;
+    this.plans.set(editor, plan);
+    const document2 = editor.document;
+    const from = document2.offsetAt(new vscode16.Position(Math.max(0, lines.first - PREFETCH_LINES), 0));
+    const to = document2.offsetAt(new vscode16.Position(lines.last + PREFETCH_LINES, Number.MAX_SAFE_INTEGER));
+    const middle = (lines.first + lines.last) / 2;
+    const tasks = [];
+    const queue = (start, render) => {
+      const line = document2.positionAt(start).line;
+      tasks.push({ editor, distance: Math.abs(line - middle), shown: line >= lines.first && line <= lines.last, render });
+    };
+    for (const region of scan.regions.inline) {
+      if (region.end < from || region.start > to) continue;
+      const tex = withNumbers(region.tex);
+      if (!this.renderer.peek(tex, options)) queue(region.start, () => this.renderer.render(tex, options));
+    }
+    for (const region of scan.regions.display) {
+      if (region.end < from || region.start > to) continue;
+      const tex = withNumbers(region.tex);
+      const tags = equationTags(region.tex, labels);
+      if (!this.renderer.peekBlock(tex, region.rows, options, tags)) queue(region.start, () => this.renderer.renderBlock(tex, region.rows, options, tags));
+    }
+    tasks.sort((a, b) => a.distance - b.distance);
+    this.tasks = [...this.tasks.filter((task) => task.editor !== editor), ...tasks];
+    if (this.tasks.length && !this.backgroundTimer) this.backgroundTimer = setImmediate(this.runBackground);
+  }
+  /**
+   * Renders queued formulas for a slice of time, then yields so that other events, typing among
+   * them, are not held up. An editor shows what it gained once its decorated lines are done, and
+   * every so often while many are still coming.
+   */
+  runBackground = () => {
+    this.backgroundTimer = void 0;
+    if (!this.enabled) return;
+    const deadline = import_node_perf_hooks.performance.now() + SLICE_MS;
+    const gained = /* @__PURE__ */ new Set();
+    while (this.tasks.length && import_node_perf_hooks.performance.now() < deadline) {
+      const task = this.tasks.shift();
+      task.render();
+      if (task.shown) gained.add(task.editor);
+    }
+    const now = import_node_perf_hooks.performance.now();
+    for (const editor of gained) {
+      const more = this.tasks.some((task) => task.editor === editor && task.shown);
+      if (more && now - (this.shownAt.get(editor) ?? 0) < SHOW_EVERY_MS) continue;
+      this.shownAt.set(editor, now);
+      if (vscode16.window.visibleTextEditors.includes(editor)) this.update(editor);
+    }
+    if (this.tasks.length) this.backgroundTimer = setImmediate(this.runBackground);
+  };
   /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
   markupFor(document2, scan, aux) {
     if (scan.overlays?.generation === this.aux.generation) return scan.overlays;
@@ -83130,9 +83374,9 @@ var LiveMathPreview = class {
     const homework = this.homeworkFor(document2, text, scan.source);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
-      ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
+      ...aux ? referenceOverlays(scan.references, aux.labels, this.workspace.cref) : [],
       ...aux ? citationOverlays(scan.citations, aux.citations) : [],
-      ...structureOverlays(scan.structure, text, this.theorems, aux, homework)
+      ...structureOverlays(scan.structure, text, this.workspace.theorems, aux, homework)
     ];
     scan.overlays = { generation: this.aux.generation, list, boxes: homework ? solutionBoxes(scan.structure) : [] };
     return scan.overlays;
@@ -83142,16 +83386,16 @@ var LiveMathPreview = class {
    * or above it, then whatever the document sets after loading that file, as the template allows.
    */
   homeworkFor(document2, text, source) {
-    if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return void 0;
+    if (!this.workspace.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return void 0;
     let settings = defaultHomeworkSettings();
     if (document2.uri.scheme === "file") {
-      for (let dir = path50.dirname(document2.uri.fsPath); ; dir = path50.dirname(dir)) {
-        const generated = this.homeworkFiles.get(dir);
+      for (let dir = path52.dirname(document2.uri.fsPath); ; dir = path52.dirname(dir)) {
+        const generated = this.workspace.homeworkFiles.get(dir);
         if (generated !== void 0) {
           settings = parseHomeworkSettings(generated);
           break;
         }
-        if (path50.dirname(dir) === dir) break;
+        if (path52.dirname(dir) === dir) break;
       }
     }
     const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
@@ -83198,6 +83442,8 @@ var LiveMathPreview = class {
   }
   clear(editor) {
     this.applied.delete(editor);
+    this.plans.delete(editor);
+    this.tasks = this.tasks.filter((task) => task.editor !== editor);
     editor.setDecorations(this.hidden, []);
     editor.setDecorations(this.inlineImages, []);
     editor.setDecorations(this.blockImages, []);
@@ -83209,11 +83455,11 @@ var LiveMathPreview = class {
     editor.setDecorations(this.insertions, []);
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
-  /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
+  /** Parsing an image's URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
   uriFor(image) {
     let uri = this.uris.get(image);
     if (!uri) {
-      uri = vscode16.Uri.parse(image.dataUri);
+      uri = vscode16.Uri.parse(image.uri);
       this.uris.set(image, uri);
     }
     return uri;
@@ -83235,33 +83481,35 @@ var LiveMathPreview = class {
     }, MACRO_SCAN_DELAY_MS);
   }
   /** Collects the macros every .tex and .sty file in the workspace defines. */
+  /**
+   * Collects what every .tex and .sty file in the workspace sets: macros, cleveref and theorem
+   * settings, homework.sty and its settings files. A file is read again only once it changes, and
+   * documents are scanned again only if what the files set did, so saving one costs little.
+   */
   async scanWorkspaceMacros() {
     const files = await vscode16.workspace.findFiles("**/*.{tex,sty}", "**/{.git,.overleaf-codex,node_modules}/**", MAX_MACRO_FILES);
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
-    const macros = {};
-    const cref = emptyCrefSettings();
-    const theorems = emptyTheoremSettings();
-    let homeworkPackage = false;
-    const homeworkFiles = /* @__PURE__ */ new Map();
-    const settingsFile = path50.join(...HOMEWORK_SETTINGS_FILE.split("/"));
+    const parts = [];
+    const seen = /* @__PURE__ */ new Set();
     for (const file of files) {
       const stat14 = await vscode16.workspace.fs.stat(file).then((value) => value, () => void 0);
       if (!stat14 || stat14.size > MAX_MACRO_FILE_BYTES) continue;
-      const bytes = await vscode16.workspace.fs.readFile(file).then((value) => value, () => void 0);
-      if (!bytes) continue;
-      const text = Buffer.from(bytes).toString("utf8");
-      const source = previewSource(text, "latex");
-      Object.assign(macros, parseMacroDefinitions(text, source));
-      readCrefSettings(text, cref, source);
-      readTheoremSettings(text, theorems, source);
-      homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
-      if (file.fsPath.endsWith(`${path50.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
+      let known = this.fileSettings.get(file.fsPath);
+      if (!known || known.mtime !== stat14.mtime || known.size !== stat14.size) {
+        const bytes = await vscode16.workspace.fs.readFile(file).then((value) => value, () => void 0);
+        if (!bytes) continue;
+        known = { mtime: stat14.mtime, size: stat14.size, settings: readFileSettings(file.fsPath, Buffer.from(bytes).toString("utf8")) };
+        this.fileSettings.set(file.fsPath, known);
+      }
+      seen.add(file.fsPath);
+      parts.push(known.settings);
     }
-    this.workspaceMacros = macros;
-    this.cref = cref;
-    this.theorems = theorems;
-    this.homeworkPackage = homeworkPackage;
-    this.homeworkFiles = homeworkFiles;
+    for (const file of this.fileSettings.keys()) if (!seen.has(file)) this.fileSettings.delete(file);
+    const workspace14 = mergeSettings(parts);
+    const fingerprint = settingsFingerprint(workspace14);
+    if (fingerprint === this.workspaceFingerprint) return;
+    this.workspace = workspace14;
+    this.workspaceFingerprint = fingerprint;
     this.macroGeneration += 1;
   }
 };
@@ -83364,7 +83612,10 @@ function activate(context) {
   overleafService = new OverleafService(context, output, () => treeProvider.refresh(), scope, !vscode17.env.remoteName);
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
-  const liveMathPreview = new LiveMathPreview(output);
+  const liveMathPreview = new LiveMathPreview(
+    output,
+    context.globalStorageUri.scheme === "file" ? path53.join(context.globalStorageUri.fsPath, "live-preview") : void 0
+  );
   context.subscriptions.push(
     liveMathPreview,
     command("latexEditingToolkit.toggleLiveMathPreview", () => liveMathPreview.toggle())
@@ -83384,7 +83635,7 @@ function activate(context) {
     }),
     command("latexEditingToolkit.installCli", async () => {
       const result = await installCli(context.extensionPath, context.extension.packageJSON.version);
-      const suffix = result.pathConfigured ? "" : ` Add ${path51.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
+      const suffix = result.pathConfigured ? "" : ` Add ${path53.dirname(result.commandPath)} to PATH to run latex-toolkit from a new terminal.`;
       const pruned = result.removedVersions.length > 0 ? ` Removed ${result.removedVersions.length} superseded install(s).` : "";
       const runtime = result.node === "node" ? "" : ` With no node on PATH it runs on ${result.node}'s Node.js.`;
       vscode17.window.showInformationMessage(`Installed LaTeX Toolkit CLI at ${result.commandPath}.${suffix}${runtime}${pruned}`);
@@ -83697,10 +83948,10 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     if (!picked) return;
     parentPath = picked;
   }
-  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path51.basename(project.rootPath))));
+  const takenInGroup = new Set(groupNotes.map((project) => stripOverleafProjectId(path53.basename(project.rootPath))));
   const nextInSeries = groupNotes[0] && suggestNextNoteName(
-    path51.basename(groupNotes[0].rootPath),
-    (candidate) => takenInGroup.has(candidate) || !remote && fs40.existsSync(path51.join(parentPath, candidate))
+    path53.basename(groupNotes[0].rootPath),
+    (candidate) => takenInGroup.has(candidate) || !remote && fs41.existsSync(path53.join(parentPath, candidate))
   );
   const defaultName = nextInSeries || "New Notes";
   const projectName = await vscode17.window.showInputBox({
@@ -83756,8 +84007,8 @@ async function createProjectWizard(context, registry, noteGroups, treeProvider, 
     );
     if (choice !== "Use Empty Folder") return;
   }
-  const normalizedParent = path51.normalize(path51.resolve(parentPath));
-  const nextRecent = [normalizedParent, ...recent.filter((item) => path51.normalize(item) !== normalizedParent)].slice(0, 8);
+  const normalizedParent = path53.normalize(path53.resolve(parentPath));
+  const nextRecent = [normalizedParent, ...recent.filter((item) => path53.normalize(item) !== normalizedParent)].slice(0, 8);
   await context.globalState.update(recentProjectParentsKey, nextRecent);
   const service = new ToolkitService(preflight.rootPath, context.extensionPath, {
     additionalStylePresets: personalStyles?.definitions() ?? []
@@ -83787,7 +84038,7 @@ async function pickProjectParent(recent, group) {
   for (const folder of vscode17.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
       suggested.add(folder.uri.fsPath);
-      suggested.add(path51.dirname(folder.uri.fsPath));
+      suggested.add(path53.dirname(folder.uri.fsPath));
     }
   }
   for (const item of recent) suggested.add(item);
@@ -83795,8 +84046,8 @@ async function pickProjectParent(recent, group) {
   if (groupFolder) suggested.delete(groupFolder);
   const location = await vscode17.window.showQuickPick(
     [
-      ...group && groupFolder ? [{ label: path51.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
-      ...[...suggested].map((folderPath) => ({ label: path51.basename(folderPath) || folderPath, description: folderPath, folderPath })),
+      ...group && groupFolder ? [{ label: path53.basename(groupFolder) || groupFolder, description: groupFolder, detail: `Where the notes in '${group.groupName}' are`, folderPath: groupFolder }] : [],
+      ...[...suggested].map((folderPath) => ({ label: path53.basename(folderPath) || folderPath, description: folderPath, folderPath })),
       { label: "$(folder-opened) Browse\u2026", description: "Choose another parent folder", folderPath: "" }
     ],
     { title: "Create Project: Location", placeHolder: "Choose the parent folder for the new project" }
@@ -83820,11 +84071,11 @@ async function projectNameError2(value, parentPath) {
   if (name === "." || name === ".." || /[\\/\0]/.test(name)) return "Use a single folder name without path separators.";
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) return "This name is reserved by Windows.";
   if (!parentPath) return void 0;
-  const target = path51.resolve(parentPath, name);
+  const target = path53.resolve(parentPath, name);
   try {
-    const stat14 = await fs40.promises.lstat(target);
+    const stat14 = await fs41.promises.lstat(target);
     if (!stat14.isDirectory()) return `A file named '${name}' already exists here.`;
-    if ((await fs40.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
+    if ((await fs41.promises.readdir(target)).length > 0) return `A folder named '${name}' already exists here and is not empty.`;
   } catch {
   }
   return void 0;
@@ -83939,9 +84190,9 @@ async function folderAndServiceForCommand(context, preferredFolderUri) {
   return { folder, service: toolkitService(context, folder.uri.fsPath) };
 }
 function toolkitService(context, rootPath) {
-  let canonical = path51.resolve(rootPath);
+  let canonical = path53.resolve(rootPath);
   try {
-    canonical = fs40.realpathSync.native(canonical);
+    canonical = fs41.realpathSync.native(canonical);
   } catch {
   }
   const key = process.platform === "win32" || process.platform === "darwin" ? canonical.toLocaleLowerCase() : canonical;
@@ -84012,7 +84263,7 @@ async function createStarterInWorkspace(context, treeProvider, folderUri) {
   });
   if (!outputTarget) return;
   let overwrite = false;
-  if (fs40.existsSync(path51.resolve(scoped.folder.uri.fsPath, outputTarget))) {
+  if (fs41.existsSync(path53.resolve(scoped.folder.uri.fsPath, outputTarget))) {
     const ok = await vscode17.window.showWarningMessage(`${outputTarget} already exists. Overwrite it?`, { modal: true }, "Overwrite");
     if (ok !== "Overwrite") return;
     overwrite = true;
@@ -84267,7 +84518,7 @@ var ToolkitTreeProvider = class {
           id: `overleaf-mirror:${mirror.id}`,
           identity: { mirrorId: mirror.id },
           label: mirror.name,
-          description: `${status} \xB7 ${path51.basename(path51.dirname(mirror.root))}`,
+          description: `${status} \xB7 ${path53.basename(path53.dirname(mirror.root))}`,
           iconId: icon,
           commandId: "overleafCodex.openLocalMirror",
           contextValue: "overleafMirror"
@@ -84317,7 +84568,7 @@ var ToolkitTreeProvider = class {
     if (response.history?.canUndo) nodes.push(this.actionNode("undo-last-change", "Undo Last Change", response.history.label, "discard", "latexEditingToolkit.undoLastChange", folderArg));
     if (response.history?.canRedo) nodes.push(this.actionNode("redo-last-change", "Redo Last Change", response.history.label, "redo", "latexEditingToolkit.redoLastChange", folderArg));
     const activeSnippetProfile = vscode17.workspace.getConfiguration("hsnips", folder.uri).get("profiles.activeProfile") || "";
-    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path51.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
+    const snippetFileCount = getSnippetFiles(getSnippetDir(), activeSnippetProfile, path53.join(folder.uri.fsPath, ".vscode", "hsnips"), folder.uri.fsPath).length;
     nodes.push(
       this.groupNode(`snippets:${folder.uri.toString()}`, "Snippets", "symbol-snippet", [
         this.actionNode(
@@ -84541,8 +84792,8 @@ var ToolkitPanel = class _ToolkitPanel {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
-          vscode17.Uri.file(path51.join(context.extensionPath, "dist")),
-          vscode17.Uri.file(path51.join(context.extensionPath, "dist", "monaco"))
+          vscode17.Uri.file(path53.join(context.extensionPath, "dist")),
+          vscode17.Uri.file(path53.join(context.extensionPath, "dist", "monaco"))
         ]
       }
     );
@@ -84646,12 +84897,12 @@ var ToolkitPanel = class _ToolkitPanel {
         const pdfPath = service.resolvePdfPath(rawPath);
         let exists7 = false;
         try {
-          const stat14 = await fs40.promises.stat(pdfPath);
+          const stat14 = await fs41.promises.stat(pdfPath);
           exists7 = stat14.isFile();
         } catch {
           exists7 = false;
         }
-        data = { path: rawPath || path51.basename(pdfPath), exists: exists7 };
+        data = { path: rawPath || path53.basename(pdfPath), exists: exists7 };
       } else if (request.command === "open-pdf") {
         const service = this.requireService();
         const rawPath = String(request.payload?.path ?? "");
@@ -84706,7 +84957,7 @@ var ToolkitPanel = class _ToolkitPanel {
         const picked = await vscode17.window.showOpenDialog({ title: "Import Personal Styles", canSelectMany: false, filters: { JSON: ["json"] } });
         if (!picked?.[0]) data = await service.handle("state", {});
         else {
-          const raw = JSON.parse(await fs40.promises.readFile(picked[0].fsPath, "utf8"));
+          const raw = JSON.parse(await fs41.promises.readFile(picked[0].fsPath, "utf8"));
           const summary = await this.styleRegistry.importLibrary(raw);
           refreshPersonalStylesOnServices(this.styleRegistry);
           data = { ...await service.handle("state", {}), personal_style_import: summary };
@@ -84716,8 +84967,8 @@ var ToolkitPanel = class _ToolkitPanel {
         const id = String(request.payload?.style_id ?? "");
         const library = this.styleRegistry.exportLibrary();
         const styles = id ? library.styles.filter((style) => style.id === id) : library.styles;
-        const target = await vscode17.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode17.Uri.file(path51.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
-        if (target) await fs40.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
+        const target = await vscode17.window.showSaveDialog({ title: "Export Personal Styles", defaultUri: vscode17.Uri.file(path53.join(this.workspacePath, id ? "personal-style.json" : "latex-toolkit-styles.json")), filters: { JSON: ["json"] } });
+        if (target) await fs41.promises.writeFile(target.fsPath, `${JSON.stringify({ version: 1, styles }, null, 2)}
 `, "utf8");
         data = { ...await service.handle("state", {}), exported: Boolean(target) };
       } else if (request.command === "undo-last-change" || request.command === "redo-last-change") {
@@ -84758,10 +85009,10 @@ var ToolkitPanel = class _ToolkitPanel {
   }
   html() {
     const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "webview.js")));
-    const styleUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "webview.css")));
-    const codiconStyleUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "codicon.css")));
-    const monacoRootUri = webview.asWebviewUri(vscode17.Uri.file(path51.join(this.context.extensionPath, "dist", "monaco", "vs")));
+    const scriptUri = webview.asWebviewUri(vscode17.Uri.file(path53.join(this.context.extensionPath, "dist", "webview.js")));
+    const styleUri = webview.asWebviewUri(vscode17.Uri.file(path53.join(this.context.extensionPath, "dist", "webview.css")));
+    const codiconStyleUri = webview.asWebviewUri(vscode17.Uri.file(path53.join(this.context.extensionPath, "dist", "codicon.css")));
+    const monacoRootUri = webview.asWebviewUri(vscode17.Uri.file(path53.join(this.context.extensionPath, "dist", "monaco", "vs")));
     const nonce = String(Date.now()) + String(Math.random()).slice(2);
     const csp = [
       "default-src 'none'",
@@ -84778,7 +85029,7 @@ var ToolkitPanel = class _ToolkitPanel {
       snippetsOnly: !this.folder,
       monacoBaseUri: monacoRootUri.toString()
     });
-    const cssExists = fs40.existsSync(path51.join(this.context.extensionPath, "dist", "webview.css"));
+    const cssExists = fs41.existsSync(path53.join(this.context.extensionPath, "dist", "webview.css"));
     return `<!doctype html>
 <html lang="en">
 <head>

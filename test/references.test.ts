@@ -229,7 +229,7 @@ describe('sliceForLines with numbers', () => {
   // 44 by 22 px, its baseline halfway down; the number is 22 by 11 px, 2.75 px of it below its baseline.
   const formula = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 -500 1000 1000"><g></g></svg>';
   const number = '<svg style="vertical-align: -0.25ex;" xmlns="http://www.w3.org/2000/svg" width="2ex" height="1ex" viewBox="0 -750 500 1000"><i></i></svg>';
-  const strip = (tags: Parameters<typeof sliceForLines>[3]) => decode(sliceForLines(formula, 3, sizing, tags)!.slices[0].dataUri);
+  const strip = (tags: Parameters<typeof sliceForLines>[3]) => sliceForLines(formula, 3, sizing, tags)!.slices[0].svg;
 
   it('right-aligns a number two ems from the formula, on the baseline of its row', () => {
     expect(sliceForLines(formula, 3, sizing, [{ svg: number, baseline: 0 }])?.widthPx).toBeCloseTo(106, 5);
@@ -259,7 +259,7 @@ describe('MathRenderer numbers', () => {
     expect(plain.ok && numbered.ok).toBe(true);
     if (!plain.ok || !numbered.ok) return;
     expect(numbered.image.widthPx).toBeGreaterThan(plain.image.widthPx + 2 * options.fontSizePx);
-    const pieces = [...decode(numbered.image.slices[0].dataUri).matchAll(/<svg x="([\d.]+)" y="([-\d.]+)"/g)].map(match => match.slice(1).map(Number));
+    const pieces = [...decode(numbered.image.slices[0].uri).matchAll(/<svg x="([\d.]+)" y="([-\d.]+)"/g)].map(match => match.slice(1).map(Number));
     expect(pieces).toHaveLength(3);
     const [, first, second] = pieces;
     expect(first[0]).toBeCloseTo(second[0], 1);

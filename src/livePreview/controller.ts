@@ -1,51 +1,60 @@
 import * as path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import * as vscode from 'vscode';
 import { defaultHomeworkSettings, HOMEWORK_SETTINGS_FILE, parseHomeworkSettings } from '../homework';
 import type { HomeworkSettings } from '../types';
 import { AuxIndex } from './auxIndex';
 import { citationOverlays, findCitations, type CitationRegion } from './citations';
+import { ImageStore } from './imageStore';
+import { decoratedLines, type LineWindow } from './lineWindow';
 import { parseMacroDefinitions } from './macros';
 import { findMathRegions, previewSource, regionIsActive, type DisplayMathRegion, type MathRegions } from './mathRegions';
 import { MathRenderer, type MathJaxMacros, type MathRenderOptions, type RenderedBlock } from './mathRenderer';
 import type { Insertion, Overlay, RangeStyle } from './overlays';
 import {
-  emptyCrefSettings,
   equationTags,
   findReferences,
   formatReference,
-  readCrefSettings,
   referenceOverlays,
   rootHint,
   substituteReferences,
   type AuxData,
-  type CrefSettings,
+  type EquationTag,
   type ReferenceRegion,
   type RootHint
 } from './references';
+import { findStructure, solutionBoxes, structureOverlays, type Structure } from './structure';
 import {
-  emptyTheoremSettings,
-  findStructure,
-  readTheoremSettings,
-  solutionBoxes,
-  structureOverlays,
-  type Structure,
-  type TheoremSettings
-} from './structure';
+  emptyWorkspaceSettings,
+  HOMEWORK_PACKAGE,
+  mergeSettings,
+  readFileSettings,
+  settingsFingerprint,
+  type WorkspaceSettings
+} from './workspaceSettings';
 
 const LANGUAGES = new Set(['latex', 'tex']);
 const RESCAN_DELAY_MS = 150;
 const MACRO_SCAN_DELAY_MS = 1000;
 const MAX_MACRO_FILES = 200;
 const MAX_MACRO_FILE_BYTES = 1024 * 1024;
-/** Formulas this far outside the visible lines are rendered too, so scrolling does not show source first. */
-const VISIBLE_MARGIN_LINES = 40;
+/** Lines decorated on each side of the viewport, so scrolling within them sends VS Code nothing. */
+const WINDOW_MARGIN_LINES = 100;
+/** How near the viewport may come to an edge of the decorated lines before they move with it. */
+const WINDOW_GUARD_LINES = 30;
+/** Formulas this near the viewport render at once; the rest of the decorated lines render in the background. */
+const NEAR_LINES = 10;
+/** Lines beyond the decorated ones rendered in the background too, so scrolling there finds them ready. */
+const PREFETCH_LINES = 300;
+/** Longest stretch of background rendering before other events get their turn. */
+const SLICE_MS = 8;
+/** How often formulas rendered in the background are shown while more are still coming. */
+const SHOW_EVERY_MS = 100;
 /** Columns between the longest line of a block being edited and its rendering. */
 const EDIT_PREVIEW_GAP = 4;
 /** homework.sty's solution box, tinted from the link colour as a callout is, and its title bar more strongly. */
 const SOLUTION_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)';
 const SOLUTION_TITLE_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)';
-/** What says a project numbers its homework with homework.sty: the package itself, an older inline copy, or loading it. */
-const HOMEWORK_PACKAGE = /\\NewDocumentEnvironment\s*\{\s*homeworkProblem\s*\}|\\usepackage\s*(?:\[[^\]]*\])?\s*\{\s*homework\s*\}/;
 
 interface DocumentScan {
   version: number;
@@ -69,6 +78,15 @@ interface Markup {
   list: Overlay[];
   /** Solutions, whose lines are tinted as homework.sty's box. */
   boxes: Array<{ start: number; end: number }>;
+}
+
+/** A formula to render in the background, nearest the viewport first. */
+interface RenderTask {
+  editor: vscode.TextEditor;
+  distance: number;
+  /** Whether it is among the decorated lines, so the editor shows it once rendered. */
+  shown: boolean;
+  render: () => void;
 }
 
 /** How each style a stretch of source can take is drawn. */
@@ -121,7 +139,8 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly insertions = vscode.window.createTextEditorDecorationType({});
   private readonly rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) =>
     [style as RangeStyle, vscode.window.createTextEditorDecorationType(options)]));
-  private readonly renderer = new MathRenderer();
+  private readonly images: ImageStore | undefined;
+  private readonly renderer: MathRenderer;
   private readonly aux: AuxIndex;
   private readonly scans = new WeakMap<vscode.TextDocument, DocumentScan>();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
@@ -129,20 +148,28 @@ export class LiveMathPreview implements vscode.Disposable {
   /** The last block rendered beside its source, kept while an edit leaves it unrenderable. */
   private readonly lastEditPreview = new WeakMap<vscode.TextDocument, { line: number; block: RenderedBlock }>();
   private readonly rescanTimers = new Map<string, NodeJS.Timeout>();
-  private readonly uris = new WeakMap<{ dataUri: string }, vscode.Uri>();
+  private readonly uris = new WeakMap<{ uri: string }, vscode.Uri>();
+  /** The lines each editor decorates, kept while it scrolls within them. */
+  private readonly windows = new WeakMap<vscode.TextEditor, LineWindow>();
+  /** What each editor's background rendering was planned for, so it is planned again only when that changes. */
+  private plans = new WeakMap<vscode.TextEditor, string>();
+  private readonly shownAt = new WeakMap<vscode.TextEditor, number>();
+  private tasks: RenderTask[] = [];
+  private backgroundTimer?: NodeJS.Immediate;
   private readonly disposables: vscode.Disposable[] = [];
-  private workspaceMacros: MathJaxMacros = {};
-  private cref: CrefSettings = emptyCrefSettings();
-  private theorems: TheoremSettings = emptyTheoremSettings();
-  private homeworkPackage = false;
-  /** The Homework panel's settings files, by the folder whose documents they number. */
-  private homeworkFiles = new Map<string, string>();
+  private workspace: WorkspaceSettings = emptyWorkspaceSettings();
+  private workspaceFingerprint = '';
+  /** What each workspace file sets, kept until the file changes. */
+  private readonly fileSettings = new Map<string, { mtime: number; size: number; settings: WorkspaceSettings }>();
   private macroGeneration = 0;
   private macroTimer?: NodeJS.Timeout;
   private enabled = false;
   private starting?: Promise<void>;
 
-  constructor(private readonly output: vscode.OutputChannel) {
+  /** `imageRoot` is where rendered images are kept as files; without one they travel as data URIs. */
+  constructor(private readonly output: vscode.OutputChannel, imageRoot?: string) {
+    this.images = imageRoot ? new ImageStore(imageRoot) : undefined;
+    this.renderer = new MathRenderer(this.images?.write);
     this.aux = new AuxIndex(output);
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.{tex,sty}');
     this.disposables.push(
@@ -165,7 +192,10 @@ export class LiveMathPreview implements vscode.Disposable {
       vscode.window.onDidChangeTextEditorSelection(event => this.update(event.textEditor)),
       vscode.window.onDidChangeTextEditorVisibleRanges(event => this.update(event.textEditor)),
       vscode.window.onDidChangeTextEditorOptions(event => this.update(event.textEditor)),
-      vscode.window.onDidChangeVisibleTextEditors(() => this.updateAll()),
+      vscode.window.onDidChangeVisibleTextEditors(() => {
+        this.tasks = this.tasks.filter(task => vscode.window.visibleTextEditors.includes(task.editor));
+        this.updateAll();
+      }),
       vscode.workspace.onDidChangeTextDocument(event => this.scheduleRescan(event.document)),
       vscode.window.onDidChangeActiveColorTheme(() => this.refresh()),
       vscode.workspace.onDidChangeConfiguration(event => this.onConfigurationChanged(event))
@@ -182,7 +212,10 @@ export class LiveMathPreview implements vscode.Disposable {
     this.enabled = false;
     for (const timer of this.rescanTimers.values()) clearTimeout(timer);
     if (this.macroTimer) clearTimeout(this.macroTimer);
+    if (this.backgroundTimer) clearImmediate(this.backgroundTimer);
+    this.tasks = [];
     while (this.disposables.length) this.disposables.pop()?.dispose();
+    this.images?.dispose();
   }
 
   private readEnabled(): boolean {
@@ -193,6 +226,8 @@ export class LiveMathPreview implements vscode.Disposable {
     this.enabled = enabled;
     if (!enabled) {
       for (const editor of vscode.window.visibleTextEditors) this.clear(editor);
+      this.tasks = [];
+      this.plans = new WeakMap();
       return;
     }
     // Files may have changed while the preview was off, when the watcher skips rescanning.
@@ -223,6 +258,8 @@ export class LiveMathPreview implements vscode.Disposable {
   /** Re-renders everything, for changes that alter how every formula looks. */
   private refresh(): void {
     this.renderer.clearCache();
+    // The renderings the queues were planned around are gone.
+    this.plans = new WeakMap();
     this.updateAll();
   }
 
@@ -257,7 +294,7 @@ export class LiveMathPreview implements vscode.Disposable {
       structure: parsed.structure,
       source: parsed.source,
       root: parsed.root,
-      macros: { ...this.workspaceMacros, ...parseMacroDefinitions(text, parsed.source) },
+      macros: { ...this.workspace.macros, ...parseMacroDefinitions(text, parsed.source) },
       macroGeneration: this.macroGeneration
     };
     this.scans.set(document, scan);
@@ -281,18 +318,28 @@ export class LiveMathPreview implements vscode.Disposable {
       start: document.offsetAt(selection.start),
       end: document.offsetAt(selection.end)
     }));
-    const visible = editor.visibleRanges.map(range => ({
-      start: document.offsetAt(new vscode.Position(Math.max(0, range.start.line - VISIBLE_MARGIN_LINES), 0)),
-      end: document.offsetAt(new vscode.Position(range.end.line + VISIBLE_MARGIN_LINES, Number.MAX_SAFE_INTEGER))
-    }));
-    const isVisible = (start: number, end: number) => visible.some(range => end >= range.start && start <= range.end);
+    // Decorated: the lines around the viewport, kept while it scrolls within them, so that scrolling
+    // sends nothing. Near: the lines just around what is in view, whose formulas render at once.
+    const viewport = editor.visibleRanges;
+    const top = viewport.length ? Math.min(...viewport.map(range => range.start.line)) : 0;
+    const bottom = viewport.length ? Math.max(...viewport.map(range => range.end.line)) : 0;
+    const lines = decoratedLines(this.windows.get(editor), top, bottom, WINDOW_MARGIN_LINES, WINDOW_GUARD_LINES);
+    this.windows.set(editor, lines);
+    const span = (first: number, last: number) => ({
+      start: document.offsetAt(new vscode.Position(Math.max(0, first), 0)),
+      end: document.offsetAt(new vscode.Position(Math.max(0, last), Number.MAX_SAFE_INTEGER))
+    });
+    const decorated = span(lines.first, lines.last);
+    const near = viewport.map(range => span(range.start.line - NEAR_LINES, range.end.line + NEAR_LINES));
+    const isVisible = (start: number, end: number) => end >= decorated.start && start <= decorated.end;
+    const isNear = (start: number, end: number) => near.some(part => end >= part.start && start <= part.end);
     const options: MathRenderOptions = { ...this.renderSizing(document), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
     // Until the root has been compiled there are no numbers, and references stay as source.
     const aux = this.aux.auxFor(document, scan.root);
     const labels = aux?.labels;
     const withNumbers = (tex: string) => labels
-      ? substituteReferences(tex, reference => formatReference(reference, labels, this.cref).text)
+      ? substituteReferences(tex, reference => formatReference(reference, labels, this.workspace.cref).text)
       : tex;
 
     const hidden = new Decorations<vscode.Range>();
@@ -308,8 +355,11 @@ export class LiveMathPreview implements vscode.Disposable {
 
     scan.regions.inline.forEach((region, index) => {
       if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
+      const tex = withNumbers(region.tex);
+      // The rest render in the background and show once they have.
+      const result = isNear(region.start, region.end) ? this.renderer.render(tex, options) : this.renderer.peek(tex, options);
+      if (!result) return;
       const range = new vscode.Range(document.positionAt(region.start), document.positionAt(region.end));
-      const result = this.renderer.render(withNumbers(region.tex), options);
       if (!result.ok) {
         errors.add(`i${index}`, { range, hoverMessage: `Live math preview: ${result.error}` });
         return;
@@ -343,12 +393,18 @@ export class LiveMathPreview implements vscode.Disposable {
     scan.regions.display.forEach((region, index) => {
       if (!isVisible(region.linesStart, region.linesEnd)) return;
       const firstLine = document.positionAt(region.start).line;
-      const result = this.renderer.renderBlock(withNumbers(region.tex), region.rows, options, equationTags(region.tex, labels));
+      const tex = withNumbers(region.tex);
+      const tags = equationTags(region.tex, labels);
       if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
+        const result = this.renderer.renderBlock(tex, region.rows, options, tags);
         const rendered = result.ok ? result.image : undefined;
         for (const item of this.besideSource(document, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
         return;
       }
+      const result = isNear(region.linesStart, region.linesEnd)
+        ? this.renderer.renderBlock(tex, region.rows, options, tags)
+        : this.renderer.peekBlock(tex, region.rows, options, tags);
+      if (!result) return;
       if (!result.ok) {
         const opening = new vscode.Range(document.positionAt(region.start), document.lineAt(firstLine).range.end);
         errors.add(`d${index}`, { range: opening, hoverMessage: `Live math preview: ${result.error}` });
@@ -425,7 +481,76 @@ export class LiveMathPreview implements vscode.Disposable {
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style)!, state);
+    this.planBackground(editor, scan, lines, options, withNumbers, labels);
   }
+
+  /**
+   * Queues the formulas of the decorated lines that have not rendered yet, and those of the lines
+   * beyond them, nearest the viewport first, unless the editor's queue is already for these lines,
+   * this text and these settings.
+   */
+  private planBackground(
+    editor: vscode.TextEditor,
+    scan: DocumentScan,
+    lines: LineWindow,
+    options: MathRenderOptions,
+    withNumbers: (tex: string) => string,
+    labels: AuxData['labels'] | undefined
+  ): void {
+    const plan = [
+      scan.version, scan.macroGeneration, this.aux.generation, lines.first, lines.last, options.color, options.fontSizePx, options.lineHeightPx
+    ].join(':');
+    if (this.plans.get(editor) === plan) return;
+    this.plans.set(editor, plan);
+    const document = editor.document;
+    const from = document.offsetAt(new vscode.Position(Math.max(0, lines.first - PREFETCH_LINES), 0));
+    const to = document.offsetAt(new vscode.Position(lines.last + PREFETCH_LINES, Number.MAX_SAFE_INTEGER));
+    const middle = (lines.first + lines.last) / 2;
+    const tasks: RenderTask[] = [];
+    const queue = (start: number, render: () => void) => {
+      const line = document.positionAt(start).line;
+      tasks.push({ editor, distance: Math.abs(line - middle), shown: line >= lines.first && line <= lines.last, render });
+    };
+    for (const region of scan.regions.inline) {
+      if (region.end < from || region.start > to) continue;
+      const tex = withNumbers(region.tex);
+      if (!this.renderer.peek(tex, options)) queue(region.start, () => this.renderer.render(tex, options));
+    }
+    for (const region of scan.regions.display) {
+      if (region.end < from || region.start > to) continue;
+      const tex = withNumbers(region.tex);
+      const tags: EquationTag[] = equationTags(region.tex, labels);
+      if (!this.renderer.peekBlock(tex, region.rows, options, tags)) queue(region.start, () => this.renderer.renderBlock(tex, region.rows, options, tags));
+    }
+    tasks.sort((a, b) => a.distance - b.distance);
+    this.tasks = [...this.tasks.filter(task => task.editor !== editor), ...tasks];
+    if (this.tasks.length && !this.backgroundTimer) this.backgroundTimer = setImmediate(this.runBackground);
+  }
+
+  /**
+   * Renders queued formulas for a slice of time, then yields so that other events, typing among
+   * them, are not held up. An editor shows what it gained once its decorated lines are done, and
+   * every so often while many are still coming.
+   */
+  private readonly runBackground = (): void => {
+    this.backgroundTimer = undefined;
+    if (!this.enabled) return;
+    const deadline = performance.now() + SLICE_MS;
+    const gained = new Set<vscode.TextEditor>();
+    while (this.tasks.length && performance.now() < deadline) {
+      const task = this.tasks.shift()!;
+      task.render();
+      if (task.shown) gained.add(task.editor);
+    }
+    const now = performance.now();
+    for (const editor of gained) {
+      const more = this.tasks.some(task => task.editor === editor && task.shown);
+      if (more && now - (this.shownAt.get(editor) ?? 0) < SHOW_EVERY_MS) continue;
+      this.shownAt.set(editor, now);
+      if (vscode.window.visibleTextEditors.includes(editor)) this.update(editor);
+    }
+    if (this.tasks.length) this.backgroundTimer = setImmediate(this.runBackground);
+  };
 
   /** What to draw over the document's markup, rebuilt only when the document, its root's aux file or the settings change. */
   private markupFor(document: vscode.TextDocument, scan: DocumentScan, aux: AuxData | undefined): Markup {
@@ -434,9 +559,9 @@ export class LiveMathPreview implements vscode.Disposable {
     const homework = this.homeworkFor(document, text, scan.source);
     const list = [
       // Without a compile there is nothing to number references and citations with, so they stay as source.
-      ...aux ? referenceOverlays(scan.references, aux.labels, this.cref) : [],
+      ...aux ? referenceOverlays(scan.references, aux.labels, this.workspace.cref) : [],
       ...aux ? citationOverlays(scan.citations, aux.citations) : [],
-      ...structureOverlays(scan.structure, text, this.theorems, aux, homework)
+      ...structureOverlays(scan.structure, text, this.workspace.theorems, aux, homework)
     ];
     scan.overlays = { generation: this.aux.generation, list, boxes: homework ? solutionBoxes(scan.structure) : [] };
     return scan.overlays;
@@ -447,11 +572,11 @@ export class LiveMathPreview implements vscode.Disposable {
    * or above it, then whatever the document sets after loading that file, as the template allows.
    */
   private homeworkFor(document: vscode.TextDocument, text: string, source: string): HomeworkSettings | undefined {
-    if (!this.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return undefined;
+    if (!this.workspace.homeworkPackage && !HOMEWORK_PACKAGE.test(text)) return undefined;
     let settings = defaultHomeworkSettings();
     if (document.uri.scheme === 'file') {
       for (let dir = path.dirname(document.uri.fsPath); ; dir = path.dirname(dir)) {
-        const generated = this.homeworkFiles.get(dir);
+        const generated = this.workspace.homeworkFiles.get(dir);
         if (generated !== undefined) {
           settings = parseHomeworkSettings(generated);
           break;
@@ -517,6 +642,8 @@ export class LiveMathPreview implements vscode.Disposable {
 
   private clear(editor: vscode.TextEditor): void {
     this.applied.delete(editor);
+    this.plans.delete(editor);
+    this.tasks = this.tasks.filter(task => task.editor !== editor);
     editor.setDecorations(this.hidden, []);
     editor.setDecorations(this.inlineImages, []);
     editor.setDecorations(this.blockImages, []);
@@ -529,11 +656,11 @@ export class LiveMathPreview implements vscode.Disposable {
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
 
-  /** Parsing a data URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
-  private uriFor(image: { dataUri: string }): vscode.Uri {
+  /** Parsing an image's URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
+  private uriFor(image: { uri: string }): vscode.Uri {
     let uri = this.uris.get(image);
     if (!uri) {
-      uri = vscode.Uri.parse(image.dataUri);
+      uri = vscode.Uri.parse(image.uri);
       this.uris.set(image, uri);
     }
     return uri;
@@ -561,34 +688,35 @@ export class LiveMathPreview implements vscode.Disposable {
   }
 
   /** Collects the macros every .tex and .sty file in the workspace defines. */
+  /**
+   * Collects what every .tex and .sty file in the workspace sets: macros, cleveref and theorem
+   * settings, homework.sty and its settings files. A file is read again only once it changes, and
+   * documents are scanned again only if what the files set did, so saving one costs little.
+   */
   private async scanWorkspaceMacros(): Promise<void> {
     const files = await vscode.workspace.findFiles('**/*.{tex,sty}', '**/{.git,.overleaf-codex,node_modules}/**', MAX_MACRO_FILES);
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
-    const macros: MathJaxMacros = {};
-    const cref = emptyCrefSettings();
-    const theorems = emptyTheoremSettings();
-    let homeworkPackage = false;
-    const homeworkFiles = new Map<string, string>();
-    const settingsFile = path.join(...HOMEWORK_SETTINGS_FILE.split('/'));
+    const parts: WorkspaceSettings[] = [];
+    const seen = new Set<string>();
     for (const file of files) {
       const stat = await vscode.workspace.fs.stat(file).then(value => value, () => undefined);
       if (!stat || stat.size > MAX_MACRO_FILE_BYTES) continue;
-      const bytes = await vscode.workspace.fs.readFile(file).then(value => value, () => undefined);
-      if (!bytes) continue;
-      const text = Buffer.from(bytes).toString('utf8');
-      // One pass blanks the comments and verbatim for all three readers.
-      const source = previewSource(text, 'latex');
-      Object.assign(macros, parseMacroDefinitions(text, source));
-      readCrefSettings(text, cref, source);
-      readTheoremSettings(text, theorems, source);
-      homeworkPackage ||= HOMEWORK_PACKAGE.test(text);
-      if (file.fsPath.endsWith(`${path.sep}${settingsFile}`)) homeworkFiles.set(file.fsPath.slice(0, -settingsFile.length - 1), text);
+      let known = this.fileSettings.get(file.fsPath);
+      if (!known || known.mtime !== stat.mtime || known.size !== stat.size) {
+        const bytes = await vscode.workspace.fs.readFile(file).then(value => value, () => undefined);
+        if (!bytes) continue;
+        known = { mtime: stat.mtime, size: stat.size, settings: readFileSettings(file.fsPath, Buffer.from(bytes).toString('utf8')) };
+        this.fileSettings.set(file.fsPath, known);
+      }
+      seen.add(file.fsPath);
+      parts.push(known.settings);
     }
-    this.workspaceMacros = macros;
-    this.cref = cref;
-    this.theorems = theorems;
-    this.homeworkPackage = homeworkPackage;
-    this.homeworkFiles = homeworkFiles;
+    for (const file of this.fileSettings.keys()) if (!seen.has(file)) this.fileSettings.delete(file);
+    const workspace = mergeSettings(parts);
+    const fingerprint = settingsFingerprint(workspace);
+    if (fingerprint === this.workspaceFingerprint) return;
+    this.workspace = workspace;
+    this.workspaceFingerprint = fingerprint;
     this.macroGeneration += 1;
   }
 }

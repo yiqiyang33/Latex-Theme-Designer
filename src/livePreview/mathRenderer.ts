@@ -17,7 +17,8 @@ export interface MathRenderOptions {
 }
 
 export interface RenderedMath {
-  dataUri: string;
+  /** Where the image is: a file the image store wrote, or a data URI. */
+  uri: string;
   widthPx: number;
   heightPx: number;
   /** CSS vertical-align for the image, so the formula's baseline sits on the text's. */
@@ -28,7 +29,7 @@ export interface BlockSlice {
   /** Line within the block this strip is drawn on. */
   row: number;
   /** A line-tall image of this part of the formula. */
-  dataUri: string;
+  uri: string;
 }
 
 /** A display formula cut into line-tall strips, one for each line of its block that it reaches. */
@@ -36,6 +37,13 @@ export interface RenderedBlock {
   widthPx: number;
   slices: BlockSlice[];
 }
+
+/** A formula's SVG sized for the editor, before it is stored. */
+export type SizedMath = Omit<RenderedMath, 'uri'> & { svg: string };
+export type SlicedBlock = { widthPx: number; slices: Array<{ row: number; svg: string }> };
+
+/** Keeps an image somewhere a decoration can show it from, and says where. */
+export type ImageWriter = (svg: string) => string;
 
 export type RenderResult<T> = { ok: true; image: T } | { ok: false; error: string };
 export type MathRenderResult = RenderResult<RenderedMath>;
@@ -48,8 +56,12 @@ type SizingOptions = Pick<MathRenderOptions, 'color' | 'fontSizePx' | 'lineHeigh
  * the text around it, and a monospace editor font's x-height is about 0.55em.
  */
 const EX_PER_EM = 0.55;
-/** Images are kept up to this many characters of data URI, so scrolling back does not re-render. */
+/** Renderings are kept up to this many characters of image reference, so scrolling back does not re-render. */
 const CACHE_BUDGET = 8 * 1024 * 1024;
+/** What a kept rendering costs besides its image reference. */
+const ENTRY_COST = 256;
+/** Macro tables remembered by their text, so a table rebuilt with the same macros keeps its renderings. */
+const MACRO_TABLE_LIMIT = 16;
 const ENGINE_LIMIT = 4;
 // These turn errors into rendered output; without them a bad formula throws, so it can stay as source.
 const EXCLUDED_PACKAGES = new Set(['noerrors', 'noundefined']);
@@ -96,11 +108,17 @@ function loadMathJax(): Promise<MathJaxModules> {
 
 /** Renders TeX to standalone SVG images sized for the editor, caching both engines and images. */
 export class MathRenderer {
-  private readonly engines = new Map<string, Engine>();
+  private readonly engines = new Map<number, Engine>();
   private readonly cache = new Map<string, { result: RenderResult<RenderedMath | RenderedBlock>; size: number }>();
-  private readonly macroKeys = new WeakMap<MathJaxMacros, string>();
+  // Cache keys name a macro table by a small id rather than by its text, which can run to many
+  // kilobytes and would otherwise be copied and hashed for every formula on every update.
+  private readonly macroIds = new WeakMap<MathJaxMacros, number>();
+  private readonly idsByTable = new Map<string, number>();
+  private nextMacroId = 0;
   private cacheSize = 0;
   private loaded?: MathJaxModules;
+
+  constructor(private readonly store: ImageWriter = svgDataUri) {}
 
   get isReady(): boolean {
     return this.loaded !== undefined;
@@ -113,18 +131,24 @@ export class MathRenderer {
 
   /** An inline formula, scaled down if needed to fit one line. */
   render(tex: string, options: MathRenderOptions): MathRenderResult {
-    return this.cached(['inline', tex], options, engine => {
+    return this.cached(inlineKey(tex), options, engine => {
       const formula = typeset(engine, tex, false);
       if (!formula.ok) return formula;
-      const image = sizeForEditor(formula.image.svg, options);
-      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
+      const sized = sizeForEditor(formula.image.svg, options);
+      if (!sized) return { ok: false, error: NO_FIXED_SIZE };
+      const { svg, ...size } = sized;
+      return { ok: true, image: { ...size, uri: this.store(svg) } };
     });
+  }
+
+  /** An inline formula's rendering if it has one already, without rendering it. */
+  peek(tex: string, options: MathRenderOptions): MathRenderResult | undefined {
+    return this.lookup(inlineKey(tex), options) as MathRenderResult | undefined;
   }
 
   /** A display formula laid out over the `rows` lines of its block, with its numbers on the right. */
   renderBlock(tex: string, rows: number, options: MathRenderOptions, tags: readonly EquationTag[] = []): BlockRenderResult {
-    const tagKey = tags.map(tag => `${tag.row ?? ''}:${tag.tex}`).join('\u0001');
-    return this.cached(['block', String(rows), tex, tagKey], options, engine => {
+    return this.cached(blockKey(tex, rows, tags), options, engine => {
       // Display style is too tall for a single line, so a one-line block is set like inline math.
       const formula = typeset(engine, withoutTags(tex), rows > 1);
       if (!formula.ok) return formula;
@@ -137,9 +161,15 @@ export class MathRenderer {
         // A number MathJax cannot set is left out rather than costing the formula its rendering.
         if (number.ok) numbers.push({ svg: number.image.svg, baseline: tag.row === undefined ? undefined : baselines[tag.row] });
       }
-      const image = sliceForLines(formula.image.svg, rows, options, numbers);
-      return image ? { ok: true, image } : { ok: false, error: NO_FIXED_SIZE };
+      const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
+      if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
+      return { ok: true, image: { widthPx: sliced.widthPx, slices: sliced.slices.map(slice => ({ row: slice.row, uri: this.store(slice.svg) })) } };
     });
+  }
+
+  /** A display formula's rendering if it has one already, without rendering it. */
+  peekBlock(tex: string, rows: number, options: MathRenderOptions, tags: readonly EquationTag[] = []): BlockRenderResult | undefined {
+    return this.lookup(blockKey(tex, rows, tags), options) as BlockRenderResult | undefined;
   }
 
   clearCache(): void {
@@ -148,26 +178,17 @@ export class MathRenderer {
   }
 
   private cached<T extends RenderedMath | RenderedBlock>(
-    parts: string[],
+    formula: string,
     options: MathRenderOptions,
     build: (engine: Engine) => RenderResult<T>
   ): RenderResult<T> {
     if (!this.loaded) throw new Error('MathRenderer.load() must finish before rendering.');
-    let macroKey = this.macroKeys.get(options.macros);
-    if (macroKey === undefined) {
-      macroKey = JSON.stringify(options.macros);
-      this.macroKeys.set(options.macros, macroKey);
-    }
-    const key = [macroKey, ...parts, options.color, options.fontSizePx, options.lineHeightPx].join('\u0000');
-    const cached = this.cache.get(key);
-    if (cached) {
-      // Re-insert so the Map's insertion order doubles as recency for eviction.
-      this.cache.delete(key);
-      this.cache.set(key, cached);
-      return cached.result as RenderResult<T>;
-    }
-    const result = build(this.engineFor(macroKey, options.macros));
-    const size = result.ok ? imageSize(result.image) : result.error.length;
+    const existing = this.lookup(formula, options);
+    if (existing) return existing as RenderResult<T>;
+    const macroId = this.macroId(options.macros);
+    const key = cacheKey(macroId, formula, options);
+    const result = build(this.engineFor(macroId, options.macros));
+    const size = ENTRY_COST + (result.ok ? imageSize(result.image) : result.error.length);
     this.cache.set(key, { result, size });
     this.cacheSize += size;
     for (const [oldKey, old] of this.cache) {
@@ -178,8 +199,32 @@ export class MathRenderer {
     return result;
   }
 
-  private engineFor(macroKey: string, macros: MathJaxMacros): Engine {
-    const existing = this.engines.get(macroKey);
+  private lookup(formula: string, options: MathRenderOptions): RenderResult<RenderedMath | RenderedBlock> | undefined {
+    const key = cacheKey(this.macroId(options.macros), formula, options);
+    const cached = this.cache.get(key);
+    if (!cached) return undefined;
+    // Re-insert so the Map's insertion order doubles as recency for eviction.
+    this.cache.delete(key);
+    this.cache.set(key, cached);
+    return cached.result;
+  }
+
+  private macroId(macros: MathJaxMacros): number {
+    let id = this.macroIds.get(macros);
+    if (id !== undefined) return id;
+    const table = JSON.stringify(macros);
+    id = this.idsByTable.get(table);
+    if (id === undefined) {
+      id = this.nextMacroId++;
+      this.idsByTable.set(table, id);
+      if (this.idsByTable.size > MACRO_TABLE_LIMIT) this.idsByTable.delete(this.idsByTable.keys().next().value!);
+    }
+    this.macroIds.set(macros, id);
+    return id;
+  }
+
+  private engineFor(macroId: number, macros: MathJaxMacros): Engine {
+    const existing = this.engines.get(macroId);
     if (existing) return existing;
     const { mathjax, TeX, SVG, adaptor, packages } = this.loaded!;
     const tex = new TeX({
@@ -190,7 +235,7 @@ export class MathRenderer {
     // A local font cache defines each glyph once per image instead of at every use.
     const document = mathjax.document('', { InputJax: tex, OutputJax: new SVG({ fontCache: 'local' }) });
     const engine = { tex, document, adaptor };
-    this.engines.set(macroKey, engine);
+    this.engines.set(macroId, engine);
     if (this.engines.size > ENGINE_LIMIT) this.engines.delete(this.engines.keys().next().value!);
     return engine;
   }
@@ -247,8 +292,20 @@ function translateY(transform: string | undefined): number {
   return y;
 }
 
+function inlineKey(tex: string): string {
+  return `inline\u0000${tex}`;
+}
+
+function blockKey(tex: string, rows: number, tags: readonly EquationTag[]): string {
+  return ['block', String(rows), tex, tags.map(tag => `${tag.row ?? ''}:${tag.tex}`).join('\u0001')].join('\u0000');
+}
+
+function cacheKey(macroId: number, formula: string, options: MathRenderOptions): string {
+  return `${macroId}\u0000${options.color}\u0000${options.fontSizePx}\u0000${options.lineHeightPx}\u0000${formula}`;
+}
+
 function imageSize(image: RenderedMath | RenderedBlock): number {
-  return 'slices' in image ? image.slices.reduce((total, slice) => total + slice.dataUri.length, 0) : image.dataUri.length;
+  return 'slices' in image ? image.slices.reduce((total, slice) => total + slice.uri.length, 0) : image.uri.length;
 }
 
 /**
@@ -287,7 +344,8 @@ function exSize(svg: string): ExSize | undefined {
   return { root, width: Number(width), height: Number(height), verticalAlign };
 }
 
-function toDataUri(svg: string): string {
+/** An image as a data URI, which needs nowhere to keep it. */
+export function svgDataUri(svg: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
 }
 
@@ -297,7 +355,7 @@ const px = (value: number) => value.toFixed(2);
  * Turns MathJax's ex-sized SVG into a px-sized image. The image is shown through CSS `content`,
  * which ignores CSS width and height, so the size has to live in the SVG itself.
  */
-export function sizeForEditor(svg: string, options: SizingOptions): RenderedMath | undefined {
+export function sizeForEditor(svg: string, options: SizingOptions): SizedMath | undefined {
   const size = exSize(svg);
   if (!size) return undefined;
   const exPx = options.fontSizePx * EX_PER_EM;
@@ -311,7 +369,7 @@ export function sizeForEditor(svg: string, options: SizingOptions): RenderedMath
     .replace(/^<svg/, `<svg style="color:${options.color}"`);
   const withNamespace = root.includes('xmlns=') ? root : root.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
   return {
-    dataUri: toDataUri(withNamespace + svg.slice(size.root.length)),
+    svg: withNamespace + svg.slice(size.root.length),
     widthPx,
     heightPx,
     verticalAlignPx: size.verticalAlign * exPx * scale
@@ -357,7 +415,7 @@ function place(part: Piece, x: number, y: number, width: number, height: number)
  * then cut into one strip per line: the editor only draws the lines on screen, so one tall image
  * hung from the first line would vanish as soon as that line scrolled away.
  */
-export function sliceForLines(svg: string, rows: number, options: SizingOptions, tags: readonly TagImage[] = []): RenderedBlock | undefined {
+export function sliceForLines(svg: string, rows: number, options: SizingOptions, tags: readonly TagImage[] = []): SlicedBlock | undefined {
   const formula = piece(svg);
   if (!formula) return undefined;
   const numbers = tags.flatMap(tag => {
@@ -387,13 +445,13 @@ export function sliceForLines(svg: string, rows: number, options: SizingOptions,
     inkTop = Math.min(inkTop, y);
     inkBottom = Math.max(inkBottom, y + numberHeight);
   }
-  const slices: BlockSlice[] = [];
+  const slices: SlicedBlock['slices'] = [];
   for (let row = 0; row < rows; row++) {
     const y = row * lineHeight;
     if (inkTop >= y + lineHeight || inkBottom <= y) continue;
     const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" `
       + `viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
-    slices.push({ row, dataUri: toDataUri(slice) });
+    slices.push({ row, svg: slice });
   }
   return { widthPx: width, slices };
 }
