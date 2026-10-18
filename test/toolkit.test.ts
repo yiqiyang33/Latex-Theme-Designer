@@ -1413,7 +1413,9 @@ describe("TypeScript Toolkit migration", () => {
     ];
     expect(expected.every((command) => commands.includes(command))).toBe(true);
     expect(expected.every((command) => manifest.activationEvents.includes(`onCommand:${command}`))).toBe(true);
-    expect(Object.keys(manifest.contributes.configuration.properties)).toEqual(expect.arrayContaining([
+    const configurationSections = [manifest.contributes.configuration].flat();
+    const configurationProperties = Object.assign({}, ...configurationSections.map((section: any) => section.properties));
+    expect(Object.keys(configurationProperties)).toEqual(expect.arrayContaining([
       "hsnips.multiLineContext", "hsnips.windows", "hsnips.linux", "hsnips.mac",
       "hsnips.context.extraMathEnvironments", "hsnips.context.extraRowBreakEnvironments",
       "hsnips.context.extraAlignmentEnvironments", "hsnips.context.extraTextLikeCommands",

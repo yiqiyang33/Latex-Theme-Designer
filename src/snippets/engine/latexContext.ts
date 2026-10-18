@@ -124,7 +124,7 @@ export interface LatexEditorContext {
   canExpandMathSnippet: boolean;
 }
 
-interface MathDelimiterFrame {
+export interface MathDelimiterFrame {
   kind: Exclude<LatexMathKind, 'none' | 'environment'>;
   start: number;
 }
@@ -499,25 +499,42 @@ export function getMathDelimiterStack(text: string, offset: number) {
 }
 
 function getMathDelimiterStackFromSanitized(beforeCursor: string) {
-  let stack: MathDelimiterFrame[] = [];
+  return walkMathDelimiters(beforeCursor);
+}
 
-  for (let index = 0; index < beforeCursor.length; index++) {
-    let char = beforeCursor[index];
+/**
+ * Pairs math delimiters in sanitized text and returns the frames still open at the end. `onClose`
+ * hears each frame as it closes, with the offset just past its closing delimiter and how many
+ * frames remain open around it. The snippet engine's math-mode check and the live preview's
+ * formula finder both walk text through here, so they agree on what counts as math.
+ */
+export function walkMathDelimiters(
+  sanitized: string,
+  onClose?: (frame: MathDelimiterFrame, end: number, depth: number) => void
+) {
+  let stack: MathDelimiterFrame[] = [];
+  let close = (end: number) => {
+    let frame = stack.pop()!;
+    onClose?.(frame, end, stack.length);
+  };
+
+  for (let index = 0; index < sanitized.length; index++) {
+    let char = sanitized[index];
 
     if (char == '\\') {
-      let next = beforeCursor[index + 1];
+      let next = sanitized[index + 1];
       if (next == '(' || next == '[') {
         stack.push({ kind: next == '(' ? 'paren' : 'bracket', start: index });
         index++;
         continue;
       }
       if (next == ')' && stack[stack.length - 1]?.kind == 'paren') {
-        stack.pop();
+        close(index + 2);
         index++;
         continue;
       }
       if (next == ']' && stack[stack.length - 1]?.kind == 'bracket') {
-        stack.pop();
+        close(index + 2);
         index++;
         continue;
       }
@@ -526,15 +543,15 @@ function getMathDelimiterStackFromSanitized(beforeCursor: string) {
       continue;
     }
 
-    if (char == '$' && !isEscaped(beforeCursor, index)) {
+    if (char == '$' && !isEscaped(sanitized, index)) {
       // `$$` only opens display math when no inline `$` is currently open. Inside inline
       // math it is a close immediately followed by an open, and treating it as display
       // math would strand an inline frame on the stack and report math mode forever.
       let insideInline = stack[stack.length - 1]?.kind == 'inlineDollar';
-      let delimiter = beforeCursor[index + 1] == '$' && !insideInline ? '$$' : '$';
+      let delimiter = sanitized[index + 1] == '$' && !insideInline ? '$$' : '$';
       let kind: MathDelimiterFrame['kind'] = delimiter == '$$' ? 'displayDollar' : 'inlineDollar';
       if (stack[stack.length - 1]?.kind == kind) {
-        stack.pop();
+        close(index + delimiter.length);
       } else {
         stack.push({ kind, start: index });
       }

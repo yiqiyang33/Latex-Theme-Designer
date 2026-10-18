@@ -31,6 +31,7 @@ import {
 import { installCli, uninstallCli, updateManagedCliIfInstalled } from "./overleaf/cliInstaller";
 import { initializeSharedConfigBridge } from "./overleaf/sharedConfigBridge";
 import { SyncStandbyError } from "./overleaf/syncOwnerCoordinator";
+import { LiveMathPreview } from "./livePreview/controller";
 
 let activePanel: ToolkitPanel | undefined;
 const toolkitServices = new Map<string, ToolkitService>();
@@ -80,6 +81,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerSnippetHost(context, output);
   void warnAboutLegacySnips(context, output);
+  const liveMathPreview = new LiveMathPreview(output);
+  context.subscriptions.push(
+    liveMathPreview,
+    command("latexEditingToolkit.toggleLiveMathPreview", () => liveMathPreview.toggle())
+  );
 
   context.subscriptions.push(
     output,

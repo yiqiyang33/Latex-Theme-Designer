@@ -132,7 +132,8 @@
     "onCommand:overleafCodex.refreshViews",
     "onCommand:overleafCodex.logout",
     "onCommand:latexEditingToolkit.installCli",
-    "onCommand:latexEditingToolkit.uninstallCli"
+    "onCommand:latexEditingToolkit.uninstallCli",
+    "onCommand:latexEditingToolkit.toggleLiveMathPreview"
   ],
   "main": "./dist/extension.js",
   "bin": {
@@ -609,193 +610,214 @@
         "command": "overleafCodex.logout",
         "title": "LaTeX Editing Toolkit: Overleaf: Logout",
         "category": "LaTeX Editing Toolkit: Overleaf"
+      },
+      {
+        "command": "latexEditingToolkit.toggleLiveMathPreview",
+        "title": "LaTeX Editing Toolkit: Toggle Live Math Preview"
       }
     ],
-    "configuration": {
-      "title": "LaTeX Editing Toolkit: Snippets",
-      "properties": {
-        "hsnips.multiLineContext": {
-          "type": "number",
-          "default": 20,
-          "description": "Number of lines matched when using multi-line regex mode."
-        },
-        "hsnips.windows": {
-          "type": "string",
-          "default": "%APPDATA%/Code/User/hsnips",
-          "description": "Custom snippet path for Windows."
-        },
-        "hsnips.linux": {
-          "type": "string",
-          "default": "$HOME/.config/Code/User/hsnips",
-          "description": "Custom snippet path for Linux."
-        },
-        "hsnips.mac": {
-          "type": "string",
-          "default": "$HOME/Library/Application Support/Code/User/hsnips",
-          "description": "Custom snippet path for macOS."
-        },
-        "hsnips.context.extraMathEnvironments": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "configuration": [
+      {
+        "title": "LaTeX Editing Toolkit: Snippets",
+        "properties": {
+          "hsnips.multiLineContext": {
+            "type": "number",
+            "default": 20,
+            "description": "Number of lines matched when using multi-line regex mode."
           },
-          "default": [],
-          "description": "Additional LaTeX environments treated as math contexts."
-        },
-        "hsnips.context.extraRowBreakEnvironments": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "hsnips.windows": {
+            "type": "string",
+            "default": "%APPDATA%/Code/User/hsnips",
+            "description": "Custom snippet path for Windows."
           },
-          "default": [],
-          "description": "Additional environments where Enter can append a row break."
-        },
-        "hsnips.context.extraAlignmentEnvironments": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "hsnips.linux": {
+            "type": "string",
+            "default": "$HOME/.config/Code/User/hsnips",
+            "description": "Custom snippet path for Linux."
           },
-          "default": [],
-          "description": "Additional environments where Tab can insert an alignment separator."
-        },
-        "hsnips.context.extraTextLikeCommands": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "hsnips.mac": {
+            "type": "string",
+            "default": "$HOME/Library/Application Support/Code/User/hsnips",
+            "description": "Custom snippet path for macOS."
           },
-          "default": [],
-          "description": "Additional LaTeX commands whose argument is treated as text."
-        },
-        "hsnips.profiles.activeProfile": {
-          "type": "string",
-          "default": "",
-          "description": "Active snippet profile loaded from hsnips/profiles/<name>. Empty means base snippets only."
-        },
-        "overleafCodex.serverUrl": {
-          "type": "string",
-          "default": "https://www.overleaf.com/",
-          "description": "Default Overleaf-compatible server URL."
-        },
-        "overleafCodex.localProjectsRoot": {
-          "type": "string",
-          "scope": "machine",
-          "default": "~/Documents/OverleafCodex/projects",
-          "description": "Default parent directory for local Overleaf mirrors. Set per machine: a remote (Remote-SSH) host keeps its own value."
-        },
-        "overleafCodex.compileOnSave": {
-          "type": "boolean",
-          "default": false,
-          "description": "Compile the active Overleaf mirror after saving a supported source file."
-        },
-        "overleafCodex.syncBinaryFiles": {
-          "type": "boolean",
-          "default": true,
-          "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
-        },
-        "overleafCodex.autoPushLocalAhead": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically push local-ahead files after a sync check."
-        },
-        "overleafCodex.timeout": {
-          "type": "number",
-          "default": 60,
-          "minimum": 1,
-          "description": "Overleaf HTTP timeout in seconds."
-        },
-        "overleafCodex.connectTimeout": {
-          "type": "number",
-          "default": 20,
-          "minimum": 1,
-          "description": "Overleaf realtime connection timeout in seconds."
-        },
-        "overleafCodex.projectJoinTimeout": {
-          "type": "number",
-          "default": 30,
-          "minimum": 1,
-          "description": "Overleaf project join timeout in seconds."
-        },
-        "overleafCodex.httpTimeout": {
-          "type": "number",
-          "default": 60,
-          "minimum": 1,
-          "description": "Overleaf HTTP request timeout in seconds."
-        },
-        "overleafCodex.joinDocTimeout": {
-          "type": "number",
-          "default": 30,
-          "minimum": 1,
-          "description": "Overleaf document join timeout in seconds."
-        },
-        "overleafCodex.otAckTimeout": {
-          "type": "number",
-          "default": 15,
-          "minimum": 1,
-          "description": "Overleaf OT acknowledgement timeout in seconds."
-        },
-        "overleafCodex.syncDestructiveChanges": {
-          "type": "boolean",
-          "default": false,
-          "description": "Allow destructive sync changes without an additional confirmation."
-        },
-        "latexEditingToolkit.overleaf.syncToolkitOverrides": {
-          "type": "boolean",
-          "default": true,
-          "description": "Synchronize LaTeX Editing Toolkit theme and configuration overrides with Overleaf."
-        },
-        "latexEditingToolkit.overleaf.autoSync": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically maintain Overleaf mirror synchronization."
-        },
-        "latexEditingToolkit.overleaf.autoPushLocalAhead": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically push safe local-ahead source changes."
-        },
-        "latexEditingToolkit.overleaf.syncBinaryFiles": {
-          "type": "boolean",
-          "default": true,
-          "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
-        },
-        "latexEditingToolkit.overleaf.confirmDestructiveChanges": {
-          "type": "boolean",
-          "default": true,
-          "description": "Require confirmation before destructive Overleaf operations."
-        },
-        "latexEditingToolkit.overleaf.compileOnSave": {
-          "type": "boolean",
-          "default": false,
-          "description": "Compile the active Overleaf mirror after saving a supported source file. Overrides overleafCodex.compileOnSave when set."
-        },
-        "latexEditingToolkit.overleaf.compileOnSaveDebounceMs": {
-          "type": "number",
-          "default": 750,
-          "minimum": 0,
-          "maximum": 10000,
-          "description": "Wait this many milliseconds after the last save before starting an Overleaf compile-on-save run."
-        },
-        "latexEditingToolkit.overleaf.compileMode": {
-          "type": "string",
-          "enum": [
-            "local",
-            "overleaf"
-          ],
-          "enumDescriptions": [
-            "Compile using the local Toolkit compiler.",
-            "Compile using the Overleaf remote compiler."
-          ],
-          "default": "local",
-          "description": "Preferred compile mode for the Toolkit Build section."
-        },
-        "latexEditingToolkit.overleaf.networkRescanSeconds": {
-          "type": "number",
-          "default": 30,
-          "minimum": 0,
-          "description": "When a mirror is on a network filesystem (NFS, SMB, Lustre, GPFS), how often to look for edits made on other machines, which file watchers cannot see. 0 turns this off."
+          "hsnips.context.extraMathEnvironments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Additional LaTeX environments treated as math contexts."
+          },
+          "hsnips.context.extraRowBreakEnvironments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Additional environments where Enter can append a row break."
+          },
+          "hsnips.context.extraAlignmentEnvironments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Additional environments where Tab can insert an alignment separator."
+          },
+          "hsnips.context.extraTextLikeCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Additional LaTeX commands whose argument is treated as text."
+          },
+          "hsnips.profiles.activeProfile": {
+            "type": "string",
+            "default": "",
+            "description": "Active snippet profile loaded from hsnips/profiles/<name>. Empty means base snippets only."
+          },
+          "overleafCodex.serverUrl": {
+            "type": "string",
+            "default": "https://www.overleaf.com/",
+            "description": "Default Overleaf-compatible server URL."
+          },
+          "overleafCodex.localProjectsRoot": {
+            "type": "string",
+            "scope": "machine",
+            "default": "~/Documents/OverleafCodex/projects",
+            "description": "Default parent directory for local Overleaf mirrors. Set per machine: a remote (Remote-SSH) host keeps its own value."
+          },
+          "overleafCodex.compileOnSave": {
+            "type": "boolean",
+            "default": false,
+            "description": "Compile the active Overleaf mirror after saving a supported source file."
+          },
+          "overleafCodex.syncBinaryFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
+          },
+          "overleafCodex.autoPushLocalAhead": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically push local-ahead files after a sync check."
+          },
+          "overleafCodex.timeout": {
+            "type": "number",
+            "default": 60,
+            "minimum": 1,
+            "description": "Overleaf HTTP timeout in seconds."
+          },
+          "overleafCodex.connectTimeout": {
+            "type": "number",
+            "default": 20,
+            "minimum": 1,
+            "description": "Overleaf realtime connection timeout in seconds."
+          },
+          "overleafCodex.projectJoinTimeout": {
+            "type": "number",
+            "default": 30,
+            "minimum": 1,
+            "description": "Overleaf project join timeout in seconds."
+          },
+          "overleafCodex.httpTimeout": {
+            "type": "number",
+            "default": 60,
+            "minimum": 1,
+            "description": "Overleaf HTTP request timeout in seconds."
+          },
+          "overleafCodex.joinDocTimeout": {
+            "type": "number",
+            "default": 30,
+            "minimum": 1,
+            "description": "Overleaf document join timeout in seconds."
+          },
+          "overleafCodex.otAckTimeout": {
+            "type": "number",
+            "default": 15,
+            "minimum": 1,
+            "description": "Overleaf OT acknowledgement timeout in seconds."
+          },
+          "overleafCodex.syncDestructiveChanges": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow destructive sync changes without an additional confirmation."
+          },
+          "latexEditingToolkit.overleaf.syncToolkitOverrides": {
+            "type": "boolean",
+            "default": true,
+            "description": "Synchronize LaTeX Editing Toolkit theme and configuration overrides with Overleaf."
+          },
+          "latexEditingToolkit.overleaf.autoSync": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically maintain Overleaf mirror synchronization."
+          },
+          "latexEditingToolkit.overleaf.autoPushLocalAhead": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically push safe local-ahead source changes."
+          },
+          "latexEditingToolkit.overleaf.syncBinaryFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Synchronize binary project assets such as images and PDFs with Overleaf. Generated outputs covered by .overleaf-codexignore remain local."
+          },
+          "latexEditingToolkit.overleaf.confirmDestructiveChanges": {
+            "type": "boolean",
+            "default": true,
+            "description": "Require confirmation before destructive Overleaf operations."
+          },
+          "latexEditingToolkit.overleaf.compileOnSave": {
+            "type": "boolean",
+            "default": false,
+            "description": "Compile the active Overleaf mirror after saving a supported source file. Overrides overleafCodex.compileOnSave when set."
+          },
+          "latexEditingToolkit.overleaf.compileOnSaveDebounceMs": {
+            "type": "number",
+            "default": 750,
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Wait this many milliseconds after the last save before starting an Overleaf compile-on-save run."
+          },
+          "latexEditingToolkit.overleaf.compileMode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "overleaf"
+            ],
+            "enumDescriptions": [
+              "Compile using the local Toolkit compiler.",
+              "Compile using the Overleaf remote compiler."
+            ],
+            "default": "local",
+            "description": "Preferred compile mode for the Toolkit Build section."
+          },
+          "latexEditingToolkit.overleaf.networkRescanSeconds": {
+            "type": "number",
+            "default": 30,
+            "minimum": 0,
+            "description": "When a mirror is on a network filesystem (NFS, SMB, Lustre, GPFS), how often to look for edits made on other machines, which file watchers cannot see. 0 turns this off."
+          }
+        }
+      },
+      {
+        "title": "LaTeX Editing Toolkit: Live Preview",
+        "properties": {
+          "latexEditingToolkit.livePreview.enabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "Render inline formulas ($...$ and \\(...\\)) in place while the cursor is elsewhere, and show their source when the cursor moves onto them."
+          },
+          "latexEditingToolkit.livePreview.mathColor": {
+            "type": "string",
+            "default": "",
+            "description": "CSS colour for rendered formulas. Leave empty to follow the colour theme."
+          }
         }
       }
-    },
+    ],
     "keybindings": [
       {
         "key": "enter",
@@ -1135,6 +1157,7 @@
     "diff-match-patch": "^1.0.5",
     "ignore": "^7.0.6",
     "keytar": "^7.9.0",
+    "mathjax-full": "^3.2.2",
     "mime-types": "^2.1.35",
     "minimatch": "^9.0.9",
     "node-fetch": "^2.7.0",
