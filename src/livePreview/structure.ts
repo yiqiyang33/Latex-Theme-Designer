@@ -14,11 +14,24 @@ export interface TheoremKind {
   numbered: boolean;
 }
 
-export type TheoremSettings = Map<string, TheoremKind>;
+export interface TheoremSettings {
+  /** Theorem-like environments by name. */
+  environments: Map<string, TheoremKind>;
+  /** Whether the project uses this toolkit's theme, whose \thm{title}{label}{body} and siblings stand for theorems. */
+  themeCommands: boolean;
+}
 
-/** Adds the theorem-like environments a file declares with \newtheorem or thmtools' \declaretheorem. */
+export function emptyTheoremSettings(): TheoremSettings {
+  return { environments: new Map(), themeCommands: false };
+}
+
+/**
+ * Adds the theorem-like environments a file declares with \newtheorem or thmtools' \declaretheorem,
+ * and notes the theme's theorem commands, which its theorems.tex defines with three arguments.
+ */
 export function readTheoremSettings(text: string, settings: TheoremSettings): void {
   const source = previewSource(text, 'latex');
+  if (/\\NewDocumentCommand\s*\{?\s*\\thm\s*\}?\s*\{\s*mm\+m\s*\}/.test(source)) settings.themeCommands = true;
   let style: TheoremStyle = 'plain';
   const asStyle = (value: string | undefined): TheoremStyle => value === 'definition' || value === 'remark' ? value : 'plain';
   for (const match of source.matchAll(/\\(theoremstyle|newtheorem|declaretheorem)(\*?)(?![A-Za-z])/g)) {
@@ -36,7 +49,7 @@ export function readTheoremSettings(text: string, settings: TheoremSettings): vo
       const name = readBraces(source, shared?.next ?? env.next);
       if (!name) continue;
       const environment = source.slice(env.start, env.end).trim();
-      settings.set(environment, {
+      settings.environments.set(environment, {
         name: plainText(source.slice(name.start, name.end)),
         style,
         counter: (shared && source.slice(shared.start, shared.end).trim()) || environment,
@@ -50,7 +63,7 @@ export function readTheoremSettings(text: string, settings: TheoremSettings): vo
     if (!envs) continue;
     const values = keyValues(options ? source.slice(options.start, options.end) : '');
     for (const environment of source.slice(envs.start, envs.end).split(',').map(name => name.trim()).filter(Boolean)) {
-      settings.set(environment, {
+      settings.environments.set(environment, {
         name: values.name ? plainText(values.name) : capitalised(environment),
         style: asStyle(values.style),
         counter: values.sibling || values.numberlike || values.sharenumber || environment,
@@ -97,12 +110,24 @@ export interface CommandMark {
   contentEnd: number;
 }
 
+/** One of the theme's theorem commands, such as \thm{title}{label}{body}, with its arguments. */
+export interface ShorthandMark {
+  command: string;
+  start: number;
+  end: number;
+  /** \question's optional title, inside its brackets. */
+  option?: { start: number; end: number };
+  /** The braced arguments, inside their braces. */
+  args: Array<{ start: number; end: number }>;
+}
+
 export interface Structure {
   headings: HeadingMark[];
   environments: EnvironmentMark[];
   items: ItemMark[];
   labels: CommandMark[];
   formats: CommandMark[];
+  shorthands: ShorthandMark[];
 }
 
 const HEADING = /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*?)(?![A-Za-z])/g;
@@ -110,6 +135,12 @@ const ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
 const ITEM = /\\item(?![A-Za-z])/g;
 const LABEL = /\\(label)\s*(?=\{)/g;
 const FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
+/** The theme's commands and how many braced arguments each takes. */
+const THEME_ARGUMENTS: Record<string, number> = {
+  defn: 3, thm: 3, lem: 3, cor: 3, prop: 3, clm: 3, fact: 3, assumption: 3, axiom: 3, lemp: 3, corp: 3,
+  pf: 1, ex: 1, rmk: 1, rmkb: 1, question: 1
+};
+const THEME_COMMAND = new RegExp(`\\\\(${Object.keys(THEME_ARGUMENTS).join('|')})(?![A-Za-z@])`, 'g');
 
 /** The document's structural markup outside formulas, with arguments that stay on their line. */
 export function findStructure(text: string, math: MathRegions, languageId?: string, source = previewSource(text, languageId)): Structure {
@@ -169,7 +200,25 @@ export function findStructure(text: string, math: MathRegions, languageId?: stri
       : [];
   });
 
-  return { headings, environments, items, labels: commands(LABEL), formats: commands(FORMAT) };
+  const shorthands: ShorthandMark[] = [];
+  for (const match of marks(THEME_COMMAND)) {
+    let next = match.index! + match[0].length;
+    const option = match[1] === 'question' ? readBrackets(source, next) : undefined;
+    if (option) next = option.next;
+    const args: ShorthandMark['args'] = [];
+    while (args.length < THEME_ARGUMENTS[match[1]]) {
+      // Arguments may follow each other across one line break, as TeX allows.
+      const argument = readBraces(source, next + (/^[ \t]*\n/.exec(source.slice(next, next + 80))?.[0].length ?? 0), true);
+      if (!argument) break;
+      args.push({ start: argument.start, end: argument.end });
+      next = argument.next;
+    }
+    // In the theme's own definitions the arguments are macro parameters such as #1.
+    if (args.length < THEME_ARGUMENTS[match[1]] || /#\d/.test(source.slice(match.index!, next))) continue;
+    shorthands.push({ command: match[1], start: match.index!, end: next, option: option && { start: option.start, end: option.end }, args });
+  }
+
+  return { headings, environments, items, labels: commands(LABEL), formats: commands(FORMAT), shorthands };
 }
 
 /** What a root's compile recorded, as far as the structure is concerned. */
@@ -237,7 +286,7 @@ export function structureOverlays(structure: Structure, text: string, theorems: 
         insert: [{ at: environment.start, text: '□' }]
       }));
     } else {
-      const kind = theorems.get(environment.name);
+      const kind = theorems.environments.get(environment.name);
       if (!kind) continue;
       overlays.push(environment.begin
         ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels))
@@ -245,6 +294,9 @@ export function structureOverlays(structure: Structure, text: string, theorems: 
     }
   }
 
+  if (theorems.themeCommands) {
+    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels));
+  }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
     const style = FORMAT_STYLES[format.name];
@@ -254,6 +306,88 @@ export function structureOverlays(structure: Structure, text: string, theorems: 
     }));
   }
   return overlays;
+}
+
+/** The theme's theorem commands: names and label prefixes as its theorems.tex defines them. */
+const THEME_THEOREMS: Record<string, { name: string; prefix?: string; style: TheoremStyle }> = {
+  defn: { name: 'Definition', prefix: 'defn', style: 'definition' },
+  thm: { name: 'Theorem', prefix: 'thm', style: 'plain' },
+  lem: { name: 'Lemma', prefix: 'lem', style: 'plain' },
+  cor: { name: 'Corollary', prefix: 'cor', style: 'plain' },
+  prop: { name: 'Proposition', prefix: 'prop', style: 'plain' },
+  clm: { name: 'Claim', prefix: 'clm', style: 'plain' },
+  fact: { name: 'Fact', prefix: 'fact', style: 'plain' },
+  assumption: { name: 'Assumption', prefix: 'assump', style: 'plain' },
+  axiom: { name: 'Axiom', prefix: 'axiom', style: 'plain' },
+  // A lemma or corollary followed by its proof, without a label.
+  lemp: { name: 'Lemma', style: 'plain' },
+  corp: { name: 'Corollary', style: 'plain' }
+};
+
+/**
+ * The theme's commands drawn as the environments they stand for: \thm{title}{label}{body} as
+ * "Theorem 2.1 (Title).", numbered by the label the theme writes, prefix:label; \pf{...} as a
+ * proof; \ex, \rmkb and \question with their heads, and \rmk in italics.
+ */
+function themeCommandOverlays(mark: ShorthandMark, text: string, labels: ReadonlyMap<string, LabelInfo> | undefined): Overlay[] {
+  const { args } = mark;
+  const last = args[args.length - 1];
+  // Heads end in a space, as the text after them may follow on the same line.
+  const bold = (at: number, label: string): Insertion => ({ at, text: `${label}\u00a0`, bold: true });
+  const closing = dimmed(last.end, mark.end);
+  switch (mark.command) {
+    case 'pf':
+      return [headOnly(mark.start, last.start, bold(mark.start, 'Proof.')), qed(last.end, mark.end)];
+    case 'ex':
+      return [headOnly(mark.start, last.start, bold(mark.start, 'Example.')), closing];
+    case 'rmkb':
+      return [headOnly(mark.start, last.start, { at: mark.start, text: 'Remark.\u00a0', italic: true }), closing];
+    case 'rmk':
+      return [overlay(mark.start, mark.end, {
+        hide: [[mark.start, last.start], [last.end, mark.end]],
+        style: [{ start: last.start, end: last.end, style: 'italic' }]
+      })];
+    case 'question':
+      return [mark.option
+        ? overlay(mark.start, last.start, {
+          hide: [[mark.start, mark.option.start], [mark.option.end, last.start]],
+          insert: [bold(mark.option.end, '.')],
+          style: [{ start: mark.option.start, end: mark.option.end, style: 'bold' }]
+        })
+        : headOnly(mark.start, last.start, bold(mark.start, 'Question.')), closing];
+  }
+  const kind = THEME_THEOREMS[mark.command];
+  const [title, second, third] = args;
+  const titled = text.slice(title.start, title.end).trim() !== '';
+  const label = kind.prefix ? text.slice(second.start, second.end).trim() : '';
+  const key = label && (label.startsWith(`${kind.prefix}:`) ? label : `${kind.prefix}:${label}`);
+  const number = key ? labels?.get(key)?.number : undefined;
+  const head: Insertion = {
+    at: mark.start,
+    text: `${kind.name}${number ? `\u00a0${number}` : ''}${titled ? '' : '.\u00a0'}`,
+    ...kind.style === 'remark' ? { italic: true } : { bold: true }
+  };
+  // Up to the body: the title stays source between "(" and ")."; a label is dimmed as \label is.
+  const headEnd = kind.prefix ? third.start : second.start;
+  const hide: Array<[number, number]> = titled ? [[mark.start, title.start], [title.end, second.start]] : [[mark.start, second.start]];
+  if (kind.prefix) hide.push([second.end, third.start]);
+  const overlays = [overlay(mark.start, headEnd, {
+    hide,
+    insert: titled ? [head, { at: title.start, text: '\u00a0(' }, { at: title.end, text: ').\u00a0' }] : [head],
+    style: label ? [{ start: second.start, end: second.end, style: 'dim' }] : []
+  })];
+  if (kind.prefix) return [...overlays, closing];
+  // \lemp and \corp: the statement, then its proof.
+  return [...overlays, headOnly(second.end, third.start, bold(second.end, 'Proof.')), qed(third.end, mark.end)];
+}
+
+function headOnly(start: number, end: number, head: Insertion): Overlay {
+  return overlay(start, end, { hide: [[start, end]], insert: [head] });
+}
+
+/** The end of a proof, drawn as amsthm's box. */
+function qed(start: number, end: number): Overlay {
+  return overlay(start, end, { hide: [[start, end]], insert: [{ at: start, text: '\u25a1' }] });
 }
 
 function dimmed(start: number, end: number): Overlay {
@@ -310,7 +444,7 @@ function theoremNumber(
     if (label.start < begin.end) continue;
     if (end && label.start > end.start) break;
     const info = labels.get(text.slice(label.contentStart, label.contentEnd).trim());
-    if (info?.type && (info.type === begin.name || info.type === kind.counter || theorems.has(info.type))) return info.number;
+    if (info?.type && (info.type === begin.name || info.type === kind.counter || theorems.environments.has(info.type))) return info.number;
   }
   return undefined;
 }

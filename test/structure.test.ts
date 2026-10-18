@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { findMathRegions } from '../src/livePreview/mathRegions';
 import type { ContentsEntry, LabelInfo } from '../src/livePreview/references';
 import {
+  emptyTheoremSettings,
   enumerateLabel,
   findStructure,
   numberHeadings,
   readTheoremSettings,
   structureOverlays,
-  type HeadingMark,
-  type TheoremSettings
+  type HeadingMark
 } from '../src/livePreview/structure';
 import { drawn } from './support/drawn';
 
-const theorems: TheoremSettings = new Map();
+const theorems = emptyTheoremSettings();
 readTheoremSettings([
   '\\theoremstyle{plain}',
   '\\newtheorem{theorem}{Theorem}[section]',
@@ -29,7 +29,8 @@ const render = (text: string, numbers: { labels?: Map<string, LabelInfo>; conten
 
 describe('readTheoremSettings', () => {
   it('reads names, styles, shared counters and unnumbered environments', () => {
-    expect(Object.fromEntries(theorems)).toEqual({
+    expect(theorems.themeCommands).toBe(false);
+    expect(Object.fromEntries(theorems.environments)).toEqual({
       theorem: { name: 'Theorem', style: 'plain', counter: 'theorem', numbered: true },
       lemma: { name: 'Lemma', style: 'plain', counter: 'theorem', numbered: true },
       proposition: { name: 'Proposition', style: 'plain', counter: 'proposition', numbered: true },
@@ -129,6 +130,41 @@ describe('lists', () => {
     expect(enumerateLabel('\\textbf{(\\roman*)}', 1, 4)).toBe('(iv)');
     expect(enumerateLabel('\\Alph*)', 1, 28)).toBe('AB)');
     expect([1, 2, 3, 4].map(depth => enumerateLabel(undefined, depth, 2))).toEqual(['2.', '(b)', 'ii.', 'B.']);
+  });
+});
+
+describe('theme commands', () => {
+  const theme = emptyTheoremSettings();
+  readTheoremSettings([
+    '\\NewDocumentCommand{\\thm}{mm+m}{', '  \\ThemeRunTcbTheorem{mytheorem}{thm}{#1}{#2}{#3}', '}',
+    '\\NewDocumentCommand{\\lemp}{m+m+m}{', '  \\lem{#1}{}{#2}', '  \\pf{#3}', '}'
+  ].join('\n'), theme);
+  const labels = new Map<string, LabelInfo>([
+    ['thm:general', { number: '2.1', type: 'tcb@cnt@mydefinition' }],
+    ['defn:def:sample', { number: '1', type: 'tcb@cnt@mydefinition' }]
+  ]);
+  const show = (text: string, settings = theme) =>
+    drawn(text, structureOverlays(findStructure(text, findMathRegions(text, 'latex'), 'latex'), text, settings, { labels }));
+
+  it('recognises the theme by its three-argument theorem commands, and leaves its own definitions alone', () => {
+    expect(theme.themeCommands).toBe(true);
+    expect(show('\\lem{#1}{}{#2}')).toBe('\\lem{#1}{}{#2}');
+    expect(show('\\thm{A}{general}{B}', emptyTheoremSettings())).toBe('\\thm{A}{general}{B}');
+  });
+
+  it('draws \\thm{title}{label}{body} as its theorem, numbered by the label with the theme\'s prefix', () => {
+    expect(show('\\thm{Generalization}{general}{\nLet $x$ be.\n}'))
+      .toBe('**Theorem\u00a02.1**\u00a0(Generalization).\u00a0<dim>general</dim>\nLet $x$ be.\n<dim>}</dim>');
+    expect(show('\\defn{Sample}{def:sample}{Body}')).toBe('**Definition\u00a01**\u00a0(Sample).\u00a0<dim>def:sample</dim>Body<dim>}</dim>');
+    expect(show('\\thm{}{thm:general}\n{Body}')).toBe('**Theorem\u00a02.1.\u00a0**<dim>thm:general</dim>Body<dim>}</dim>');
+    expect(show('\\lem{}{}{Body}')).toBe('**Lemma.\u00a0**Body<dim>}</dim>');
+  });
+
+  it('draws proofs, examples, remarks and questions as the theme sets them', () => {
+    expect(show('\\pf{Done.}')).toBe('**Proof.\u00a0**Done.\u25a1');
+    expect(show('\\lemp{Bound}{Stmt}{\nPf\n}')).toBe('**Lemma**\u00a0(Bound).\u00a0Stmt**Proof.\u00a0**\nPf\n\u25a1');
+    expect(show('\\ex{E} \\rmk{R} \\rmkb{B}')).toBe('**Example.\u00a0**E<dim>}</dim> <italic>R</italic> *Remark.\u00a0*B<dim>}</dim>');
+    expect(show('\\question{Q} \\question[Warm-up]{W}')).toBe('**Question.\u00a0**Q<dim>}</dim> <bold>Warm-up</bold>**.\u00a0**W<dim>}</dim>');
   });
 });
 

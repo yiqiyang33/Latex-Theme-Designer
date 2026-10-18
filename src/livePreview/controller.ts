@@ -19,7 +19,7 @@ import {
   type ReferenceRegion,
   type RootHint
 } from './references';
-import { findStructure, readTheoremSettings, structureOverlays, type Structure, type TheoremSettings } from './structure';
+import { emptyTheoremSettings, findStructure, readTheoremSettings, structureOverlays, type Structure, type TheoremSettings } from './structure';
 
 const LANGUAGES = new Set(['latex', 'tex']);
 const RESCAN_DELAY_MS = 150;
@@ -99,7 +99,7 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private workspaceMacros: MathJaxMacros = {};
   private cref: CrefSettings = emptyCrefSettings();
-  private theorems: TheoremSettings = new Map();
+  private theorems: TheoremSettings = emptyTheoremSettings();
   private macroGeneration = 0;
   private macroTimer?: NodeJS.Timeout;
   private enabled = false;
@@ -469,7 +469,7 @@ export class LiveMathPreview implements vscode.Disposable {
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros: MathJaxMacros = {};
     const cref = emptyCrefSettings();
-    const theorems: TheoremSettings = new Map();
+    const theorems = emptyTheoremSettings();
     for (const file of files) {
       const stat = await vscode.workspace.fs.stat(file).then(value => value, () => undefined);
       if (!stat || stat.size > MAX_MACRO_FILE_BYTES) continue;

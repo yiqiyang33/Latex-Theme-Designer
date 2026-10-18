@@ -82207,8 +82207,12 @@ function sliceForLines(svg, rows, options, tags = []) {
 }
 
 // src/livePreview/structure.ts
+function emptyTheoremSettings() {
+  return { environments: /* @__PURE__ */ new Map(), themeCommands: false };
+}
 function readTheoremSettings(text, settings) {
   const source = previewSource(text, "latex");
+  if (/\\NewDocumentCommand\s*\{?\s*\\thm\s*\}?\s*\{\s*mm\+m\s*\}/.test(source)) settings.themeCommands = true;
   let style = "plain";
   const asStyle = (value) => value === "definition" || value === "remark" ? value : "plain";
   for (const match2 of source.matchAll(/\\(theoremstyle|newtheorem|declaretheorem)(\*?)(?![A-Za-z])/g)) {
@@ -82225,7 +82229,7 @@ function readTheoremSettings(text, settings) {
       const name = readBraces(source, shared?.next ?? env4.next);
       if (!name) continue;
       const environment = source.slice(env4.start, env4.end).trim();
-      settings.set(environment, {
+      settings.environments.set(environment, {
         name: plainText(source.slice(name.start, name.end)),
         style,
         counter: shared && source.slice(shared.start, shared.end).trim() || environment,
@@ -82239,7 +82243,7 @@ function readTheoremSettings(text, settings) {
     if (!envs) continue;
     const values = keyValues(options ? source.slice(options.start, options.end) : "");
     for (const environment of source.slice(envs.start, envs.end).split(",").map((name) => name.trim()).filter(Boolean)) {
-      settings.set(environment, {
+      settings.environments.set(environment, {
         name: values.name ? plainText(values.name) : capitalised2(environment),
         style: asStyle(values.style),
         counter: values.sibling || values.numberlike || values.sharenumber || environment,
@@ -82253,6 +82257,25 @@ var ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
 var ITEM = /\\item(?![A-Za-z])/g;
 var LABEL = /\\(label)\s*(?=\{)/g;
 var FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
+var THEME_ARGUMENTS = {
+  defn: 3,
+  thm: 3,
+  lem: 3,
+  cor: 3,
+  prop: 3,
+  clm: 3,
+  fact: 3,
+  assumption: 3,
+  axiom: 3,
+  lemp: 3,
+  corp: 3,
+  pf: 1,
+  ex: 1,
+  rmk: 1,
+  rmkb: 1,
+  question: 1
+};
+var THEME_COMMAND = new RegExp(`\\\\(${Object.keys(THEME_ARGUMENTS).join("|")})(?![A-Za-z@])`, "g");
 function findStructure(text, math, languageId, source = previewSource(text, languageId)) {
   const formulas = [...math.inline, ...math.display].sort((a, b) => a.start - b.start);
   const inFormula = (offset) => {
@@ -82303,7 +82326,22 @@ function findStructure(text, math, languageId, source = previewSource(text, lang
     const argument = readBraces(source, match2.index + match2[0].length);
     return argument ? [{ name: match2[1], start: match2.index, end: argument.next, contentStart: argument.start, contentEnd: argument.end }] : [];
   });
-  return { headings, environments, items, labels: commands8(LABEL), formats: commands8(FORMAT) };
+  const shorthands = [];
+  for (const match2 of marks(THEME_COMMAND)) {
+    let next = match2.index + match2[0].length;
+    const option = match2[1] === "question" ? readBrackets(source, next) : void 0;
+    if (option) next = option.next;
+    const args = [];
+    while (args.length < THEME_ARGUMENTS[match2[1]]) {
+      const argument = readBraces(source, next + (/^[ \t]*\n/.exec(source.slice(next, next + 80))?.[0].length ?? 0), true);
+      if (!argument) break;
+      args.push({ start: argument.start, end: argument.end });
+      next = argument.next;
+    }
+    if (args.length < THEME_ARGUMENTS[match2[1]] || /#\d/.test(source.slice(match2.index, next))) continue;
+    shorthands.push({ command: match2[1], start: match2.index, end: next, option: option && { start: option.start, end: option.end }, args });
+  }
+  return { headings, environments, items, labels: commands8(LABEL), formats: commands8(FORMAT), shorthands };
 }
 var NUMBERED_HEADINGS = /* @__PURE__ */ new Set(["part", "chapter", "section", "subsection", "subsubsection"]);
 var HEADING_STYLES = {
@@ -82368,10 +82406,13 @@ function structureOverlays(structure, text, theorems, numbers = {}) {
         insert: [{ at: environment.start, text: "\u25A1" }]
       }));
     } else {
-      const kind = theorems.get(environment.name);
+      const kind = theorems.environments.get(environment.name);
       if (!kind) continue;
       overlays.push(environment.begin ? theoremHead(environment, kind, theoremNumber(environment, kind, structure, text, theorems, numbers.labels)) : dimmed(environment.start, environment.end));
     }
+  }
+  if (theorems.themeCommands) {
+    for (const mark of structure.shorthands) overlays.push(...themeCommandOverlays(mark, text, numbers.labels));
   }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
@@ -82382,6 +82423,72 @@ function structureOverlays(structure, text, theorems, numbers = {}) {
     }));
   }
   return overlays;
+}
+var THEME_THEOREMS = {
+  defn: { name: "Definition", prefix: "defn", style: "definition" },
+  thm: { name: "Theorem", prefix: "thm", style: "plain" },
+  lem: { name: "Lemma", prefix: "lem", style: "plain" },
+  cor: { name: "Corollary", prefix: "cor", style: "plain" },
+  prop: { name: "Proposition", prefix: "prop", style: "plain" },
+  clm: { name: "Claim", prefix: "clm", style: "plain" },
+  fact: { name: "Fact", prefix: "fact", style: "plain" },
+  assumption: { name: "Assumption", prefix: "assump", style: "plain" },
+  axiom: { name: "Axiom", prefix: "axiom", style: "plain" },
+  // A lemma or corollary followed by its proof, without a label.
+  lemp: { name: "Lemma", style: "plain" },
+  corp: { name: "Corollary", style: "plain" }
+};
+function themeCommandOverlays(mark, text, labels) {
+  const { args } = mark;
+  const last = args[args.length - 1];
+  const bold = (at, label2) => ({ at, text: `${label2}\xA0`, bold: true });
+  const closing = dimmed(last.end, mark.end);
+  switch (mark.command) {
+    case "pf":
+      return [headOnly(mark.start, last.start, bold(mark.start, "Proof.")), qed(last.end, mark.end)];
+    case "ex":
+      return [headOnly(mark.start, last.start, bold(mark.start, "Example.")), closing];
+    case "rmkb":
+      return [headOnly(mark.start, last.start, { at: mark.start, text: "Remark.\xA0", italic: true }), closing];
+    case "rmk":
+      return [overlay(mark.start, mark.end, {
+        hide: [[mark.start, last.start], [last.end, mark.end]],
+        style: [{ start: last.start, end: last.end, style: "italic" }]
+      })];
+    case "question":
+      return [mark.option ? overlay(mark.start, last.start, {
+        hide: [[mark.start, mark.option.start], [mark.option.end, last.start]],
+        insert: [bold(mark.option.end, ".")],
+        style: [{ start: mark.option.start, end: mark.option.end, style: "bold" }]
+      }) : headOnly(mark.start, last.start, bold(mark.start, "Question.")), closing];
+  }
+  const kind = THEME_THEOREMS[mark.command];
+  const [title, second, third] = args;
+  const titled = text.slice(title.start, title.end).trim() !== "";
+  const label = kind.prefix ? text.slice(second.start, second.end).trim() : "";
+  const key = label && (label.startsWith(`${kind.prefix}:`) ? label : `${kind.prefix}:${label}`);
+  const number = key ? labels?.get(key)?.number : void 0;
+  const head = {
+    at: mark.start,
+    text: `${kind.name}${number ? `\xA0${number}` : ""}${titled ? "" : ".\xA0"}`,
+    ...kind.style === "remark" ? { italic: true } : { bold: true }
+  };
+  const headEnd = kind.prefix ? third.start : second.start;
+  const hide = titled ? [[mark.start, title.start], [title.end, second.start]] : [[mark.start, second.start]];
+  if (kind.prefix) hide.push([second.end, third.start]);
+  const overlays = [overlay(mark.start, headEnd, {
+    hide,
+    insert: titled ? [head, { at: title.start, text: "\xA0(" }, { at: title.end, text: ").\xA0" }] : [head],
+    style: label ? [{ start: second.start, end: second.end, style: "dim" }] : []
+  })];
+  if (kind.prefix) return [...overlays, closing];
+  return [...overlays, headOnly(second.end, third.start, bold(second.end, "Proof.")), qed(third.end, mark.end)];
+}
+function headOnly(start, end, head) {
+  return overlay(start, end, { hide: [[start, end]], insert: [head] });
+}
+function qed(start, end) {
+  return overlay(start, end, { hide: [[start, end]], insert: [{ at: start, text: "\u25A1" }] });
 }
 function dimmed(start, end) {
   return overlay(start, end, { style: [{ start, end, style: "dim" }] });
@@ -82420,7 +82527,7 @@ function theoremNumber(begin, kind, structure, text, theorems, labels) {
     if (label.start < begin.end) continue;
     if (end && label.start > end.start) break;
     const info = labels.get(text.slice(label.contentStart, label.contentEnd).trim());
-    if (info?.type && (info.type === begin.name || info.type === kind.counter || theorems.has(info.type))) return info.number;
+    if (info?.type && (info.type === begin.name || info.type === kind.counter || theorems.environments.has(info.type))) return info.number;
   }
   return void 0;
 }
@@ -82614,7 +82721,7 @@ var LiveMathPreview = class {
   disposables = [];
   workspaceMacros = {};
   cref = emptyCrefSettings();
-  theorems = /* @__PURE__ */ new Map();
+  theorems = emptyTheoremSettings();
   macroGeneration = 0;
   macroTimer;
   enabled = false;
@@ -82913,7 +83020,7 @@ var LiveMathPreview = class {
     files.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
     const macros = {};
     const cref = emptyCrefSettings();
-    const theorems = /* @__PURE__ */ new Map();
+    const theorems = emptyTheoremSettings();
     for (const file of files) {
       const stat14 = await vscode16.workspace.fs.stat(file).then((value) => value, () => void 0);
       if (!stat14 || stat14.size > MAX_MACRO_FILE_BYTES) continue;
