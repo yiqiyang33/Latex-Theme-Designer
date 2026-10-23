@@ -81208,17 +81208,18 @@ function findMathRegions(text, languageId, source = previewSource(text, language
   const blocks = [];
   for (const frame of closedEnvironments(source, DISPLAY_ENVIRONMENTS, "restarts")) {
     if (!source.slice(frame.bodyStart, frame.bodyEnd).trim()) continue;
-    const tex = frame.name === "displaymath" ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
-    blocks.push({ start: frame.start, end: frame.end, tex });
+    const texStart = frame.name === "displaymath" ? frame.bodyStart : frame.start;
+    const tex = text.slice(texStart, frame.name === "displaymath" ? frame.bodyEnd : frame.end);
+    blocks.push({ start: frame.start, end: frame.end, tex, texStart, closeStart: frame.bodyEnd });
   }
   const inline = [];
   walkMathDelimiters(blankRanges(source, blocks.map((block) => [block.start, block.end])), (frame, end, depth) => {
     if (depth !== 0) return;
     const delimiter4 = DELIMITER_LENGTH[frame.kind];
-    const tex = text.slice(frame.start + delimiter4, end - delimiter4);
-    if (!tex.trim()) return;
-    if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push({ start: frame.start, end, tex });
-    else if (!tex.includes("\n")) inline.push({ start: frame.start, end, tex });
+    const region = { start: frame.start, end, tex: text.slice(frame.start + delimiter4, end - delimiter4), texStart: frame.start + delimiter4, closeStart: end - delimiter4 };
+    if (!region.tex.trim()) return;
+    if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push(region);
+    else if (!region.tex.includes("\n")) inline.push(region);
   });
   const display = blocks.map((block) => onOwnLines(block, text, source)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
   return { inline, display };
@@ -81259,6 +81260,11 @@ function blankRanges(text, ranges) {
     copied = end;
   }
   return blanked + text.slice(copied);
+}
+function texWithCursor(region, cursor, marker) {
+  const at = cursor - region.texStart;
+  if (at < 0 || at > region.tex.length) return void 0;
+  return region.tex.slice(0, at) + marker + region.tex.slice(at);
 }
 function regionIsActive(region, selections) {
   return selections.some((selection) => selection.start <= region.end && region.start <= selection.end);
@@ -81992,6 +81998,20 @@ var MathRenderer = class {
       return { ok: true, image: { ...size, uri: this.store(svg) } };
     });
   }
+  /**
+   * A formula at the size it is set, in display style or inline, for the preview shown while it is
+   * edited. That preview changes with every move of the cursor, so its images are not kept as files.
+   */
+  renderUnscaled(tex, display, options) {
+    return this.cached(unscaledKey(tex, display), options, (engine) => {
+      const formula = typeset(engine, display ? withoutTags(tex) : tex, display);
+      if (!formula.ok) return formula;
+      const sized = sizeForEditor(formula.image.svg, options, false);
+      if (!sized) return { ok: false, error: NO_FIXED_SIZE };
+      const { svg, ...size } = sized;
+      return { ok: true, image: { ...size, uri: svgDataUri(svg) } };
+    });
+  }
   /** An inline formula's rendering if it has one already, without rendering it. */
   peek(tex, options) {
     return this.lookup(inlineKey(tex), options);
@@ -82113,6 +82133,9 @@ function translateY(transform) {
 function inlineKey(tex) {
   return `inline\0${tex}`;
 }
+function unscaledKey(tex, display) {
+  return `${display ? "display" : "text"}\0${tex}`;
+}
 function blockKey(tex, rows, tags) {
   return ["block", String(rows), tex, tags.map((tag) => `${tag.row ?? ""}:${tag.tex}`).join("")].join("\0");
 }
@@ -82148,11 +82171,11 @@ function svgDataUri(svg) {
   return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
 }
 var px = (value) => value.toFixed(2);
-function sizeForEditor(svg, options) {
+function sizeForEditor(svg, options, fitLine = true) {
   const size = exSize(svg);
   if (!size) return void 0;
   const exPx = options.fontSizePx * EX_PER_EM;
-  const scale = Math.min(1, options.lineHeightPx / (size.height * exPx));
+  const scale = fitLine ? Math.min(1, options.lineHeightPx / (size.height * exPx)) : 1;
   const widthPx = size.width * exPx * scale;
   const heightPx = size.height * exPx * scale;
   const root = size.root.replace(/\swidth="[^"]*"/, ` width="${px(widthPx)}px"`).replace(/\sheight="[^"]*"/, ` height="${px(heightPx)}px"`).replace(/\sstyle="[^"]*"/, "").replace(/^<svg/, `<svg style="color:${options.color}"`);
@@ -82946,7 +82969,12 @@ var NEAR_LINES = 10;
 var PREFETCH_LINES = 300;
 var SLICE_MS = 8;
 var SHOW_EVERY_MS = 100;
-var EDIT_PREVIEW_GAP = 4;
+var CURSOR_MARKER = "\u25B6";
+var EDIT_PREVIEW_PADDING = { x: 8, y: 4 };
+var EDIT_PREVIEW_BORDER = 1;
+var EDIT_PREVIEW_GAP = 2;
+var FORMULA_START_ANCHOR = "--latex-toolkit-formula-start";
+var FORMULA_END_ANCHOR = "--latex-toolkit-formula-end";
 var PAGE_ANCHOR = "--latex-toolkit-page";
 var SOLUTION_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)";
 var SOLUTION_TITLE_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)";
@@ -82980,6 +83008,10 @@ var LiveMathPreview = class {
       this.solutionBlockBackgrounds,
       this.errors,
       this.insertions,
+      this.editPreview,
+      this.formulaStart,
+      this.formulaEnd,
+      this.formulaLines,
       ...this.rangeStyles.values(),
       this.aux,
       this.aux.onDidChange(() => this.updateAll()),
@@ -83027,6 +83059,11 @@ var LiveMathPreview = class {
   });
   /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
   insertions = vscode16.window.createTextEditorDecorationType({});
+  editPreview = vscode16.window.createTextEditorDecorationType({});
+  formulaStart = vscode16.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_START_ANCHOR};` });
+  formulaEnd = vscode16.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_END_ANCHOR};` });
+  // The edited formula's lines report the editor's width, as the backgrounds under display formulas do.
+  formulaLines = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: `transparent; anchor-name: ${PAGE_ANCHOR};` });
   rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) => [style, vscode16.window.createTextEditorDecorationType(options)]));
   images;
   renderer;
@@ -83034,7 +83071,7 @@ var LiveMathPreview = class {
   scans = /* @__PURE__ */ new WeakMap();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   applied = /* @__PURE__ */ new WeakMap();
-  /** The last block rendered beside its source, kept while an edit leaves it unrenderable. */
+  /** The last rendering of the formula being edited, kept while an edit leaves it unrenderable. */
   lastEditPreview = /* @__PURE__ */ new WeakMap();
   rescanTimers = /* @__PURE__ */ new Map();
   uris = /* @__PURE__ */ new WeakMap();
@@ -83225,12 +83262,7 @@ var LiveMathPreview = class {
       const firstLine = document2.positionAt(region.start).line;
       const tex = withNumbers(region.tex);
       const tags = equationTags(region.tex, labels);
-      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
-        const result2 = this.renderer.renderBlock(tex, region.rows, options, tags);
-        const rendered = result2.ok ? result2.image : void 0;
-        for (const item of this.besideSource(document2, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
-        return;
-      }
+      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) return;
       const result = isNear(region.linesStart, region.linesEnd) ? this.renderer.renderBlock(tex, region.rows, options, tags) : this.renderer.peekBlock(tex, region.rows, options, tags);
       if (!result) return;
       if (!result.ok) {
@@ -83293,6 +83325,21 @@ var LiveMathPreview = class {
         });
       });
     });
+    const editPreview = new Decorations();
+    const formulaStart = new Decorations();
+    const formulaEnd = new Decorations();
+    const formulaLines = new Decorations();
+    const cursor = document2.offsetAt(editor.selection.active);
+    const edited = editedFormula(scan.regions, { start: document2.offsetAt(editor.selection.start), end: document2.offsetAt(editor.selection.end) });
+    const preview = edited && this.previewWhileEditing(document2, edited, cursor, { top, bottom }, options, withNumbers);
+    if (edited && preview) {
+      editPreview.add(`${edited.key}:${cursor}:${preview.below ? "below" : "above"}`, preview.decoration);
+      formulaStart.add(edited.key, range(edited.region.start, edited.region.start + 1));
+      formulaEnd.add(edited.key, range(edited.region.closeStart, edited.region.closeStart + 1));
+      for (const line of new Set([edited.region.start, edited.region.closeStart].map((offset) => document2.positionAt(offset).line))) {
+        formulaLines.add(edited.key, new vscode16.Range(line, 0, line, 0));
+      }
+    }
     const state = [
       scan.version,
       scan.macroGeneration,
@@ -83313,6 +83360,10 @@ var LiveMathPreview = class {
     this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
+    this.apply(editor, this.editPreview, editPreview, state);
+    this.apply(editor, this.formulaStart, formulaStart, state);
+    this.apply(editor, this.formulaEnd, formulaEnd, state);
+    this.apply(editor, this.formulaLines, formulaLines, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style), state);
     this.planBackground(editor, scan, lines, options, withNumbers, labels);
   }
@@ -83417,35 +83468,48 @@ var LiveMathPreview = class {
     return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
   /**
-   * While a block is edited its source shows, and its rendering sits to the right of its longest
-   * line, as Obsidian shows it below. An edit that leaves it unrenderable keeps the last rendering.
+   * While a formula is edited its rendering shows above it, over the lines there, as Latex Suite
+   * shows it in Obsidian, with the cursor marked: an extension cannot make room between lines. It
+   * goes below instead where the top of the editor leaves no room above, and stays within the
+   * editor's width. An edit that leaves the formula unrenderable keeps its last rendering.
    */
-  besideSource(document2, region, rendered, tabSize, lineHeightPx) {
-    const firstLine = document2.positionAt(region.start).line;
+  previewWhileEditing(document2, edited, cursor, viewport, options, withNumbers) {
+    const { region, display } = edited;
+    const marked = texWithCursor(region, cursor, CURSOR_MARKER);
+    const markedTex = marked === void 0 ? void 0 : withNumbers(marked);
+    let result = markedTex?.includes(CURSOR_MARKER) ? this.renderer.renderUnscaled(markedTex, display, options) : void 0;
+    if (!result?.ok) result = this.renderer.renderUnscaled(withNumbers(region.tex), display, options);
     const last = this.lastEditPreview.get(document2);
-    const block = rendered ?? (last?.line === firstLine ? last.block : void 0);
-    if (!block) return [];
-    if (rendered) this.lastEditPreview.set(document2, { line: firstLine, block: rendered });
-    let widest = 0;
-    for (let row = 0; row < region.rows; row++) {
-      const text = document2.lineAt(firstLine + row).text;
-      widest = Math.max(widest, visualColumn(text, text.length, tabSize));
-    }
-    return block.slices.filter((slice) => slice.row < region.rows).map((slice) => {
-      const end = document2.lineAt(firstLine + slice.row).range.end;
-      return {
-        range: new vscode16.Range(end, end),
+    const image = result.ok ? result.image : last?.start === region.start ? last.image : void 0;
+    if (!image) return void 0;
+    if (result.ok) this.lastEditPreview.set(document2, { start: region.start, image });
+    const chrome = (padding) => 2 * (padding + EDIT_PREVIEW_BORDER);
+    const rows = Math.ceil((image.heightPx + chrome(EDIT_PREVIEW_PADDING.y) + EDIT_PREVIEW_GAP) / options.lineHeightPx);
+    const below = document2.positionAt(region.start).line - viewport.top < rows && viewport.bottom - document2.positionAt(region.closeStart).line >= rows;
+    const at = document2.positionAt(below ? region.closeStart : region.start);
+    const outerWidth = image.widthPx + chrome(EDIT_PREVIEW_PADDING.x);
+    const from = `anchor(${FORMULA_START_ANCHOR} left, anchor(${FORMULA_END_ANCHOR} left))`;
+    const left = `max(0px, min(${from}, anchor(${PAGE_ANCHOR} right, 100%) - ${outerWidth.toFixed(2)}px))`;
+    const vertical = below ? `top: anchor(${FORMULA_END_ANCHOR} bottom); margin-top: ${EDIT_PREVIEW_GAP}px;` : `bottom: anchor(${FORMULA_START_ANCHOR} top); margin-bottom: ${EDIT_PREVIEW_GAP}px;`;
+    return {
+      below,
+      decoration: {
+        range: new vscode16.Range(at, at),
         renderOptions: {
-          after: {
-            contentIconPath: this.uriFor(slice),
-            width: `${block.widthPx.toFixed(2)}px`,
-            height: `${lineHeightPx}px`,
-            // Positioned out of the text flow, so the cursor and line lengths stay as they are.
-            textDecoration: `none; position: absolute; top: 0; left: ${widest + EDIT_PREVIEW_GAP}ch;`
+          before: {
+            contentIconPath: this.uriFor(image),
+            width: `${image.widthPx.toFixed(2)}px`,
+            height: `${image.heightPx.toFixed(2)}px`,
+            backgroundColor: new vscode16.ThemeColor("editorHoverWidget.background"),
+            border: `${EDIT_PREVIEW_BORDER}px solid`,
+            borderColor: new vscode16.ThemeColor("editorHoverWidget.border"),
+            // Fixed, as the anchors are only within reach of that; above the lines after it; and
+            // clicks go through to the text it covers. No font size, so no line box pads the image.
+            textDecoration: `none; position: fixed; z-index: 1; pointer-events: none; padding: ${EDIT_PREVIEW_PADDING.y}px ${EDIT_PREVIEW_PADDING.x}px; border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow); font-size: 0; line-height: 0; left: ${left}; ${vertical}`
           }
         }
-      };
-    });
+      }
+    };
   }
   apply(editor, type, decorations, state) {
     let applied = this.applied.get(editor);
@@ -83468,6 +83532,10 @@ var LiveMathPreview = class {
     editor.setDecorations(this.solutionBlockBackgrounds, []);
     editor.setDecorations(this.errors, []);
     editor.setDecorations(this.insertions, []);
+    editor.setDecorations(this.editPreview, []);
+    editor.setDecorations(this.formulaStart, []);
+    editor.setDecorations(this.formulaEnd, []);
+    editor.setDecorations(this.formulaLines, []);
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
   /** Parsing an image's URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
@@ -83536,6 +83604,12 @@ var Decorations = class {
     if (this.keys[this.keys.length - 1] !== key) this.keys.push(key);
   }
 };
+function editedFormula(regions, selection) {
+  const display = regions.display.findIndex((region) => regionIsActive({ start: region.linesStart, end: region.linesEnd }, [selection]));
+  if (display !== -1) return { region: regions.display[display], display: true, key: `d${display}` };
+  const inline = regions.inline.findIndex((region) => regionIsActive(region, [selection]));
+  return inline === -1 ? void 0 : { region: regions.inline[inline], display: false, key: `i${inline}` };
+}
 function visualColumn(text, character, tabSize) {
   let column = 0;
   for (let i = 0; i < character; i++) column = text[i] === "	" ? column + tabSize - column % tabSize : column + 1;

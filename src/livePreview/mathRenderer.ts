@@ -143,6 +143,21 @@ export class MathRenderer {
     });
   }
 
+  /**
+   * A formula at the size it is set, in display style or inline, for the preview shown while it is
+   * edited. That preview changes with every move of the cursor, so its images are not kept as files.
+   */
+  renderUnscaled(tex: string, display: boolean, options: MathRenderOptions): MathRenderResult {
+    return this.cached(unscaledKey(tex, display), options, engine => {
+      const formula = typeset(engine, display ? withoutTags(tex) : tex, display);
+      if (!formula.ok) return formula;
+      const sized = sizeForEditor(formula.image.svg, options, false);
+      if (!sized) return { ok: false, error: NO_FIXED_SIZE };
+      const { svg, ...size } = sized;
+      return { ok: true, image: { ...size, uri: svgDataUri(svg) } };
+    });
+  }
+
   /** An inline formula's rendering if it has one already, without rendering it. */
   peek(tex: string, options: MathRenderOptions): MathRenderResult | undefined {
     return this.lookup(inlineKey(tex), options) as MathRenderResult | undefined;
@@ -299,6 +314,10 @@ function inlineKey(tex: string): string {
   return `inline\u0000${tex}`;
 }
 
+function unscaledKey(tex: string, display: boolean): string {
+  return `${display ? 'display' : 'text'}\u0000${tex}`;
+}
+
 function blockKey(tex: string, rows: number, tags: readonly EquationTag[]): string {
   return ['block', String(rows), tex, tags.map(tag => `${tag.row ?? ''}:${tag.tex}`).join('\u0001')].join('\u0000');
 }
@@ -355,14 +374,15 @@ export function svgDataUri(svg: string): string {
 const px = (value: number) => value.toFixed(2);
 
 /**
- * Turns MathJax's ex-sized SVG into a px-sized image. The image is shown through CSS `content`,
- * which ignores CSS width and height, so the size has to live in the SVG itself.
+ * Turns MathJax's ex-sized SVG into a px-sized image, scaled down to fit a line unless `fitLine` is
+ * false. The image is shown through CSS `content`, which ignores CSS width and height, so the size
+ * has to live in the SVG itself.
  */
-export function sizeForEditor(svg: string, options: SizingOptions): SizedMath | undefined {
+export function sizeForEditor(svg: string, options: SizingOptions, fitLine = true): SizedMath | undefined {
   const size = exSize(svg);
   if (!size) return undefined;
   const exPx = options.fontSizePx * EX_PER_EM;
-  const scale = Math.min(1, options.lineHeightPx / (size.height * exPx));
+  const scale = fitLine ? Math.min(1, options.lineHeightPx / (size.height * exPx)) : 1;
   const widthPx = size.width * exPx * scale;
   const heightPx = size.height * exPx * scale;
   const root = size.root

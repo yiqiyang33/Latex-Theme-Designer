@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMacroDefinitions } from '../src/livePreview/macros';
-import { findMathRegions, previewSource, regionIsActive } from '../src/livePreview/mathRegions';
+import { findMathRegions, previewSource, regionIsActive, texWithCursor } from '../src/livePreview/mathRegions';
 import { decoratedLines } from '../src/livePreview/lineWindow';
 import { MathRenderer, sizeForEditor, sliceForLines, type MathRenderOptions } from '../src/livePreview/mathRenderer';
 
@@ -11,8 +11,8 @@ describe('findMathRegions: inline', () => {
   it('finds $...$ and \\(...\\) with the offsets of their delimiters', () => {
     const text = 'Let $x$ and \\(y^2\\) be.';
     expect(findMathRegions(text, 'latex').inline).toEqual([
-      { start: 4, end: 7, tex: 'x' },
-      { start: 12, end: 19, tex: 'y^2' }
+      { start: 4, end: 7, tex: 'x', texStart: 5, closeStart: 6 },
+      { start: 12, end: 19, tex: 'y^2', texStart: 14, closeStart: 17 }
     ]);
   });
 
@@ -46,12 +46,32 @@ describe('findMathRegions: display', () => {
     const text = 'Text\n\\[\n  x\n\\]\n$$ y $$\n  \\begin{align*}\n a &= b\n  \\end{align*} % note\nMore';
     const at = (needle: string) => text.indexOf(needle);
     expect(findMathRegions(text, 'latex').display).toEqual([
-      { start: at('\\['), end: at('\\]') + 2, tex: '\n  x\n', rows: 3, linesStart: at('\\['), linesEnd: at('\\]') + 2 },
-      { start: at('$$'), end: at('\n  \\begin'), tex: ' y ', rows: 1, linesStart: at('$$'), linesEnd: at('\n  \\begin') },
+      {
+        start: at('\\['),
+        end: at('\\]') + 2,
+        tex: '\n  x\n',
+        texStart: at('\\[') + 2,
+        closeStart: at('\\]'),
+        rows: 3,
+        linesStart: at('\\['),
+        linesEnd: at('\\]') + 2
+      },
+      {
+        start: at('$$'),
+        end: at('\n  \\begin'),
+        tex: ' y ',
+        texStart: at('$$') + 2,
+        closeStart: at('\n  \\begin') - 2,
+        rows: 1,
+        linesStart: at('$$'),
+        linesEnd: at('\n  \\begin')
+      },
       {
         start: at('\\begin'),
         end: at(' % note'),
         tex: '\\begin{align*}\n a &= b\n  \\end{align*}',
+        texStart: at('\\begin'),
+        closeStart: at('\\end'),
         rows: 3,
         linesStart: at('  \\begin'),
         linesEnd: at('\nMore')
@@ -60,7 +80,10 @@ describe('findMathRegions: display', () => {
   });
 
   it('gives MathJax the body of displaymath, which it does not know', () => {
-    expect(displayTex('\\begin{displaymath}\n x\n\\end{displaymath}')).toEqual(['\n x\n']);
+    const text = '\\begin{displaymath}\n x\n\\end{displaymath}';
+    expect(findMathRegions(text, 'latex').display).toMatchObject([
+      { tex: '\n x\n', texStart: text.indexOf('\n'), closeStart: text.indexOf('\\end') }
+    ]);
   });
 
   it('leaves blocks that share a line with text, and empty ones', () => {
@@ -85,6 +108,22 @@ describe('previewSource', () => {
     // A comment keeps its line's \r; a verbatim body is blanked to its line breaks alone.
     expect(source).toBe('a $x$       \r\n\\% kept\r\n\\begin{verbatim} \n    \n\\end{verbatim}');
     expect(source).toHaveLength(text.length);
+  });
+});
+
+describe('texWithCursor', () => {
+  it('marks the cursor in the TeX, from either end of it, but not on a delimiter', () => {
+    const text = 'Let $a+b$ be.';
+    const [region] = findMathRegions(text, 'latex').inline;
+    const at = (cursor: number) => texWithCursor(region, cursor, '|');
+    expect([at(5), at(6), at(8)]).toEqual(['|a+b', 'a|+b', 'a+b|']);
+    expect([at(4), at(9)]).toEqual([undefined, undefined]);
+  });
+
+  it('marks it in an environment, which MathJax takes whole', () => {
+    const text = '\\begin{align}\n x &= 1\n\\end{align}';
+    const [region] = findMathRegions(text, 'latex').display;
+    expect(texWithCursor(region, text.indexOf('1'), '|')).toBe('\\begin{align}\n x &= |1\n\\end{align}');
   });
 });
 
@@ -224,6 +263,28 @@ describe('MathRenderer', () => {
     expect(renderer.renderBlock('\\begin{align}\n a &= \\frac{1}{\n\\end{align}', 3, options())).toMatchObject({ ok: false });
   });
 
+  it('renders a formula at the size it is set for the preview while it is edited, inline or displayed', () => {
+    const fraction = '\\frac{\\frac{a}{b}}{\\frac{c}{d}}';
+    const unscaled = renderer.renderUnscaled(fraction, false, options());
+    const displayed = renderer.renderUnscaled(fraction, true, options());
+    expect(unscaled.ok && displayed.ok).toBe(true);
+    if (!unscaled.ok || !displayed.ok) return;
+    // Not squeezed into a line, and display style sets the fractions larger still.
+    expect(unscaled.image.heightPx).toBeGreaterThan(21);
+    expect(displayed.image.heightPx).toBeGreaterThan(unscaled.image.heightPx);
+    expect(decode(displayed.image.uri)).toContain(`height="${displayed.image.heightPx.toFixed(2)}px"`);
+    expect(renderer.renderUnscaled(fraction, true, options())).toBe(displayed);
+  });
+
+  it('keeps the images of the preview while editing out of the image store', async () => {
+    const written: string[] = [];
+    const store = new MathRenderer(svg => { written.push(svg); return `file:///images/${written.length}.svg`; });
+    await store.load();
+    const result = store.renderUnscaled('x \\tag{1}', true, options());
+    expect(result.ok && result.image.uri.startsWith('data:image/svg+xml;base64,')).toBe(true);
+    expect(written).toEqual([]);
+  });
+
   it('renders a labelled equation again, as after an edit or a theme change', () => {
     const labelled = '\\begin{equation}\n x = 1 \\label{eq:x}\n\\end{equation}';
     expect(renderer.renderBlock(labelled, 3, options()).ok).toBe(true);
@@ -250,6 +311,12 @@ describe('sizeForEditor', () => {
     const svg = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 0 1 1"></svg>';
     const image = sizeForEditor(svg, { color: '#000', fontSizePx: 20, lineHeightPx: 100 });
     expect(image).toMatchObject({ widthPx: 44, heightPx: 22, verticalAlignPx: -5.5 });
+  });
+
+  it('keeps the size MathJax set when told not to fit the line', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="4ex" height="20ex" viewBox="0 0 1 1"></svg>';
+    expect(sizeForEditor(svg, { color: '#000', fontSizePx: 20, lineHeightPx: 100 })).toMatchObject({ heightPx: 100 });
+    expect(sizeForEditor(svg, { color: '#000', fontSizePx: 20, lineHeightPx: 100 }, false)).toMatchObject({ widthPx: 44, heightPx: 220 });
   });
 
   it('refuses an SVG MathJax did not give a fixed size', () => {

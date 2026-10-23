@@ -12,6 +12,10 @@ export interface MathRegion {
   end: number;
   /** The TeX to typeset. */
   tex: string;
+  /** Offset of `tex` in the text. */
+  texStart: number;
+  /** Offset of the closing delimiter. */
+  closeStart: number;
 }
 
 /** A display formula with its lines to itself, so its rendering can take their whole height. */
@@ -60,18 +64,19 @@ export function findMathRegions(text: string, languageId?: string, source = prev
   for (const frame of closedEnvironments(source, DISPLAY_ENVIRONMENTS, 'restarts')) {
     if (!source.slice(frame.bodyStart, frame.bodyEnd).trim()) continue;
     // MathJax takes the environments themselves, except displaymath, which it does not know.
-    const tex = frame.name === 'displaymath' ? text.slice(frame.bodyStart, frame.bodyEnd) : text.slice(frame.start, frame.end);
-    blocks.push({ start: frame.start, end: frame.end, tex });
+    const texStart = frame.name === 'displaymath' ? frame.bodyStart : frame.start;
+    const tex = text.slice(texStart, frame.name === 'displaymath' ? frame.bodyEnd : frame.end);
+    blocks.push({ start: frame.start, end: frame.end, tex, texStart, closeStart: frame.bodyEnd });
   }
   const inline: MathRegion[] = [];
   // A `$` in a display environment belongs to text nested in the formula, not to a formula of its own.
   walkMathDelimiters(blankRanges(source, blocks.map(block => [block.start, block.end])), (frame, end, depth) => {
     if (depth !== 0) return;
     const delimiter = DELIMITER_LENGTH[frame.kind];
-    const tex = text.slice(frame.start + delimiter, end - delimiter);
-    if (!tex.trim()) return;
-    if (frame.kind === 'displayDollar' || frame.kind === 'bracket') blocks.push({ start: frame.start, end, tex });
-    else if (!tex.includes('\n')) inline.push({ start: frame.start, end, tex });
+    const region = { start: frame.start, end, tex: text.slice(frame.start + delimiter, end - delimiter), texStart: frame.start + delimiter, closeStart: end - delimiter };
+    if (!region.tex.trim()) return;
+    if (frame.kind === 'displayDollar' || frame.kind === 'bracket') blocks.push(region);
+    else if (!region.tex.includes('\n')) inline.push(region);
   });
   const display = blocks
     .map(block => onOwnLines(block, text, source))
@@ -135,6 +140,13 @@ function blankRanges(text: string, ranges: Array<[number, number]>): string {
     copied = end;
   }
   return blanked + text.slice(copied);
+}
+
+/** The formula's TeX with `marker` at the cursor, if the cursor is in the TeX rather than on a delimiter. */
+export function texWithCursor(region: MathRegion, cursor: number, marker: string): string | undefined {
+  const at = cursor - region.texStart;
+  if (at < 0 || at > region.tex.length) return undefined;
+  return region.tex.slice(0, at) + marker + region.tex.slice(at);
 }
 
 /**

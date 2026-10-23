@@ -8,8 +8,8 @@ import { citationOverlays, findCitations, type CitationRegion } from './citation
 import { ImageStore } from './imageStore';
 import { decoratedLines, type LineWindow } from './lineWindow';
 import { parseMacroDefinitions } from './macros';
-import { findMathRegions, previewSource, regionIsActive, type DisplayMathRegion, type MathRegions } from './mathRegions';
-import { MathRenderer, type MathJaxMacros, type MathRenderOptions, type RenderedBlock } from './mathRenderer';
+import { findMathRegions, previewSource, regionIsActive, texWithCursor, type MathRegion, type MathRegions } from './mathRegions';
+import { MathRenderer, type MathJaxMacros, type MathRenderOptions, type RenderedMath } from './mathRenderer';
 import type { Insertion, Overlay, RangeStyle } from './overlays';
 import {
   equationTags,
@@ -50,8 +50,19 @@ const PREFETCH_LINES = 300;
 const SLICE_MS = 8;
 /** How often formulas rendered in the background are shown while more are still coming. */
 const SHOW_EVERY_MS = 100;
-/** Columns between the longest line of a block being edited and its rendering. */
-const EDIT_PREVIEW_GAP = 4;
+/** Marks the cursor in the preview shown while a formula is edited, as Latex Suite does in Obsidian. */
+const CURSOR_MARKER = '\u25B6';
+/** Space around the formula in that preview, inside its border, and between it and the formula's line. */
+const EDIT_PREVIEW_PADDING = { x: 8, y: 4 };
+const EDIT_PREVIEW_BORDER = 1;
+const EDIT_PREVIEW_GAP = 2;
+/**
+ * Name the first characters of the formula being edited and of its closing delimiter, which that
+ * preview is placed against with CSS anchor positioning. They are drawn as backgrounds: the preview
+ * cannot reach an anchor in the text of a line.
+ */
+const FORMULA_START_ANCHOR = '--latex-toolkit-formula-start';
+const FORMULA_END_ANCHOR = '--latex-toolkit-formula-end';
 /**
  * Names the backgrounds laid under display formulas, which span their lines as wide as VS Code lays
  * the lines out: a formula is centred against one with CSS anchor positioning. Unlike the lines'
@@ -122,7 +133,8 @@ const RANGE_STYLES: Record<RangeStyle, vscode.DecorationRenderOptions> = {
  * editing feature keeps working on it, and moving onto a formula shows it again.
  *
  * Display formulas are drawn over the lines their source takes, since an extension cannot change
- * line heights. The source keeps its lines when shown again, so nothing below it moves.
+ * line heights. The source keeps its lines when shown again, so nothing below it moves. For the
+ * same reason the rendering of a formula being edited floats over the lines above it.
  */
 export class LiveMathPreview implements vscode.Disposable {
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
@@ -151,6 +163,11 @@ export class LiveMathPreview implements vscode.Disposable {
   });
   /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
   private readonly insertions = vscode.window.createTextEditorDecorationType({});
+  private readonly editPreview = vscode.window.createTextEditorDecorationType({});
+  private readonly formulaStart = vscode.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_START_ANCHOR};` });
+  private readonly formulaEnd = vscode.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_END_ANCHOR};` });
+  // The edited formula's lines report the editor's width, as the backgrounds under display formulas do.
+  private readonly formulaLines = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: `transparent; anchor-name: ${PAGE_ANCHOR};` });
   private readonly rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) =>
     [style as RangeStyle, vscode.window.createTextEditorDecorationType(options)]));
   private readonly images: ImageStore | undefined;
@@ -159,8 +176,8 @@ export class LiveMathPreview implements vscode.Disposable {
   private readonly scans = new WeakMap<vscode.TextDocument, DocumentScan>();
   /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
   private readonly applied = new WeakMap<vscode.TextEditor, Map<vscode.TextEditorDecorationType, string>>();
-  /** The last block rendered beside its source, kept while an edit leaves it unrenderable. */
-  private readonly lastEditPreview = new WeakMap<vscode.TextDocument, { line: number; block: RenderedBlock }>();
+  /** The last rendering of the formula being edited, kept while an edit leaves it unrenderable. */
+  private readonly lastEditPreview = new WeakMap<vscode.TextDocument, { start: number; image: RenderedMath }>();
   private readonly rescanTimers = new Map<string, NodeJS.Timeout>();
   private readonly uris = new WeakMap<{ uri: string }, vscode.Uri>();
   /** The lines each editor decorates, kept while it scrolls within them. */
@@ -196,6 +213,10 @@ export class LiveMathPreview implements vscode.Disposable {
       this.solutionBlockBackgrounds,
       this.errors,
       this.insertions,
+      this.editPreview,
+      this.formulaStart,
+      this.formulaEnd,
+      this.formulaLines,
       ...this.rangeStyles.values(),
       this.aux,
       this.aux.onDidChange(() => this.updateAll()),
@@ -417,12 +438,7 @@ export class LiveMathPreview implements vscode.Disposable {
       const firstLine = document.positionAt(region.start).line;
       const tex = withNumbers(region.tex);
       const tags = equationTags(region.tex, labels);
-      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) {
-        const result = this.renderer.renderBlock(tex, region.rows, options, tags);
-        const rendered = result.ok ? result.image : undefined;
-        for (const item of this.besideSource(document, region, rendered, tabSize, options.lineHeightPx)) blockImages.add(`p${index}`, item);
-        return;
-      }
+      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) return;
       const result = isNear(region.linesStart, region.linesEnd)
         ? this.renderer.renderBlock(tex, region.rows, options, tags)
         : this.renderer.peekBlock(tex, region.rows, options, tags);
@@ -504,6 +520,22 @@ export class LiveMathPreview implements vscode.Disposable {
       });
     });
 
+    const editPreview = new Decorations<vscode.DecorationOptions>();
+    const formulaStart = new Decorations<vscode.Range>();
+    const formulaEnd = new Decorations<vscode.Range>();
+    const formulaLines = new Decorations<vscode.Range>();
+    const cursor = document.offsetAt(editor.selection.active);
+    const edited = editedFormula(scan.regions, { start: document.offsetAt(editor.selection.start), end: document.offsetAt(editor.selection.end) });
+    const preview = edited && this.previewWhileEditing(document, edited, cursor, { top, bottom }, options, withNumbers);
+    if (edited && preview) {
+      editPreview.add(`${edited.key}:${cursor}:${preview.below ? 'below' : 'above'}`, preview.decoration);
+      formulaStart.add(edited.key, range(edited.region.start, edited.region.start + 1));
+      formulaEnd.add(edited.key, range(edited.region.closeStart, edited.region.closeStart + 1));
+      for (const line of new Set([edited.region.start, edited.region.closeStart].map(offset => document.positionAt(offset).line))) {
+        formulaLines.add(edited.key, new vscode.Range(line, 0, line, 0));
+      }
+    }
+
     // Everything a type shows follows from these, so equal keys mean equal decorations.
     const state = [
       scan.version, scan.macroGeneration, this.aux.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize, wraps, pageColumns
@@ -517,6 +549,10 @@ export class LiveMathPreview implements vscode.Disposable {
     this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds, state);
     this.apply(editor, this.errors, errors, state);
     this.apply(editor, this.insertions, insertions, state);
+    this.apply(editor, this.editPreview, editPreview, state);
+    this.apply(editor, this.formulaStart, formulaStart, state);
+    this.apply(editor, this.formulaEnd, formulaEnd, state);
+    this.apply(editor, this.formulaLines, formulaLines, state);
     for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style)!, state);
     this.planBackground(editor, scan, lines, options, withNumbers, labels);
   }
@@ -626,41 +662,66 @@ export class LiveMathPreview implements vscode.Disposable {
   }
 
   /**
-   * While a block is edited its source shows, and its rendering sits to the right of its longest
-   * line, as Obsidian shows it below. An edit that leaves it unrenderable keeps the last rendering.
+   * While a formula is edited its rendering shows above it, over the lines there, as Latex Suite
+   * shows it in Obsidian, with the cursor marked: an extension cannot make room between lines. It
+   * goes below instead where the top of the editor leaves no room above, and stays within the
+   * editor's width. An edit that leaves the formula unrenderable keeps its last rendering.
    */
-  private besideSource(
+  private previewWhileEditing(
     document: vscode.TextDocument,
-    region: DisplayMathRegion,
-    rendered: RenderedBlock | undefined,
-    tabSize: number,
-    lineHeightPx: number
-  ): vscode.DecorationOptions[] {
-    const firstLine = document.positionAt(region.start).line;
+    edited: EditedFormula,
+    cursor: number,
+    viewport: { top: number; bottom: number },
+    options: MathRenderOptions,
+    withNumbers: (tex: string) => string
+  ): { decoration: vscode.DecorationOptions; below: boolean } | undefined {
+    const { region, display } = edited;
+    const marked = texWithCursor(region, cursor, CURSOR_MARKER);
+    const markedTex = marked === undefined ? undefined : withNumbers(marked);
+    // A marker in a label would leave its reference unresolved, and one in a command breaks it.
+    let result = markedTex?.includes(CURSOR_MARKER) ? this.renderer.renderUnscaled(markedTex, display, options) : undefined;
+    if (!result?.ok) result = this.renderer.renderUnscaled(withNumbers(region.tex), display, options);
     const last = this.lastEditPreview.get(document);
-    const block = rendered ?? (last?.line === firstLine ? last.block : undefined);
-    if (!block) return [];
-    if (rendered) this.lastEditPreview.set(document, { line: firstLine, block: rendered });
-    let widest = 0;
-    for (let row = 0; row < region.rows; row++) {
-      const text = document.lineAt(firstLine + row).text;
-      widest = Math.max(widest, visualColumn(text, text.length, tabSize));
-    }
-    return block.slices.filter(slice => slice.row < region.rows).map(slice => {
-      const end = document.lineAt(firstLine + slice.row).range.end;
-      return {
-        range: new vscode.Range(end, end),
+    const image = result.ok ? result.image : last?.start === region.start ? last.image : undefined;
+    if (!image) return undefined;
+    if (result.ok) this.lastEditPreview.set(document, { start: region.start, image });
+
+    const chrome = (padding: number) => 2 * (padding + EDIT_PREVIEW_BORDER);
+    const rows = Math.ceil((image.heightPx + chrome(EDIT_PREVIEW_PADDING.y) + EDIT_PREVIEW_GAP) / options.lineHeightPx);
+    // Counted in lines, which word wrap may make several rows each, so this errs towards below.
+    const below = document.positionAt(region.start).line - viewport.top < rows
+      && viewport.bottom - document.positionAt(region.closeStart).line >= rows;
+    // It hangs from a character on the line it is placed against, so it shows while that line does.
+    const at = document.positionAt(below ? region.closeStart : region.start);
+    const outerWidth = image.widthPx + chrome(EDIT_PREVIEW_PADDING.x);
+    // At the formula's start, or at its end's where the start is off screen, and further left if it
+    // would run past the editor's right edge.
+    const from = `anchor(${FORMULA_START_ANCHOR} left, anchor(${FORMULA_END_ANCHOR} left))`;
+    const left = `max(0px, min(${from}, anchor(${PAGE_ANCHOR} right, 100%) - ${outerWidth.toFixed(2)}px))`;
+    const vertical = below
+      ? `top: anchor(${FORMULA_END_ANCHOR} bottom); margin-top: ${EDIT_PREVIEW_GAP}px;`
+      : `bottom: anchor(${FORMULA_START_ANCHOR} top); margin-bottom: ${EDIT_PREVIEW_GAP}px;`;
+    return {
+      below,
+      decoration: {
+        range: new vscode.Range(at, at),
         renderOptions: {
-          after: {
-            contentIconPath: this.uriFor(slice),
-            width: `${block.widthPx.toFixed(2)}px`,
-            height: `${lineHeightPx}px`,
-            // Positioned out of the text flow, so the cursor and line lengths stay as they are.
-            textDecoration: `none; position: absolute; top: 0; left: ${widest + EDIT_PREVIEW_GAP}ch;`
+          before: {
+            contentIconPath: this.uriFor(image),
+            width: `${image.widthPx.toFixed(2)}px`,
+            height: `${image.heightPx.toFixed(2)}px`,
+            backgroundColor: new vscode.ThemeColor('editorHoverWidget.background'),
+            border: `${EDIT_PREVIEW_BORDER}px solid`,
+            borderColor: new vscode.ThemeColor('editorHoverWidget.border'),
+            // Fixed, as the anchors are only within reach of that; above the lines after it; and
+            // clicks go through to the text it covers. No font size, so no line box pads the image.
+            textDecoration: `none; position: fixed; z-index: 1; pointer-events: none; `
+              + `padding: ${EDIT_PREVIEW_PADDING.y}px ${EDIT_PREVIEW_PADDING.x}px; border-radius: 4px; `
+              + `box-shadow: 0 2px 8px var(--vscode-widget-shadow); font-size: 0; line-height: 0; left: ${left}; ${vertical}`
           }
         }
-      };
-    });
+      }
+    };
   }
 
   private apply<T extends vscode.Range | vscode.DecorationOptions>(
@@ -690,6 +751,10 @@ export class LiveMathPreview implements vscode.Disposable {
     editor.setDecorations(this.solutionBlockBackgrounds, []);
     editor.setDecorations(this.errors, []);
     editor.setDecorations(this.insertions, []);
+    editor.setDecorations(this.editPreview, []);
+    editor.setDecorations(this.formulaStart, []);
+    editor.setDecorations(this.formulaEnd, []);
+    editor.setDecorations(this.formulaLines, []);
     for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
   }
 
@@ -767,6 +832,20 @@ class Decorations<T> {
     this.items.push(item);
     if (this.keys[this.keys.length - 1] !== key) this.keys.push(key);
   }
+}
+
+/** The formula a selection is at, with a key naming it among the document's formulas. */
+interface EditedFormula {
+  region: MathRegion;
+  display: boolean;
+  key: string;
+}
+
+function editedFormula(regions: MathRegions, selection: { start: number; end: number }): EditedFormula | undefined {
+  const display = regions.display.findIndex(region => regionIsActive({ start: region.linesStart, end: region.linesEnd }, [selection]));
+  if (display !== -1) return { region: regions.display[display], display: true, key: `d${display}` };
+  const inline = regions.inline.findIndex(region => regionIsActive(region, [selection]));
+  return inline === -1 ? undefined : { region: regions.inline[inline], display: false, key: `i${inline}` };
 }
 
 /** The screen column `character` falls at, with tabs expanded. */
