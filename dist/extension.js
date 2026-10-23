@@ -82010,7 +82010,8 @@ var MathRenderer = class {
       }
       const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
       if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
-      return { ok: true, image: { widthPx: sliced.widthPx, slices: sliced.slices.map((slice) => ({ row: slice.row, uri: this.store(slice.svg) })) } };
+      const { slices, ...size } = sliced;
+      return { ok: true, image: { ...size, slices: slices.map((slice) => ({ row: slice.row, uri: this.store(slice.svg) })) } };
     });
   }
   /** A display formula's rendering if it has one already, without rendering it. */
@@ -82208,7 +82209,7 @@ function sliceForLines(svg, rows, options, tags = []) {
     const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, svg: slice });
   }
-  return { widthPx: width, slices };
+  return { widthPx: width, formulaWidthPx: formula.width * unit, slices };
 }
 
 // src/livePreview/imageStore.ts
@@ -82946,18 +82947,20 @@ var PREFETCH_LINES = 300;
 var SLICE_MS = 8;
 var SHOW_EVERY_MS = 100;
 var EDIT_PREVIEW_GAP = 4;
+var PAGE_ANCHOR = "--latex-toolkit-page";
 var SOLUTION_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)";
 var SOLUTION_TITLE_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)";
+var CHANGES_WIDTH = { letterSpacing: "inherit" };
 var RANGE_STYLES = {
   bold: { fontWeight: "bold" },
   italic: { fontStyle: "italic" },
   underline: { textDecoration: "underline" },
   // textDecoration carries CSS the public options do not have, as for hiding.
-  smallCaps: { textDecoration: "none; font-variant: small-caps;" },
+  smallCaps: { ...CHANGES_WIDTH, textDecoration: "none; font-variant: small-caps;" },
   dim: { opacity: "0.45" },
-  chapter: { fontWeight: "bold", textDecoration: "none; font-size: 1.3em;" },
-  section: { fontWeight: "bold", textDecoration: "none; font-size: 1.2em;" },
-  subsection: { fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" }
+  chapter: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.3em;" },
+  section: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.2em;" },
+  subsection: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" }
 };
 var LiveMathPreview = class {
   /** `imageRoot` is where rendered images are kept as files; without one they travel as data URIs. */
@@ -82999,7 +83002,7 @@ var LiveMathPreview = class {
   }
   output;
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
-  hidden = vscode16.window.createTextEditorDecorationType({ textDecoration: "none; display: none;" });
+  hidden = vscode16.window.createTextEditorDecorationType({ ...CHANGES_WIDTH, textDecoration: "none; display: none;" });
   inlineImages = vscode16.window.createTextEditorDecorationType({});
   // Display images are large; keeping them apart means moving through inline math does not resend them.
   blockImages = vscode16.window.createTextEditorDecorationType({});
@@ -83008,7 +83011,7 @@ var LiveMathPreview = class {
   // covers them; rulers are drawn above this layer, so they stay.
   blockBackgrounds = vscode16.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: new vscode16.ThemeColor("editor.background")
+    backgroundColor: `var(--vscode-editor-background); anchor-name: ${PAGE_ANCHOR};`
   });
   // Translucent, as decorations are drawn above the selection.
   solutionTitles = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
@@ -83017,7 +83020,7 @@ var LiveMathPreview = class {
   // indent guides as blockBackgrounds does; two separate types could be drawn in either order.
   solutionBlockBackgrounds = vscode16.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT});`
+    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT}); anchor-name: ${PAGE_ANCHOR};`
   });
   errors = vscode16.window.createTextEditorDecorationType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
@@ -83093,6 +83096,8 @@ var LiveMathPreview = class {
     }
     if (event.affectsConfiguration("latexEditingToolkit.livePreview") || event.affectsConfiguration("editor.fontSize") || event.affectsConfiguration("editor.lineHeight")) {
       this.refresh();
+    } else if (event.affectsConfiguration("editor.wordWrap") || event.affectsConfiguration("editor.wordWrapColumn")) {
+      this.updateAll();
     }
   }
   /** Re-renders everything, for changes that alter how every formula looks. */
@@ -83165,6 +83170,10 @@ var LiveMathPreview = class {
     const isNear = (start, end) => near.some((part) => end >= part.start && start <= part.end);
     const options = { ...this.renderSizing(document2), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === "number" ? editor.options.tabSize : 4;
+    const editorConfig = vscode16.workspace.getConfiguration("editor", document2);
+    const wrapMode = editorConfig.get("wordWrap", "off");
+    const wraps = wrapMode !== "off";
+    const pageColumns = wrapMode === "bounded" || wrapMode === "wordWrapColumn" ? editorConfig.get("wordWrapColumn", 80) : void 0;
     const aux = this.aux.auxFor(document2, scan.root);
     const labels = aux?.labels;
     const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.workspace.cref).text) : tex;
@@ -83238,8 +83247,14 @@ var LiveMathPreview = class {
       box?.formulas.push({ index, first: firstLine, last: lastLine });
       (box ? solutionBlockBackgrounds : blockBackgrounds).add(`d${index}`, new vscode16.Range(firstLine, 0, lastLine, 0));
       const indent = visualColumn(document2.lineAt(firstLine).text, document2.positionAt(region.start).character, tabSize) + tabSize;
+      const anchor = wraps ? region.rows - 1 : -1;
+      const half = (result.image.formulaWidthPx / 2).toFixed(2);
+      const page = pageColumns === void 0 ? void 0 : `${pageColumns / 2}ch`;
+      const lines2 = `anchor(${PAGE_ANCHOR} center, ${page ?? `calc(${indent}ch + ${half}px)`})`;
+      const centre = wrapMode === "wordWrapColumn" ? page : wrapMode === "bounded" ? `min(${lines2}, ${page})` : lines2;
+      const left = `max(0px, ${centre} - ${half}px)`;
       for (const slice of result.image.slices) {
-        const start = new vscode16.Position(firstLine + slice.row, 0);
+        const start = new vscode16.Position(firstLine + (wraps ? anchor : slice.row), 0);
         blockImages.add(`d${index}`, {
           range: new vscode16.Range(start, start),
           renderOptions: {
@@ -83247,9 +83262,7 @@ var LiveMathPreview = class {
               contentIconPath: this.uriFor(slice),
               width: `${result.image.widthPx.toFixed(2)}px`,
               height: `${options.lineHeightPx}px`,
-              margin: `0 0 0 ${indent}ch`,
-              // Each strip fills its line exactly, so the strips join into one formula.
-              textDecoration: "none; vertical-align: top;"
+              ...wraps ? { textDecoration: `none; position: fixed; margin-top: ${(slice.row - anchor) * options.lineHeightPx}px; left: ${left};` } : { margin: `0 0 0 ${indent}ch`, textDecoration: "none; vertical-align: top;" }
             }
           }
         });
@@ -83287,7 +83300,9 @@ var LiveMathPreview = class {
       options.color,
       options.fontSizePx,
       options.lineHeightPx,
-      tabSize
+      tabSize,
+      wraps,
+      pageColumns
     ].join(":");
     this.apply(editor, this.hidden, hidden, state);
     this.apply(editor, this.inlineImages, inlineImages, state);

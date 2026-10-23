@@ -52,6 +52,12 @@ const SLICE_MS = 8;
 const SHOW_EVERY_MS = 100;
 /** Columns between the longest line of a block being edited and its rendering. */
 const EDIT_PREVIEW_GAP = 4;
+/**
+ * Names the backgrounds laid under display formulas, which span their lines as wide as VS Code lays
+ * the lines out: a formula is centred against one with CSS anchor positioning. Unlike the lines'
+ * text, VS Code does not measure them, so their width follows the editor's as it is resized.
+ */
+const PAGE_ANCHOR = '--latex-toolkit-page';
 /** homework.sty's solution box, tinted from the link colour as a callout is, and its title bar more strongly. */
 const SOLUTION_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)';
 const SOLUTION_TITLE_TINT = 'color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)';
@@ -89,17 +95,25 @@ interface RenderTask {
   render: () => void;
 }
 
+/**
+ * Marks a decoration as changing how wide its text is drawn. On a line with none of these and no
+ * attached content, VS Code places the cursor and reads clicks by counting columns of a
+ * monospaced font, which text the preview hides or resizes throws off; with one, it measures the
+ * line as drawn. VS Code only asks whether letter spacing is set, so this keeps the editor's own.
+ */
+const CHANGES_WIDTH: vscode.DecorationRenderOptions = { letterSpacing: 'inherit' };
+
 /** How each style a stretch of source can take is drawn. */
 const RANGE_STYLES: Record<RangeStyle, vscode.DecorationRenderOptions> = {
   bold: { fontWeight: 'bold' },
   italic: { fontStyle: 'italic' },
   underline: { textDecoration: 'underline' },
   // textDecoration carries CSS the public options do not have, as for hiding.
-  smallCaps: { textDecoration: 'none; font-variant: small-caps;' },
+  smallCaps: { ...CHANGES_WIDTH, textDecoration: 'none; font-variant: small-caps;' },
   dim: { opacity: '0.45' },
-  chapter: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.3em;' },
-  section: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.2em;' },
-  subsection: { fontWeight: 'bold', textDecoration: 'none; font-size: 1.1em;' }
+  chapter: { ...CHANGES_WIDTH, fontWeight: 'bold', textDecoration: 'none; font-size: 1.3em;' },
+  section: { ...CHANGES_WIDTH, fontWeight: 'bold', textDecoration: 'none; font-size: 1.2em;' },
+  subsection: { ...CHANGES_WIDTH, fontWeight: 'bold', textDecoration: 'none; font-size: 1.1em;' }
 };
 
 /**
@@ -112,7 +126,7 @@ const RANGE_STYLES: Record<RangeStyle, vscode.DecorationRenderOptions> = {
  */
 export class LiveMathPreview implements vscode.Disposable {
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
-  private readonly hidden = vscode.window.createTextEditorDecorationType({ textDecoration: 'none; display: none;' });
+  private readonly hidden = vscode.window.createTextEditorDecorationType({ ...CHANGES_WIDTH, textDecoration: 'none; display: none;' });
   private readonly inlineImages = vscode.window.createTextEditorDecorationType({});
   // Display images are large; keeping them apart means moving through inline math does not resend them.
   private readonly blockImages = vscode.window.createTextEditorDecorationType({});
@@ -121,7 +135,7 @@ export class LiveMathPreview implements vscode.Disposable {
   // covers them; rulers are drawn above this layer, so they stay.
   private readonly blockBackgrounds = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: new vscode.ThemeColor('editor.background')
+    backgroundColor: `var(--vscode-editor-background); anchor-name: ${PAGE_ANCHOR};`
   });
   // Translucent, as decorations are drawn above the selection.
   private readonly solutionTitles = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
@@ -130,7 +144,7 @@ export class LiveMathPreview implements vscode.Disposable {
   // indent guides as blockBackgrounds does; two separate types could be drawn in either order.
   private readonly solutionBlockBackgrounds = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT});`
+    backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT}); anchor-name: ${PAGE_ANCHOR};`
   });
   private readonly errors = vscode.window.createTextEditorDecorationType({
     textDecoration: 'underline wavy var(--vscode-editorError-foreground)'
@@ -252,6 +266,8 @@ export class LiveMathPreview implements vscode.Disposable {
     if (event.affectsConfiguration('latexEditingToolkit.livePreview') || event.affectsConfiguration('editor.fontSize')
       || event.affectsConfiguration('editor.lineHeight')) {
       this.refresh();
+    } else if (event.affectsConfiguration('editor.wordWrap') || event.affectsConfiguration('editor.wordWrapColumn')) {
+      this.updateAll();
     }
   }
 
@@ -335,6 +351,12 @@ export class LiveMathPreview implements vscode.Disposable {
     const isNear = (start: number, end: number) => near.some(part => end >= part.start && start <= part.end);
     const options: MathRenderOptions = { ...this.renderSizing(document), macros: scan.macros };
     const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
+    const editorConfig = vscode.workspace.getConfiguration('editor', document);
+    const wrapMode = editorConfig.get<string>('wordWrap', 'off');
+    const wraps = wrapMode !== 'off';
+    // A text width the settings fix is the page display formulas centre on, as LaTeX centres them
+    // on its text width; bounded wraps at the window when it is narrower.
+    const pageColumns = wrapMode === 'bounded' || wrapMode === 'wordWrapColumn' ? editorConfig.get<number>('wordWrapColumn', 80) : undefined;
     // Until the root has been compiled there are no numbers, and references stay as source.
     const aux = this.aux.auxFor(document, scan.root);
     const labels = aux?.labels;
@@ -420,8 +442,22 @@ export class LiveMathPreview implements vscode.Disposable {
       (box ? solutionBlockBackgrounds : blockBackgrounds).add(`d${index}`, new vscode.Range(firstLine, 0, lastLine, 0));
       // Indented one level from its delimiter, as display math stands out from the text around it.
       const indent = visualColumn(document.lineAt(firstLine).text, document.positionAt(region.start).character, tabSize) + tabSize;
+      // VS Code wraps a line by its text even while the preview hides it, and does not tell
+      // extensions where, so with word wrap a row that wraps would push the strips below it down
+      // and split the formula. Then all of them hang from the block's last line instead, one above
+      // another: whatever the rows take, the formula stays whole within the block. It shows while
+      // that line is on screen, so scrolling down never takes it away while it is being read.
+      // The formula is centred on the lines as the editor shows them, or on the page where the
+      // settings fix one, and starts at the left edge when wider. The strips are fixed so that
+      // the backgrounds of the lines, which hold the anchor, are within their reach.
+      const anchor = wraps ? region.rows - 1 : -1;
+      const half = (result.image.formulaWidthPx / 2).toFixed(2);
+      const page = pageColumns === undefined ? undefined : `${pageColumns / 2}ch`;
+      const lines = `anchor(${PAGE_ANCHOR} center, ${page ?? `calc(${indent}ch + ${half}px)`})`;
+      const centre = wrapMode === 'wordWrapColumn' ? page : wrapMode === 'bounded' ? `min(${lines}, ${page})` : lines;
+      const left = `max(0px, ${centre} - ${half}px)`;
       for (const slice of result.image.slices) {
-        const start = new vscode.Position(firstLine + slice.row, 0);
+        const start = new vscode.Position(firstLine + (wraps ? anchor : slice.row), 0);
         blockImages.add(`d${index}`, {
           range: new vscode.Range(start, start),
           renderOptions: {
@@ -429,9 +465,10 @@ export class LiveMathPreview implements vscode.Disposable {
               contentIconPath: this.uriFor(slice),
               width: `${result.image.widthPx.toFixed(2)}px`,
               height: `${options.lineHeightPx}px`,
-              margin: `0 0 0 ${indent}ch`,
-              // Each strip fills its line exactly, so the strips join into one formula.
-              textDecoration: 'none; vertical-align: top;'
+              ...wraps
+                ? { textDecoration: `none; position: fixed; margin-top: ${(slice.row - anchor) * options.lineHeightPx}px; left: ${left};` }
+                // Each strip fills its line exactly, so the strips join into one formula.
+                : { margin: `0 0 0 ${indent}ch`, textDecoration: 'none; vertical-align: top;' }
             }
           }
         });
@@ -469,7 +506,7 @@ export class LiveMathPreview implements vscode.Disposable {
 
     // Everything a type shows follows from these, so equal keys mean equal decorations.
     const state = [
-      scan.version, scan.macroGeneration, this.aux.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize
+      scan.version, scan.macroGeneration, this.aux.generation, options.color, options.fontSizePx, options.lineHeightPx, tabSize, wraps, pageColumns
     ].join(':');
     this.apply(editor, this.hidden, hidden, state);
     this.apply(editor, this.inlineImages, inlineImages, state);

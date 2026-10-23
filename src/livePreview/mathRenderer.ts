@@ -35,12 +35,14 @@ export interface BlockSlice {
 /** A display formula cut into line-tall strips, one for each line of its block that it reaches. */
 export interface RenderedBlock {
   widthPx: number;
+  /** Width of the formula itself, without the numbers set after it. */
+  formulaWidthPx: number;
   slices: BlockSlice[];
 }
 
 /** A formula's SVG sized for the editor, before it is stored. */
 export type SizedMath = Omit<RenderedMath, 'uri'> & { svg: string };
-export type SlicedBlock = { widthPx: number; slices: Array<{ row: number; svg: string }> };
+export type SlicedBlock = Omit<RenderedBlock, 'slices'> & { slices: Array<{ row: number; svg: string }> };
 
 /** Keeps an image somewhere a decoration can show it from, and says where. */
 export type ImageWriter = (svg: string) => string;
@@ -163,7 +165,8 @@ export class MathRenderer {
       }
       const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
       if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
-      return { ok: true, image: { widthPx: sliced.widthPx, slices: sliced.slices.map(slice => ({ row: slice.row, uri: this.store(slice.svg) })) } };
+      const { slices, ...size } = sliced;
+      return { ok: true, image: { ...size, slices: slices.map(slice => ({ row: slice.row, uri: this.store(slice.svg) })) } };
     });
   }
 
@@ -453,5 +456,5 @@ export function sliceForLines(svg: string, rows: number, options: SizingOptions,
       + `viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, svg: slice });
   }
-  return { widthPx: width, slices };
+  return { widthPx: width, formulaWidthPx: formula.width * unit, slices };
 }
