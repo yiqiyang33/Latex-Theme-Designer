@@ -5,12 +5,11 @@ import { STARTER_TEMPLATE_DEFINITIONS } from "./schema";
 import { defaultBeamerSettings, isHomeworkTemplate, readTemplateMetadata, starterTemplate, writeBeamerSettings, writeTemplateMetadata } from "./beamer";
 import { defaultHomeworkSettings, writeHomeworkSettings } from "./homework";
 import { ensureWorkspaceTemplateAssets, StateService } from "./state";
-import { upgradableTemplateExtras } from "./templatePlan";
+import { UPGRADABLE_THEME_ASSETS, upgradableTemplateExtras } from "./templatePlan";
 import type { UpgradeThemeAssetsOptions, UpgradeThemeAssetsResult } from "./types";
 import { assertWorkspacePathSafe, exists, extractDocumentclassDeclaration, isSubpath, normalizeCompileTarget, toPosixPath, workspaceRel } from "./utils";
 import { generateVscodeSettingsIfMissing } from "./vscodeSettings";
 
-const UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
 const COLOR_OVERRIDE_FILES = ["theme.colors.tex", "theme.ui.json"];
 
 export class TemplateService {
@@ -56,13 +55,21 @@ export class TemplateService {
       assetReplacements.push({ file, source, target });
     };
 
-    for (const file of UPGRADE_THEME_ASSET_FILES) await queueReplacement(file);
+    // Missing shared theme files are added only to a project that uses the theme: one whose
+    // recorded starter loads theme.sty or, without a record, one that already has theme.sty.
+    // Elsewhere - a research paper, a Beamer deck - only copies already there are refreshed;
+    // adding them unconditionally left three unused files in such projects.
+    const metadata = await readTemplateMetadata(this.rootDir);
+    const recorded = starterTemplate(metadata?.templateId ?? "");
+    const usesTheme = recorded
+      ? recorded.capabilities.includes("toolkit-theme")
+      : await exists(path.join(this.rootDir, "theme.sty"));
+    for (const file of UPGRADABLE_THEME_ASSETS) await queueReplacement(file, !usesTheme);
 
     // Per-starter support packages, e.g. homework.sty. Taken from the project's recorded
     // template so a homework project that predates the package gains it here, and also
     // from disk so a project keeps whatever it already has even without metadata.
-    const metadata = await readTemplateMetadata(this.rootDir);
-    const extras = new Set(upgradableTemplateExtras(starterTemplate(metadata?.templateId ?? "")));
+    const extras = new Set(upgradableTemplateExtras(recorded));
     for (const definition of STARTER_TEMPLATE_DEFINITIONS) {
       for (const file of upgradableTemplateExtras(definition)) {
         if (!extras.has(file) && await exists(path.join(this.rootDir, file))) extras.add(file);

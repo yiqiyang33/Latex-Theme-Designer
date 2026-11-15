@@ -1187,6 +1187,29 @@ describe("TypeScript Toolkit migration", () => {
     expect(await fs.readFile(path.join(root, "theme.overrides.tex"), "utf8")).toBe(beforeToggles);
   });
 
+  it("adds missing shared theme files on upgrade only to projects that use the theme", async () => {
+    const upgrade = async (templateId: string | undefined, existing: string[]) => {
+      const root = await tempWorkspace();
+      await fs.writeFile(path.join(root, "main.tex"), "\\documentclass{article}\n", "utf8");
+      if (templateId) await writeTemplateMetadata(root, { kind: "article", templateId, target: "main.tex" });
+      for (const file of existing) await fs.writeFile(path.join(root, file), `% old ${file}\n`, "utf8");
+      const result = await new TemplateService(root, repoRoot, new StateService(root)).upgradeThemeAssets({ colorPolicy: "preserve" });
+      const present: string[] = [];
+      for (const file of ["theme.sty", "theorems.tex", "commands.tex"]) {
+        if (await fs.access(path.join(root, file)).then(() => true, () => false)) present.push(file);
+      }
+      return { upgraded: result.upgraded_files, present };
+    };
+    // research-paper never loads theme.sty: nothing is added, and a copy already there is refreshed.
+    expect(await upgrade("research-paper", [])).toEqual({ upgraded: [], present: [] });
+    expect((await upgrade("research-paper", ["theme.sty"])).present).toEqual(["theme.sty"]);
+    // A themed starter gets whatever it is missing.
+    expect((await upgrade("homework-assignment", ["theme.sty"])).present).toEqual(["theme.sty", "theorems.tex", "commands.tex"]);
+    // Without a record, theme.sty on disk is what says the project is themed.
+    expect((await upgrade(undefined, [])).present).toEqual([]);
+    expect((await upgrade(undefined, ["theme.sty"])).present).toEqual(["theme.sty", "theorems.tex", "commands.tex"]);
+  });
+
   it("maps the legacy reset_color_overrides upgrade payload to the new policies", async () => {
     const root = await tempWorkspace();
     await copyBaseAssets(root);
