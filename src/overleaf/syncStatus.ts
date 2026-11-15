@@ -10,7 +10,8 @@ import {
   SyncStatusReport
 } from './types';
 import { isFilesystemLeftover, shouldIgnore, shouldIgnoreUntrackedLocalPath } from './manifest';
-import { toPosixPath } from './util';
+import { hashFileDigests } from './binaryTransfer';
+import { assertNoSymlinkAbsolutePath, assertNoSymlinkPath, toPosixPath } from './util';
 
 export interface SyncStatusDecisionInput {
   path: string;
@@ -528,6 +529,31 @@ export async function cachedLocalFileHash(
 export function trashPathFor(root: string, relPath: string): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   return path.join(root, '.overleaf-codex', 'trash', stamp, relPath);
+}
+
+/**
+ * Before a pull overwrites `relPath`, copies the local file into the Overleaf Codex trash when the
+ * overwrite could lose work: it differs from what the pull brings and from the last version both
+ * sides agreed on - or the pull would leave it empty, which is what an upload Overleaf refused but
+ * that was recorded as synced looks like. Routine pulls of unedited files keep no copy. Returns
+ * where the copy went, if one was made.
+ */
+export async function keepLocalCopyBeforePull(
+  root: string,
+  relPath: string,
+  incoming: { sha1?: string; gitBlobHash?: string; empty: boolean },
+  agreedSha1: string | undefined
+): Promise<string | undefined> {
+  const localPath = await assertNoSymlinkPath(root, relPath);
+  const stat = await fs.stat(localPath).catch(() => undefined);
+  if (!stat?.isFile() || stat.size === 0) return undefined;
+  const local = await hashFileDigests(localPath);
+  if (local.sha1 === incoming.sha1 || local.gitBlobHash === incoming.gitBlobHash) return undefined;
+  if (!incoming.empty && local.sha1 === agreedSha1) return undefined;
+  const target = await assertNoSymlinkAbsolutePath(root, trashPathFor(root, relPath));
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.copyFile(localPath, target);
+  return target;
 }
 
 function shouldSkip(relPath: string): boolean {

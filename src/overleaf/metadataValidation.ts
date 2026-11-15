@@ -151,6 +151,7 @@ function validateStatusItem(value: unknown, at: string): ValidationResult {
   try { normalizeProjectRelativePath(value.path); } catch { return `${at}.path must be a safe relative project path`; }
   if (!STATUS_VALUES.has(value.status as string)) return `${at}.status is invalid`;
   if (typeof value.blocking !== 'boolean') return `${at}.blocking must be a boolean`;
+  if (value.uploadBlocked !== undefined && typeof value.uploadBlocked !== 'boolean') return `${at}.uploadBlocked must be a boolean`;
   if (value.entityType !== undefined && !ENTITY_TYPES.has(value.entityType as string)) return `${at}.entityType is invalid`;
   for (const field of ['entityId', 'parentFolderId', 'localHash', 'remoteHash', 'baseHash', 'message', 'localPath', 'remotePath'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') return `${at}.${field} must be a string`;

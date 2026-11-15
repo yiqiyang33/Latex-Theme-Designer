@@ -29,6 +29,7 @@ import {
   FileTransferResult
 } from './types';
 import { hashFileDigests } from './binaryTransfer';
+import { awaitUpdateVerdict } from './otUpdateVerdict';
 import { formatUnknownError, normalizeServerUrl, sanitizeDiagnosticText } from './util';
 import {
   addProjectTreeEntity,
@@ -849,8 +850,20 @@ export class OverleafSocketSession {
     await this.emitAck('leaveDoc', this.timeouts.joinDocMs, undefined, docId);
   }
 
+  /**
+   * Sends an update and returns once Overleaf has applied it. The acknowledgement alone only means
+   * the update was queued; treating it as applied recorded updates Overleaf went on to reject as
+   * pushed. Throws OverleafUpdateRejectedError when Overleaf refused the update.
+   */
   async applyOtUpdate(docId: string, update: OtUpdate, signal?: AbortSignal): Promise<void> {
-    await this.emitAck('applyOtUpdate', this.timeouts.otAckMs, signal, docId, update);
+    const verdict = awaitUpdateVerdict(this.socket, docId, update.v, this.timeouts.otAckMs, signal);
+    try {
+      await this.emitAck('applyOtUpdate', this.timeouts.otAckMs, signal, docId, update);
+    } catch (error) {
+      verdict.dispose();
+      throw error;
+    }
+    await verdict.settled;
   }
 
   async getConnectedUsers(): Promise<OnlineUser[]> {

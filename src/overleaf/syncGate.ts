@@ -96,7 +96,8 @@ export class SyncGate {
   applyReport(report: SyncStatusReport): void {
     this.paths.clear();
     for (const item of report.items) {
-      if (!item.blocking || UPLOADABLE_BLOCKING_STATUSES.has(item.status)) continue;
+      // Content Overleaf would refuse is the one upload that resolves nothing, so it is held.
+      if (!item.blocking || (UPLOADABLE_BLOCKING_STATUSES.has(item.status) && !item.uploadBlocked)) continue;
       const state = item.status === 'error' ? 'error' : item.status === 'diverged' ? 'conflict' : 'pending';
       this.setPath(item.path, state, item.message, item.blockingScope === 'subtree');
     }

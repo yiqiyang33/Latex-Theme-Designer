@@ -31,15 +31,18 @@ import type {
 import {
   cachedLocalFileHash,
   findUnsafeFolderDescendants,
+  keepLocalCopyBeforePull,
   scanLocalProject,
   trashPathFor,
   unsafeFolderDeleteMessage
 } from './syncStatus';
-import { buildOtOperations } from './ot';
+import { buildOtOperations, shareJsBlobHash } from './ot';
+import { OverleafUpdateRejectedError } from './otUpdateVerdict';
+import { unsupportedCharactersMessage } from './overleafText';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { BinaryTransactionStore, type BinaryTransaction } from './binaryTransactions';
 import { assertNoSymlinkPath, assertPathWithin, formatUnknownError, gitBlobHash, isTextLike, normalizeProjectRelativePath, sha1, toPosixPath } from './util';
-import { planSafeSyncActions, selectRemoteWriteTarget } from './syncCommandCore';
+import { markRejectedUploads, planSafeSyncActions, selectRemoteWriteTarget, type RejectedUpload } from './syncCommandCore';
 import { fetchRemoteSnapshot, reconcileProject } from './syncReconciler';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { SyncHealthService } from './syncHealthService';
@@ -81,6 +84,8 @@ export class OverleafSyncEngine {
   private operation: Promise<unknown> = Promise.resolve();
   private readonly events = new EventEmitter();
   private readonly syncHealth = new SyncHealthService();
+  /** Content Overleaf refused, by path, so a watching sync does not send it again until it changes. */
+  private readonly rejectedUploads = new Map<string, RejectedUpload>();
 
   constructor(
     readonly root: string,
@@ -336,6 +341,7 @@ export class OverleafSyncEngine {
           this.host.conflict(relPath, 'Local and remote content both changed since the trusted base.');
         }
       });
+      markRejectedUploads(report, this.rejectedUploads);
       await writeManifest(this.root, this.manifest);
       await writeSyncStatus(this.root, report);
       this.host.status(report);
@@ -430,6 +436,10 @@ export class OverleafSyncEngine {
       if (!entry && shouldIgnoreUntrackedLocalPath(this.manifest, normalized)) {
         throw new Error(`${normalized} is excluded by .overleaf-codexignore.`);
       }
+      // Without a hash on the update Overleaf does not refuse such text, it stores it mangled - and
+      // the next sync would pull the mangled copy back over the file.
+      const unstorable = textFile ? unsupportedCharactersMessage(normalized, content!.toString('utf8')) : undefined;
+      if (unstorable) throw new Error(unstorable);
       const remote = await this.remoteFile(normalized);
       try {
         const effectiveEntry = selectRemoteWriteTarget(normalized, entry, remote?.file, force);
@@ -448,11 +458,24 @@ export class OverleafSyncEngine {
           if (!target) {
             const doc = await this.client.addDoc(this.manifest.projectId, parentFolderId, path.posix.basename(normalized));
             target = { path: normalized, entityId: doc._id, entityType: 'doc', parentFolderId, binary: false };
+            // Recorded as the empty document Overleaf now holds until the text is confirmed there, so
+            // a refused upload reads as local work still to send rather than an Overleaf edit to pull.
+            addOrUpdateFile(this.manifest, target, '');
+            await writeManifest(this.root, this.manifest);
           }
           const joined = await this.session!.joinDoc(target.entityId);
           const text = content!.toString('utf8');
           const op = buildOtOperations(joined.content, text);
-          if (op.length > 0) await this.session!.applyOtUpdate(target.entityId, { doc: target.entityId, v: joined.version, op });
+          try {
+            // With the hash Overleaf verifies what it stored, as it does for the extension's updates.
+            if (op.length > 0) await this.session!.applyOtUpdate(target.entityId, { doc: target.entityId, v: joined.version, op, hash: shareJsBlobHash(text) });
+          } catch (error) {
+            if (!(error instanceof OverleafUpdateRejectedError)) throw error;
+            const reason = `Overleaf rejected the upload of ${normalized} (${error.reason}); nothing was changed on Overleaf.`;
+            this.rejectedUploads.set(normalized, { localHash: localDigests.sha1, reason });
+            throw new Error(reason);
+          }
+          this.rejectedUploads.delete(normalized);
           target.version = joined.version + (op.length > 0 ? 1 : 0);
           addOrUpdateFile(this.manifest, target, text);
           this.manifest.files[normalized].baseHash = await writeBaseDoc(this.root, target.entityId, text);
@@ -539,6 +562,12 @@ export class OverleafSyncEngine {
             throw new Error(`${normalized} has local changes; use --force only after reviewing them.`);
           }
         }
+        const keptLocalCopy = await keepLocalCopyBeforePull(
+          this.root,
+          normalized,
+          { sha1: remote.digests.sha1, empty: remote.digests.size === 0 },
+          entry?.baseHash ?? entry?.sha1
+        );
         await fs.mkdir(path.dirname(localPath), { recursive: true });
         if (remote.file.entityType === 'file') {
           if (!remote.sourcePath) throw new Error(`Remote binary ${normalized} has no staged download.`);
@@ -556,7 +585,7 @@ export class OverleafSyncEngine {
           );
         }
         await writeManifest(this.root, this.manifest);
-        this.emit('pulled', { path: normalized });
+        this.emit('pulled', { path: normalized, keptLocalCopy });
       } finally {
         await remote.dispose();
       }

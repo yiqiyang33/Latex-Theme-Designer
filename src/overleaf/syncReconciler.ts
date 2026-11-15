@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { addOrUpdateFile, isAlwaysLocal, readBaseDoc, shouldIgnore, writeBaseDoc } from './manifest';
+import { addOrUpdateFile, isAlwaysLocal, readBaseDoc, readTextFileBounded, shouldIgnore, writeBaseDoc } from './manifest';
 import type { OverleafClient, OverleafSocketSession } from './overleafClient';
+import { unsupportedCharactersMessage } from './overleafText';
 import {
   cachedLocalFileHash,
   classifyFolderStructure,
@@ -16,7 +17,7 @@ import {
 import { mapWithConcurrency, mapWithDynamicByteConcurrency, SyncHealthService } from './syncHealthService';
 import { buildProjectTreeIndex } from './tree';
 import type { ManifestFile, OverleafCodexManifest, SyncStatusItem, SyncStatusReport } from './types';
-import { formatUnknownError, sha1 } from './util';
+import { formatUnknownError, isTextLike, sha1 } from './util';
 
 /**
  * Sync logic shared by the two engines that drive it: the VS Code realtime service
@@ -278,6 +279,17 @@ export async function classifyProjectPaths(deps: ClassifyPathsDeps): Promise<Cla
       await deps.onDiverged?.({ relPath, remoteFile, remoteContent });
     }
 
+    // An upload Overleaf would refuse should say so before anyone tries it, and must never be tried
+    // automatically: each refusal also disconnects every client that has the document open.
+    if ((item.status === 'local ahead' || item.status === 'local only')
+      && (manifestFile ? manifestFile.entityType === 'doc' : isTextLike(relPath))) {
+      const reason = await unstorableTextReason(root, relPath);
+      if (reason) {
+        item.message = reason;
+        item.uploadBlocked = true;
+      }
+    }
+
     if (item.status === 'synced' && manifestFile && remoteFile) {
       const stale = manifestFile.version !== remoteFile.version
         || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash
@@ -321,6 +333,15 @@ export async function classifyProjectPaths(deps: ClassifyPathsDeps): Promise<Cla
   }
 
   return { items, manifestChanged, localCacheReuseCount };
+}
+
+// Well above Overleaf's own document size limit; anything larger fails to upload for that reason.
+const MAX_SCANNED_DOCUMENT_BYTES = 16 * 1024 * 1024;
+
+/** Why the local text at `relPath` cannot be stored on Overleaf, if it cannot. */
+async function unstorableTextReason(root: string, relPath: string): Promise<string | undefined> {
+  const text = await readTextFileBounded(path.join(root, relPath), MAX_SCANNED_DOCUMENT_BYTES).catch(() => undefined);
+  return text === undefined ? undefined : unsupportedCharactersMessage(relPath, text);
 }
 
 export interface ReconcileDeps extends ClassifyPathsDeps {

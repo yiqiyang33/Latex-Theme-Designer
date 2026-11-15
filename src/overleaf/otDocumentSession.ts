@@ -1,5 +1,6 @@
 import { JoinDocResult, OtUpdate } from './types';
 import { applyOtOperations, buildOtOperations, mergeRemoteIntoLocal, shareJsBlobHash } from './ot';
+import { OverleafUpdateRejectedError, OverleafUpdateUnconfirmedError } from './otUpdateVerdict';
 import { formatUnknownError } from './util';
 
 export interface OtDocumentState {
@@ -166,6 +167,10 @@ export class OtDocumentSession {
 }
 
 function isAmbiguousAckError(error: unknown): boolean {
+  // A rejection is a definite answer: the update was not applied, and sending it again gets the
+  // same answer, with another disconnect.
+  if (error instanceof OverleafUpdateRejectedError) return false;
+  if (error instanceof OverleafUpdateUnconfirmedError) return true;
   if (error && typeof error === 'object' && !(error instanceof Error)) {
     return true;
   }

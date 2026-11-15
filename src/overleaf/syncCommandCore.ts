@@ -1,6 +1,6 @@
 import type { PersistedConflict } from './conflictStore';
 import type { ManifestFile, SyncStatusItem, SyncStatusKind, SyncStatusReport } from './types';
-import { isTextLike } from './util';
+import { isTextLike, sha1 } from './util';
 
 export interface SyncStatusRequest {
   refresh: boolean;
@@ -24,16 +24,48 @@ export interface SafeSyncPlan {
   pushes: SyncStatusItem[];
 }
 
+/** Content Overleaf refused for a path, kept so that automatic sync does not send it again. */
+export interface RejectedUpload {
+  localHash: string;
+  reason: string;
+}
+
+/**
+ * Marks the uploads Overleaf refused in a fresh report, so nothing sends them again on its own -
+ * each refusal also disconnects - and the reason shows with the file. A record lapses once the
+ * local content differs from what was refused, or the path no longer needs an upload.
+ */
+export function markRejectedUploads(report: SyncStatusReport, rejected: Map<string, RejectedUpload>): void {
+  for (const item of report.items) {
+    const record = rejected.get(item.path);
+    if (!record) continue;
+    if (item.localHash !== record.localHash || (item.status !== 'local ahead' && item.status !== 'local only')) {
+      rejected.delete(item.path);
+      continue;
+    }
+    item.message = record.reason;
+    item.uploadBlocked = true;
+  }
+}
+
+const EMPTY_TEXT_SHA1 = sha1('');
+
 export function planSafeSyncActions(
   report: SyncStatusReport,
   policy: { autoPushLocalAhead: boolean; syncBinaryFiles: boolean }
 ): SafeSyncPlan {
   return {
-    pulls: report.items.filter(item => item.status === 'remote ahead' || item.status === 'remote only'),
+    pulls: report.items.filter(item =>
+      (item.status === 'remote ahead' || item.status === 'remote only')
+      // A document emptied on Overleaf while it still has content here is far more often an upload
+      // that never arrived than a deliberate edit, and pulling it would empty the local file too.
+      && !(item.status === 'remote ahead' && item.remoteHash === EMPTY_TEXT_SHA1 && item.localHash !== undefined && item.localHash !== EMPTY_TEXT_SHA1)
+    ),
     pushes: policy.autoPushLocalAhead
       ? report.items.filter(item =>
         item.entityType !== 'folder'
         && (item.status === 'local ahead' || item.status === 'local only')
+        && !item.uploadBlocked
         && (isTextLike(item.path) || policy.syncBinaryFiles)
       )
       : []

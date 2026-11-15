@@ -53,6 +53,7 @@ import {
 } from './types';
 import {
   findUnsafeFolderDescendants,
+  keepLocalCopyBeforePull,
   scanLocalProject,
   unsafeFolderDeleteMessage,
   trashPathFor
@@ -62,7 +63,9 @@ import { SyncGate } from './syncGate';
 import { fetchRemoteSnapshot, reconcileProject, type RemoteSnapshot } from './syncReconciler';
 import { ConflictStore, type PersistedConflict } from './conflictStore';
 import { ManifestStore } from './manifestStore';
-import { OtDocumentSession, OtDocumentState } from './otDocumentSession';
+import { OtDocumentSession, OtDocumentState, type OtSubmitResult } from './otDocumentSession';
+import { OverleafUpdateRejectedError } from './otUpdateVerdict';
+import { unsupportedCharactersMessage } from './overleafText';
 import { RenameDetection, RenameDetector } from './renameDetector';
 import { SyncCheckScheduler } from './syncCheckScheduler';
 import { DEFAULT_NETWORK_RESCAN_MS, NetworkRescanner } from './networkRescan';
@@ -70,7 +73,7 @@ import { SyncHealthService } from './syncHealthService';
 import { getWithLegacyFallback } from './config';
 import { renameLocalPathTransactionally } from './localRename';
 import { hashFileDigests, installStagedFile, type FileDigests } from './binaryTransfer';
-import { planSafeSyncActions } from './syncCommandCore';
+import { markRejectedUploads, planSafeSyncActions, type RejectedUpload } from './syncCommandCore';
 import { performRemotePathChange, recoverBinaryTransactions, transactionName } from './remoteMutationCore';
 import { buildManifestFolderFingerprints, folderFingerprintFromLocal } from './folderFingerprint';
 import { mergeRemoteIntoLocal } from './ot';
@@ -168,6 +171,12 @@ export class RealtimeSyncService implements vscode.Disposable {
   private readonly pendingLocalCreates = new Set<string>();
   /** Paths whose local change arrived while the path was held, and so was recorded but not sent. */
   private readonly heldLocalChanges = new Set<string>();
+  /**
+   * Content Overleaf refused, by path, so that it is not sent again automatically until it changes:
+   * every refusal also disconnects. Kept across the reconnect that follows, so per root, not per start.
+   */
+  private readonly rejectedUploads = new Map<string, RejectedUpload>();
+  private rejectedUploadsRoot?: string;
   private readonly pendingFolderRenameRoots = new Set<string>();
   private readonly renameDetector = new RenameDetector(5000);
   private readonly output: vscode.OutputChannel;
@@ -417,6 +426,7 @@ export class RealtimeSyncService implements vscode.Disposable {
       isExcluded: relPath => !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)
     });
     const { report, folderRepair } = reconciled;
+    if (root === this.rejectedUploadsRoot) markRejectedUploads(report, this.rejectedUploads);
     let manifestChanged = reconciled.manifestChanged;
     if (folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0) {
       this.log(
@@ -663,6 +673,17 @@ export class RealtimeSyncService implements vscode.Disposable {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
 
+    const tracked = this.manifest!.files[normalized];
+    const kept = await keepLocalCopyBeforePull(
+      this.root!,
+      normalized,
+      remoteFile.entityType === 'file'
+        ? { gitBlobHash: remoteFile.remoteBlobHash, empty: remoteFile.remoteSize === 0 }
+        : { sha1: sha1(remoteContent!), empty: remoteContent === '' },
+      tracked?.baseHash ?? tracked?.sha1
+    );
+    if (kept) this.log(`Kept the local copy of ${normalized} that this pull replaces: ${kept}`);
+
     if (remoteFile.entityType === 'file') {
       const result = await this.downloadVerifiedBinary(remoteFile.entityId, normalized, remoteFile.remoteBlobHash);
       addOrUpdateFile(this.manifest!, { ...remoteFile, remoteSize: result.size });
@@ -755,6 +776,10 @@ export class RealtimeSyncService implements vscode.Disposable {
     this.stopping = false;
     this.shouldReconnect = true;
     this.root = root;
+    if (this.rejectedUploadsRoot !== root) {
+      this.rejectedUploads.clear();
+      this.rejectedUploadsRoot = root;
+    }
     this.client = client;
     this.manifest = await readManifest(root);
     this.activityLog.splice(0, this.activityLog.length);
@@ -2185,9 +2210,10 @@ export class RealtimeSyncService implements vscode.Disposable {
           return;
         }
       }
-      const reason = !isTextLike(relPath) && !this.canSyncBinaryFiles()
-        ? 'Binary synchronization is disabled; use Push Local or enable binary synchronization.'
-        : 'Automatic upload is disabled; use Push Local for this new file.';
+      const reason = (isTextLike(relPath) ? unsupportedCharactersMessage(relPath, content.toString('utf8')) : undefined)
+        ?? (!isTextLike(relPath) && !this.canSyncBinaryFiles()
+          ? 'Binary synchronization is disabled; use Push Local or enable binary synchronization.'
+          : 'Automatic upload is disabled; use Push Local for this new file.');
       this.syncGate.setPath(relPath, 'pending', reason);
       this.log(`New local file ${relPath} is pending: ${reason}`);
       this.scheduleSyncStatusCheck(undefined, [relPath]);
@@ -2236,6 +2262,14 @@ export class RealtimeSyncService implements vscode.Disposable {
       this.log(`Skipped binary upload for ${relPath}. Enable overleafCodex.syncBinaryFiles to upload binary files.`);
       return false;
     }
+    // Refused before anything exists on Overleaf: creating the document first left an empty one
+    // behind whenever its text was then turned down.
+    const unstorable = isTextLike(relPath) && content ? unsupportedCharactersMessage(relPath, Buffer.from(content).toString('utf8')) : undefined;
+    if (unstorable) {
+      this.syncGate.setPath(relPath, 'pending', unstorable);
+      if (manual) throw new Error(unstorable);
+      return false;
+    }
     const ensured = await this.ensureRemoteParentFolders(relPath);
     if (isTextLike(relPath)) {
       if (!content) throw new Error(`Could not read local document ${relPath}.`);
@@ -2249,7 +2283,10 @@ export class RealtimeSyncService implements vscode.Disposable {
           parentFolderId: ensured.parentFolderId,
           binary: false
         };
-        addOrUpdateFile(this.manifest!, entry, content);
+        // Recorded as what Overleaf now holds, an empty document, until the text is confirmed there.
+        // Recording the local text up front made a refused upload read as an Overleaf edit that
+        // emptied the file, which a pull would then apply locally.
+        addOrUpdateFile(this.manifest!, entry, '');
         await this.persistManifest();
         await this.syncDocContent(relPath, Buffer.from(content).toString('utf8'));
         return true;
@@ -2507,7 +2544,25 @@ export class RealtimeSyncService implements vscode.Disposable {
       return;
     }
 
-    const result = await this.documentSessionFor(state).submitLocal(content);
+    const unstorable = unsupportedCharactersMessage(relPath, content);
+    if (unstorable) {
+      // Held until the text changes, so the next save reports nothing new instead of failing again.
+      this.syncGate.setPath(relPath, 'pending', unstorable);
+      this.scheduleSyncStatusCheck(undefined, [relPath]);
+      throw new Error(unstorable);
+    }
+    let result: OtSubmitResult;
+    try {
+      result = await this.documentSessionFor(state).submitLocal(content);
+    } catch (error) {
+      if (!(error instanceof OverleafUpdateRejectedError)) throw error;
+      const reason = `Overleaf rejected the upload of ${relPath} (${error.reason}); nothing was changed on Overleaf.`;
+      this.rejectedUploads.set(relPath, { localHash: sha1(content), reason });
+      this.syncGate.setPath(relPath, 'pending', reason);
+      this.log(reason);
+      throw new Error(reason);
+    }
+    this.rejectedUploads.delete(relPath);
     if (result.conflictRemote !== undefined) {
       await this.pauseForConflict(
         relPath,

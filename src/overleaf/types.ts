@@ -197,6 +197,11 @@ export interface SyncStatusItem {
   baseHash?: string;
   message?: string;
   blocking: boolean;
+  /**
+   * The local content cannot go to Overleaf as it is - `message` says why - so nothing uploads it
+   * automatically until it changes. A push still tries, and reports the reason.
+   */
+  uploadBlocked?: boolean;
   blockingScope?: 'none' | 'path' | 'subtree' | 'project';
   localPath?: string;
   remotePath?: string;
