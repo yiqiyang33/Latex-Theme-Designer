@@ -118,6 +118,8 @@ export interface LatexEditorContext {
   inVerbatimLikeEnvironment: boolean;
   inMath: boolean;
   mathKind: LatexMathKind;
+  /** Where the content of the innermost formula around the position begins, when it is in math. */
+  mathStart?: number;
   canSmartEnter: boolean;
   canSmartTab: boolean;
   canInsertAlignmentSeparator: boolean;
@@ -603,9 +605,18 @@ export function getLatexContext(
   let blocked = inComment || inMarkdownCode || inTextLikeCommand || inVerbatimLikeEnvironment;
   let inMath = (Boolean(delimiterMathKind) || inMathEnvironment) && !blocked;
   let mathKind: LatexMathKind = 'none';
+  let mathStart: number | undefined;
 
   if (inMath) {
     mathKind = delimiterMathKind || 'environment';
+    // Whichever of the open delimiter and the open math environment is innermost: a pmatrix
+    // inside \[...\] starts after its \begin{pmatrix}.
+    let delimiter = delimiterStack[delimiterStack.length - 1];
+    let environment = environmentFrames.filter((frame) => mathEnvironments.has(frame.name)).pop();
+    mathStart = Math.max(
+      delimiter ? delimiter.start + (delimiter.kind == 'inlineDollar' ? 1 : 2) : 0,
+      environment ? environment.beginEnd : 0
+    );
   }
 
   return {
@@ -619,6 +630,7 @@ export function getLatexContext(
     inVerbatimLikeEnvironment,
     inMath,
     mathKind,
+    mathStart,
     canSmartEnter: inRowBreakEnvironment && !blocked,
     canSmartTab: inAlignmentEnvironment && !blocked,
     canInsertAlignmentSeparator: inAlignmentEnvironment && !blocked,

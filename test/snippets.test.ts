@@ -19,6 +19,7 @@ import {
 } from "../src/snippets/engine/latexEdit";
 import { parse } from "../src/snippets/engine/parser";
 import { getMathDelimiterStack } from "../src/snippets/engine/latexContext";
+import { planSuperscriptWrap } from "../src/snippets/engine/superscriptWrap";
 
 import {
   assertExpectedSnippetDocumentHash,
@@ -314,5 +315,122 @@ a &= b|
     const single = applyOffset(origin as never, String.raw`\$`, 0);
     const double = applyOffset(origin as never, String.raw`\$\$`, 0);
     expect(double.character - single.character).toBe(1);
+  });
+});
+
+describe("bracing an atom that gets a second superscript", () => {
+  /**
+   * `@` marks the new ^ (`|` is a delimiter here). The text with the braces applied, or undefined
+   * when nothing would change. Formulas open with "$ " so no template literal holds "${".
+   */
+  function braced(input: string): string | undefined {
+    const offset = input.indexOf("@");
+    const text = input.slice(0, offset) + input.slice(offset + 1);
+    const context = getLatexContext(text, offset);
+    if (!context.canExpandMathSnippet || context.mathStart === undefined) return undefined;
+    const edits = planSuperscriptWrap(text, offset, context.mathStart);
+    return edits && applyTextEdits(text, edits);
+  }
+
+  it("braces the atom with its scripts, in every kind of math", () => {
+    expect(braced(String.raw`$ a^{*}@^{\top}$`)).toBe(String.raw`$ {a^{*}}^{\top}$`);
+    expect(braced(String.raw`\[ a^* @^{\top} \]`)).toBe(String.raw`\[ {a^*} ^{\top} \]`);
+    expect(braced(String.raw`\( x_i^{*}@^{\top} \)`)).toBe(String.raw`\( {x_i^{*}}^{\top} \)`);
+    expect(braced(String.raw`$$ x^{*}_{i}@^{\top}$$`)).toBe(String.raw`$$ {x^{*}_{i}}^{\top}$$`);
+    expect(braced(String.raw`\begin{align} y &= \lambda^{*}@^{\top} \end{align}`))
+      .toBe(String.raw`\begin{align} y &= {\lambda^{*}}^{\top} \end{align}`);
+  });
+
+  it("takes a command with its arguments as the atom", () => {
+    expect(braced(String.raw`$ \mathbf{x}^{*}@^{\top}$`)).toBe(String.raw`$ {\mathbf{x}^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \boldsymbol\mu^{*}@^{\top}$`)).toBe(String.raw`$ {\boldsymbol\mu^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \overline{x}^{*}@^{\top}$`)).toBe(String.raw`$ {\overline{x}^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \frac{a}{b}^{2}@^{\top}$`)).toBe(String.raw`$ {\frac{a}{b}^{2}}^{\top}$`);
+    expect(braced(String.raw`$ \sqrt[3]{x}^{2}@^{\top}$`)).toBe(String.raw`$ {\sqrt[3]{x}^{2}}^{\top}$`);
+    expect(braced(String.raw`$ \operatorname*{tr}^{2}@^{\top}$`)).toBe(String.raw`$ {\operatorname*{tr}^{2}}^{\top}$`);
+    expect(braced(String.raw`$ \sum\limits_{i}^{n}@^{2}$`)).toBe(String.raw`$ {\sum\limits_{i}^{n}}^{2}$`);
+  });
+
+  it("keeps the group around an accent whole with an empty atom, since TeX dissolves it otherwise", () => {
+    expect(braced(String.raw`$ \hat{x}_i^{*}@^{\top}$`)).toBe(String.raw`$ {\hat{x}_i^{*}{}}^{\top}$`);
+    expect(braced(String.raw`$ \tilde{A}^{-1}@^{\top}$`)).toBe(String.raw`$ {\tilde{A}^{-1}{}}^{\top}$`);
+    expect(braced(String.raw`$ \bar x^{*}@^{\top}$`)).toBe(String.raw`$ {\bar x^{*}{}}^{\top}$`);
+    expect(braced(String.raw`$ \mathbf{\hat{x}}^{*}@^{\top}$`)).toBe(String.raw`$ {\mathbf{\hat{x}}^{*}{}}^{\top}$`);
+    expect(braced(String.raw`$ \bm{\vec{v}}^{*}@^{\top}$`)).toBe(String.raw`$ {\bm{\vec{v}}^{*}{}}^{\top}$`);
+    expect(braced(String.raw`$ {\hat{x}}^{*}@^{\top}$`)).toBe(String.raw`$ {{\hat{x}}^{*}{}}^{\top}$`);
+    expect(braced(String.raw`$ \mathbf {\hat{x}}^{*}@^{\top}$`)).toBe(String.raw`$ {\mathbf {\hat{x}}^{*}{}}^{\top}$`);
+    // Not accents: TeX keeps these groups whole.
+    expect(braced(String.raw`$ \hat{x} y^{*}@^{\top}$`)).toBe(String.raw`$ \hat{x} {y^{*}}^{\top}$`);
+    expect(braced(String.raw`$ {a\hat{x}}^{*}@^{\top}$`)).toBe(String.raw`$ {{a\hat{x}}^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \overline {\hat{x}}^{*}@^{\top}$`)).toBe(String.raw`$ {\overline {\hat{x}}^{*}}^{\top}$`);
+  });
+
+  it("reads a script written without braces or with spaces", () => {
+    expect(braced(String.raw`$ X^\top@^{-1}$`)).toBe(String.raw`$ {X^\top}^{-1}$`);
+    expect(braced(String.raw`$ X^\mathrm{T}@^{-1}$`)).toBe(String.raw`$ {X^\mathrm{T}}^{-1}$`);
+    expect(braced(String.raw`$ X^ {\top} @^{-1}$`)).toBe(String.raw`$ {X^ {\top}} ^{-1}$`);
+  });
+
+  it("takes a delimited expression from its opening delimiter", () => {
+    expect(braced(String.raw`$ (X^{\top}X)^{-1}@^{\top}$`)).toBe(String.raw`$ {(X^{\top}X)^{-1}}^{\top}$`);
+    expect(braced(String.raw`$ \left(X^{\top}X\right)^{-1}@^{\top}$`)).toBe(String.raw`$ {\left(X^{\top}X\right)^{-1}}^{\top}$`);
+    expect(braced(String.raw`$ \left. f \right|_{0}^{1}@^{2}$`)).toBe(String.raw`$ {\left. f \right|_{0}^{1}}^{2}$`);
+    expect(braced(String.raw`$ \Bigl( a \Bigr)^{2}@^{\top}$`)).toBe(String.raw`$ {\Bigl( a \Bigr)^{2}}^{\top}$`);
+    expect(braced(String.raw`$ ((a)(b))^{2}@^{\top}$`)).toBe(String.raw`$ {((a)(b))^{2}}^{\top}$`);
+    expect(braced(String.raw`$ [a, b]^{*}@^{\top}$`)).toBe(String.raw`$ {[a, b]^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \{a\}^{*}@^{\top}$`)).toBe(String.raw`$ {\{a\}^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \langle x, y \rangle^{*}@^{\top}$`)).toBe(String.raw`$ {\langle x, y \rangle^{*}}^{\top}$`);
+    expect(braced(String.raw`$ \|x\|^{2}@^{\top}$`)).toBe(String.raw`$ {\|x\|^{2}}^{\top}$`);
+    expect(braced(String.raw`$ |x|^{2}@^{\top}$`)).toBe(String.raw`$ {|x|^{2}}^{\top}$`);
+  });
+
+  it("takes a number, a group and an already braced atom whole", () => {
+    expect(braced(String.raw`$ 10^{3}@^{2}$`)).toBe(String.raw`$ {10^{3}}^{2}$`);
+    expect(braced(String.raw`$ 2x^{2}@^{\top}$`)).toBe(String.raw`$ 2{x^{2}}^{\top}$`);
+    expect(braced(String.raw`$ {a^{*}}^{\top}@^{\dagger}$`)).toBe(String.raw`$ {{a^{*}}^{\top}}^{\dagger}$`);
+    expect(braced(String.raw`$ a^{b}{c}^{d}@^{e}$`)).toBe(String.raw`$ a^{b}{{c}^{d}}^{e}$`);
+  });
+
+  it("counts a prime as a superscript, except when the new ^ follows it directly", () => {
+    expect(braced(String.raw`$ x'@^{2}$`)).toBeUndefined();
+    expect(braced(String.raw`$ x''@^{2}$`)).toBeUndefined();
+    expect(braced(String.raw`$ x'^{*}@^{\top}$`)).toBe(String.raw`$ {x'^{*}}^{\top}$`);
+    expect(braced(String.raw`$ x'_{i}@^{2}$`)).toBe(String.raw`$ {x'_{i}}^{2}$`);
+  });
+
+  it("leaves an atom without a superscript, and anything it cannot read for certain, alone", () => {
+    expect(braced(String.raw`$ a@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ x_{i}@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ a^{*}{b}@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ a^{*} + b@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ a^{*}\,@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ @^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`\begin{align} a^{*} &@^{\top} \end{align}`)).toBeUndefined();
+    // Each opener is outside the formula, outside the group, or the start of an unclosed \left.
+    expect(braced(String.raw`(see $ x)^{2}@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ (\frac{a}{b)^{2}@^{\top}}$`)).toBeUndefined();
+    expect(braced(String.raw`$ \left( \frac{a}{b \right)^{2}@^{\top}}$`)).toBeUndefined();
+    expect(braced(String.raw`$ \left( x)^{2}@^{\top}$`)).toBeUndefined();
+    expect(braced(String.raw`$ \sqrt[{a]{x}^{2}@^{\top}}$`)).toBe(String.raw`$ \sqrt[{a]{{x}^{2}}^{\top}}$`);
+  });
+
+  it("reads past comments and stays out of text, comments and verbatim", () => {
+    expect(braced("\\[\n  a^{*} % the {optimum\n  @^{\\top}\n\\]")).toBe("\\[\n  {a^{*}} % the {optimum\n  ^{\\top}\n\\]");
+    expect(braced(String.raw`a^{*}@^{\top}`)).toBeUndefined();
+    expect(braced(String.raw`$ \text{a^{*}@^{\top}}$`)).toBeUndefined();
+    expect(braced(String.raw`% $ a^{*}@^{\top}$`)).toBeUndefined();
+    expect(braced("\\begin{verbatim}\n$ a^{*}@^{\\top}$\n\\end{verbatim}")).toBeUndefined();
+  });
+
+  it("looks for the atom only inside the innermost formula", () => {
+    const inline = marked(String.raw`text $a$ more $x^{2}|$`);
+    expect(getLatexContext(inline.text, inline.offset).mathStart).toBe(inline.text.lastIndexOf("$x") + 1);
+    const environment = marked(String.raw`$a$ and \begin{equation} x^{2}| \end{equation}`);
+    expect(getLatexContext(environment.text, environment.offset).mathStart)
+      .toBe(environment.text.indexOf("{equation}") + "{equation}".length);
+    const matrix = marked(String.raw`\[ \begin{pmatrix} a^{2}| \end{pmatrix} \]`);
+    expect(getLatexContext(matrix.text, matrix.offset).mathStart).toBe(matrix.text.indexOf("{pmatrix}") + "{pmatrix}".length);
+    const text = marked("plain| text");
+    expect(getLatexContext(text.text, text.offset).mathStart).toBeUndefined();
   });
 });

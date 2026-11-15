@@ -165,7 +165,12 @@ commands. It powers:
 - Smart Enter row breaks in `align`, matrices, `cases`, `array`, and table environments;
 - Smart Tab alignment separators with normal placeholder fallback;
 - environment conversion and matching `\\begin`/`\\end` renaming;
-- wrapping and unwrapping supported math structures.
+- wrapping and unwrapping supported math structures;
+- bracing an atom that gets a second superscript, typed or from a snippet: `a^{*}` followed by
+  `^{\top}` becomes `{a^{*}}^{\top}` instead of TeX's *Double superscript* error. The atom is
+  read whole, as in `{(X^{\top}X)^{-1}}^{\top}` or `{\mathbf{x}_i^{*}}^{\top}`; an accented one
+  gets an empty `{}` inside the braces (`{\hat{x}^{*}{}}^{\top}`), because TeX dissolves a group
+  that holds only an accent. Turn it off with `hsnips.math.braceDoubleSuperscript`.
 
 Extra environments and text-like commands can be configured with the existing
 `hsnips.context.*` settings.

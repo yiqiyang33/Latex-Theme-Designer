@@ -672,6 +672,11 @@
             "default": [],
             "description": "Additional LaTeX commands whose argument is treated as text."
           },
+          "hsnips.math.braceDoubleSuperscript": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "When a superscript is added in math to something that already has one, typed or from a snippet, brace it first: `a^{*}` followed by `^{\\top}` becomes `{a^{*}}^{\\top}` instead of TeX's *Double superscript* error."
+          },
           "hsnips.profiles.activeProfile": {
             "type": "string",
             "default": "",

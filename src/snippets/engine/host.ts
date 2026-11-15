@@ -7,6 +7,7 @@ import { HSnippetInstance, registerVisualSelectionTracker } from './hsnippetInst
 import { parse } from './parser';
 import { getSnippetDir } from './utils';
 import { getAutomaticCompletion, getCompletions, CompletionInfo } from './completion';
+import { planSuperscriptWrap } from './superscriptWrap';
 import {
     getLatexContext,
     getSmartEnterPlan,
@@ -773,8 +774,43 @@ export async function expandSnippet(
         });
 
         if (snippetInstance.selectedPlaceholder != 0) SNIPPET_STACK.unshift(snippetInstance);
+
+        // After the instance is on the stack, so the braces shift its tab stops like any edit.
+        // Part of the expansion's undo step: undo goes back to the trigger, as without braces.
+        if (snippetInstance.snippetString.value.startsWith('^')) {
+            await braceDoubleSuperscript(editor, editor.document.offsetAt(completion.range.start), false);
+        }
     } finally {
         insertingSnippet = false;
+    }
+}
+
+/**
+ * Braces the atom before a `^` at `superscriptOffset` when it already has a superscript, so
+ * a^{*} followed by ^{\top} becomes {a^{*}}^{\top} instead of TeX's "Double superscript" error.
+ * Runs for snippets that insert a superscript and for a typed ^.
+ */
+async function braceDoubleSuperscript(editor: vscode.TextEditor, superscriptOffset: number, ownUndoStep: boolean) {
+    if (!vscode.workspace.getConfiguration('hsnips').get<boolean>('math.braceDoubleSuperscript', true)) return false;
+    let document = editor.document;
+    let text = document.getText();
+    if (text[superscriptOffset] != '^') return false;
+    let context = getCachedLatexContext(document, document.positionAt(superscriptOffset));
+    if (!context?.canExpandMathSnippet || context.mathStart === undefined) return false;
+    let edits = planSuperscriptWrap(text, superscriptOffset, context.mathStart);
+    if (!edits) return false;
+    // The braces are not keystrokes: they must not reach automatic expansion.
+    let wasInserting = insertingSnippet;
+    insertingSnippet = true;
+    try {
+        return await editor.edit(
+            (builder) => {
+                for (let edit of edits) builder.insert(document.positionAt(edit.start), edit.text);
+            },
+            { undoStopBefore: ownUndoStep, undoStopAfter: ownUndoStep }
+        );
+    } finally {
+        insertingSnippet = wasInserting;
     }
 }
 
@@ -1039,20 +1075,32 @@ export function registerSnippetHost(context: vscode.ExtensionContext, output: vs
             // Let's try to detect only events that come from keystrokes.
             if (mainChange.text.length != 1) return;
 
-            let snippets = getSnippetsForDocument(e.document);
-            if (!snippets) return;
             let editor = vscode.window.activeTextEditor;
             if (!editor || e.document != editor.document) return;
 
-            let latexContext = getEditorLatexContext(editor);
-            snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
+            let snippets = getSnippetsForDocument(e.document);
+            if (snippets) {
+                let latexContext = getEditorLatexContext(editor);
+                snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
 
-            let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
-            let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
+                let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
+                let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
 
-            if (completion) {
-                void expandSnippet(completion, editor).then(undefined, console.error);
-                return;
+                if (completion) {
+                    void expandSnippet(completion, editor).then(undefined, console.error);
+                    return;
+                }
+            }
+
+            // A typed ^, not one put back by undo or redo. The braces are an undo step of their
+            // own, so undo drops them and keeps the ^.
+            if (
+                mainChange.text == '^' &&
+                mainChange.rangeLength == 0 &&
+                e.contentChanges.length == 1 &&
+                e.reason === undefined
+            ) {
+                void braceDoubleSuperscript(editor, mainChange.rangeOffset, true).then(undefined, console.error);
             }
         })
     );
