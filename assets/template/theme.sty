@@ -110,26 +110,47 @@
     \fi
 \fi
 
+% Body font size. Every size command is scaled by body size / the class's \normalsize, so
+% floats and minipages (which reset to \normalsize), footnotes and headings all follow the
+% chosen size. Selecting the size once at \begin{document} only lasted until the first
+% \normalsize: figure and table text fell back to the class size.
 \def\theme@empty{}
-\def\theme@bodyfontsize{}
-\def\theme@bodybaseline{}
+\def\theme@sizefactor{}
 \ifx\ThemeBodyFontSizePt\theme@empty
 \else
     \begingroup
         \dimen@=\ThemeBodyFontSizePt pt\relax
-        \ifdim\dimen@>0pt
-            \dimen@ii=1.2\dimen@
-            \xdef\theme@bodyfontsize{\strip@pt\dimen@}
-            \xdef\theme@bodybaseline{\strip@pt\dimen@ii}
+        \ifdim\dimen@>\z@
+            % \f@size is still the class's \normalsize here: a class ends by selecting it.
+            \dimen@ii=\f@size pt\relax
+            \xdef\theme@sizefactor{\strip@pt\dimexpr\numexpr\dimen@*65536/\dimen@ii\relax sp\relax}%
         \fi
     \endgroup
 \fi
-\AtBeginDocument{
-    \ifx\theme@bodyfontsize\theme@empty
-    \else
-        \fontsize{\theme@bodyfontsize pt}{\theme@bodybaseline pt}\selectfont
-    \fi
-}
+\ifx\theme@sizefactor\theme@empty
+\else
+    % Own registers: a size command can run in the middle of someone else's \dimen@ arithmetic.
+    \newdimen\theme@fontsizedim
+    \newdimen\theme@baselinedim
+    \def\theme@rescalefont{%
+        \theme@fontsizedim=\theme@sizefactor\dimexpr\f@size pt\relax
+        \theme@baselinedim=\theme@sizefactor\dimexpr\f@baselineskip\relax
+        \fontsize{\strip@pt\theme@fontsizedim}{\strip@pt\theme@baselinedim}\selectfont
+    }
+    % Each size command keeps the class's definition, with its display and list spacing, and
+    % then rescales. \protected keeps the wrapper intact in moving arguments.
+    \def\theme@wrapsize#1{%
+        \expandafter\let\csname theme@class@#1\expandafter\endcsname\csname #1\endcsname
+        \expandafter\protected\expandafter\edef\csname #1\endcsname{%
+            \expandafter\noexpand\csname theme@class@#1\endcsname
+            \noexpand\theme@rescalefont
+        }%
+    }
+    \@for\theme@size:=tiny,scriptsize,footnotesize,small,normalsize,large,Large,LARGE,huge,Huge\do{%
+        \expandafter\theme@wrapsize\expandafter{\theme@size}%
+    }
+    \AtBeginDocument{\normalsize}
+\fi
 \makeatother
 
 % -------------------- Document Theme Tokens --------------------
@@ -329,7 +350,18 @@
 % -------------------- Inline Text Theme --------------------
 \makeatletter
 \let\theme@originaltextbf\textbf
-\renewcommand{\textbf}[1]{{\color{theme-bold}\theme@originaltextbf{#1}}}
+% Bold takes the theme's bold colour only over the document's default colour, so bold inside
+% \textcolor, a coloured box title or the table of contents keeps that colour instead of
+% turning theme-bold. \protected keeps \textbf unexpanded in \edef and moving arguments, as
+% the kernel's robust \textbf is; the plain \renewcommand it replaces was fragile.
+\AtBeginDocument{\let\theme@defaultcolor\current@color}
+\protected\long\def\textbf#1{%
+    \ifx\current@color\theme@defaultcolor
+        {\color{theme-bold}\theme@originaltextbf{#1}}%
+    \else
+        \theme@originaltextbf{#1}%
+    \fi
+}
 \makeatother
 
 % -------------------- Document Theme --------------------

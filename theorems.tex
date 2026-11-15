@@ -187,8 +187,9 @@
 % -------------------- Native amsthm theorem family --------------------
 % These environments are always available for imported paper-style LaTeX:
 % \begin{theorem}, \begin{lemma}, \begin{proposition}, \begin{corollary},
-% \begin{claim}, and \begin{remark} stay plain even when shortcut commands
-% such as \thm use styled tcolorbox blocks.
+% \begin{claim}, \begin{fact}, \begin{assumption}, \begin{axiom} and
+% \begin{remark} stay plain even when shortcut commands such as \thm use styled
+% tcolorbox blocks.
 \ifThemeTheoremNumberingNone
     \theoremstyle{definition}
     \newtheorem{definition}{Definition}
@@ -198,6 +199,9 @@
     \newtheorem{proposition}{Proposition}
     \newtheorem{corollary}{Corollary}
     \newtheorem{claim}{Claim}
+    \newtheorem{fact}{Fact}
+    \newtheorem{assumption}{Assumption}
+    \newtheorem{axiom}{Axiom}
     \theoremstyle{remark}
     \newtheorem{remark}{Remark}
 \else
@@ -210,6 +214,9 @@
         \newtheorem{proposition}{Proposition}[chapter]
         \newtheorem{corollary}{Corollary}[chapter]
         \newtheorem{claim}{Claim}[chapter]
+        \newtheorem{fact}{Fact}[chapter]
+        \newtheorem{assumption}{Assumption}[chapter]
+        \newtheorem{axiom}{Axiom}[chapter]
         \theoremstyle{remark}
         \newtheorem{remark}{Remark}[chapter]
     \else
@@ -221,34 +228,20 @@
         \newtheorem{proposition}{Proposition}[section]
         \newtheorem{corollary}{Corollary}[section]
         \newtheorem{claim}{Claim}[section]
+        \newtheorem{fact}{Fact}[section]
+        \newtheorem{assumption}{Assumption}[section]
+        \newtheorem{axiom}{Axiom}[section]
         \theoremstyle{remark}
         \newtheorem{remark}{Remark}[section]
     \fi
 \fi
 
-\ifEnablePlainAmsthmTheorem
-    \ifThemeTheoremNumberingNone
-        \theoremstyle{plain}
-        \newtheorem{fact}{Fact}
-        \newtheorem{assumption}{Assumption}
-        \newtheorem{axiom}{Axiom}
-    \else
-        \ifThemeTheoremCounterWithinChapter
-            \theoremstyle{plain}
-            \newtheorem{fact}{Fact}[chapter]
-            \newtheorem{assumption}{Assumption}[chapter]
-            \newtheorem{axiom}{Axiom}[chapter]
-        \else
-            \theoremstyle{plain}
-            \newtheorem{fact}{Fact}[section]
-            \newtheorem{assumption}{Assumption}[section]
-            \newtheorem{axiom}{Axiom}[section]
-        \fi
-    \fi
-    \let\ThemeFactEnvBegin\fact
-    \let\ThemeAssumptionEnvBegin\assumption
-    \let\ThemeAxiomEnvBegin\axiom
-\else
+% \fact, \assumption and \axiom are also commands (below); \begin{fact} still has to reach these.
+\let\ThemeFactEnvBegin\fact
+\let\ThemeAssumptionEnvBegin\assumption
+\let\ThemeAxiomEnvBegin\axiom
+
+\ifEnablePlainAmsthmTheorem\else
     % -------------------- Styled tcolorbox theorem family --------------------
     \ifThemeTheoremNumberingNone
         \newtcbtheorem{mydefinition}{Definition}
@@ -433,12 +426,6 @@
             #3
         \end{axiom}
     }
-
-    \makeatletter
-    \renewcommand{\fact}{\@ifnextchar\bgroup{\ThemeFactCommand}{\ThemeFactEnvBegin}}
-    \renewcommand{\assumption}{\@ifnextchar\bgroup{\ThemeAssumptionCommand}{\ThemeAssumptionEnvBegin}}
-    \renewcommand{\axiom}{\@ifnextchar\bgroup{\ThemeAxiomCommand}{\ThemeAxiomEnvBegin}}
-    \makeatother
 \else
     \NewDocumentCommand{\defn}{mm+m}{
         \ThemeRunTcbTheorem{mydefinition}{defn}{#1}{#2}{#3}
@@ -464,18 +451,38 @@
         \ThemeRunTcbTheorem{myclaim}{clm}{#1}{#2}{#3}
     }
 
-    \NewDocumentCommand{\fact}{mm+m}{
+    \NewDocumentCommand{\ThemeFactCommand}{mm+m}{
         \ThemeRunTcbTheorem{myfact}{fact}{#1}{#2}{#3}
     }
 
-    \NewDocumentCommand{\assumption}{mm+m}{
+    \NewDocumentCommand{\ThemeAssumptionCommand}{mm+m}{
         \ThemeRunTcbTheorem{myassumption}{assump}{#1}{#2}{#3}
     }
 
-    \NewDocumentCommand{\axiom}{mm+m}{
+    \NewDocumentCommand{\ThemeAxiomCommand}{mm+m}{
         \ThemeRunTcbTheorem{myaxiom}{axiom}{#1}{#2}{#3}
     }
 \fi
+
+% \fact, \assumption and \axiom are both the three-argument command (\fact{Title}{label}{Body})
+% and, through \begin{fact}, the native environment. \begin reaches the macro with \@currenvir
+% already naming the environment and a direct call does not, which tells the two apart without
+% looking ahead: looking for a following brace took a body that starts with {...} for the
+% command's arguments, and in styled mode \begin{assumption} silently ate its first words.
+\makeatletter
+\newcommand{\ThemeBlockDispatch}[3]{%
+    \def\theme@block@name{#1}%
+    \ifx\@currenvir\theme@block@name
+        \expandafter\@firstoftwo
+    \else
+        \expandafter\@secondoftwo
+    \fi
+    {#2}{#3}%
+}
+\renewcommand{\fact}{\ThemeBlockDispatch{fact}\ThemeFactEnvBegin\ThemeFactCommand}
+\renewcommand{\assumption}{\ThemeBlockDispatch{assumption}\ThemeAssumptionEnvBegin\ThemeAssumptionCommand}
+\renewcommand{\axiom}{\ThemeBlockDispatch{axiom}\ThemeAxiomEnvBegin\ThemeAxiomCommand}
+\makeatother
 
 \NewDocumentCommand{\lemp}{m+m+m}{
     \lem{#1}{}{#2}
@@ -534,8 +541,9 @@
         \vspace{5pt}
     }
 
-    % Note (plain mode)
-    \NewDocumentEnvironment{note}{o g +b}{
+    % Note (plain mode). The braced title has to follow \begin{note} directly (!g): skipping
+    % spaces before it took a body that starts on the next line with {...} for the title.
+    \NewDocumentEnvironment{note}{o !g +b}{
         \par
         \vspace{5pt}
         \noindent
@@ -556,18 +564,19 @@
     }
 \else
     % Example (styled mode)
+    % No minipage around the box: a minipage cannot break, so a long example ran off the
+    % bottom of the page, and at \textwidth it overflowed inside lists. \nobreak keeps the
+    % label with the start of the box instead.
     \newenvironment{example}{%
         \par
         \vspace{5pt}
-        \begin{minipage}{\textwidth}
-                \noindent\textbf{\color{example-label-fg}Example.}
-                \tcolorbox[
-                callout/variant={example-bg}{example-accent},
-                callout/indented
-            ]
+        \noindent\textbf{\color{example-label-fg}Example.}\par\nobreak
+        \tcolorbox[
+            callout/variant={example-bg}{example-accent},
+            callout/indented
+        ]
     }{%
-            \endtcolorbox
-        \end{minipage}
+        \endtcolorbox
         \vspace{5pt}
     }
 
@@ -582,17 +591,16 @@
         {\it \color{remark-inline-fg}#1}
     }
 
+    % Breakable for the same reason as example.
     \newenvironment{styledremark}{
         \par
         \vspace{5pt}
-        \begin{minipage}{\textwidth}
-            {\par\noindent{\textbf{\color{remark-label-fg}Remark.}}}
-            \tcolorbox[
-                callout/variant={remark-bg}{remark-accent}
-            ]
+        \noindent\textbf{\color{remark-label-fg}Remark.}\par\nobreak
+        \tcolorbox[
+            callout/variant={remark-bg}{remark-accent}
+        ]
     }{
-            \endtcolorbox
-        \end{minipage}
+        \endtcolorbox
         \vspace{5pt}
     }
 
@@ -613,8 +621,8 @@
         \endtcolorbox
     }
 
-    % Note (styled mode)
-    \NewDocumentEnvironment{note}{o g +b}{
+    % Note (styled mode), with the braced title read as in plain mode.
+    \NewDocumentEnvironment{note}{o !g +b}{
         \IfNoValueTF{#1}{
             \IfNoValueTF{#2}{
                 \begin{tcolorbox}[note/base]

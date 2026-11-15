@@ -204,9 +204,22 @@
 % An explicit number is an integer or a dotted integer; the representation comes from
 % \homeworkProblemNumbering, so under Roman you still write [5] to get V.
 \makeatletter
-\newcommand{\hw@word}[1]{#1\if\relax\detokenize{#1}\relax\else~\fi}
-\newcommand{\hw@trailing}[1]{\if\relax\detokenize{#1}\relax\else\ --- #1\fi}
-\newcommand{\hw@suffix}[1]{\if\relax\detokenize{#1}\relax\else\ #1\fi}
+% \hw@ifblank{<tokens>}{<blank>}{<not blank>}: blank once expanded, so a heading word given as
+% a macro that holds nothing (\homeworkSectionName by default) counts as blank. \protected@edef
+% leaves robust commands alone, so the test never runs \emph or \textbf.
+\newcommand{\hw@ifblank}[1]{%
+    \protected@edef\hw@test{#1}%
+    \ifx\hw@test\@empty\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi
+}
+% Sets the pieces of a heading around its number: \hw@wordtxt from the heading word #1, and
+% \hw@nametxt from \hw@nm (taken by value, since the next heading redefines it) after the
+% separator #2. Both keep the tokens they were given. Expanding the heading instead, as an
+% \edef did, stopped the build on a name such as [Show that \emph{every} ...]; and
+% \protected@edef leaves \emph in its internal form, which hyperref's bookmark code loops on.
+\newcommand{\hw@setparts}[2]{%
+    \hw@ifblank{#1}{\let\hw@wordtxt\@empty}{\def\hw@wordtxt{#1~}}%
+    \hw@ifblank{\hw@nm}{\let\hw@nametxt\@empty}{\edef\hw@nametxt{\unexpanded{#2}\unexpanded\expandafter{\hw@nm}}}%
+}
 
 \NewDocumentEnvironment{homeworkProblem}{o o D<>{\homeworkProblemName}}
 {%
@@ -214,10 +227,10 @@
         {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hwAdvanceProblem{}}
         {\def\hw@nm{#2}\hwAdvanceProblem{#1}}%
     \hwResetSectionPrefix
-    % Built once, so the heading and the TOC entry cannot drift apart. The \edef also
-    % expands \hw@nm, which is what lets \hw@trailing test the content rather than the
-    % macro name.
-    \edef\hw@txt{\noexpand\hw@word{#3}\thehomeworkProblemCounter\noexpand\hw@trailing{\hw@nm}}%
+    % Built once, so the heading and the TOC entry cannot drift apart. Only the number is
+    % expanded here; the word and the name stay as written.
+    \hw@setparts{#3}{\ --- }%
+    \edef\hw@txt{\unexpanded\expandafter{\hw@wordtxt}\thehomeworkProblemCounter\unexpanded\expandafter{\hw@nametxt}}%
     \section*{\hw@txt}%
     \addcontentsline{toc}{section}{\hw@txt}%
 }
@@ -230,9 +243,10 @@
     \IfNoValueTF{#2}
         {\IfNoValueTF{#1}{\def\hw@nm{}}{\def\hw@nm{#1}}\hwAdvanceSection{}}
         {\def\hw@nm{#2}\hwAdvanceSection{#1}}%
-    \edef\hw@txt{\noexpand\hw@word{#3}%
+    \hw@setparts{#3}{\ }%
+    \edef\hw@txt{\unexpanded\expandafter{\hw@wordtxt}%
         \noexpand\homeworkSectionLabelFormat{\thehomeworkSectionCounter}%
-        \noexpand\hw@suffix{\hw@nm}}%
+        \unexpanded\expandafter{\hw@nametxt}}%
     \subsection*{\hw@txt}%
 }
 {%

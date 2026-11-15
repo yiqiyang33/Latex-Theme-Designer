@@ -101,8 +101,30 @@
 \newcommand{\term}[1]{\themeInlineBox{inline-term-bg}{inline-term-fg}{#1}}
 \newcommand{\warn}[1]{\themeInlineBox[\bfseries]{inline-todo-bg}{inline-warn-fg}{#1}}
 \newcommand{\todo}[1]{\themeInlineBox[\sffamily\footnotesize\bfseries]{inline-todo-bg}{inline-todo-fg}{TODO #1}}
+% \code shows its argument as written. \detokenize alone doubled every # and kept the backslash
+% of escaped specials, so \code{x#1} printed x##1 and \code{50\%} printed 50\%. The string is
+% built before the chip, so no parameter character travels through tcolorbox. A bare % still
+% starts a comment before \code sees it: write \% for a percent sign.
+\ExplSyntaxOn
+\str_new:N \l__theme_code_str
+\cs_generate_variant:Nn \str_replace_all:Nnn { NnV }
+\NewDocumentCommand{\ThemeCodeSet}{m}{
+    \str_set:Nn \l__theme_code_str {#1}
+    % One # in the argument comes out of \str_set:Nn as ##, which is what ## searches for here.
+    \str_replace_all:NnV \l__theme_code_str { ## } \c_hash_str
+    \str_replace_all:NnV \l__theme_code_str { \# } \c_hash_str
+    \str_replace_all:NnV \l__theme_code_str { \% } \c_percent_str
+    \str_replace_all:NnV \l__theme_code_str { \& } \c_ampersand_str
+    \str_replace_all:NnV \l__theme_code_str { \_ } \c_underscore_str
+    \str_replace_all:NnV \l__theme_code_str { \$ } \c_dollar_str
+    \str_replace_all:NnV \l__theme_code_str { \{ } \c_left_brace_str
+    \str_replace_all:NnV \l__theme_code_str { \} } \c_right_brace_str
+}
+\NewDocumentCommand{\ThemeCodeUse}{}{ \str_use:N \l__theme_code_str }
+\ExplSyntaxOff
 \newcommand{\code}[1]{%
-    \themeInlineChip[fontupper=\ttfamily\footnotesize]{inline-code-bg}{inline-code-fg}{\detokenize{#1}}%
+    \ThemeCodeSet{#1}%
+    \themeInlineChip[fontupper=\ttfamily\footnotesize]{inline-code-bg}{inline-code-fg}{\ThemeCodeUse}%
 }
 \makeatletter
 \newcommand{\sidenote}[1]{%
