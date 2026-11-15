@@ -137,12 +137,15 @@ tmp/
 *.lof
 *.log
 *.lot
+*.nav
 *.out
 *.run.xml
+*.snm
 *.synctex
 *.synctex.gz
 *.synctex(busy)
 *.toc
+*.vrb
 *.xdv
 *-SAVE-ERROR
 main.pdf
