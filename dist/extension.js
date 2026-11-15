@@ -36051,14 +36051,14 @@ var require_munderover2 = __commonJS({
         var nodes = this.childNodes;
         nodes[0].setInheritedAttributes(attributes, display2, level, prime || !!nodes[this.over]);
         var force = !!(!display2 && nodes[0].coreMO().attributes.get("movablelimits"));
-        var ACCENTS2 = this.constructor.ACCENTS;
-        nodes[1].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[1], force, level), prime || this.under === 1);
-        this.setInheritedAccent(1, ACCENTS2[1], display2, level, prime, force);
+        var ACCENTS3 = this.constructor.ACCENTS;
+        nodes[1].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS3[1], force, level), prime || this.under === 1);
+        this.setInheritedAccent(1, ACCENTS3[1], display2, level, prime, force);
         if (!nodes[2]) {
           return;
         }
-        nodes[2].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[2], force, level), prime || this.under === 2);
-        this.setInheritedAccent(2, ACCENTS2[2], display2, level, prime, force);
+        nodes[2].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS3[2], force, level), prime || this.under === 2);
+        this.setInheritedAccent(2, ACCENTS3[2], display2, level, prime, force);
       };
       MmlMunderover2.prototype.getScriptlevel = function(accent, force, level) {
         if (force || !this.attributes.get(accent)) {
@@ -62727,8 +62727,15 @@ function getLatexContext(text, offset, options = {}) {
   let blocked = inComment || inMarkdownCode || inTextLikeCommand || inVerbatimLikeEnvironment;
   let inMath = (Boolean(delimiterMathKind) || inMathEnvironment) && !blocked;
   let mathKind = "none";
+  let mathStart;
   if (inMath) {
     mathKind = delimiterMathKind || "environment";
+    let delimiter4 = delimiterStack[delimiterStack.length - 1];
+    let environment = environmentFrames.filter((frame) => mathEnvironments.has(frame.name)).pop();
+    mathStart = Math.max(
+      delimiter4 ? delimiter4.start + (delimiter4.kind == "inlineDollar" ? 1 : 2) : 0,
+      environment ? environment.beginEnd : 0
+    );
   }
   return {
     environmentStack,
@@ -62741,11 +62748,242 @@ function getLatexContext(text, offset, options = {}) {
     inVerbatimLikeEnvironment,
     inMath,
     mathKind,
+    mathStart,
     canSmartEnter: inRowBreakEnvironment && !blocked,
     canSmartTab: inAlignmentEnvironment && !blocked,
     canInsertAlignmentSeparator: inAlignmentEnvironment && !blocked,
     canExpandMathSnippet: inMath && !blocked
   };
+}
+
+// src/snippets/engine/superscriptWrap.ts
+function planSuperscriptWrap(text, superscriptOffset, mathStart) {
+  if (mathStart < 0 || mathStart > superscriptOffset) return void 0;
+  const source = sanitizeLatexForParsing(text.slice(mathStart, superscriptOffset), [], false);
+  const end = skipSpaces(source, source.length);
+  const atom = atomBefore(source, end);
+  if (!atom?.superscripted) return void 0;
+  if (atom.primeLast && end == source.length) return void 0;
+  return [
+    { start: mathStart + atom.start, end: mathStart + atom.start, text: "{" },
+    // TeX dissolves a group that holds nothing but an accent into the accent itself, scripts
+    // and all, so {\hat{x}^{*}}^{\top} is still a double superscript. A second atom in the
+    // group, even an empty one, keeps it whole.
+    { start: mathStart + end, end: mathStart + end, text: atom.accent ? "{}}" : "}" }
+  ];
+}
+var OPENER_OF = {
+  ")": "(",
+  "]": "[",
+  "\\}": "\\{",
+  "\\rbrace": "\\lbrace",
+  "\\rbrack": "\\lbrack",
+  "\\rangle": "\\langle",
+  "\\rvert": "\\lvert",
+  "\\rVert": "\\lVert",
+  "\\rfloor": "\\lfloor",
+  "\\rceil": "\\lceil"
+};
+var SYMMETRIC = /* @__PURE__ */ new Set(["|", "\\|", "\\vert", "\\Vert"]);
+var SIZE = /^[Bb]igg?[lrm]?$/;
+var STRUCTURE = /* @__PURE__ */ new Set(["left", "right", "middle", "begin", "end", "label", "tag", "nonumber", "notag", "hline"]);
+var ACCENTS = /* @__PURE__ */ new Set([
+  "hat",
+  "widehat",
+  "check",
+  "widecheck",
+  "tilde",
+  "widetilde",
+  "acute",
+  "grave",
+  "dot",
+  "ddot",
+  "breve",
+  "bar",
+  "vec",
+  "mathring"
+]);
+var FONTS = /* @__PURE__ */ new Set([
+  "mathbf",
+  "mathrm",
+  "mathit",
+  "mathsf",
+  "mathtt",
+  "mathnormal",
+  "mathcal",
+  "mathscr",
+  "mathfrak",
+  "mathbb",
+  "boldsymbol",
+  "bm"
+]);
+var ONE_ARGUMENT = /* @__PURE__ */ new Set([...ACCENTS, ...FONTS, "overline", "underline"]);
+function atomBefore(source, end) {
+  let at = end;
+  let superscripted = false;
+  let primeLast = false;
+  for (; ; ) {
+    if (source[at - 1] == "'") {
+      primeLast ||= at == end;
+      while (source[at - 1] == "'") at--;
+      superscripted = true;
+      at = skipSpaces(source, at);
+      continue;
+    }
+    const unit = unitBefore(source, at);
+    if (!unit || unit.kind == "char" && (unit.name == "^" || unit.name == "_")) return void 0;
+    const markerEnd = skipSpaces(source, unit.start);
+    const marker = source[markerEnd - 1];
+    if ((marker == "^" || marker == "_") && !isEscaped(source, markerEnd - 1)) {
+      if (marker == "^") superscripted = true;
+      at = skipSpaces(source, markerEnd - 1);
+      continue;
+    }
+    const nucleus = nucleusOf(source, unit);
+    return nucleus && { ...nucleus, superscripted, primeLast };
+  }
+}
+function nucleusOf(source, unit) {
+  if (unit.kind == "word" && /^(no|display)?limits$/.test(unit.name)) {
+    const operator = unitBefore(source, skipSpaces(source, unit.start));
+    return operator && nucleusOf(source, operator);
+  }
+  if (unit.kind == "char" || unit.kind == "symbol" || unit.kind == "word") {
+    const before = tokenBefore(source, skipSpaces(source, unit.start));
+    if (before?.kind == "word" && before.name == "right") {
+      const left = matchingLeft(source, before.start);
+      return left < 0 ? void 0 : { start: left, accent: false };
+    }
+    const text = tokenText(unit);
+    if (text in OPENER_OF || SYMMETRIC.has(text)) {
+      const start2 = delimitedStart(source, unit);
+      return start2 < 0 ? void 0 : { start: start2, accent: false };
+    }
+  }
+  if (unit.kind == "char") {
+    if (/[0-9]/.test(unit.name)) {
+      let start2 = unit.start;
+      while (start2 > 0 && /[0-9.]/.test(source[start2 - 1])) start2--;
+      return { start: start2, accent: false };
+    }
+    if (/[&{$#~]/.test(unit.name)) return void 0;
+  }
+  if (unit.kind == "symbol" && unit.name == "\\") return void 0;
+  if (unit.kind == "word" && STRUCTURE.has(unit.name)) return void 0;
+  if (unit.kind == "command") return { start: unit.start, accent: isAccentCommand(source, unit) };
+  let start = unit.start;
+  let accent = unit.kind == "group" && isAccentField(source.slice(unit.start + 1, unit.end - 1));
+  for (; ; ) {
+    const command = tokenBefore(source, skipSpaces(source, start));
+    if (command?.kind != "word" || !ONE_ARGUMENT.has(command.name)) break;
+    accent = ACCENTS.has(command.name) || FONTS.has(command.name) && accent;
+    start = command.start;
+  }
+  return { start, accent };
+}
+function isAccentCommand(source, command) {
+  if (ACCENTS.has(command.name)) return true;
+  if (!FONTS.has(command.name)) return false;
+  const open2 = openingBrace(source, command.end - 1);
+  return open2 >= 0 && isAccentField(source.slice(open2 + 1, command.end - 1));
+}
+function isAccentField(field) {
+  const atom = atomBefore(field, skipSpaces(field, field.length));
+  return Boolean(atom?.accent) && field.slice(0, atom.start).trim() == "";
+}
+function delimitedStart(source, close) {
+  const open2 = matchingOpener(source, close);
+  if (open2 < 0) return SYMMETRIC.has(tokenText(close)) ? close.start : -1;
+  const before = tokenBefore(source, skipSpaces(source, open2));
+  if (before?.kind != "word") return open2;
+  if (SIZE.test(before.name)) return before.start;
+  return before.name == "left" || before.name == "right" || before.name == "middle" ? -1 : open2;
+}
+function unitBefore(source, end) {
+  const token = tokenBefore(source, end);
+  if (token?.kind != "group") return token;
+  let previous = tokenBefore(source, token.start);
+  while (previous?.kind == "group") previous = tokenBefore(source, previous.start);
+  if (previous?.kind == "char" && (previous.name == "]" || previous.name == "*")) {
+    const open2 = previous.name == "]" ? openingBracket(source, previous.start) : previous.start;
+    previous = open2 < 0 ? void 0 : tokenBefore(source, open2);
+  }
+  return previous?.kind == "word" ? { start: previous.start, end, kind: "command", name: previous.name } : token;
+}
+function tokenBefore(source, end) {
+  if (end <= 0) return void 0;
+  const last = end - 1;
+  const char = source[last];
+  if (isLetter(char)) {
+    let start = last;
+    while (start > 0 && isLetter(source[start - 1])) start--;
+    if (start > 0 && source[start - 1] == "\\" && !isEscaped(source, start - 1)) {
+      return { start: start - 1, end, kind: "word", name: source.slice(start, end) };
+    }
+    return { start: last, end, kind: "char", name: char };
+  }
+  if (isEscaped(source, last)) return { start: last - 1, end, kind: "symbol", name: char };
+  if (char == "}") {
+    const open2 = openingBrace(source, last);
+    return open2 < 0 ? void 0 : { start: open2, end, kind: "group", name: "" };
+  }
+  return { start: last, end, kind: "char", name: char };
+}
+function tokenText(token) {
+  if (token.kind == "char") return token.name;
+  return token.kind == "group" ? "{}" : `\\${token.name}`;
+}
+function openingBrace(source, close) {
+  let depth = 0;
+  for (let index = close; index >= 0; index--) {
+    const char = source[index];
+    if (char != "{" && char != "}" || isEscaped(source, index)) continue;
+    depth += char == "}" ? 1 : -1;
+    if (depth == 0) return index;
+  }
+  return -1;
+}
+function openingBracket(source, close) {
+  let depth = 1;
+  for (let token = tokenBefore(source, close); token; token = tokenBefore(source, token.start)) {
+    if (token.kind != "char") continue;
+    if (token.name == "{") return -1;
+    if (token.name == "]") depth++;
+    else if (token.name == "[" && --depth == 0) return token.start;
+  }
+  return -1;
+}
+function matchingOpener(source, close) {
+  const closing = tokenText(close);
+  const opening = OPENER_OF[closing] ?? closing;
+  let depth = 1;
+  for (let token = tokenBefore(source, close.start); token; token = tokenBefore(source, token.start)) {
+    if (token.kind == "char" && token.name == "{") return -1;
+    const text = tokenText(token);
+    if (text == opening) {
+      if (--depth == 0) return token.start;
+    } else if (text == closing) {
+      depth++;
+    }
+  }
+  return -1;
+}
+function matchingLeft(source, right) {
+  let depth = 1;
+  for (let token = tokenBefore(source, right); token; token = tokenBefore(source, token.start)) {
+    if (token.kind == "char" && token.name == "{") return -1;
+    if (token.kind != "word") continue;
+    if (token.name == "right") depth++;
+    else if (token.name == "left" && --depth == 0) return token.start;
+  }
+  return -1;
+}
+function skipSpaces(source, end) {
+  while (end > 0 && /\s/.test(source[end - 1])) end--;
+  return end;
+}
+function isLetter(char) {
+  return char !== void 0 && /[A-Za-z]/.test(char);
 }
 
 // src/snippets/engine/latexEdit.ts
@@ -64009,8 +64247,33 @@ async function expandSnippet(completion, editor, snippetExpansion = false) {
       undoStopBefore: false
     });
     if (snippetInstance.selectedPlaceholder != 0) SNIPPET_STACK.unshift(snippetInstance);
+    if (snippetInstance.snippetString.value.startsWith("^")) {
+      await braceDoubleSuperscript(editor, editor.document.offsetAt(completion.range.start), false);
+    }
   } finally {
     insertingSnippet = false;
+  }
+}
+async function braceDoubleSuperscript(editor, superscriptOffset, ownUndoStep) {
+  if (!vscode5.workspace.getConfiguration("hsnips").get("math.braceDoubleSuperscript", true)) return false;
+  let document2 = editor.document;
+  let text = document2.getText();
+  if (text[superscriptOffset] != "^") return false;
+  let context = getCachedLatexContext(document2, document2.positionAt(superscriptOffset));
+  if (!context?.canExpandMathSnippet || context.mathStart === void 0) return false;
+  let edits = planSuperscriptWrap(text, superscriptOffset, context.mathStart);
+  if (!edits) return false;
+  let wasInserting = insertingSnippet;
+  insertingSnippet = true;
+  try {
+    return await editor.edit(
+      (builder) => {
+        for (let edit of edits) builder.insert(document2.positionAt(edit.start), edit.text);
+      },
+      { undoStopBefore: ownUndoStep, undoStopAfter: ownUndoStep }
+    );
+  } finally {
+    insertingSnippet = wasInserting;
   }
 }
 function snippetCommandError(output, commandId, error) {
@@ -64209,17 +64472,21 @@ function registerSnippetHost(context, output) {
         return;
       }
       if (mainChange.text.length != 1) return;
-      let snippets = getSnippetsForDocument(e.document);
-      if (!snippets) return;
       let editor = vscode5.window.activeTextEditor;
       if (!editor || e.document != editor.document) return;
-      let latexContext = getEditorLatexContext(editor);
-      snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
-      let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
-      let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
-      if (completion) {
-        void expandSnippet(completion, editor).then(void 0, console.error);
-        return;
+      let snippets = getSnippetsForDocument(e.document);
+      if (snippets) {
+        let latexContext = getEditorLatexContext(editor);
+        snippets = snippets.filter((snippet) => canExpandSnippetInContext(snippet, latexContext));
+        let mainChangePosition = mainChange.range.start.translate(0, mainChange.text.length);
+        let completion = getAutomaticCompletion(e.document, mainChangePosition, snippets);
+        if (completion) {
+          void expandSnippet(completion, editor).then(void 0, console.error);
+          return;
+        }
+      }
+      if (mainChange.text == "^" && mainChange.rangeLength == 0 && e.contentChanges.length == 1 && e.reason === void 0) {
+        void braceDoubleSuperscript(editor, mainChange.rangeOffset, true).then(void 0, console.error);
       }
     })
   );
@@ -81620,7 +81887,7 @@ function anchorType(anchor) {
   if (!name) return void 0;
   return { AMS: "equation", Item: "enumi" }[name] ?? name;
 }
-var ACCENTS = {
+var ACCENTS2 = {
   "'": "\u0301",
   "`": "\u0300",
   "^": "\u0302",
@@ -81654,7 +81921,7 @@ var LETTERS = {
 };
 function plainText(tex) {
   const letter = (base) => base.startsWith("\\") ? LETTERS[base.slice(1)] ?? "" : base;
-  const accented = (_, accent, braced, bare) => letter(braced ?? bare ?? "") + ACCENTS[accent];
+  const accented = (_, accent, braced, bare) => letter(braced ?? bare ?? "") + ACCENTS2[accent];
   return tex.replace(/\\(['`^"~=.])\s*(?:\{\s*(\\[ij]|[A-Za-z])\s*\}|([A-Za-z]))/g, accented).replace(/\\([uvHckrdb])(?:\s*\{\s*(\\[ij]|[A-Za-z])\s*\}|\s+([A-Za-z]))/g, accented).replace(/\\(ss|aa|AA|ae|AE|oe|OE|o|O|l|L)(?![A-Za-z])\s*(?:\{\})?/g, (_, name) => LETTERS[name]).replace(/\\(?:protect|relax|ignorespaces|leavevmode|unskip)(?![A-Za-z])\s*/g, "").replace(/\\nobreakspace\s*(?:\{\})?|~/g, "\xA0").replace(/\\([&%$#_{}])/g, "$1").replace(/\\[A-Za-z@]+\s*/g, "").replace(/[{}]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
 }
 function rootHint(text, source = previewSource(text)) {
@@ -82549,12 +82816,12 @@ function parseMacroDefinitions(text, source = sanitizeLatexForParsing(text, void
   }
   return macros;
 }
-function skipSpaces(source, index) {
+function skipSpaces2(source, index) {
   while (index < source.length && /\s/.test(source[index])) index++;
   return index;
 }
 function readName(source, index) {
-  index = skipSpaces(source, index);
+  index = skipSpaces2(source, index);
   let raw;
   let next;
   if (source[index] === "{") {
@@ -82570,13 +82837,13 @@ function readName(source, index) {
   return name ? { name, next } : void 0;
 }
 function readGroup2(source, index) {
-  index = skipSpaces(source, index);
+  index = skipSpaces2(source, index);
   if (source[index] !== "{") return void 0;
   const close = findMatchingBrace(source, index);
   return close === -1 ? void 0 : { value: source.slice(index + 1, close), next: close + 1 };
 }
 function readOptional(source, index) {
-  index = skipSpaces(source, index);
+  index = skipSpaces2(source, index);
   if (source[index] !== "[") return void 0;
   const close = source.indexOf("]", index);
   return close === -1 ? void 0 : { value: source.slice(index + 1, close), next: close + 1 };
