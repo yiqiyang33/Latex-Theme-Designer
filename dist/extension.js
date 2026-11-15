@@ -17361,9 +17361,9 @@ var require_MathItem = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.newState = exports2.STATE = exports2.AbstractMathItem = exports2.protoItem = void 0;
-    function protoItem(open2, math, close, n, start, end, display) {
-      if (display === void 0) {
-        display = null;
+    function protoItem(open2, math, close, n, start, end, display2) {
+      if (display2 === void 0) {
+        display2 = null;
       }
       var item = {
         open: open2,
@@ -17372,15 +17372,15 @@ var require_MathItem = __commonJS({
         n,
         start: { n: start },
         end: { n: end },
-        display
+        display: display2
       };
       return item;
     }
     exports2.protoItem = protoItem;
     var AbstractMathItem = (function() {
-      function AbstractMathItem2(math, jax, display, start, end) {
-        if (display === void 0) {
-          display = true;
+      function AbstractMathItem2(math, jax, display2, start, end) {
+        if (display2 === void 0) {
+          display2 = true;
         }
         if (start === void 0) {
           start = { i: 0, n: 0, delim: "" };
@@ -17396,7 +17396,7 @@ var require_MathItem = __commonJS({
         this._state = exports2.STATE.UNPROCESSED;
         this.math = math;
         this.inputJax = jax;
-        this.display = display;
+        this.display = display2;
         this.start = start;
         this.end = end;
         this.root = null;
@@ -17595,21 +17595,21 @@ var require_FindTeX = __commonJS({
         this.start = new RegExp(parts.join("|"), "g");
         this.hasPatterns = parts.length > 0;
       };
-      FindTeX2.prototype.addPattern = function(starts, delims, display) {
+      FindTeX2.prototype.addPattern = function(starts, delims, display2) {
         var _a2 = __read(delims, 2), open2 = _a2[0], close = _a2[1];
         starts.push((0, string_js_1.quotePattern)(open2));
-        this.end[open2] = [close, display, this.endPattern(close)];
+        this.end[open2] = [close, display2, this.endPattern(close)];
       };
       FindTeX2.prototype.endPattern = function(end, endp) {
         return new RegExp((endp || (0, string_js_1.quotePattern)(end)) + "|\\\\(?:[a-zA-Z]|.)|[{}]", "g");
       };
       FindTeX2.prototype.findEnd = function(text, n, start, end) {
-        var _a2 = __read(end, 3), close = _a2[0], display = _a2[1], pattern = _a2[2];
+        var _a2 = __read(end, 3), close = _a2[0], display2 = _a2[1], pattern = _a2[2];
         var i = pattern.lastIndex = start.index + start[0].length;
         var match2, braces = 0;
         while (match2 = pattern.exec(text)) {
           if ((match2[1] || match2[0]) === close && braces === 0) {
-            return (0, MathItem_js_1.protoItem)(start[0], text.substr(i, match2.index - i), match2[0], n, start.index, match2.index + match2[0].length, display);
+            return (0, MathItem_js_1.protoItem)(start[0], text.substr(i, match2.index - i), match2[0], n, start.index, match2.index + match2[0].length, display2);
           } else if (match2[0] === "{") {
             braces++;
           } else if (match2[0] === "}" && braces) {
@@ -18411,13 +18411,13 @@ var require_MmlNode = __commonJS({
       AbstractMmlNode2.prototype.hasSpacingAttributes = function() {
         return this.isEmbellished && this.coreMO().hasSpacingAttributes();
       };
-      AbstractMmlNode2.prototype.setInheritedAttributes = function(attributes, display, level, prime) {
+      AbstractMmlNode2.prototype.setInheritedAttributes = function(attributes, display2, level, prime) {
         var e_5, _a2;
         if (attributes === void 0) {
           attributes = {};
         }
-        if (display === void 0) {
-          display = false;
+        if (display2 === void 0) {
+          display2 = false;
         }
         if (level === void 0) {
           level = 0;
@@ -18448,7 +18448,7 @@ var require_MmlNode = __commonJS({
         }
         var displaystyle = this.attributes.getExplicit("displaystyle");
         if (displaystyle === void 0) {
-          this.attributes.setInherited("displaystyle", display);
+          this.attributes.setInherited("displaystyle", display2);
         }
         var scriptlevel = this.attributes.getExplicit("scriptlevel");
         if (scriptlevel === void 0) {
@@ -18467,14 +18467,14 @@ var require_MmlNode = __commonJS({
             }
           }
         }
-        this.setChildInheritedAttributes(attributes, display, level, prime);
+        this.setChildInheritedAttributes(attributes, display2, level, prime);
       };
-      AbstractMmlNode2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      AbstractMmlNode2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var e_6, _a2;
         try {
           for (var _b = __values(this.childNodes), _c = _b.next(); !_c.done; _c = _b.next()) {
             var child = _c.value;
-            child.setInheritedAttributes(attributes, display, level, prime);
+            child.setInheritedAttributes(attributes, display2, level, prime);
           }
         } catch (e_6_1) {
           e_6 = { error: e_6_1 };
@@ -18509,13 +18509,13 @@ var require_MmlNode = __commonJS({
       };
       AbstractMmlNode2.prototype.inheritAttributesFrom = function(node) {
         var attributes = node.attributes;
-        var display = attributes.get("displaystyle");
+        var display2 = attributes.get("displaystyle");
         var scriptlevel = attributes.get("scriptlevel");
         var defaults2 = !attributes.isSet("mathsize") ? {} : {
           mathsize: ["math", attributes.get("mathsize")]
         };
         var prime = node.getProperty("texprimestyle") || false;
-        this.setInheritedAttributes(defaults2, display, scriptlevel, prime);
+        this.setInheritedAttributes(defaults2, display2, scriptlevel, prime);
       };
       AbstractMmlNode2.prototype.verifyTree = function(options) {
         if (options === void 0) {
@@ -18661,13 +18661,13 @@ var require_MmlNode = __commonJS({
         }
         return text;
       };
-      AbstractMmlTokenNode2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      AbstractMmlTokenNode2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var e_11, _a2;
         try {
           for (var _b = __values(this.childNodes), _c = _b.next(); !_c.done; _c = _b.next()) {
             var child = _c.value;
             if (child instanceof AbstractMmlNode) {
-              child.setInheritedAttributes(attributes, display, level, prime);
+              child.setInheritedAttributes(attributes, display2, level, prime);
             }
           }
         } catch (e_11_1) {
@@ -20515,12 +20515,12 @@ var require_mo = __commonJS({
         }
         return this;
       };
-      MmlMo2.prototype.setInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMo2.prototype.setInheritedAttributes = function(attributes, display2, level, prime) {
         if (attributes === void 0) {
           attributes = {};
         }
-        if (display === void 0) {
-          display = false;
+        if (display2 === void 0) {
+          display2 = false;
         }
         if (level === void 0) {
           level = 0;
@@ -20528,7 +20528,7 @@ var require_mo = __commonJS({
         if (prime === void 0) {
           prime = false;
         }
-        _super.prototype.setInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setInheritedAttributes.call(this, attributes, display2, level, prime);
         var mo = this.getText();
         this.checkOperatorTable(mo);
         this.checkPseudoScripts(mo);
@@ -27990,13 +27990,13 @@ var require_tex = __commonJS({
       TeX2.prototype.compile = function(math, document2) {
         this.parseOptions.clear();
         this.executeFilters(this.preFilters, math, document2, this.parseOptions);
-        var display = math.display;
+        var display2 = math.display;
         this.latex = math.math;
         var node;
         this.parseOptions.tags.startEquation(math);
         var globalEnv;
         try {
-          var parser = new TexParser_js_1.default(this.latex, { display, isInner: false }, this.parseOptions);
+          var parser = new TexParser_js_1.default(this.latex, { display: display2, isInner: false }, this.parseOptions);
           node = parser.mml();
           globalEnv = parser.stack.global;
         } catch (err) {
@@ -28010,7 +28010,7 @@ var require_tex = __commonJS({
         if (globalEnv === null || globalEnv === void 0 ? void 0 : globalEnv.indentalign) {
           NodeUtil_js_1.default.setAttribute(node, "indentalign", globalEnv.indentalign);
         }
-        if (display) {
+        if (display2) {
           NodeUtil_js_1.default.setAttribute(node, "display", "block");
         }
         this.parseOptions.tags.finishEquation(math);
@@ -28901,9 +28901,9 @@ var require_OutputJax2 = __commonJS({
           }
         }
       };
-      CommonOutputJax2.prototype.getMetricsFor = function(node, display) {
+      CommonOutputJax2.prototype.getMetricsFor = function(node, display2) {
         var getFamily = this.options.mtextInheritFont || this.options.merrorInheritFont;
-        var test = this.getTestElement(node, display);
+        var test = this.getTestElement(node, display2);
         var metrics = this.measureMetrics(test, getFamily);
         this.adaptor.remove(test);
         return metrics;
@@ -28990,7 +28990,7 @@ var require_OutputJax2 = __commonJS({
         }
         return maps;
       };
-      CommonOutputJax2.prototype.getTestElement = function(node, display) {
+      CommonOutputJax2.prototype.getTestElement = function(node, display2) {
         var adaptor = this.adaptor;
         if (!this.testInline) {
           this.testInline = this.html("mjx-test", { style: {
@@ -29034,7 +29034,7 @@ var require_OutputJax2 = __commonJS({
           adaptor.setStyle(right, "width", "10000em");
           adaptor.setStyle(right, "float", "");
         }
-        return adaptor.append(node, adaptor.clone(display ? this.testDisplay : this.testInline));
+        return adaptor.append(node, adaptor.clone(display2 ? this.testDisplay : this.testInline));
       };
       CommonOutputJax2.prototype.measureMetrics = function(node, getFamily) {
         var adaptor = this.adaptor;
@@ -31100,15 +31100,15 @@ var require_math2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMath2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMath2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         if (this.attributes.get("mode") === "display") {
           this.attributes.setInherited("display", "block");
         }
         attributes = this.addInheritedAttributes(attributes, this.attributes.getAllAttributes());
-        display = !!this.attributes.get("displaystyle") || !this.attributes.get("displaystyle") && this.attributes.get("display") === "block";
-        this.attributes.setInherited("displaystyle", display);
+        display2 = !!this.attributes.get("displaystyle") || !this.attributes.get("displaystyle") && this.attributes.get("display") === "block";
+        this.attributes.setInherited("displaystyle", display2);
         level = this.attributes.get("scriptlevel") || this.constructor.defaults["scriptlevel"];
-        _super.prototype.setChildInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setChildInheritedAttributes.call(this, attributes, display2, level, prime);
       };
       MmlMath2.defaults = __assign(__assign({}, MmlNode_js_1.AbstractMmlLayoutNode.defaults), { mathvariant: "normal", mathsize: "normal", mathcolor: "", mathbackground: "transparent", dir: "ltr", scriptlevel: 0, displaystyle: false, display: "inline", maxwidth: "", overflow: "linebreak", altimg: "", "altimg-width": "", "altimg-height": "", "altimg-valign": "", alttext: "", cdgroup: "", scriptsizemultiplier: 1 / Math.sqrt(2), scriptminsize: "8px", infixlinebreakstyle: "before", lineleading: "1ex", linebreakmultchar: "\u2062", indentshift: "auto", indentalign: "auto", indenttarget: "", indentalignfirst: "indentalign", indentshiftfirst: "indentshift", indentalignlast: "indentalign", indentshiftlast: "indentshift" });
       return MmlMath2;
@@ -31182,8 +31182,8 @@ var require_math3 = __commonJS({
       SVGmath2.prototype.toSVG = function(parent) {
         _super.prototype.toSVG.call(this, parent);
         var adaptor = this.adaptor;
-        var display = this.node.attributes.get("display") === "block";
-        if (display) {
+        var display2 = this.node.attributes.get("display") === "block";
+        if (display2) {
           adaptor.setAttribute(this.jax.container, "display", "true");
           this.handleDisplay();
         }
@@ -31876,12 +31876,12 @@ var require_mi2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMi2.prototype.setInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMi2.prototype.setInheritedAttributes = function(attributes, display2, level, prime) {
         if (attributes === void 0) {
           attributes = {};
         }
-        if (display === void 0) {
-          display = false;
+        if (display2 === void 0) {
+          display2 = false;
         }
         if (level === void 0) {
           level = 0;
@@ -31889,7 +31889,7 @@ var require_mi2 = __commonJS({
         if (prime === void 0) {
           prime = false;
         }
-        _super.prototype.setInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setInheritedAttributes.call(this, attributes, display2, level, prime);
         var text = this.getText();
         if (text.match(MmlMi2.singleCharacter) && !attributes.mathvariant) {
           this.attributes.setInherited("mathvariant", "italic");
@@ -33707,17 +33707,17 @@ var require_mfrac = __commonJS({
           }
           bbox.empty();
           var _a2 = this.node.attributes.getList("linethickness", "bevelled"), linethickness = _a2.linethickness, bevelled = _a2.bevelled;
-          var display = this.isDisplay();
+          var display2 = this.isDisplay();
           var w = null;
           if (bevelled) {
-            this.getBevelledBBox(bbox, display);
+            this.getBevelledBBox(bbox, display2);
           } else {
             var thickness = this.length2em(String(linethickness), 0.06);
             w = -2 * this.pad;
             if (thickness === 0) {
-              this.getAtopBBox(bbox, display);
+              this.getAtopBBox(bbox, display2);
             } else {
-              this.getFractionBBox(bbox, display, thickness);
+              this.getFractionBBox(bbox, display2, thickness);
               w -= 0.2;
             }
             w += bbox.w;
@@ -33725,38 +33725,38 @@ var require_mfrac = __commonJS({
           bbox.clean();
           this.setChildPWidths(recompute, w);
         };
-        class_1.prototype.getFractionBBox = function(bbox, display, t) {
+        class_1.prototype.getFractionBBox = function(bbox, display2, t) {
           var nbox = this.childNodes[0].getOuterBBox();
           var dbox = this.childNodes[1].getOuterBBox();
           var tex = this.font.params;
           var a = tex.axis_height;
-          var _a2 = this.getTUV(display, t), T = _a2.T, u = _a2.u, v = _a2.v;
+          var _a2 = this.getTUV(display2, t), T = _a2.T, u = _a2.u, v = _a2.v;
           bbox.combine(nbox, 0, a + T + Math.max(nbox.d * nbox.rscale, u));
           bbox.combine(dbox, 0, a - T - Math.max(dbox.h * dbox.rscale, v));
           bbox.w += 2 * this.pad + 0.2;
         };
-        class_1.prototype.getTUV = function(display, t) {
+        class_1.prototype.getTUV = function(display2, t) {
           var tex = this.font.params;
           var a = tex.axis_height;
-          var T = (display ? 3.5 : 1.5) * t;
+          var T = (display2 ? 3.5 : 1.5) * t;
           return {
-            T: (display ? 3.5 : 1.5) * t,
-            u: (display ? tex.num1 : tex.num2) - a - T,
-            v: (display ? tex.denom1 : tex.denom2) + a - T
+            T: (display2 ? 3.5 : 1.5) * t,
+            u: (display2 ? tex.num1 : tex.num2) - a - T,
+            v: (display2 ? tex.denom1 : tex.denom2) + a - T
           };
         };
-        class_1.prototype.getAtopBBox = function(bbox, display) {
-          var _a2 = this.getUVQ(display), u = _a2.u, v = _a2.v, nbox = _a2.nbox, dbox = _a2.dbox;
+        class_1.prototype.getAtopBBox = function(bbox, display2) {
+          var _a2 = this.getUVQ(display2), u = _a2.u, v = _a2.v, nbox = _a2.nbox, dbox = _a2.dbox;
           bbox.combine(nbox, 0, u);
           bbox.combine(dbox, 0, -v);
           bbox.w += 2 * this.pad;
         };
-        class_1.prototype.getUVQ = function(display) {
+        class_1.prototype.getUVQ = function(display2) {
           var nbox = this.childNodes[0].getOuterBBox();
           var dbox = this.childNodes[1].getOuterBBox();
           var tex = this.font.params;
-          var _a2 = __read(display ? [tex.num1, tex.denom1] : [tex.num3, tex.denom2], 2), u = _a2[0], v = _a2[1];
-          var p = (display ? 7 : 3) * tex.rule_thickness;
+          var _a2 = __read(display2 ? [tex.num1, tex.denom1] : [tex.num3, tex.denom2], 2), u = _a2[0], v = _a2[1];
+          var p = (display2 ? 7 : 3) * tex.rule_thickness;
           var q = u - nbox.d * nbox.scale - (dbox.h * dbox.scale - v);
           if (q < p) {
             u += (p - q) / 2;
@@ -33765,17 +33765,17 @@ var require_mfrac = __commonJS({
           }
           return { u, v, q, nbox, dbox };
         };
-        class_1.prototype.getBevelledBBox = function(bbox, display) {
-          var _a2 = this.getBevelData(display), u = _a2.u, v = _a2.v, delta = _a2.delta, nbox = _a2.nbox, dbox = _a2.dbox;
+        class_1.prototype.getBevelledBBox = function(bbox, display2) {
+          var _a2 = this.getBevelData(display2), u = _a2.u, v = _a2.v, delta = _a2.delta, nbox = _a2.nbox, dbox = _a2.dbox;
           var lbox = this.bevel.getOuterBBox();
           bbox.combine(nbox, 0, u);
           bbox.combine(lbox, bbox.w - delta / 2, 0);
           bbox.combine(dbox, bbox.w - delta / 2, v);
         };
-        class_1.prototype.getBevelData = function(display) {
+        class_1.prototype.getBevelData = function(display2) {
           var nbox = this.childNodes[0].getOuterBBox();
           var dbox = this.childNodes[1].getOuterBBox();
-          var delta = display ? 0.4 : 0.15;
+          var delta = display2 ? 0.4 : 0.15;
           var H = Math.max(nbox.scale * (nbox.h + nbox.d), dbox.scale * (dbox.h + dbox.d)) + 2 * delta;
           var a = this.font.params.axis_height;
           var u = nbox.scale * (nbox.d - nbox.h) / 2 + a + delta;
@@ -33902,8 +33902,8 @@ var require_mfrac2 = __commonJS({
         }
         return this;
       };
-      MmlMfrac2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
-        if (!display || level > 0) {
+      MmlMfrac2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
+        if (!display2 || level > 0) {
           level++;
         }
         this.childNodes[0].setInheritedAttributes(attributes, false, level, prime);
@@ -33969,19 +33969,19 @@ var require_mfrac3 = __commonJS({
       SVGmfrac2.prototype.toSVG = function(parent) {
         this.standardSVGnode(parent);
         var _a2 = this.node.attributes.getList("linethickness", "bevelled"), linethickness = _a2.linethickness, bevelled = _a2.bevelled;
-        var display = this.isDisplay();
+        var display2 = this.isDisplay();
         if (bevelled) {
-          this.makeBevelled(display);
+          this.makeBevelled(display2);
         } else {
           var thickness = this.length2em(String(linethickness), 0.06);
           if (thickness === 0) {
-            this.makeAtop(display);
+            this.makeAtop(display2);
           } else {
-            this.makeFraction(display, thickness);
+            this.makeFraction(display2, thickness);
           }
         }
       };
-      SVGmfrac2.prototype.makeFraction = function(display, t) {
+      SVGmfrac2.prototype.makeFraction = function(display2, t) {
         var svg = this.element;
         var _a2 = this.node.attributes.getList("numalign", "denomalign"), numalign = _a2.numalign, denomalign = _a2.denomalign;
         var _b = __read(this.childNodes, 2), num = _b[0], den = _b[1];
@@ -33994,7 +33994,7 @@ var require_mfrac3 = __commonJS({
         var W = Math.max((nbox.L + nbox.w + nbox.R) * nbox.rscale, (dbox.L + dbox.w + dbox.R) * dbox.rscale);
         var nx = this.getAlignX(W, nbox, numalign) + d + pad;
         var dx = this.getAlignX(W, dbox, denomalign) + d + pad;
-        var _c = this.getTUV(display, t), T = _c.T, u = _c.u, v = _c.v;
+        var _c = this.getTUV(display2, t), T = _c.T, u = _c.u, v = _c.v;
         num.toSVG(svg);
         num.place(nx, a + T + Math.max(nbox.d * nbox.rscale, u));
         den.toSVG(svg);
@@ -34006,7 +34006,7 @@ var require_mfrac3 = __commonJS({
           y: this.fixed(a - t / 2)
         }));
       };
-      SVGmfrac2.prototype.makeAtop = function(display) {
+      SVGmfrac2.prototype.makeAtop = function(display2) {
         var svg = this.element;
         var _a2 = this.node.attributes.getList("numalign", "denomalign"), numalign = _a2.numalign, denomalign = _a2.denomalign;
         var _b = __read(this.childNodes, 2), num = _b[0], den = _b[1];
@@ -34017,16 +34017,16 @@ var require_mfrac3 = __commonJS({
         var W = Math.max((nbox.L + nbox.w + nbox.R) * nbox.rscale, (dbox.L + dbox.w + dbox.R) * dbox.rscale);
         var nx = this.getAlignX(W, nbox, numalign) + pad;
         var dx = this.getAlignX(W, dbox, denomalign) + pad;
-        var _c = this.getUVQ(display), u = _c.u, v = _c.v;
+        var _c = this.getUVQ(display2), u = _c.u, v = _c.v;
         num.toSVG(svg);
         num.place(nx, u);
         den.toSVG(svg);
         den.place(dx, -v);
       };
-      SVGmfrac2.prototype.makeBevelled = function(display) {
+      SVGmfrac2.prototype.makeBevelled = function(display2) {
         var svg = this.element;
         var _a2 = __read(this.childNodes, 2), num = _a2[0], den = _a2[1];
-        var _b = this.getBevelData(display), u = _b.u, v = _b.v, delta = _b.delta, nbox = _b.nbox, dbox = _b.dbox;
+        var _b = this.getBevelData(display2), u = _b.u, v = _b.v, delta = _b.delta, nbox = _b.nbox, dbox = _b.dbox;
         var w = (nbox.L + nbox.w + nbox.R) * nbox.rscale;
         num.toSVG(svg);
         this.bevel.toSVG(svg);
@@ -34243,8 +34243,8 @@ var require_msqrt2 = __commonJS({
         this.childNodes[0].setTeXclass(null);
         return this;
       };
-      MmlMsqrt2.prototype.setChildInheritedAttributes = function(attributes, display, level, _prime) {
-        this.childNodes[0].setInheritedAttributes(attributes, display, level, true);
+      MmlMsqrt2.prototype.setChildInheritedAttributes = function(attributes, display2, level, _prime) {
+        this.childNodes[0].setInheritedAttributes(attributes, display2, level, true);
       };
       MmlMsqrt2.defaults = __assign({}, MmlNode_js_1.AbstractMmlNode.defaults);
       return MmlMsqrt2;
@@ -34457,8 +34457,8 @@ var require_mroot2 = __commonJS({
         this.childNodes[1].setTeXclass(null);
         return this;
       };
-      MmlMroot2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
-        this.childNodes[0].setInheritedAttributes(attributes, display, level, true);
+      MmlMroot2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
+        this.childNodes[0].setInheritedAttributes(attributes, display2, level, true);
         this.childNodes[1].setInheritedAttributes(attributes, false, level + 2, prime);
       };
       MmlMroot2.defaults = __assign({}, MmlNode_js_1.AbstractMmlNode.defaults);
@@ -34750,14 +34750,14 @@ var require_mfenced2 = __commonJS({
         this.updateTeXclass(this.open);
         return prev;
       };
-      MmlMfenced2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMfenced2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var e_1, _a2;
         this.addFakeNodes();
         try {
           for (var _b = __values([this.open, this.close].concat(this.separators)), _c = _b.next(); !_c.done; _c = _b.next()) {
             var child = _c.value;
             if (child) {
-              child.setInheritedAttributes(attributes, display, level, prime);
+              child.setInheritedAttributes(attributes, display2, level, prime);
             }
           }
         } catch (e_1_1) {
@@ -34769,7 +34769,7 @@ var require_mfenced2 = __commonJS({
             if (e_1) throw e_1.error;
           }
         }
-        _super.prototype.setChildInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setChildInheritedAttributes.call(this, attributes, display2, level, prime);
       };
       MmlMfenced2.prototype.addFakeNodes = function() {
         var e_2, _a2;
@@ -35140,9 +35140,9 @@ var require_scriptbase = __commonJS({
           return Math.max(this.baseCharZero(bbox.h * this.baseScale - tex.sup_drop * sbox.rscale), superscriptshift, sbox.d * sbox.rscale + 1 / 4 * tex.x_height);
         };
         class_1.prototype.hasMovableLimits = function() {
-          var display = this.node.attributes.get("displaystyle");
+          var display2 = this.node.attributes.get("displaystyle");
           var mo = this.baseChild.coreMO().node;
-          return !display && !!mo.attributes.get("movablelimits");
+          return !display2 && !!mo.attributes.get("movablelimits");
         };
         class_1.prototype.getOverKU = function(basebox, overbox) {
           var accent = this.node.attributes.get("accent");
@@ -35591,9 +35591,9 @@ var require_msubsup2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMsubsup2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMsubsup2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var nodes = this.childNodes;
-        nodes[0].setInheritedAttributes(attributes, display, level, prime);
+        nodes[0].setInheritedAttributes(attributes, display2, level, prime);
         nodes[1].setInheritedAttributes(attributes, false, level + 1, prime || this.sub === 1);
         if (!nodes[2]) {
           return;
@@ -36047,18 +36047,18 @@ var require_munderover2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMunderover2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMunderover2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var nodes = this.childNodes;
-        nodes[0].setInheritedAttributes(attributes, display, level, prime || !!nodes[this.over]);
-        var force = !!(!display && nodes[0].coreMO().attributes.get("movablelimits"));
+        nodes[0].setInheritedAttributes(attributes, display2, level, prime || !!nodes[this.over]);
+        var force = !!(!display2 && nodes[0].coreMO().attributes.get("movablelimits"));
         var ACCENTS2 = this.constructor.ACCENTS;
         nodes[1].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[1], force, level), prime || this.under === 1);
-        this.setInheritedAccent(1, ACCENTS2[1], display, level, prime, force);
+        this.setInheritedAccent(1, ACCENTS2[1], display2, level, prime, force);
         if (!nodes[2]) {
           return;
         }
         nodes[2].setInheritedAttributes(attributes, false, this.getScriptlevel(ACCENTS2[2], force, level), prime || this.under === 2);
-        this.setInheritedAccent(2, ACCENTS2[2], display, level, prime, force);
+        this.setInheritedAccent(2, ACCENTS2[2], display2, level, prime, force);
       };
       MmlMunderover2.prototype.getScriptlevel = function(accent, force, level) {
         if (force || !this.attributes.get(accent)) {
@@ -36066,13 +36066,13 @@ var require_munderover2 = __commonJS({
         }
         return level;
       };
-      MmlMunderover2.prototype.setInheritedAccent = function(n, accent, display, level, prime, force) {
+      MmlMunderover2.prototype.setInheritedAccent = function(n, accent, display2, level, prime, force) {
         var node = this.childNodes[n];
         if (this.attributes.getExplicit(accent) == null && node.isEmbellished) {
           var value = node.coreMO().attributes.get("accent");
           this.attributes.setInherited(accent, value);
           if (value !== this.attributes.getDefault(accent)) {
-            node.setInheritedAttributes({}, display, this.getScriptlevel(accent, force, level), prime);
+            node.setInheritedAttributes({}, display2, this.getScriptlevel(accent, force, level), prime);
           }
         }
       };
@@ -36543,8 +36543,8 @@ var require_mmultiscripts2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMmultiscripts2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
-        this.childNodes[0].setInheritedAttributes(attributes, display, level, prime);
+      MmlMmultiscripts2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
+        this.childNodes[0].setInheritedAttributes(attributes, display2, level, prime);
         var prescripts = false;
         for (var i = 1, n = 0; i < this.childNodes.length; i++) {
           var child = this.childNodes[i];
@@ -37504,7 +37504,7 @@ var require_mtable2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMtable2.prototype.setInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMtable2.prototype.setInheritedAttributes = function(attributes, display2, level, prime) {
         var e_1, _a2;
         try {
           for (var indentAttributes_1 = __values(MmlNode_js_1.indentAttributes), indentAttributes_1_1 = indentAttributes_1.next(); !indentAttributes_1_1.done; indentAttributes_1_1 = indentAttributes_1.next()) {
@@ -37525,9 +37525,9 @@ var require_mtable2 = __commonJS({
             if (e_1) throw e_1.error;
           }
         }
-        _super.prototype.setInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setInheritedAttributes.call(this, attributes, display2, level, prime);
       };
-      MmlMtable2.prototype.setChildInheritedAttributes = function(attributes, display, level, _prime) {
+      MmlMtable2.prototype.setChildInheritedAttributes = function(attributes, display2, level, _prime) {
         var e_2, _a2, e_3, _b;
         try {
           for (var _c = __values(this.childNodes), _d = _c.next(); !_d.done; _d = _c.next()) {
@@ -37546,7 +37546,7 @@ var require_mtable2 = __commonJS({
           }
         }
         level = this.getProperty("scriptlevel") || level;
-        display = !!(this.attributes.getExplicit("displaystyle") || this.attributes.getDefault("displaystyle"));
+        display2 = !!(this.attributes.getExplicit("displaystyle") || this.attributes.getDefault("displaystyle"));
         attributes = this.addInheritedAttributes(attributes, {
           columnalign: this.attributes.get("columnalign"),
           rowalign: "center"
@@ -37557,7 +37557,7 @@ var require_mtable2 = __commonJS({
           for (var _e = __values(this.childNodes), _f = _e.next(); !_f.done; _f = _e.next()) {
             var child = _f.value;
             attributes.rowalign[1] = ralign.shift() || attributes.rowalign[1];
-            child.setInheritedAttributes(attributes, display, level, !!cramped);
+            child.setInheritedAttributes(attributes, display2, level, !!cramped);
           }
         } catch (e_3_1) {
           e_3 = { error: e_3_1 };
@@ -38196,7 +38196,7 @@ var require_mtr2 = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMtr2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMtr2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var e_1, _a2, e_2, _b;
         try {
           for (var _c = __values(this.childNodes), _d = _c.next(); !_d.done; _d = _c.next()) {
@@ -38226,7 +38226,7 @@ var require_mtr2 = __commonJS({
           for (var _e = __values(this.childNodes), _f = _e.next(); !_f.done; _f = _e.next()) {
             var child = _f.value;
             attributes.columnalign[1] = calign.shift() || attributes.columnalign[1];
-            child.setInheritedAttributes(attributes, display, level, prime);
+            child.setInheritedAttributes(attributes, display2, level, prime);
           }
         } catch (e_2_1) {
           e_2 = { error: e_2_1 };
@@ -49078,7 +49078,7 @@ var require_mstyle = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMstyle2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMstyle2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         var scriptlevel = this.attributes.getExplicit("scriptlevel");
         if (scriptlevel != null) {
           scriptlevel = scriptlevel.toString();
@@ -49091,7 +49091,7 @@ var require_mstyle = __commonJS({
         }
         var displaystyle = this.attributes.getExplicit("displaystyle");
         if (displaystyle != null) {
-          display = displaystyle === true;
+          display2 = displaystyle === true;
           prime = false;
         }
         var cramped = this.attributes.getExplicit("data-cramped");
@@ -49099,7 +49099,7 @@ var require_mstyle = __commonJS({
           prime = cramped;
         }
         attributes = this.addInheritedAttributes(attributes, this.attributes.getAllAttributes());
-        this.childNodes[0].setInheritedAttributes(attributes, display, level, prime);
+        this.childNodes[0].setInheritedAttributes(attributes, display2, level, prime);
       };
       MmlMstyle2.defaults = __assign(__assign({}, MmlNode_js_1.AbstractMmlLayoutNode.defaults), { scriptlevel: Attributes_js_1.INHERIT, displaystyle: Attributes_js_1.INHERIT, scriptsizemultiplier: 1 / Math.sqrt(2), scriptminsize: "8px", mathbackground: Attributes_js_1.INHERIT, mathcolor: Attributes_js_1.INHERIT, dir: Attributes_js_1.INHERIT, infixlinebreakstyle: "before" });
       return MmlMstyle2;
@@ -49165,9 +49165,9 @@ var require_maligngroup = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MmlMaligngroup2.prototype.setChildInheritedAttributes = function(attributes, display, level, prime) {
+      MmlMaligngroup2.prototype.setChildInheritedAttributes = function(attributes, display2, level, prime) {
         attributes = this.addInheritedAttributes(attributes, this.attributes.getAllAttributes());
-        _super.prototype.setChildInheritedAttributes.call(this, attributes, display, level, prime);
+        _super.prototype.setChildInheritedAttributes.call(this, attributes, display2, level, prime);
       };
       MmlMaligngroup2.defaults = __assign(__assign({}, MmlNode_js_1.AbstractMmlLayoutNode.defaults), { groupalign: Attributes_js_1.INHERIT });
       return MmlMaligngroup2;
@@ -49309,11 +49309,11 @@ var require_mathchoice = __commonJS({
         enumerable: false,
         configurable: true
       });
-      MathChoice2.prototype.setInheritedAttributes = function(attributes, display, level, prime) {
-        var selection = display ? 0 : Math.max(0, Math.min(level, 2)) + 1;
+      MathChoice2.prototype.setInheritedAttributes = function(attributes, display2, level, prime) {
+        var selection = display2 ? 0 : Math.max(0, Math.min(level, 2)) + 1;
         var child = this.childNodes[selection] || this.factory.create("mrow");
         this.parent.replaceChild(child, this);
-        child.setInheritedAttributes(attributes, display, level, prime);
+        child.setInheritedAttributes(attributes, display2, level, prime);
       };
       MathChoice2.defaults = __assign({}, MmlNode_js_1.AbstractMmlBaseNode.defaults);
       return MathChoice2;
@@ -49908,14 +49908,14 @@ var require_MathDocument = __commonJS({
           lineWidth: 1e6,
           scale: 1,
           family: ""
-        }, options), format = _a2.format, display = _a2.display, end = _a2.end, ex = _a2.ex, em = _a2.em, containerWidth = _a2.containerWidth, lineWidth = _a2.lineWidth, scale = _a2.scale, family = _a2.family;
+        }, options), format = _a2.format, display2 = _a2.display, end = _a2.end, ex = _a2.ex, em = _a2.em, containerWidth = _a2.containerWidth, lineWidth = _a2.lineWidth, scale = _a2.scale, family = _a2.family;
         if (containerWidth === null) {
           containerWidth = 80 * ex;
         }
         var jax = this.inputJax.reduce(function(jax2, ijax) {
           return ijax.name === format ? ijax : jax2;
         }, null);
-        var mitem = new this.options.MathItem(math, jax, display);
+        var mitem = new this.options.MathItem(math, jax, display2);
         mitem.start.node = this.adaptor.body(this.document);
         mitem.setMetrics(em, ex, containerWidth, lineWidth, scale);
         if (this.outputJax.options.mtextInheritFont) {
@@ -50309,9 +50309,9 @@ var require_HTMLMathItem = __commonJS({
     var MathItem_js_1 = require_MathItem();
     var HTMLMathItem = (function(_super) {
       __extends(HTMLMathItem2, _super);
-      function HTMLMathItem2(math, jax, display, start, end) {
-        if (display === void 0) {
-          display = true;
+      function HTMLMathItem2(math, jax, display2, start, end) {
+        if (display2 === void 0) {
+          display2 = true;
         }
         if (start === void 0) {
           start = { node: null, n: 0, delim: "" };
@@ -50319,7 +50319,7 @@ var require_HTMLMathItem = __commonJS({
         if (end === void 0) {
           end = { node: null, n: 0, delim: "" };
         }
-        return _super.call(this, math, jax, display, start, end) || this;
+        return _super.call(this, math, jax, display2, start, end) || this;
       }
       Object.defineProperty(HTMLMathItem2.prototype, "adaptor", {
         get: function() {
@@ -55255,9 +55255,9 @@ var require_MathtoolsUtil = __commonJS({
           "\\textstyle": [false, 0],
           "\\scriptstyle": [false, 1],
           "\\scriptscriptstyle": [false, 2]
-        }, [null, null]), 2), display = _a2[0], script = _a2[1];
-        if (display !== null) {
-          mml.attributes.set("displaystyle", display);
+        }, [null, null]), 2), display2 = _a2[0], script = _a2[1];
+        if (display2 !== null) {
+          mml.attributes.set("displaystyle", display2);
           mml.attributes.set("scriptlevel", script);
         }
       },
@@ -55692,7 +55692,7 @@ var require_MathtoolsMethods = __commonJS({
           ], { width: 0, lspace: "-.5width" })
         ], { texClass: MmlNode_js_1.TEXCLASS.REL }));
       },
-      SplitFrac: function(parser, name, display) {
+      SplitFrac: function(parser, name, display2) {
         var num = parser.ParseArg(name);
         var den = parser.ParseArg(name);
         parser.Push(parser.create("node", "mstyle", [
@@ -55708,7 +55708,7 @@ var require_MathtoolsMethods = __commonJS({
               den
             ], { scriptlevel: 0 })
           ], { linethickness: 0, numalign: "left", denomalign: "right" })
-        ], { displaystyle: display, scriptlevel: 0 }));
+        ], { displaystyle: display2, scriptlevel: 0 }));
       },
       XMathStrut: function(parser, name) {
         var dd = parser.GetBrackets(name);
@@ -66666,7 +66666,6 @@ var import_node_fs17 = require("node:fs");
 var path18 = __toESM(require("node:path"));
 init_schema();
 init_utils();
-var UPGRADE_THEME_ASSET_FILES = ["theme.sty", "theorems.tex", "commands.tex"];
 var COLOR_OVERRIDE_FILES = ["theme.colors.tex", "theme.ui.json"];
 var TemplateService = class {
   constructor(rootDir, extensionDir, stateService) {
@@ -66706,9 +66705,11 @@ var TemplateService = class {
       if (onlyWhenPresent && !await exists(target)) return;
       assetReplacements.push({ file, source, target });
     };
-    for (const file of UPGRADE_THEME_ASSET_FILES) await queueReplacement(file);
     const metadata = await readTemplateMetadata(this.rootDir);
-    const extras = new Set(upgradableTemplateExtras(starterTemplate(metadata?.templateId ?? "")));
+    const recorded = starterTemplate(metadata?.templateId ?? "");
+    const usesTheme = recorded ? recorded.capabilities.includes("toolkit-theme") : await exists(path18.join(this.rootDir, "theme.sty"));
+    for (const file of UPGRADABLE_THEME_ASSETS) await queueReplacement(file, !usesTheme);
+    const extras = new Set(upgradableTemplateExtras(recorded));
     for (const definition of STARTER_TEMPLATE_DEFINITIONS) {
       for (const file of upgradableTemplateExtras(definition)) {
         if (!extras.has(file) && await exists(path18.join(this.rootDir, file))) extras.add(file);
@@ -69229,6 +69230,7 @@ function validateStatusItem(value, at) {
   }
   if (!STATUS_VALUES.has(value.status)) return `${at}.status is invalid`;
   if (typeof value.blocking !== "boolean") return `${at}.blocking must be a boolean`;
+  if (value.uploadBlocked !== void 0 && typeof value.uploadBlocked !== "boolean") return `${at}.uploadBlocked must be a boolean`;
   if (value.entityType !== void 0 && !ENTITY_TYPES.has(value.entityType)) return `${at}.entityType is invalid`;
   for (const field of ["entityId", "parentFolderId", "localHash", "remoteHash", "baseHash", "message", "localPath", "remotePath"]) {
     if (value[field] !== void 0 && typeof value[field] !== "string") return `${at}.${field} must be a string`;
@@ -69369,12 +69371,15 @@ tmp/
 *.lof
 *.log
 *.lot
+*.nav
 *.out
 *.run.xml
+*.snm
 *.synctex
 *.synctex.gz
 *.synctex(busy)
 *.toc
+*.vrb
 *.xdv
 *-SAVE-ERROR
 main.pdf
@@ -69948,8 +69953,8 @@ function isWithin(root, candidate) {
 }
 
 // src/overleaf/mirrorManager.ts
-var fs24 = __toESM(require("fs/promises"));
-var path30 = __toESM(require("path"));
+var fs25 = __toESM(require("fs/promises"));
+var path31 = __toESM(require("path"));
 var vscode9 = __toESM(require("vscode"));
 
 // src/overleaf/sharedState.ts
@@ -70361,8 +70366,8 @@ async function exists3(target) {
 }
 
 // src/overleaf/mirrorCore.ts
-var fs23 = __toESM(require("fs/promises"));
-var path29 = __toESM(require("path"));
+var fs24 = __toESM(require("fs/promises"));
+var path30 = __toESM(require("path"));
 var import_child_process3 = require("child_process");
 var import_util11 = require("util");
 var import_ignore2 = __toESM(require_ignore());
@@ -70530,10 +70535,72 @@ function walkFolder(folder, folderPath, parentFolderId, folders, files) {
 }
 
 // src/overleaf/syncStatus.ts
-var fs22 = __toESM(require("fs/promises"));
-var import_fs5 = require("fs");
+var fs23 = __toESM(require("fs/promises"));
+var import_fs6 = require("fs");
+var import_crypto4 = require("crypto");
+var path29 = __toESM(require("path"));
+
+// src/overleaf/binaryTransfer.ts
 var import_crypto2 = require("crypto");
+var import_fs5 = require("fs");
+var fs22 = __toESM(require("fs/promises"));
 var path28 = __toESM(require("path"));
+var import_crypto3 = require("crypto");
+async function hashFileDigests(filePath) {
+  const stat14 = await fs22.stat(filePath);
+  if (!stat14.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
+  const sha12 = (0, import_crypto2.createHash)("sha1");
+  const git = (0, import_crypto2.createHash)("sha1");
+  git.update(`blob ${stat14.size}\0`);
+  await new Promise((resolve31, reject) => {
+    const input = (0, import_fs5.createReadStream)(filePath);
+    input.on("data", (chunk) => {
+      sha12.update(chunk);
+      git.update(chunk);
+    });
+    input.on("error", reject);
+    input.on("end", resolve31);
+  });
+  return { size: stat14.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
+}
+async function installStagedFile(stagedPath, targetPath) {
+  const token = `${process.pid}-${Date.now()}-${(0, import_crypto3.randomBytes)(4).toString("hex")}`;
+  const directory = path28.dirname(targetPath);
+  const incomingPath = path28.join(directory, `.${path28.basename(targetPath)}.incoming-${token}`);
+  const backupPath = path28.join(directory, `.${path28.basename(targetPath)}.backup-${token}`);
+  let backedUp = false;
+  try {
+    await fs22.mkdir(directory, { recursive: true });
+    await moveOrCopy(stagedPath, incomingPath);
+    try {
+      await fs22.rename(targetPath, backupPath);
+      backedUp = true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await fs22.rename(incomingPath, targetPath);
+    if (backedUp) await fs22.rm(backupPath, { force: true });
+  } catch (error) {
+    if (backedUp) {
+      await fs22.rm(targetPath, { force: true }).catch(() => void 0);
+      await fs22.rename(backupPath, targetPath).catch(() => void 0);
+    }
+    throw error;
+  } finally {
+    await fs22.rm(incomingPath, { force: true }).catch(() => void 0);
+    await fs22.rm(stagedPath, { force: true }).catch(() => void 0);
+  }
+}
+async function moveOrCopy(source, target) {
+  try {
+    await fs22.rename(source, target);
+  } catch (error) {
+    if (error.code !== "EXDEV") throw error;
+    await fs22.copyFile(source, target);
+  }
+}
+
+// src/overleaf/syncStatus.ts
 function classifySyncStatus(input) {
   const entity = input.remoteFile ?? input.manifestFile;
   const baseHash = input.baseHash ?? input.manifestFile?.baseHash ?? input.manifestFile?.sha1;
@@ -70813,19 +70880,19 @@ async function scanLocalProject(root, manifest) {
   folders.sort();
   return { files, folders, fileMetadata, trackedOrParentPaths };
   async function walk(absDir, relDir) {
-    const entries = await runFs(() => fs22.readdir(absDir, { withFileTypes: true }).catch(() => []));
+    const entries = await runFs(() => fs23.readdir(absDir, { withFileTypes: true }).catch(() => []));
     const childDirectories = [];
     for (const entry of entries) {
-      const relPath = toPosixPath2(path28.posix.join(relDir, entry.name));
+      const relPath = toPosixPath2(path29.posix.join(relDir, entry.name));
       const tracked = trackedOrParentPaths.has(relPath);
       if (!relPath || shouldSkip(relPath) || shouldIgnore(manifest, relPath) || !tracked && shouldIgnoreUntrackedLocalPath(manifest, relPath)) continue;
-      const absPath = path28.join(absDir, entry.name);
+      const absPath = path29.join(absDir, entry.name);
       if (entry.isDirectory()) {
         folders.push(relPath);
         childDirectories.push({ absolute: absPath, relative: relPath });
       } else if (entry.isFile()) {
         files.push(relPath);
-        const stat14 = await runFs(() => fs22.stat(absPath).catch(() => void 0));
+        const stat14 = await runFs(() => fs23.stat(absPath).catch(() => void 0));
         if (stat14) {
           fileMetadata.set(relPath, {
             size: stat14.size,
@@ -70864,7 +70931,7 @@ function buildTrackedOrParentPathIndex(manifest) {
     let current = toPosixPath2(candidate);
     while (current) {
       result.add(current);
-      current = path28.posix.dirname(current);
+      current = path29.posix.dirname(current);
       if (current === ".") current = "";
     }
   }
@@ -70872,9 +70939,9 @@ function buildTrackedOrParentPathIndex(manifest) {
 }
 async function fileHash(filePath) {
   try {
-    const hash2 = (0, import_fs5.createReadStream)(filePath);
+    const hash2 = (0, import_fs6.createReadStream)(filePath);
     const digest = await new Promise((resolve31, reject) => {
-      const state = (0, import_crypto2.createHash)("sha1");
+      const state = (0, import_crypto4.createHash)("sha1");
       hash2.on("data", (chunk) => state.update(chunk));
       hash2.on("error", reject);
       hash2.on("end", () => resolve31(state.digest("hex")));
@@ -70891,7 +70958,7 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
     mtimeMs: knownMetadata.mtimeMs,
     ctimeMs: knownMetadata.ctimeMs,
     ino: knownMetadata.inode
-  } : await fs22.stat(filePath).catch(() => void 0);
+  } : await fs23.stat(filePath).catch(() => void 0);
   if (!stat14?.isFile()) {
     if (manifestFile) {
       const cacheChanged2 = manifestFile.localHashCache !== void 0 || manifestFile.localSize !== void 0 || manifestFile.localMtimeMs !== void 0 || manifestFile.localCtimeMs !== void 0 || manifestFile.localInode !== void 0;
@@ -70920,7 +70987,19 @@ async function cachedLocalFileHash(filePath, manifestFile, force = false, knownM
 }
 function trashPathFor(root, relPath) {
   const stamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
-  return path28.join(root, ".overleaf-codex", "trash", stamp, relPath);
+  return path29.join(root, ".overleaf-codex", "trash", stamp, relPath);
+}
+async function keepLocalCopyBeforePull(root, relPath, incoming, agreedSha1) {
+  const localPath = await assertNoSymlinkPath(root, relPath);
+  const stat14 = await fs23.stat(localPath).catch(() => void 0);
+  if (!stat14?.isFile() || stat14.size === 0) return void 0;
+  const local = await hashFileDigests(localPath);
+  if (local.sha1 === incoming.sha1 || local.gitBlobHash === incoming.gitBlobHash) return void 0;
+  if (!incoming.empty && local.sha1 === agreedSha1) return void 0;
+  const target = await assertNoSymlinkAbsolutePath(root, trashPathFor(root, relPath));
+  await fs23.mkdir(path29.dirname(target), { recursive: true });
+  await fs23.copyFile(localPath, target);
+  return target;
 }
 function shouldSkip(relPath) {
   return /(^|\/)(\.overleaf-codex|\.vscode|\.git)(\/|$)/.test(relPath) || isFilesystemLeftover(relPath);
@@ -70972,13 +71051,13 @@ cookie*
 .DS_Store
 `;
 function projectMirrorRoot(parentRoot, project) {
-  return path29.join(expandHome(parentRoot), sanitizeProjectFolderName(project.name, project.id));
+  return path30.join(expandHome(parentRoot), sanitizeProjectFolderName(project.name, project.id));
 }
 async function createProjectMirror(client, project, parentRoot, options = {}) {
   const targetRoot = projectMirrorRoot(parentRoot, project);
-  await fs23.mkdir(path29.dirname(targetRoot), { recursive: true });
+  await fs24.mkdir(path30.dirname(targetRoot), { recursive: true });
   try {
-    await fs23.mkdir(targetRoot);
+    await fs24.mkdir(targetRoot);
   } catch (error) {
     if (error.code === "EEXIST") {
       throw new Error(`Mirror target already exists: ${targetRoot}`);
@@ -70995,7 +71074,7 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
       index.folders.filter((folder) => Boolean(folder.path)),
       options.taskConcurrency ?? 4,
       async (folder) => {
-        await fs23.mkdir(path29.join(targetRoot, folder.path), { recursive: true });
+        await fs24.mkdir(path30.join(targetRoot, folder.path), { recursive: true });
       }
     );
     await mapWithDynamicByteConcurrency(
@@ -71004,15 +71083,15 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
       options.maxInFlightBytes ?? 32 * 1024 * 1024,
       async (file, reservation) => writeInitialFile(client, session, project.id, targetRoot, file, reservation)
     );
-    for (const name of ["output", "conflicts", path29.join("base", "docs"), "trash"]) {
-      await fs23.mkdir(metadataPath(targetRoot, name), { recursive: true });
+    for (const name of ["output", "conflicts", path30.join("base", "docs"), "trash"]) {
+      await fs24.mkdir(metadataPath(targetRoot, name), { recursive: true });
     }
     await ensureLocalIgnoreFile(targetRoot);
     await writeManifest(targetRoot, index.manifest);
     await writeMirrorSupportFiles(targetRoot, index.manifest.rootDocPath, index.manifest.compiler);
     await initializeMirrorGitRepository(targetRoot, `Initial Overleaf mirror: ${project.name}`);
   } catch (error) {
-    await fs23.rm(targetRoot, { recursive: true, force: true });
+    await fs24.rm(targetRoot, { recursive: true, force: true });
     throw error;
   } finally {
     session?.disconnect();
@@ -71021,13 +71100,13 @@ async function createProjectMirror(client, project, parentRoot, options = {}) {
   return targetRoot;
 }
 async function writeInitialFile(client, session, projectId, root, file, reservation) {
-  const target = path29.join(root, file.path);
-  await fs23.mkdir(path29.dirname(target), { recursive: true });
+  const target = path30.join(root, file.path);
+  await fs24.mkdir(path30.dirname(target), { recursive: true });
   if (file.entityType === "doc") {
     const joined = await session.joinDoc(file.entityId);
     try {
       await reservation?.reserve(Buffer.byteLength(joined.content, "utf8"));
-      await fs23.writeFile(target, joined.content, "utf8");
+      await fs24.writeFile(target, joined.content, "utf8");
       file.version = joined.version;
       file.binary = !isTextLike(file.path);
       file.sha1 = sha1(joined.content);
@@ -71072,8 +71151,8 @@ async function emptyFreshProject(client, projectId, projectName) {
   }
 }
 async function createMetadataDirectories(root) {
-  for (const name of ["output", "conflicts", path29.join("base", "docs"), "trash"]) {
-    await fs23.mkdir(metadataPath(root, name), { recursive: true });
+  for (const name of ["output", "conflicts", path30.join("base", "docs"), "trash"]) {
+    await fs24.mkdir(metadataPath(root, name), { recursive: true });
   }
 }
 async function createRemoteProjectMirror(client, projectName, parentRoot, options) {
@@ -71082,8 +71161,8 @@ async function createRemoteProjectMirror(client, projectName, parentRoot, option
   const targetRoot = projectMirrorRoot(parentRoot, summary);
   let manifestWritten = false;
   try {
-    await fs23.mkdir(path29.dirname(targetRoot), { recursive: true });
-    await fs23.mkdir(targetRoot);
+    await fs24.mkdir(path30.dirname(targetRoot), { recursive: true });
+    await fs24.mkdir(targetRoot);
     const manifest = await emptyFreshProject(client, projectId, projectName);
     await options.scaffold(targetRoot);
     await createMetadataDirectories(targetRoot);
@@ -71094,7 +71173,7 @@ async function createRemoteProjectMirror(client, projectName, parentRoot, option
     await initializeMirrorGitRepository(targetRoot, `Initial Overleaf project: ${projectName}`);
   } catch (error) {
     if (!manifestWritten) {
-      await fs23.rm(targetRoot, { recursive: true, force: true }).catch(() => void 0);
+      await fs24.rm(targetRoot, { recursive: true, force: true }).catch(() => void 0);
       await client.deleteProject(projectId).catch(() => void 0);
     }
     throw error;
@@ -71121,18 +71200,18 @@ function untrackedManifest() {
 }
 async function previewLocalPublish(root, isExcluded = () => false) {
   const manifest = untrackedManifest();
-  setLocalIgnoreRules(manifest, await readTextFileBounded(path29.join(root, LOCAL_IGNORE_NAME), MAX_METADATA_JSON_BYTES).catch(() => DEFAULT_LOCAL_IGNORE_CONTENT));
+  setLocalIgnoreRules(manifest, await readTextFileBounded(path30.join(root, LOCAL_IGNORE_NAME), MAX_METADATA_JSON_BYTES).catch(() => DEFAULT_LOCAL_IGNORE_CONTENT));
   const scan = await scanLocalProject(root, manifest);
   const files = scan.files.filter((relPath) => !isAlwaysLocal(relPath) && !isExcluded(relPath)).map((relPath) => ({ path: relPath, size: scan.fileMetadata.get(relPath)?.size ?? 0 })).sort((a, b) => a.path.localeCompare(b.path));
   const nestedMirrors = (await Promise.all(scan.folders.map(
-    async (folder) => await exists4(manifestPath(path29.join(root, folder))) ? folder : void 0
+    async (folder) => await exists4(manifestPath(path30.join(root, folder))) ? folder : void 0
   ))).filter((folder) => folder !== void 0);
   return { files, totalBytes: files.reduce((sum, file) => sum + file.size, 0), nestedMirrors };
 }
 async function findEnclosingMirror(root) {
-  let current = path29.resolve(root);
-  while (path29.dirname(current) !== current) {
-    current = path29.dirname(current);
+  let current = path30.resolve(root);
+  while (path30.dirname(current) !== current) {
+    current = path30.dirname(current);
     if (await exists4(manifestPath(current))) return current;
   }
   return void 0;
@@ -71157,13 +71236,13 @@ async function detectRootDocuments(root, candidatePaths) {
   const found = [];
   for (const relPath of candidatePaths) {
     if (!/\.tex$/i.test(relPath)) continue;
-    const text = await readTextFileBounded(path29.join(root, relPath), MAX_METADATA_JSON_BYTES).catch(() => "");
+    const text = await readTextFileBounded(path30.join(root, relPath), MAX_METADATA_JSON_BYTES).catch(() => "");
     if (extractDocumentclassDeclaration(stripTexComments(text))) found.push(relPath);
   }
   const depth = (relPath) => relPath.split("/").length;
   return found.sort((a, b) => {
-    const aMain = path29.posix.basename(a) === "main.tex" ? 0 : 1;
-    const bMain = path29.posix.basename(b) === "main.tex" ? 0 : 1;
+    const aMain = path30.posix.basename(a) === "main.tex" ? 0 : 1;
+    const bMain = path30.posix.basename(b) === "main.tex" ? 0 : 1;
     return aMain - bMain || depth(a) - depth(b) || a.localeCompare(b);
   });
 }
@@ -71197,9 +71276,9 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
   if (excluded.includes(rootDocPath)) throw new Error("The main document cannot be left out of the project.");
   const ignoreEntries = excluded.length ? localIgnoreEntries(excluded, candidates) : [];
   const metadataRoot = metadataPath(root);
-  const ignoreFile = path29.join(root, LOCAL_IGNORE_NAME);
+  const ignoreFile = path30.join(root, LOCAL_IGNORE_NAME);
   const metadataExisted = await exists4(metadataRoot);
-  const ignoreSizeBefore = await fs23.stat(ignoreFile).then((stat14) => stat14.size, () => void 0);
+  const ignoreSizeBefore = await fs24.stat(ignoreFile).then((stat14) => stat14.size, () => void 0);
   const projectId = await client.createProject(projectName);
   let manifestWritten = false;
   let keptFiles = [];
@@ -71207,7 +71286,7 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
     const manifest = await emptyFreshProject(client, projectId, projectName);
     manifest.rootDocPath = rootDocPath;
     await createMetadataDirectories(root);
-    await fs23.writeFile(
+    await fs24.writeFile(
       metadataPath(root, PUBLISHED_IN_PLACE_MARKER),
       `${JSON.stringify({ kind: "published-in-place", at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2)}
 `,
@@ -71215,7 +71294,7 @@ async function publishLocalFolder(client, root, projectName, rootDocPath, option
     );
     await ensureLocalIgnoreFile(root);
     if (ignoreEntries.length) {
-      await fs23.appendFile(ignoreFile, `
+      await fs24.appendFile(ignoreFile, `
 # Left out when this folder was published to Overleaf.
 ${ignoreEntries.join("\n")}
 `, "utf8");
@@ -71225,10 +71304,10 @@ ${ignoreEntries.join("\n")}
     keptFiles = await writeMirrorSupportFiles(root, rootDocPath, manifest.compiler, { overwriteExisting: false });
   } catch (error) {
     if (!manifestWritten) {
-      if (!metadataExisted) await fs23.rm(metadataRoot, { recursive: true, force: true }).catch(() => void 0);
-      else await fs23.rm(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), { force: true }).catch(() => void 0);
-      if (ignoreSizeBefore === void 0) await fs23.rm(ignoreFile, { force: true }).catch(() => void 0);
-      else await fs23.truncate(ignoreFile, ignoreSizeBefore).catch(() => void 0);
+      if (!metadataExisted) await fs24.rm(metadataRoot, { recursive: true, force: true }).catch(() => void 0);
+      else await fs24.rm(metadataPath(root, PUBLISHED_IN_PLACE_MARKER), { force: true }).catch(() => void 0);
+      if (ignoreSizeBefore === void 0) await fs24.rm(ignoreFile, { force: true }).catch(() => void 0);
+      else await fs24.truncate(ignoreFile, ignoreSizeBefore).catch(() => void 0);
       await client.deleteProject(projectId).catch(() => void 0);
     }
     throw error;
@@ -71243,15 +71322,15 @@ ${ignoreEntries.join("\n")}
 }
 async function writeMirrorSupportFiles(root, rootDocPath, compiler, options = {}) {
   const overwrite = options.overwriteExisting ?? true;
-  const rootDir = rootDocPath ? path29.posix.dirname(rootDocPath) : ".";
+  const rootDir = rootDocPath ? path30.posix.dirname(rootDocPath) : ".";
   const writers = [
     [".vscode/settings.json", () => writeLocalVsCodeSettings(root, rootDocPath, compiler)],
-    [path29.posix.join(rootDir, ".latexmkrc"), () => writeLocalLatexmkRc(root, rootDocPath)],
-    ["AGENTS.md", () => fs23.writeFile(path29.join(root, "AGENTS.md"), AGENTS_CONTENT, "utf8")]
+    [path30.posix.join(rootDir, ".latexmkrc"), () => writeLocalLatexmkRc(root, rootDocPath)],
+    ["AGENTS.md", () => fs24.writeFile(path30.join(root, "AGENTS.md"), AGENTS_CONTENT, "utf8")]
   ];
   const kept = [];
   await Promise.all(writers.map(async ([relative10, write]) => {
-    if (!overwrite && await exists4(path29.join(root, relative10))) {
+    if (!overwrite && await exists4(path30.join(root, relative10))) {
       kept.push(relative10);
       return;
     }
@@ -71260,9 +71339,9 @@ async function writeMirrorSupportFiles(root, rootDocPath, compiler, options = {}
   return kept.sort();
 }
 async function initializeMirrorGitRepository(root, commitMessage = "Initial Overleaf mirror") {
-  await fs23.mkdir(root, { recursive: true });
-  await fs23.writeFile(path29.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
-  if (!await exists4(path29.join(root, ".git"))) {
+  await fs24.mkdir(root, { recursive: true });
+  await fs24.writeFile(path30.join(root, ".gitignore"), MIRROR_GITIGNORE_CONTENT, "utf8");
+  if (!await exists4(path30.join(root, ".git"))) {
     await runGit(root, ["init"]);
     await runGit(root, ["add", "-A"]);
     const staged = await runGit(root, ["diff", "--cached", "--quiet"]).then(
@@ -71285,15 +71364,15 @@ async function initializeMirrorGitRepository(root, commitMessage = "Initial Over
   await runGit(root, ["add", ".gitignore"]);
 }
 async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
-  const settingsPath = path29.join(root, ".vscode", "settings.json");
-  await fs23.mkdir(path29.dirname(settingsPath), { recursive: true });
+  const settingsPath = path30.join(root, ".vscode", "settings.json");
+  await fs24.mkdir(path30.dirname(settingsPath), { recursive: true });
   const rootFile = rootDocPath ? `./${rootDocPath}` : void 0;
-  const rootDir = rootDocPath ? path29.posix.dirname(rootDocPath) : ".";
-  const texFile = rootDocPath ? path29.posix.basename(rootDocPath) : "%DOC%";
+  const rootDir = rootDocPath ? path30.posix.dirname(rootDocPath) : ".";
+  const texFile = rootDocPath ? path30.posix.basename(rootDocPath) : "%DOC%";
   const engine = compiler === "pdflatex" ? "-pdf" : compiler === "lualatex" ? "-lualatex" : "-xelatex";
   const outputDir = ".overleaf-codex/local-build";
-  const outputDirFromRootDoc = path29.posix.relative(rootDir, outputDir) || ".";
-  const workspaceFromRootDoc = path29.posix.relative(rootDir, ".") || ".";
+  const outputDirFromRootDoc = path30.posix.relative(rootDir, outputDir) || ".";
+  const workspaceFromRootDoc = path30.posix.relative(rootDir, ".") || ".";
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
   const compileCommand = [
     `mkdir -p ${shellQuote(outputDir)}`,
@@ -71339,7 +71418,7 @@ async function writeLocalVsCodeSettings(root, rootDocPath, compiler) {
     }],
     "latex-workshop.latex.recipes": [{ name: "latexmk (local mirror)", tools: ["latexmk-local-mirror"] }]
   };
-  await fs23.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
+  await fs24.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
 }
 var LATEXMKRC_HEADER = "# Generated by Overleaf Codex for local VS Code/LaTeX Workshop builds.";
@@ -71367,26 +71446,26 @@ var LATEXMKRC_BLOCKS = [
   }
 ];
 function latexmkRcPath(root, rootDocPath) {
-  return path29.join(root, rootDocPath ? path29.posix.dirname(rootDocPath) : ".", ".latexmkrc");
+  return path30.join(root, rootDocPath ? path30.posix.dirname(rootDocPath) : ".", ".latexmkrc");
 }
 async function upgradeGeneratedLatexmkRc(root, rootDocPath) {
   const rcPath = latexmkRcPath(root, rootDocPath);
-  const existing = await fs23.readFile(rcPath, "utf8").catch(() => void 0);
+  const existing = await fs24.readFile(rcPath, "utf8").catch(() => void 0);
   if (!existing?.startsWith(LATEXMKRC_HEADER)) return false;
   const current = existing.replace(LEGACY_BIBER_CACHE_PERL, () => biberCachePerl(root).join("\n"));
   const missing = LATEXMKRC_BLOCKS.filter((block) => !current.includes(block.marker));
   if (current === existing && !missing.length) return false;
   const appended = missing.map((block) => `${block.lines.join("\n")}
 `).join("");
-  await fs23.writeFile(rcPath, `${current.endsWith("\n") ? current : `${current}
+  await fs24.writeFile(rcPath, `${current.endsWith("\n") ? current : `${current}
 `}${appended}`, "utf8");
   return true;
 }
 var LEGACY_BIBER_CACHE_PERL = /^my \$overleaf_codex_biber_cache = '[^'\n]*';$/m;
 var LEGACY_BIBER_CACHE_SHELL = /mkdir -p '[^']*overleaf-codex-biber[^']*'/;
 async function upgradeGeneratedVsCodeSettings(root) {
-  const settingsPath = path29.join(root, ".vscode", "settings.json");
-  const raw = await fs23.readFile(settingsPath, "utf8").catch(() => void 0);
+  const settingsPath = path30.join(root, ".vscode", "settings.json");
+  const raw = await fs24.readFile(settingsPath, "utf8").catch(() => void 0);
   if (!raw) return false;
   let settings;
   try {
@@ -71403,7 +71482,7 @@ async function upgradeGeneratedVsCodeSettings(root) {
     delete tool.env.PAR_GLOBAL_TEMP;
     delete tool.env.PAR_TEMP;
   }
-  await fs23.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
+  await fs24.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
   return true;
 }
@@ -71428,11 +71507,11 @@ function biberCachePerl(root) {
   ];
 }
 async function writeLocalLatexmkRc(root, rootDocPath) {
-  const rootDir = rootDocPath ? path29.posix.dirname(rootDocPath) : ".";
+  const rootDir = rootDocPath ? path30.posix.dirname(rootDocPath) : ".";
   const rcPath = latexmkRcPath(root, rootDocPath);
   const outputDir = ".overleaf-codex/local-build";
-  const outputDirFromRootDoc = path29.posix.relative(rootDir, outputDir) || ".";
-  const workspaceFromRootDoc = path29.posix.relative(rootDir, ".") || ".";
+  const outputDirFromRootDoc = path30.posix.relative(rootDir, outputDir) || ".";
+  const workspaceFromRootDoc = path30.posix.relative(rootDir, ".") || ".";
   const searchPrefix = rootDir === "." ? ".:src/source//:" : `.:${workspaceFromRootDoc}//:src/source//:`;
   const content = [
     LATEXMKRC_HEADER,
@@ -71469,8 +71548,8 @@ async function writeLocalLatexmkRc(root, rootDocPath) {
     ...LATEXMKRC_BLOCKS.flatMap((block) => block.lines),
     ""
   ].join("\n");
-  await fs23.mkdir(path29.dirname(rcPath), { recursive: true });
-  await fs23.writeFile(rcPath, content, "utf8");
+  await fs24.mkdir(path30.dirname(rcPath), { recursive: true });
+  await fs24.writeFile(rcPath, content, "utf8");
 }
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -71486,7 +71565,7 @@ function isGitDiffExitCode(error) {
   return Boolean(error) && typeof error === "object" && error.code === 1;
 }
 async function exists4(target) {
-  return fs23.stat(target).then(() => true, () => false);
+  return fs24.stat(target).then(() => true, () => false);
 }
 
 // src/overleaf/mirrorManager.ts
@@ -71501,7 +71580,7 @@ var mirrorAdapter = {
     const serverUrl = typeof item.serverUrl === "string" ? item.serverUrl.trim() : "";
     if (!root || !projectId || !serverUrl || projectId.length > 256 || serverUrl.length > 2048) return void 0;
     const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : stableResourceId("mirror", `${serverUrl}|${projectId}|${root}`);
-    const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : path30.basename(root);
+    const name = typeof item.name === "string" && item.name.trim() ? item.name.trim() : path31.basename(root);
     const lastSyncAt = typeof item.lastSyncAt === "string" && item.lastSyncAt.trim() ? item.lastSyncAt : void 0;
     const createdAt = typeof item.createdAt === "string" && item.createdAt.trim() ? item.createdAt : lastSyncAt ?? (/* @__PURE__ */ new Date(0)).toISOString();
     return { id, root, name, projectId, serverUrl, lastSyncAt, createdAt };
@@ -71614,11 +71693,11 @@ var MirrorManager = class {
   }
   async scanConfiguredRootMirrors() {
     const projectsRoot = this.getConfiguredProjectsRoot();
-    const entries = await fs24.readdir(projectsRoot, { withFileTypes: true }).catch(() => []);
+    const entries = await fs25.readdir(projectsRoot, { withFileTypes: true }).catch(() => []);
     const mirrors = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      const mirror = await this.recordForMirrorRoot(path30.join(projectsRoot, entry.name));
+      const mirror = await this.recordForMirrorRoot(path31.join(projectsRoot, entry.name));
       if (mirror) mirrors.push(mirror);
     }
     return mirrors;
@@ -71628,9 +71707,9 @@ var MirrorManager = class {
     const manifest = await readManifest(root).catch(() => void 0);
     if (!manifest) return void 0;
     return {
-      id: stableResourceId("mirror", `${manifest.serverUrl}|${manifest.projectId}|${path30.resolve(root)}`),
+      id: stableResourceId("mirror", `${manifest.serverUrl}|${manifest.projectId}|${path31.resolve(root)}`),
       root,
-      name: manifest.projectName || path30.basename(root),
+      name: manifest.projectName || path31.basename(root),
       projectId: manifest.projectId,
       serverUrl: manifest.serverUrl,
       lastSyncAt: manifest.lastSyncAt,
@@ -71662,7 +71741,7 @@ var MirrorManager = class {
     const existing = [];
     for (const root of roots) {
       try {
-        await fs24.stat(root);
+        await fs25.stat(root);
         existing.push(root);
       } catch {
       }
@@ -71671,12 +71750,12 @@ var MirrorManager = class {
   }
 };
 async function exists5(filePath) {
-  return fs24.access(filePath).then(() => true, () => false);
+  return fs25.access(filePath).then(() => true, () => false);
 }
 function isPathWithin(parent, candidate) {
-  const base = path30.resolve(parent);
-  const target = path30.resolve(candidate);
-  return target === base || target.startsWith(`${base}${path30.sep}`);
+  const base = path31.resolve(parent);
+  const target = path31.resolve(candidate);
+  return target === base || target.startsWith(`${base}${path31.sep}`);
 }
 
 // src/overleaf/projectName.ts
@@ -71746,64 +71825,62 @@ function _v4(options, buf, offset) {
 }
 var v4_default = v4;
 
-// src/overleaf/binaryTransfer.ts
-var import_crypto3 = require("crypto");
-var import_fs6 = require("fs");
-var fs25 = __toESM(require("fs/promises"));
-var path31 = __toESM(require("path"));
-var import_crypto4 = require("crypto");
-async function hashFileDigests(filePath) {
-  const stat14 = await fs25.stat(filePath);
-  if (!stat14.isFile()) throw new Error(`Binary transfer source is not a file: ${filePath}`);
-  const sha12 = (0, import_crypto3.createHash)("sha1");
-  const git = (0, import_crypto3.createHash)("sha1");
-  git.update(`blob ${stat14.size}\0`);
-  await new Promise((resolve31, reject) => {
-    const input = (0, import_fs6.createReadStream)(filePath);
-    input.on("data", (chunk) => {
-      sha12.update(chunk);
-      git.update(chunk);
-    });
-    input.on("error", reject);
-    input.on("end", resolve31);
+// src/overleaf/otUpdateVerdict.ts
+var OverleafUpdateRejectedError = class extends Error {
+  constructor(docId, reason) {
+    super(`Overleaf rejected the update: ${reason}`);
+    this.docId = docId;
+    this.reason = reason;
+  }
+  docId;
+  reason;
+  name = "OverleafUpdateRejectedError";
+};
+var OverleafUpdateUnconfirmedError = class extends Error {
+  name = "OverleafUpdateUnconfirmedError";
+};
+function awaitUpdateVerdict(socket, docId, sentVersion, timeoutMs, signal) {
+  let dispose = () => void 0;
+  const settled = new Promise((resolve31, reject) => {
+    let done = false;
+    const finish = (error) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      socket.removeListener("otUpdateApplied", onApplied);
+      socket.removeListener("otUpdateError", onError);
+      socket.removeListener("disconnect", onDisconnect);
+      signal?.removeEventListener("abort", onAbort);
+      if (error) reject(error);
+      else resolve31();
+    };
+    const onApplied = (update) => {
+      if (!isRecord6(update) || update.doc !== docId || update.op !== void 0) return;
+      if (typeof update.v === "number" && update.v >= sentVersion) finish();
+    };
+    const onError = (error, message) => {
+      const failedDoc = isRecord6(message) ? message.doc_id : void 0;
+      if (typeof failedDoc === "string" && failedDoc !== docId) return;
+      finish(new OverleafUpdateRejectedError(docId, formatUnknownError(error)));
+    };
+    const onDisconnect = () => finish(new OverleafUpdateUnconfirmedError("Overleaf disconnected before confirming the applyOtUpdate."));
+    const onAbort = () => finish(new OverleafUpdateUnconfirmedError("Stopped waiting for Overleaf to confirm the applyOtUpdate."));
+    const timer = setTimeout(
+      () => finish(new OverleafUpdateUnconfirmedError("Timed out waiting for Overleaf to confirm the applyOtUpdate.")),
+      timeoutMs
+    );
+    socket.on("otUpdateApplied", onApplied);
+    socket.on("otUpdateError", onError);
+    socket.on("disconnect", onDisconnect);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    dispose = () => finish();
   });
-  return { size: stat14.size, sha1: sha12.digest("hex"), gitBlobHash: git.digest("hex") };
+  settled.catch(() => void 0);
+  return { settled, dispose: () => dispose() };
 }
-async function installStagedFile(stagedPath, targetPath) {
-  const token = `${process.pid}-${Date.now()}-${(0, import_crypto4.randomBytes)(4).toString("hex")}`;
-  const directory = path31.dirname(targetPath);
-  const incomingPath = path31.join(directory, `.${path31.basename(targetPath)}.incoming-${token}`);
-  const backupPath = path31.join(directory, `.${path31.basename(targetPath)}.backup-${token}`);
-  let backedUp = false;
-  try {
-    await fs25.mkdir(directory, { recursive: true });
-    await moveOrCopy(stagedPath, incomingPath);
-    try {
-      await fs25.rename(targetPath, backupPath);
-      backedUp = true;
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-    await fs25.rename(incomingPath, targetPath);
-    if (backedUp) await fs25.rm(backupPath, { force: true });
-  } catch (error) {
-    if (backedUp) {
-      await fs25.rm(targetPath, { force: true }).catch(() => void 0);
-      await fs25.rename(backupPath, targetPath).catch(() => void 0);
-    }
-    throw error;
-  } finally {
-    await fs25.rm(incomingPath, { force: true }).catch(() => void 0);
-    await fs25.rm(stagedPath, { force: true }).catch(() => void 0);
-  }
-}
-async function moveOrCopy(source, target) {
-  try {
-    await fs25.rename(source, target);
-  } catch (error) {
-    if (error.code !== "EXDEV") throw error;
-    await fs25.copyFile(source, target);
-  }
+function isRecord6(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 // src/overleaf/overleafClient.ts
@@ -72486,8 +72563,20 @@ var OverleafSocketSession = class {
   async leaveDoc(docId) {
     await this.emitAck("leaveDoc", this.timeouts.joinDocMs, void 0, docId);
   }
+  /**
+   * Sends an update and returns once Overleaf has applied it. The acknowledgement alone only means
+   * the update was queued; treating it as applied recorded updates Overleaf went on to reject as
+   * pushed. Throws OverleafUpdateRejectedError when Overleaf refused the update.
+   */
   async applyOtUpdate(docId, update, signal) {
-    await this.emitAck("applyOtUpdate", this.timeouts.otAckMs, signal, docId, update);
+    const verdict = awaitUpdateVerdict(this.socket, docId, update.v, this.timeouts.otAckMs, signal);
+    try {
+      await this.emitAck("applyOtUpdate", this.timeouts.otAckMs, signal, docId, update);
+    } catch (error) {
+      verdict.dispose();
+      throw error;
+    }
+    await verdict.settled;
   }
   async getConnectedUsers() {
     const values = await this.emitAck("clientTracking.getConnectedUsers", this.timeouts.otAckMs);
@@ -73108,7 +73197,7 @@ var SyncGate = class {
   applyReport(report) {
     this.paths.clear();
     for (const item of report.items) {
-      if (!item.blocking || UPLOADABLE_BLOCKING_STATUSES.has(item.status)) continue;
+      if (!item.blocking || UPLOADABLE_BLOCKING_STATUSES.has(item.status) && !item.uploadBlocked) continue;
       const state = item.status === "error" ? "error" : item.status === "diverged" ? "conflict" : "pending";
       this.setPath(item.path, state, item.message, item.blockingScope === "subtree");
     }
@@ -73120,6 +73209,73 @@ var SyncGate = class {
 var fs28 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path33 = __toESM(require("path"));
+
+// src/overleaf/overleafText.ts
+var UNSUPPORTED = /[\u{10000}-\u{10FFFF}]|[\uD800-\uDFFF]/gu;
+function findUnsupportedCharacters(text) {
+  const found = [];
+  const lines = text.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    for (const match2 of lines[index].matchAll(UNSUPPORTED)) found.push({ character: match2[0], line: index + 1 });
+  }
+  return found;
+}
+function unsupportedCharactersMessage(relPath, text) {
+  const found = findUnsupportedCharacters(text);
+  if (found.length === 0) return void 0;
+  const lines = /* @__PURE__ */ new Map();
+  for (const { character, line } of found) {
+    const seen = lines.get(character) ?? [];
+    if (!seen.includes(line)) seen.push(line);
+    lines.set(character, seen);
+  }
+  const listed = [...lines].slice(0, 4).map(([character, at]) => `${display(character)} (line${at.length === 1 ? "" : "s"} ${listLines(at)})`);
+  const more = lines.size > 4 ? `, and ${lines.size - 4} other${lines.size === 5 ? "" : "s"}` : "";
+  const suggestions = [...lines.keys()].flatMap((character) => {
+    const replacement = replacementFor(character);
+    return replacement ? [`${character} with ${replacement}`] : [];
+  }).slice(0, 4);
+  return `${relPath} contains characters Overleaf cannot store: ${listed.join(", ")}${more}. Overleaf replaces characters outside Unicode's Basic Multilingual Plane, such as mathematical letters and emoji, so it would reject the upload. ` + (suggestions.length > 0 ? `Replace them, for example ${suggestions.join("; ")}.` : "Replace or remove them.");
+}
+function display(character) {
+  const code = character.codePointAt(0);
+  return `${code >= 55296 && code <= 57343 ? "a broken character" : character} U+${code.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+function listLines(lines) {
+  const shown = lines.slice(0, 3).join(", ");
+  return lines.length > 3 ? `${shown} and ${lines.length - 3} more` : shown;
+}
+var SCRIPT_LETTERLIKE = { B: "\u212C", E: "\u2130", F: "\u2131", H: "\u210B", I: "\u2110", L: "\u2112", M: "\u2133", R: "\u211B", e: "\u212F", g: "\u210A", o: "\u2134" };
+var FRAKTUR_LETTERLIKE = { C: "\u212D", H: "\u210C", I: "\u2111", R: "\u211C", Z: "\u2128" };
+var DOUBLE_STRUCK_LETTERLIKE = { C: "\u2102", H: "\u210D", N: "\u2115", P: "\u2119", Q: "\u211A", R: "\u211D", Z: "\u2124" };
+var MATH_ALPHABETS = [
+  { start: 119808, command: "mathbf" },
+  { start: 119860, command: "mathit", letterlike: { h: "\u210E" } },
+  { start: 119912, command: "boldsymbol" },
+  { start: 119964, command: "mathcal", letterlike: SCRIPT_LETTERLIKE },
+  { start: 120016, command: "mathcal", letterlike: SCRIPT_LETTERLIKE },
+  { start: 120068, command: "mathfrak", letterlike: FRAKTUR_LETTERLIKE },
+  { start: 120120, command: "mathbb", letterlike: DOUBLE_STRUCK_LETTERLIKE },
+  { start: 120172, command: "mathfrak", letterlike: FRAKTUR_LETTERLIKE },
+  { start: 120224, command: "mathsf" },
+  { start: 120276, command: "mathsf" },
+  { start: 120328, command: "mathsf" },
+  { start: 120380, command: "mathsf" },
+  { start: 120432, command: "mathtt" }
+];
+function replacementFor(character) {
+  const code = character.codePointAt(0);
+  if (code >= 120782 && code <= 120831) return String((code - 120782) % 10);
+  const alphabet = MATH_ALPHABETS.find(({ start }) => code >= start && code < start + 52);
+  if (!alphabet) return void 0;
+  const offset = code - alphabet.start;
+  const letter = String.fromCharCode(offset < 26 ? 65 + offset : 97 + offset - 26);
+  const lookalike = alphabet.letterlike?.[letter];
+  const command = `\\${alphabet.command}{${letter}}`;
+  return lookalike ? `${lookalike} or ${command}` : command;
+}
+
+// src/overleaf/syncReconciler.ts
 var BINARY_READ_CONCURRENCY = 4;
 var BINARY_READ_MAX_IN_FLIGHT_BYTES = 64 * 1024 * 1024;
 var DOC_JOIN_CONCURRENCY = 4;
@@ -73266,6 +73422,13 @@ async function classifyProjectPaths(deps) {
     if (item.status === "diverged" && remoteFile) {
       await deps.onDiverged?.({ relPath, remoteFile, remoteContent });
     }
+    if ((item.status === "local ahead" || item.status === "local only") && (manifestFile ? manifestFile.entityType === "doc" : isTextLike(relPath))) {
+      const reason = await unstorableTextReason(root, relPath);
+      if (reason) {
+        item.message = reason;
+        item.uploadBlocked = true;
+      }
+    }
     if (item.status === "synced" && manifestFile && remoteFile) {
       const stale = manifestFile.version !== remoteFile.version || manifestFile.remoteBlobHash !== remoteFile.remoteBlobHash || manifestFile.remoteRevision !== remoteFile.remoteRevision || manifestFile.remoteSize !== remoteFile.remoteSize || remoteHash !== void 0 && manifestFile.sha1 !== remoteHash;
       if (stale) {
@@ -73300,6 +73463,11 @@ async function classifyProjectPaths(deps) {
     deps.onProgress?.({ path: relPath, completed, total: ordered.length });
   }
   return { items, manifestChanged, localCacheReuseCount };
+}
+var MAX_SCANNED_DOCUMENT_BYTES = 16 * 1024 * 1024;
+async function unstorableTextReason(root, relPath) {
+  const text = await readTextFileBounded(path33.join(root, relPath), MAX_SCANNED_DOCUMENT_BYTES).catch(() => void 0);
+  return text === void 0 ? void 0 : unsupportedCharactersMessage(relPath, text);
 }
 async function reconcileProject(deps) {
   const { manifest, remote, localScan, requestedPaths } = deps;
@@ -73608,6 +73776,8 @@ var OtDocumentSession = class {
   }
 };
 function isAmbiguousAckError(error) {
+  if (error instanceof OverleafUpdateRejectedError) return false;
+  if (error instanceof OverleafUpdateUnconfirmedError) return true;
   if (error && typeof error === "object" && !(error instanceof Error)) {
     return true;
   }
@@ -73936,11 +74106,26 @@ function resolveWithinRoot(root, relPath) {
 }
 
 // src/overleaf/syncCommandCore.ts
+function markRejectedUploads(report, rejected) {
+  for (const item of report.items) {
+    const record = rejected.get(item.path);
+    if (!record) continue;
+    if (item.localHash !== record.localHash || item.status !== "local ahead" && item.status !== "local only") {
+      rejected.delete(item.path);
+      continue;
+    }
+    item.message = record.reason;
+    item.uploadBlocked = true;
+  }
+}
+var EMPTY_TEXT_SHA1 = sha1("");
 function planSafeSyncActions(report, policy) {
   return {
-    pulls: report.items.filter((item) => item.status === "remote ahead" || item.status === "remote only"),
+    pulls: report.items.filter(
+      (item) => (item.status === "remote ahead" || item.status === "remote only") && !(item.status === "remote ahead" && item.remoteHash === EMPTY_TEXT_SHA1 && item.localHash !== void 0 && item.localHash !== EMPTY_TEXT_SHA1)
+    ),
     pushes: policy.autoPushLocalAhead ? report.items.filter(
-      (item) => item.entityType !== "folder" && (item.status === "local ahead" || item.status === "local only") && (isTextLike(item.path) || policy.syncBinaryFiles)
+      (item) => item.entityType !== "folder" && (item.status === "local ahead" || item.status === "local only") && !item.uploadBlocked && (isTextLike(item.path) || policy.syncBinaryFiles)
     ) : []
   };
 }
@@ -74186,6 +74371,12 @@ var RealtimeSyncService = class {
   pendingLocalCreates = /* @__PURE__ */ new Set();
   /** Paths whose local change arrived while the path was held, and so was recorded but not sent. */
   heldLocalChanges = /* @__PURE__ */ new Set();
+  /**
+   * Content Overleaf refused, by path, so that it is not sent again automatically until it changes:
+   * every refusal also disconnects. Kept across the reconnect that follows, so per root, not per start.
+   */
+  rejectedUploads = /* @__PURE__ */ new Map();
+  rejectedUploadsRoot;
   pendingFolderRenameRoots = /* @__PURE__ */ new Set();
   renameDetector = new RenameDetector(5e3);
   output;
@@ -74397,6 +74588,7 @@ var RealtimeSyncService = class {
       isExcluded: (relPath) => !this.canSyncToolkitOverrides() && isToolkitOverridePath(relPath)
     });
     const { report, folderRepair } = reconciled;
+    if (root === this.rejectedUploadsRoot) markRejectedUploads(report, this.rejectedUploads);
     let manifestChanged = reconciled.manifestChanged;
     if (folderRepair.adopted.length > 0 || folderRepair.remapped.length > 0) {
       this.log(
@@ -74613,6 +74805,14 @@ var RealtimeSyncService = class {
     if (!remoteFile || remoteFile.entityType === "doc" && remoteContent === void 0) {
       throw new Error(`${normalized} is not present on Overleaf.`);
     }
+    const tracked = this.manifest.files[normalized];
+    const kept = await keepLocalCopyBeforePull(
+      this.root,
+      normalized,
+      remoteFile.entityType === "file" ? { gitBlobHash: remoteFile.remoteBlobHash, empty: remoteFile.remoteSize === 0 } : { sha1: sha1(remoteContent), empty: remoteContent === "" },
+      tracked?.baseHash ?? tracked?.sha1
+    );
+    if (kept) this.log(`Kept the local copy of ${normalized} that this pull replaces: ${kept}`);
     if (remoteFile.entityType === "file") {
       const result = await this.downloadVerifiedBinary(remoteFile.entityId, normalized, remoteFile.remoteBlobHash);
       addOrUpdateFile(this.manifest, { ...remoteFile, remoteSize: result.size });
@@ -74697,6 +74897,10 @@ var RealtimeSyncService = class {
     this.stopping = false;
     this.shouldReconnect = true;
     this.root = root;
+    if (this.rejectedUploadsRoot !== root) {
+      this.rejectedUploads.clear();
+      this.rejectedUploadsRoot = root;
+    }
     this.client = client;
     this.manifest = await readManifest(root);
     this.activityLog.splice(0, this.activityLog.length);
@@ -75993,7 +76197,7 @@ var RealtimeSyncService = class {
           return;
         }
       }
-      const reason = !isTextLike(relPath) && !this.canSyncBinaryFiles() ? "Binary synchronization is disabled; use Push Local or enable binary synchronization." : "Automatic upload is disabled; use Push Local for this new file.";
+      const reason = (isTextLike(relPath) ? unsupportedCharactersMessage(relPath, content.toString("utf8")) : void 0) ?? (!isTextLike(relPath) && !this.canSyncBinaryFiles() ? "Binary synchronization is disabled; use Push Local or enable binary synchronization." : "Automatic upload is disabled; use Push Local for this new file.");
       this.syncGate.setPath(relPath, "pending", reason);
       this.log(`New local file ${relPath} is pending: ${reason}`);
       this.scheduleSyncStatusCheck(void 0, [relPath]);
@@ -76037,6 +76241,12 @@ var RealtimeSyncService = class {
       this.log(`Skipped binary upload for ${relPath}. Enable overleafCodex.syncBinaryFiles to upload binary files.`);
       return false;
     }
+    const unstorable = isTextLike(relPath) && content ? unsupportedCharactersMessage(relPath, Buffer.from(content).toString("utf8")) : void 0;
+    if (unstorable) {
+      this.syncGate.setPath(relPath, "pending", unstorable);
+      if (manual) throw new Error(unstorable);
+      return false;
+    }
     const ensured = await this.ensureRemoteParentFolders(relPath);
     if (isTextLike(relPath)) {
       if (!content) throw new Error(`Could not read local document ${relPath}.`);
@@ -76050,7 +76260,7 @@ var RealtimeSyncService = class {
           parentFolderId: ensured.parentFolderId,
           binary: false
         };
-        addOrUpdateFile(this.manifest, entry, content);
+        addOrUpdateFile(this.manifest, entry, "");
         await this.persistManifest();
         await this.syncDocContent(relPath, Buffer.from(content).toString("utf8"));
         return true;
@@ -76279,7 +76489,24 @@ var RealtimeSyncService = class {
     if (state.paused || !force && content === state.localCache) {
       return;
     }
-    const result = await this.documentSessionFor(state).submitLocal(content);
+    const unstorable = unsupportedCharactersMessage(relPath, content);
+    if (unstorable) {
+      this.syncGate.setPath(relPath, "pending", unstorable);
+      this.scheduleSyncStatusCheck(void 0, [relPath]);
+      throw new Error(unstorable);
+    }
+    let result;
+    try {
+      result = await this.documentSessionFor(state).submitLocal(content);
+    } catch (error) {
+      if (!(error instanceof OverleafUpdateRejectedError)) throw error;
+      const reason = `Overleaf rejected the upload of ${relPath} (${error.reason}); nothing was changed on Overleaf.`;
+      this.rejectedUploads.set(relPath, { localHash: sha1(content), reason });
+      this.syncGate.setPath(relPath, "pending", reason);
+      this.log(reason);
+      throw new Error(reason);
+    }
+    this.rejectedUploads.delete(relPath);
     if (result.conflictRemote !== void 0) {
       await this.pauseForConflict(
         relPath,
@@ -80859,8 +81086,8 @@ var fs38 = __toESM(require("fs/promises"));
 var os9 = __toESM(require("os"));
 var path46 = __toESM(require("path"));
 var import_child_process5 = require("child_process");
-var import_util31 = require("util");
-var execFileAsync3 = (0, import_util31.promisify)(import_child_process5.execFile);
+var import_util32 = require("util");
+var execFileAsync3 = (0, import_util32.promisify)(import_child_process5.execFile);
 var MARKER = ".latex-editing-toolkit-cli.json";
 var LAUNCHER_MARKER = "latex-editing-toolkit-cli-launcher v1";
 var MAX_LAUNCHER_BYTES = 16 * 1024;
@@ -81221,8 +81448,8 @@ function findMathRegions(text, languageId, source = previewSource(text, language
     if (frame.kind === "displayDollar" || frame.kind === "bracket") blocks.push(region);
     else if (!region.tex.includes("\n")) inline.push(region);
   });
-  const display = blocks.map((block) => onOwnLines(block, text, source)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
-  return { inline, display };
+  const display2 = blocks.map((block) => onOwnLines(block, text, source)).filter((block) => block !== void 0).sort((a, b) => a.start - b.start);
+  return { inline, display: display2 };
 }
 function onOwnLines(block, text, source) {
   const linesStart = text.lastIndexOf("\n", block.start - 1) + 1;
@@ -81260,6 +81487,21 @@ function blankRanges(text, ranges) {
     copied = end;
   }
   return blanked + text.slice(copied);
+}
+function moveRegion(region, edits, text) {
+  const endsAtClose = region.texStart + region.tex.length === region.closeStart;
+  let shift = 0;
+  let grow = 0;
+  for (const edit of edits) {
+    const editEnd = edit.offset + edit.length;
+    if (editEnd < region.start) shift += edit.inserted - edit.length;
+    else if (edit.offset > region.start && edit.offset >= region.texStart && editEnd <= region.closeStart) grow += edit.inserted - edit.length;
+    else if (edit.offset <= region.end) return void 0;
+  }
+  const texStart = region.texStart + shift;
+  const closeStart = region.closeStart + shift + grow;
+  const end = region.end + shift + grow;
+  return { start: region.start + shift, end, tex: text.slice(texStart, endsAtClose ? closeStart : end), texStart, closeStart };
 }
 function texWithCursor(region, cursor, marker) {
   const at = cursor - region.texStart;
@@ -81947,7 +82189,6 @@ var ENGINE_LIMIT = 4;
 var EXCLUDED_PACKAGES = /* @__PURE__ */ new Set(["noerrors", "noundefined"]);
 var DEFAULT_MACROS = { qedhere: "" };
 var SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
-var TAG_GAP_EM = 2;
 var NO_FIXED_SIZE = "MathJax gave this formula no fixed size.";
 var modules;
 function loadMathJax() {
@@ -82002,9 +82243,9 @@ var MathRenderer = class {
    * A formula at the size it is set, in display style or inline, for the preview shown while it is
    * edited. That preview changes with every move of the cursor, so its images are not kept as files.
    */
-  renderUnscaled(tex, display, options) {
-    return this.cached(unscaledKey(tex, display), options, (engine) => {
-      const formula = typeset(engine, display ? withoutTags(tex) : tex, display);
+  renderUnscaled(tex, display2, options) {
+    return this.cached(unscaledKey(tex, display2), options, (engine) => {
+      const formula = typeset(engine, display2 ? withoutTags(tex) : tex, display2);
       if (!formula.ok) return formula;
       const sized = sizeForEditor(formula.image.svg, options, false);
       if (!sized) return { ok: false, error: NO_FIXED_SIZE };
@@ -82030,8 +82271,14 @@ var MathRenderer = class {
       }
       const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
       if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
-      const { slices, ...size } = sliced;
-      return { ok: true, image: { ...size, slices: slices.map((slice) => ({ row: slice.row, uri: this.store(slice.svg) })) } };
+      return {
+        ok: true,
+        image: {
+          widthPx: sliced.widthPx,
+          slices: sliced.slices.map((slice) => ({ row: slice.row, uri: this.store(slice.svg) })),
+          numbers: sliced.numbers.map(({ svg, ...number }) => ({ ...number, uri: this.store(svg) }))
+        }
+      };
     });
   }
   /** A display formula's rendering if it has one already, without rendering it. */
@@ -82098,10 +82345,10 @@ var MathRenderer = class {
     return engine;
   }
 };
-function typeset(engine, tex, display) {
+function typeset(engine, tex, display2) {
   try {
     engine.tex.parseOptions.tags.reset();
-    const container = engine.document.convert(tex, { display });
+    const container = engine.document.convert(tex, { display: display2 });
     const baselines = rowBaselines(engine.adaptor, container);
     const svg = engine.adaptor.innerHTML(container).replace(/\sdata-(?:mml-node|c|mjx-texclass)="[^"]*"/g, "");
     return { ok: true, image: { svg, baselines } };
@@ -82133,8 +82380,8 @@ function translateY(transform) {
 function inlineKey(tex) {
   return `inline\0${tex}`;
 }
-function unscaledKey(tex, display) {
-  return `${display ? "display" : "text"}\0${tex}`;
+function unscaledKey(tex, display2) {
+  return `${display2 ? "display" : "text"}\0${tex}`;
 }
 function blockKey(tex, rows, tags) {
   return ["block", String(rows), tex, tags.map((tag) => `${tag.row ?? ""}:${tag.tex}`).join("")].join("\0");
@@ -82143,7 +82390,8 @@ function cacheKey(macroId, formula, options) {
   return `${macroId}\0${options.color}\0${options.fontSizePx}\0${options.lineHeightPx}\0${formula}`;
 }
 function imageSize(image) {
-  return "slices" in image ? image.slices.reduce((total, slice) => total + slice.uri.length, 0) : image.uri.length;
+  if (!("slices" in image)) return image.uri.length;
+  return [...image.slices, ...image.numbers].reduce((total, part) => total + part.uri.length, 0);
 }
 function withoutTags(tex) {
   const pattern = /\\tag\*?\s*\{/g;
@@ -82202,37 +82450,31 @@ function place(part, x, y, width, height) {
 function sliceForLines(svg, rows, options, tags = []) {
   const formula = piece(svg);
   if (!formula) return void 0;
-  const numbers = tags.flatMap((tag) => {
-    const part = piece(tag.svg);
-    return part ? [{ part, baseline: tag.baseline }] : [];
-  });
   const lineHeight = options.lineHeightPx;
   const boxHeight = rows * lineHeight;
   const exPx = options.fontSizePx * EX_PER_EM;
   const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
   const height = formula.height * unit;
   const top = (boxHeight - height) / 2;
-  const numbersWidth = Math.max(0, ...numbers.map((number) => number.part.width * unit));
-  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
-  let content = place(formula, 0, top, formula.width * unit, height);
-  let inkTop = top;
-  let inkBottom = top + height;
-  for (const { part, baseline } of numbers) {
-    const numberWidth = part.width * unit;
-    const numberHeight = part.height * unit;
-    const y = baseline === void 0 ? top + (height - numberHeight) / 2 : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
-    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
-    inkTop = Math.min(inkTop, y);
-    inkBottom = Math.max(inkBottom, y + numberHeight);
-  }
+  const width = formula.width * unit;
+  const content = place(formula, 0, top, width, height);
   const slices = [];
   for (let row = 0; row < rows; row++) {
     const y = row * lineHeight;
-    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
+    if (top >= y + lineHeight || top + height <= y) continue;
     const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, svg: slice });
   }
-  return { widthPx: width, formulaWidthPx: formula.width * unit, slices };
+  const numbers = tags.flatMap((tag) => {
+    const part = piece(tag.svg);
+    if (!part) return [];
+    const numberWidth = part.width * unit;
+    const numberHeight = part.height * unit;
+    const topPx = tag.baseline === void 0 ? top + (height - numberHeight) / 2 : top + (tag.baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
+    const number = `<svg ${SVG_NAMESPACES} width="${px(numberWidth)}px" height="${px(numberHeight)}px" viewBox="0 0 ${px(numberWidth)} ${px(numberHeight)}" style="color:${options.color}">${place(part, 0, 0, numberWidth, numberHeight)}</svg>`;
+    return [{ svg: number, widthPx: numberWidth, heightPx: numberHeight, topPx }];
+  });
+  return { widthPx: width, slices, numbers };
 }
 
 // src/livePreview/imageStore.ts
@@ -82364,6 +82606,91 @@ function readDefBody(source, index) {
   return { value: args ? [body.value, args] : body.value, next: body.next };
 }
 
+// src/livePreview/sentDecorations.ts
+function moveSpan(span, edits) {
+  let shift = 0;
+  for (const edit of edits) {
+    if (edit.offset + edit.length < span.start) shift += edit.inserted - edit.length;
+    else if (edit.offset <= span.end) return void 0;
+  }
+  return shift ? { start: span.start + shift, end: span.end + shift } : span;
+}
+var SentDecorations = class {
+  constructor(settleMs) {
+    this.settleMs = settleMs;
+  }
+  settleMs;
+  slots = /* @__PURE__ */ new Map();
+  sent = /* @__PURE__ */ new Map();
+  sentAt = /* @__PURE__ */ new Map();
+  /** Types VS Code may have given their last decorations on text that had changed since. */
+  uncertain = /* @__PURE__ */ new Set();
+  allUncertain = false;
+  /** The slot of the markup at `owner`, given by `assign` the first time it is seen. */
+  slotOf(owner, assign) {
+    const key = `${owner.start}:${owner.end}`;
+    let slot = this.slots.get(key);
+    if (slot === void 0) this.slots.set(key, slot = assign());
+    return slot;
+  }
+  /** Whether `type` needs `items` sent: unless it holds exactly these already. */
+  differs(type, items) {
+    const held = this.sent.get(type) ?? [];
+    if (this.allUncertain || this.uncertain.has(type)) return items.length > 0 || held.length > 0;
+    if (held.length !== items.length) return true;
+    for (let i = 0; i < items.length; i++) {
+      const a = held[i];
+      const b = items[i];
+      if (a.start !== b.start || a.end !== b.end || a.shows !== b.shows) return true;
+    }
+    return false;
+  }
+  record(type, items, now) {
+    if (items.length) this.sent.set(type, items.map(({ start, end, shows }) => ({ start, end, shows })));
+    else this.sent.delete(type);
+    this.sentAt.set(type, now);
+    this.uncertain.delete(type);
+  }
+  /** The types that hold anything, which an update sending nothing to them has to empty. */
+  heldTypes() {
+    return this.sent.keys();
+  }
+  /** Ends an update that sent every type that differed, so nothing is uncertain any more. */
+  settle() {
+    this.allUncertain = false;
+  }
+  /** Has the next update send everything again, whatever is assumed held. */
+  unsettle() {
+    this.allUncertain = true;
+  }
+  /**
+   * Moves everything through a change event as VS Code moves the decorations. Decorations sent just
+   * before the edit may have reached VS Code after it, placed on the changed text: their types are
+   * then sent again on the next update.
+   */
+  move(edits, now) {
+    for (const [type, at] of this.sentAt) {
+      if (now - at < this.settleMs) this.uncertain.add(type);
+      else this.sentAt.delete(type);
+    }
+    const slots = /* @__PURE__ */ new Map();
+    for (const [key, slot] of this.slots) {
+      const separator = key.indexOf(":");
+      const moved = moveSpan({ start: Number(key.slice(0, separator)), end: Number(key.slice(separator + 1)) }, edits);
+      if (moved) slots.set(`${moved.start}:${moved.end}`, slot);
+    }
+    this.slots = slots;
+    for (const [type, items] of this.sent) {
+      const moved = [];
+      for (const item of items) {
+        const span = moveSpan(item, edits);
+        moved.push(span ? { ...span, shows: item.shows } : { start: -1, end: -1, shows: "" });
+      }
+      this.sent.set(type, moved);
+    }
+  }
+};
+
 // src/livePreview/structure.ts
 function emptyTheoremSettings() {
   return { environments: /* @__PURE__ */ new Map(), themeCommands: false };
@@ -82414,7 +82741,8 @@ var ENVIRONMENT = /\\(begin|end)\s*\{([^{}\n]*)\}/g;
 var ITEM = /\\item(?![A-Za-z])/g;
 var HOMEWORK_HEADINGS = /* @__PURE__ */ new Set(["homeworkProblem", "homeworkSection"]);
 var LABEL = /\\(label)\s*(?=\{)/g;
-var FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
+var FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal|key|term|warn)\s*(?=\{)/g;
+var THEME_FORMATS = /* @__PURE__ */ new Set(["key", "term", "warn"]);
 var THEME_ARGUMENTS = {
   defn: 3,
   thm: 3,
@@ -82526,7 +82854,10 @@ var FORMAT_STYLES = {
   emph: "italic",
   textsl: "italic",
   underline: "underline",
-  textsc: "smallCaps"
+  textsc: "smallCaps",
+  key: "key",
+  term: "term",
+  warn: "warn"
 };
 function structureOverlays(structure, text, theorems, numbers = {}, homework) {
   const overlays = [];
@@ -82584,6 +82915,7 @@ function structureOverlays(structure, text, theorems, numbers = {}, homework) {
   }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
+    if (THEME_FORMATS.has(format.name) && !theorems.themeCommands) continue;
     const style = FORMAT_STYLES[format.name];
     overlays.push(overlay(format.start, format.end, {
       hide: [[format.start, format.contentStart], [format.contentEnd, format.end]],
@@ -82966,18 +83298,25 @@ var MAX_MACRO_FILE_BYTES = 1024 * 1024;
 var WINDOW_MARGIN_LINES = 100;
 var WINDOW_GUARD_LINES = 30;
 var NEAR_LINES = 10;
-var PREFETCH_LINES = 300;
+var PREFETCH_LINES = 4e3;
 var SLICE_MS = 8;
 var SHOW_EVERY_MS = 100;
+var SLOT_LINES = 16;
+var SLOT_COUNT = 24;
+var SEND_SETTLE_MS = 20;
+var RESEND_AFTER_EDITS_MS = 1e3;
 var CURSOR_MARKER = "\u25B6";
 var EDIT_PREVIEW_PADDING = { x: 8, y: 4 };
 var EDIT_PREVIEW_BORDER = 1;
 var EDIT_PREVIEW_GAP = 2;
 var FORMULA_START_ANCHOR = "--latex-toolkit-formula-start";
 var FORMULA_END_ANCHOR = "--latex-toolkit-formula-end";
+var NUMBER_GAP_EM = 2;
+var NUMBER_MARGIN_CH = 1;
 var PAGE_ANCHOR = "--latex-toolkit-page";
-var SOLUTION_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 6%, transparent)";
-var SOLUTION_TITLE_TINT = "color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent)";
+var tinted = (color, percent) => `color-mix(in srgb, var(--vscode-${color.replace(/\./g, "-")}) ${percent}%, transparent)`;
+var SOLUTION_TINT = tinted("textLink.foreground", 6);
+var SOLUTION_TITLE_TINT = tinted("textLink.foreground", 14);
 var CHANGES_WIDTH = { letterSpacing: "inherit" };
 var RANGE_STYLES = {
   bold: { fontWeight: "bold" },
@@ -82988,7 +83327,10 @@ var RANGE_STYLES = {
   dim: { opacity: "0.45" },
   chapter: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.3em;" },
   section: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.2em;" },
-  subsection: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" }
+  subsection: { ...CHANGES_WIDTH, fontWeight: "bold", textDecoration: "none; font-size: 1.1em;" },
+  key: { fontWeight: "bold", color: new vscode16.ThemeColor("textLink.foreground"), backgroundColor: tinted("textLink.foreground", 16), borderRadius: "3px" },
+  term: { color: new vscode16.ThemeColor("textLink.foreground"), backgroundColor: tinted("textLink.foreground", 12), borderRadius: "3px" },
+  warn: { fontWeight: "bold", color: new vscode16.ThemeColor("editorWarning.foreground"), backgroundColor: tinted("editorWarning.foreground", 16), borderRadius: "3px" }
 };
 var LiveMathPreview = class {
   /** `imageRoot` is where rendered images are kept as files; without one they travel as data URIs. */
@@ -83026,7 +83368,10 @@ var LiveMathPreview = class {
         this.tasks = this.tasks.filter((task) => vscode16.window.visibleTextEditors.includes(task.editor));
         this.updateAll();
       }),
-      vscode16.workspace.onDidChangeTextDocument((event) => this.scheduleRescan(event.document)),
+      vscode16.workspace.onDidChangeTextDocument((event) => {
+        this.moveSent(event);
+        this.scheduleRescan(event.document);
+      }),
       vscode16.window.onDidChangeActiveColorTheme(() => this.refresh()),
       vscode16.workspace.onDidChangeConfiguration((event) => this.onConfigurationChanged(event))
     );
@@ -83034,46 +83379,50 @@ var LiveMathPreview = class {
   }
   output;
   // Hiding works by injecting CSS through textDecoration, which VS Code emits verbatim.
-  hidden = vscode16.window.createTextEditorDecorationType({ ...CHANGES_WIDTH, textDecoration: "none; display: none;" });
-  inlineImages = vscode16.window.createTextEditorDecorationType({});
+  hidden = new SlottedType({ ...CHANGES_WIDTH, textDecoration: "none; display: none;" });
+  inlineImages = new SlottedType({});
   // Display images are large; keeping them apart means moving through inline math does not resend them.
-  blockImages = vscode16.window.createTextEditorDecorationType({});
+  blockImages = new SlottedType({});
   // The editor still draws indent guides for a block's hidden source, and on lines carrying an image
   // it measures them from the image's right edge. Painting the lines in the editor's background
   // covers them; rulers are drawn above this layer, so they stay.
-  blockBackgrounds = vscode16.window.createTextEditorDecorationType({
+  blockBackgrounds = new SlottedType({
     isWholeLine: true,
     backgroundColor: `var(--vscode-editor-background); anchor-name: ${PAGE_ANCHOR};`
   });
   // Translucent, as decorations are drawn above the selection.
-  solutionTitles = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
-  solutionBodies = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: SOLUTION_TINT });
+  solutionTitles = new SlottedType({ isWholeLine: true, backgroundColor: SOLUTION_TITLE_TINT });
+  solutionBodies = new SlottedType({ isWholeLine: true, backgroundColor: SOLUTION_TINT });
   // A formula's lines in a solution take the box over the editor's background, which covers their
   // indent guides as blockBackgrounds does; two separate types could be drawn in either order.
-  solutionBlockBackgrounds = vscode16.window.createTextEditorDecorationType({
+  solutionBlockBackgrounds = new SlottedType({
     isWholeLine: true,
     backgroundColor: `var(--vscode-editor-background); background-image: linear-gradient(${SOLUTION_TINT}, ${SOLUTION_TINT}); anchor-name: ${PAGE_ANCHOR};`
   });
-  errors = vscode16.window.createTextEditorDecorationType({
+  errors = new SlottedType({
     textDecoration: "underline wavy var(--vscode-editorError-foreground)"
   });
   /** Text drawn in place of markup: numbers, citations, theorem heads and list labels. */
-  insertions = vscode16.window.createTextEditorDecorationType({});
-  editPreview = vscode16.window.createTextEditorDecorationType({});
-  formulaStart = vscode16.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_START_ANCHOR};` });
-  formulaEnd = vscode16.window.createTextEditorDecorationType({ backgroundColor: `transparent; anchor-name: ${FORMULA_END_ANCHOR};` });
+  insertions = new SlottedType({});
+  // There is one formula being edited, so these need no slots.
+  editPreview = new SlottedType({}, 1);
+  formulaStart = new SlottedType({ backgroundColor: `transparent; anchor-name: ${FORMULA_START_ANCHOR};` }, 1);
+  formulaEnd = new SlottedType({ backgroundColor: `transparent; anchor-name: ${FORMULA_END_ANCHOR};` }, 1);
   // The edited formula's lines report the editor's width, as the backgrounds under display formulas do.
-  formulaLines = vscode16.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: `transparent; anchor-name: ${PAGE_ANCHOR};` });
-  rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) => [style, vscode16.window.createTextEditorDecorationType(options)]));
+  formulaLines = new SlottedType({ isWholeLine: true, backgroundColor: `transparent; anchor-name: ${PAGE_ANCHOR};` }, 1);
+  rangeStyles = new Map(Object.entries(RANGE_STYLES).map(([style, options]) => [style, new SlottedType(options)]));
   images;
   renderer;
   aux;
   scans = /* @__PURE__ */ new WeakMap();
-  /** What each editor shows per decoration type, so unchanged decorations are not sent again. */
-  applied = /* @__PURE__ */ new WeakMap();
+  /** What each editor's decoration types hold, so that what VS Code holds already is not sent again. */
+  sent = /* @__PURE__ */ new WeakMap();
+  /** The formula each editor previews while it is edited, followed through the edits made since the document was read. */
+  editing = /* @__PURE__ */ new WeakMap();
   /** The last rendering of the formula being edited, kept while an edit leaves it unrenderable. */
   lastEditPreview = /* @__PURE__ */ new WeakMap();
   rescanTimers = /* @__PURE__ */ new Map();
+  resendTimers = /* @__PURE__ */ new Map();
   uris = /* @__PURE__ */ new WeakMap();
   /** The lines each editor decorates, kept while it scrolls within them. */
   windows = /* @__PURE__ */ new WeakMap();
@@ -83097,6 +83446,7 @@ var LiveMathPreview = class {
   dispose() {
     this.enabled = false;
     for (const timer of this.rescanTimers.values()) clearTimeout(timer);
+    for (const timer of this.resendTimers.values()) clearTimeout(timer);
     if (this.macroTimer) clearTimeout(this.macroTimer);
     if (this.backgroundTimer) clearImmediate(this.backgroundTimer);
     this.tasks = [];
@@ -83117,8 +83467,7 @@ var LiveMathPreview = class {
     if (this.starting) this.scheduleMacroScan();
     this.starting ??= (async () => {
       const startedAt = Date.now();
-      await this.renderer.load();
-      await this.scanWorkspaceMacros();
+      await Promise.all([this.renderer.load(), this.scanWorkspaceMacros()]);
       this.output.appendLine(`[${(/* @__PURE__ */ new Date()).toISOString()}] Live math preview ready in ${Date.now() - startedAt}ms.`);
     })().catch((error) => {
       this.starting = void 0;
@@ -83145,6 +83494,31 @@ var LiveMathPreview = class {
   }
   updateAll() {
     for (const editor of vscode16.window.visibleTextEditors) this.update(editor);
+  }
+  /** Moves what each editor of the document holds through the edit, as VS Code moves the decorations. */
+  moveSent(event) {
+    if (!event.contentChanges.length) return;
+    const edits = event.contentChanges.map((change) => ({ offset: change.rangeOffset, length: change.rangeLength, inserted: change.text.length }));
+    const now = import_node_perf_hooks.performance.now();
+    const text = event.document.getText();
+    for (const editor of vscode16.window.visibleTextEditors) {
+      if (editor.document !== event.document) continue;
+      this.sent.get(editor)?.move(edits, now);
+      const edited = this.editing.get(editor);
+      const region = edited && moveRegion(edited.region, edits, text);
+      if (edited && region) this.editing.set(editor, { ...edited, region });
+      else this.editing.delete(editor);
+    }
+    const key = event.document.uri.toString();
+    clearTimeout(this.resendTimers.get(key));
+    this.resendTimers.set(key, setTimeout(() => {
+      this.resendTimers.delete(key);
+      for (const editor of vscode16.window.visibleTextEditors) {
+        if (editor.document !== event.document) continue;
+        this.sent.get(editor)?.unsettle();
+        this.update(editor);
+      }
+    }, RESEND_AFTER_EDITS_MS));
   }
   scheduleRescan(document2) {
     if (!this.enabled || !LANGUAGES.has(document2.languageId)) return;
@@ -83186,7 +83560,10 @@ var LiveMathPreview = class {
     }
     if (!this.renderer.isReady) return;
     const cached = this.scans.get(document2);
-    if (cached && cached.version !== document2.version && this.rescanTimers.has(document2.uri.toString())) return;
+    if (cached && cached.version !== document2.version && this.rescanTimers.has(document2.uri.toString())) {
+      this.followEditedFormula(editor, cached);
+      return;
+    }
     const scan = this.scanFor(document2);
     const selections = editor.selections.map((selection) => ({
       start: document2.offsetAt(selection.start),
@@ -83213,7 +83590,7 @@ var LiveMathPreview = class {
     const pageColumns = wrapMode === "bounded" || wrapMode === "wordWrapColumn" ? editorConfig.get("wordWrapColumn", 80) : void 0;
     const aux = this.aux.auxFor(document2, scan.root);
     const labels = aux?.labels;
-    const withNumbers = (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.workspace.cref).text) : tex;
+    const withNumbers = this.numbering(labels);
     const hidden = new Decorations();
     const inlineImages = new Decorations();
     const blockImages = new Decorations();
@@ -83224,20 +83601,23 @@ var LiveMathPreview = class {
     const errors = new Decorations();
     const insertions = new Decorations();
     const styled = new Map([...this.rangeStyles.keys()].map((style) => [style, new Decorations()]));
-    scan.regions.inline.forEach((region, index) => {
-      if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) return;
+    const range = (start, end) => new vscode16.Range(document2.positionAt(start), document2.positionAt(end));
+    const lineStart = (line) => document2.offsetAt(new vscode16.Position(line, 0));
+    const wholeLines = (first, last) => [lineStart(first), lineStart(last), new vscode16.Range(first, 0, last, 0)];
+    for (const region of scan.regions.inline) {
+      if (!isVisible(region.start, region.end) || regionIsActive(region, selections)) continue;
       const tex = withNumbers(region.tex);
       const result = isNear(region.start, region.end) ? this.renderer.render(tex, options) : this.renderer.peek(tex, options);
-      if (!result) return;
-      const range2 = new vscode16.Range(document2.positionAt(region.start), document2.positionAt(region.end));
+      if (!result) continue;
+      const whole = range(region.start, region.end);
       if (!result.ok) {
-        errors.add(`i${index}`, { range: range2, hoverMessage: `Live math preview: ${result.error}` });
-        return;
+        errors.add(region, region.start, region.end, { range: whole, hoverMessage: `Live math preview: ${result.error}` }, result.error);
+        continue;
       }
       const { widthPx, heightPx, verticalAlignPx } = result.image;
-      hidden.add(`i${index}`, range2);
-      inlineImages.add(`i${index}`, {
-        range: new vscode16.Range(range2.start, range2.start),
+      hidden.add(region, region.start, region.end, whole);
+      inlineImages.add(region, region.start, region.start, {
+        range: new vscode16.Range(whole.start, whole.start),
         renderOptions: {
           before: {
             contentIconPath: this.uriFor(result.image),
@@ -83247,84 +83627,101 @@ var LiveMathPreview = class {
             textDecoration: `none; vertical-align: ${verticalAlignPx.toFixed(2)}px;`
           }
         }
-      });
-    });
+      }, result.image.uri);
+    }
     const markup = this.markupFor(document2, scan, aux);
     const boxes = [];
-    markup.boxes.forEach((box, index) => {
-      if (!isVisible(box.start, box.end)) return;
+    for (const box of markup.boxes) {
+      if (!isVisible(box.start, box.end)) continue;
       const first = document2.positionAt(box.start).line;
-      if (boxes.length && first <= boxes[boxes.length - 1].last) return;
-      boxes.push({ index, first, last: document2.positionAt(box.end).line, formulas: [] });
-    });
-    scan.regions.display.forEach((region, index) => {
-      if (!isVisible(region.linesStart, region.linesEnd)) return;
+      if (boxes.length && first <= boxes[boxes.length - 1].last) continue;
+      boxes.push({ ...box, first, last: document2.positionAt(box.end).line, formulas: [] });
+    }
+    for (const region of scan.regions.display) {
+      if (!isVisible(region.linesStart, region.linesEnd)) continue;
+      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) continue;
+      const owner = { start: region.linesStart, end: region.linesEnd };
       const firstLine = document2.positionAt(region.start).line;
       const tex = withNumbers(region.tex);
       const tags = equationTags(region.tex, labels);
-      if (regionIsActive({ start: region.linesStart, end: region.linesEnd }, selections)) return;
       const result = isNear(region.linesStart, region.linesEnd) ? this.renderer.renderBlock(tex, region.rows, options, tags) : this.renderer.peekBlock(tex, region.rows, options, tags);
-      if (!result) return;
+      if (!result) continue;
       if (!result.ok) {
-        const opening = new vscode16.Range(document2.positionAt(region.start), document2.lineAt(firstLine).range.end);
-        errors.add(`d${index}`, { range: opening, hoverMessage: `Live math preview: ${result.error}` });
-        return;
+        const openingEnd = document2.offsetAt(document2.lineAt(firstLine).range.end);
+        errors.add(owner, region.start, openingEnd, { range: range(region.start, openingEnd), hoverMessage: `Live math preview: ${result.error}` }, result.error);
+        continue;
       }
       for (let row = 0; row < region.rows; row++) {
         const line = document2.lineAt(firstLine + row);
-        if (!line.range.isEmpty) hidden.add(`d${index}`, line.range);
+        const at = lineStart(firstLine + row);
+        if (!line.range.isEmpty) hidden.add(owner, at, at + line.text.length, line.range);
       }
       const lastLine = firstLine + region.rows - 1;
       const box = boxes.find((item) => item.first < firstLine && lastLine <= item.last);
-      box?.formulas.push({ index, first: firstLine, last: lastLine });
-      (box ? solutionBlockBackgrounds : blockBackgrounds).add(`d${index}`, new vscode16.Range(firstLine, 0, lastLine, 0));
+      box?.formulas.push({ first: firstLine, last: lastLine });
+      (box ? solutionBlockBackgrounds : blockBackgrounds).add(owner, ...wholeLines(firstLine, lastLine));
       const indent = visualColumn(document2.lineAt(firstLine).text, document2.positionAt(region.start).character, tabSize) + tabSize;
       const anchor = wraps ? region.rows - 1 : -1;
-      const half = (result.image.formulaWidthPx / 2).toFixed(2);
+      const half = (result.image.widthPx / 2).toFixed(2);
       const page = pageColumns === void 0 ? void 0 : `${pageColumns / 2}ch`;
       const lines2 = `anchor(${PAGE_ANCHOR} center, ${page ?? `calc(${indent}ch + ${half}px)`})`;
       const centre = wrapMode === "wordWrapColumn" ? page : wrapMode === "bounded" ? `min(${lines2}, ${page})` : lines2;
       const left = `max(0px, ${centre} - ${half}px)`;
       for (const slice of result.image.slices) {
-        const start = new vscode16.Position(firstLine + (wraps ? anchor : slice.row), 0);
-        blockImages.add(`d${index}`, {
-          range: new vscode16.Range(start, start),
+        const line = firstLine + (wraps ? anchor : slice.row);
+        const at = lineStart(line);
+        const placement = wraps ? { textDecoration: `none; position: fixed; margin-top: ${(slice.row - anchor) * options.lineHeightPx}px; left: ${left};` } : { margin: `0 0 0 ${indent}ch`, textDecoration: "none; vertical-align: top;" };
+        blockImages.add(owner, at, at, {
+          range: new vscode16.Range(line, 0, line, 0),
           renderOptions: {
             before: {
               contentIconPath: this.uriFor(slice),
               width: `${result.image.widthPx.toFixed(2)}px`,
               height: `${options.lineHeightPx}px`,
-              ...wraps ? { textDecoration: `none; position: fixed; margin-top: ${(slice.row - anchor) * options.lineHeightPx}px; left: ${left};` } : { margin: `0 0 0 ${indent}ch`, textDecoration: "none; vertical-align: top;" }
+              ...placement
             }
           }
-        });
+        }, `${slice.uri}|${placement.margin ?? ""}|${placement.textDecoration}`);
       }
-    });
+      const formulaRight = `calc(${wraps ? left : `${indent}ch`} + ${result.image.widthPx.toFixed(2)}px)`;
+      const gap = `${NUMBER_GAP_EM * options.fontSizePx}px`;
+      for (const number of result.image.numbers) {
+        const width = `${number.widthPx.toFixed(2)}px`;
+        const lineRight = `anchor(${PAGE_ANCHOR} right, calc(${formulaRight} + ${gap} + ${width} + ${NUMBER_MARGIN_CH}ch))`;
+        const right = wrapMode === "wordWrapColumn" ? `${pageColumns}ch` : wrapMode === "bounded" ? `min(${lineRight}, ${pageColumns}ch)` : lineRight;
+        const row = wraps ? anchor : Math.min(region.rows - 1, Math.max(0, Math.floor(number.topPx / options.lineHeightPx)));
+        const line = firstLine + row;
+        const at = lineStart(line);
+        const css = `none; position: fixed; display: inline-flex; width: ${width}; height: ${number.heightPx.toFixed(2)}px; margin-top: ${(number.topPx - row * options.lineHeightPx).toFixed(2)}px; left: max(calc(${right} - ${width} - ${NUMBER_MARGIN_CH}ch), calc(${formulaRight} + ${gap}));`;
+        blockImages.add(owner, at, at, {
+          range: new vscode16.Range(line, 0, line, 0),
+          renderOptions: { before: { contentIconPath: this.uriFor(number), textDecoration: css } }
+        }, `${number.uri}|${css}`);
+      }
+    }
     for (const box of boxes) {
-      solutionTitles.add(`s${box.index}`, new vscode16.Range(box.first, 0, box.first, 0));
-      const key = `s${box.index}:${box.formulas.map((formula) => formula.index).join(".")}`;
+      solutionTitles.add(box, ...wholeLines(box.first, box.first));
       let from = box.first + 1;
       for (const formula of box.formulas) {
-        if (formula.first > from) solutionBodies.add(key, new vscode16.Range(from, 0, formula.first - 1, 0));
+        if (formula.first > from) solutionBodies.add(box, ...wholeLines(from, formula.first - 1));
         from = formula.last + 1;
       }
-      if (from <= box.last) solutionBodies.add(key, new vscode16.Range(from, 0, box.last, 0));
+      if (from <= box.last) solutionBodies.add(box, ...wholeLines(from, box.last));
     }
-    const range = (start, end) => new vscode16.Range(document2.positionAt(start), document2.positionAt(end));
-    markup.list.forEach((item, index) => {
-      if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) return;
-      const key = `o${index}`;
-      for (const [start, end] of item.hide) hidden.add(key, range(start, end));
-      for (const part of item.style) styled.get(part.style)?.add(key, range(part.start, part.end));
+    for (const item of markup.list) {
+      if (!isVisible(item.start, item.end) || regionIsActive(item, selections)) continue;
+      for (const [start, end] of item.hide) hidden.add(item, start, end, range(start, end));
+      for (const part of item.style) styled.get(part.style)?.add(item, part.start, part.end, range(part.start, part.end));
       item.insert.forEach((insertion, position) => {
-        const hover = position === 0 && item.hover ? hoverText(item.hover) : void 0;
-        insertions.add(key, {
-          range: hover ? range(item.start, item.end) : range(insertion.at, insertion.at),
-          hoverMessage: hover,
+        const hover = position === 0 && item.hover ? item.hover : void 0;
+        const [start, end] = hover ? [item.start, item.end] : [insertion.at, insertion.at];
+        insertions.add(item, start, end, {
+          range: range(start, end),
+          hoverMessage: hover && hoverText(hover),
           renderOptions: { before: insertionStyle(insertion) }
-        });
+        }, [insertion.text, insertion.color, insertion.bold, insertion.italic, insertion.size, hover?.join("\n")].join("\0"));
       });
-    });
+    }
     const editPreview = new Decorations();
     const formulaStart = new Decorations();
     const formulaEnd = new Decorations();
@@ -83332,39 +83729,33 @@ var LiveMathPreview = class {
     const cursor = document2.offsetAt(editor.selection.active);
     const edited = editedFormula(scan.regions, { start: document2.offsetAt(editor.selection.start), end: document2.offsetAt(editor.selection.end) });
     const preview = edited && this.previewWhileEditing(document2, edited, cursor, { top, bottom }, options, withNumbers);
+    if (edited && preview) this.editing.set(editor, edited);
+    else this.editing.delete(editor);
     if (edited && preview) {
-      editPreview.add(`${edited.key}:${cursor}:${preview.below ? "below" : "above"}`, preview.decoration);
-      formulaStart.add(edited.key, range(edited.region.start, edited.region.start + 1));
-      formulaEnd.add(edited.key, range(edited.region.closeStart, edited.region.closeStart + 1));
-      for (const line of new Set([edited.region.start, edited.region.closeStart].map((offset) => document2.positionAt(offset).line))) {
-        formulaLines.add(edited.key, new vscode16.Range(line, 0, line, 0));
+      const { region } = edited;
+      editPreview.add(region, preview.at, preview.at, preview.decoration, preview.shows);
+      formulaStart.add(region, region.start, region.start + 1, range(region.start, region.start + 1));
+      formulaEnd.add(region, region.closeStart, region.closeStart + 1, range(region.closeStart, region.closeStart + 1));
+      for (const line of new Set([region.start, region.closeStart].map((offset) => document2.positionAt(offset).line))) {
+        formulaLines.add(region, ...wholeLines(line, line));
       }
     }
-    const state = [
-      scan.version,
-      scan.macroGeneration,
-      this.aux.generation,
-      options.color,
-      options.fontSizePx,
-      options.lineHeightPx,
-      tabSize,
-      wraps,
-      pageColumns
-    ].join(":");
-    this.apply(editor, this.hidden, hidden, state);
-    this.apply(editor, this.inlineImages, inlineImages, state);
-    this.apply(editor, this.blockImages, blockImages, state);
-    this.apply(editor, this.blockBackgrounds, blockBackgrounds, state);
-    this.apply(editor, this.solutionTitles, solutionTitles, state);
-    this.apply(editor, this.solutionBodies, solutionBodies, state);
-    this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds, state);
-    this.apply(editor, this.errors, errors, state);
-    this.apply(editor, this.insertions, insertions, state);
-    this.apply(editor, this.editPreview, editPreview, state);
-    this.apply(editor, this.formulaStart, formulaStart, state);
-    this.apply(editor, this.formulaEnd, formulaEnd, state);
-    this.apply(editor, this.formulaLines, formulaLines, state);
-    for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style), state);
+    const sent = this.sentFor(editor);
+    this.apply(editor, this.hidden, hidden);
+    this.apply(editor, this.inlineImages, inlineImages);
+    this.apply(editor, this.blockImages, blockImages);
+    this.apply(editor, this.blockBackgrounds, blockBackgrounds);
+    this.apply(editor, this.solutionTitles, solutionTitles);
+    this.apply(editor, this.solutionBodies, solutionBodies);
+    this.apply(editor, this.solutionBlockBackgrounds, solutionBlockBackgrounds);
+    this.apply(editor, this.errors, errors);
+    this.apply(editor, this.insertions, insertions);
+    this.apply(editor, this.editPreview, editPreview);
+    this.apply(editor, this.formulaStart, formulaStart);
+    this.apply(editor, this.formulaEnd, formulaEnd);
+    this.apply(editor, this.formulaLines, formulaLines);
+    for (const [style, type] of this.rangeStyles) this.apply(editor, type, styled.get(style));
+    sent.settle();
     this.planBackground(editor, scan, lines, options, withNumbers, labels);
   }
   /**
@@ -83467,6 +83858,31 @@ var LiveMathPreview = class {
     const hook = source.indexOf(HOMEWORK_SETTINGS_FILE);
     return parseHomeworkSettings(hook === -1 ? source : source.slice(hook), settings);
   }
+  /** Puts the numbers of the last compile in place of the references in a formula. */
+  numbering(labels) {
+    return (tex) => labels ? substituteReferences(tex, (reference) => formatReference(reference, labels, this.workspace.cref).text) : tex;
+  }
+  /**
+   * Draws the formula being edited again from the text as it is now, while the rest of the document
+   * waits for the pause in typing that has it read again.
+   */
+  followEditedFormula(editor, scan) {
+    const edited = this.editing.get(editor);
+    if (!edited) return;
+    const document2 = editor.document;
+    const selection = { start: document2.offsetAt(editor.selection.start), end: document2.offsetAt(editor.selection.end) };
+    if (!regionIsActive(edited.region, [selection])) return;
+    const viewport = editor.visibleRanges;
+    const top = viewport.length ? Math.min(...viewport.map((range) => range.start.line)) : 0;
+    const bottom = viewport.length ? Math.max(...viewport.map((range) => range.end.line)) : 0;
+    const options = { ...this.renderSizing(document2), macros: scan.macros };
+    const withNumbers = this.numbering(this.aux.auxFor(document2, scan.root)?.labels);
+    const cursor = document2.offsetAt(editor.selection.active);
+    const preview = this.previewWhileEditing(document2, edited, cursor, { top, bottom }, options, withNumbers);
+    const decorations = new Decorations();
+    if (preview) decorations.add(edited.region, preview.at, preview.at, preview.decoration, preview.shows);
+    this.apply(editor, this.editPreview, decorations);
+  }
   /**
    * While a formula is edited its rendering shows above it, over the lines there, as Latex Suite
    * shows it in Obsidian, with the cursor marked: an extension cannot make room between lines. It
@@ -83474,11 +83890,11 @@ var LiveMathPreview = class {
    * editor's width. An edit that leaves the formula unrenderable keeps its last rendering.
    */
   previewWhileEditing(document2, edited, cursor, viewport, options, withNumbers) {
-    const { region, display } = edited;
+    const { region, display: display2 } = edited;
     const marked = texWithCursor(region, cursor, CURSOR_MARKER);
     const markedTex = marked === void 0 ? void 0 : withNumbers(marked);
-    let result = markedTex?.includes(CURSOR_MARKER) ? this.renderer.renderUnscaled(markedTex, display, options) : void 0;
-    if (!result?.ok) result = this.renderer.renderUnscaled(withNumbers(region.tex), display, options);
+    let result = markedTex?.includes(CURSOR_MARKER) ? this.renderer.renderUnscaled(markedTex, display2, options) : void 0;
+    if (!result?.ok) result = this.renderer.renderUnscaled(withNumbers(region.tex), display2, options);
     const last = this.lastEditPreview.get(document2);
     const image = result.ok ? result.image : last?.start === region.start ? last.image : void 0;
     if (!image) return void 0;
@@ -83486,15 +83902,19 @@ var LiveMathPreview = class {
     const chrome = (padding) => 2 * (padding + EDIT_PREVIEW_BORDER);
     const rows = Math.ceil((image.heightPx + chrome(EDIT_PREVIEW_PADDING.y) + EDIT_PREVIEW_GAP) / options.lineHeightPx);
     const below = document2.positionAt(region.start).line - viewport.top < rows && viewport.bottom - document2.positionAt(region.closeStart).line >= rows;
-    const at = document2.positionAt(below ? region.closeStart : region.start);
+    const at = below ? region.closeStart : region.start;
+    const position = document2.positionAt(at);
     const outerWidth = image.widthPx + chrome(EDIT_PREVIEW_PADDING.x);
     const from = `anchor(${FORMULA_START_ANCHOR} left, anchor(${FORMULA_END_ANCHOR} left))`;
     const left = `max(0px, min(${from}, anchor(${PAGE_ANCHOR} right, 100%) - ${outerWidth.toFixed(2)}px))`;
     const vertical = below ? `top: anchor(${FORMULA_END_ANCHOR} bottom); margin-top: ${EDIT_PREVIEW_GAP}px;` : `bottom: anchor(${FORMULA_START_ANCHOR} top); margin-bottom: ${EDIT_PREVIEW_GAP}px;`;
+    const css = `none; position: fixed; z-index: 1; pointer-events: none; padding: ${EDIT_PREVIEW_PADDING.y}px ${EDIT_PREVIEW_PADDING.x}px; border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow); font-size: 0; line-height: 0; left: ${left}; ${vertical}`;
     return {
       below,
+      at,
+      shows: `${image.uri}|${css}`,
       decoration: {
-        range: new vscode16.Range(at, at),
+        range: new vscode16.Range(position, position),
         renderOptions: {
           before: {
             contentIconPath: this.uriFor(image),
@@ -83505,38 +83925,58 @@ var LiveMathPreview = class {
             borderColor: new vscode16.ThemeColor("editorHoverWidget.border"),
             // Fixed, as the anchors are only within reach of that; above the lines after it; and
             // clicks go through to the text it covers. No font size, so no line box pads the image.
-            textDecoration: `none; position: fixed; z-index: 1; pointer-events: none; padding: ${EDIT_PREVIEW_PADDING.y}px ${EDIT_PREVIEW_PADDING.x}px; border-radius: 4px; box-shadow: 0 2px 8px var(--vscode-widget-shadow); font-size: 0; line-height: 0; left: ${left}; ${vertical}`
+            textDecoration: css
           }
         }
       }
     };
   }
-  apply(editor, type, decorations, state) {
-    let applied = this.applied.get(editor);
-    if (!applied) this.applied.set(editor, applied = /* @__PURE__ */ new Map());
-    const key = `${state}|${decorations.keys.join(",")}`;
-    if (applied.get(type) === key) return;
-    applied.set(type, key);
-    editor.setDecorations(type, decorations.items);
+  sentFor(editor) {
+    let sent = this.sent.get(editor);
+    if (!sent) this.sent.set(editor, sent = new SentDecorations(SEND_SETTLE_MS));
+    return sent;
+  }
+  /** Sends each slot of `type` what it is to show, unless VS Code holds exactly that already. */
+  apply(editor, type, decorations) {
+    const sent = this.sentFor(editor);
+    const slots = [];
+    for (const placed of decorations.items) {
+      const slot = type.count === 1 ? 0 : sent.slotOf(placed.owner, () => Math.floor(editor.document.positionAt(placed.owner.start).line / SLOT_LINES) % type.count);
+      (slots[slot] ??= []).push(placed);
+    }
+    const now = import_node_perf_hooks.performance.now();
+    for (let slot = 0; slot < type.count; slot++) {
+      const items = slots[slot] ?? [];
+      const slotType = items.length ? type.slot(slot) : type.existing(slot);
+      if (!slotType || !sent.differs(slotType, items)) continue;
+      editor.setDecorations(slotType, items.map((placed) => placed.item));
+      sent.record(slotType, items, now);
+    }
   }
   clear(editor) {
-    this.applied.delete(editor);
+    this.sent.delete(editor);
+    this.editing.delete(editor);
     this.plans.delete(editor);
     this.tasks = this.tasks.filter((task) => task.editor !== editor);
-    editor.setDecorations(this.hidden, []);
-    editor.setDecorations(this.inlineImages, []);
-    editor.setDecorations(this.blockImages, []);
-    editor.setDecorations(this.blockBackgrounds, []);
-    editor.setDecorations(this.solutionTitles, []);
-    editor.setDecorations(this.solutionBodies, []);
-    editor.setDecorations(this.solutionBlockBackgrounds, []);
-    editor.setDecorations(this.errors, []);
-    editor.setDecorations(this.insertions, []);
-    editor.setDecorations(this.editPreview, []);
-    editor.setDecorations(this.formulaStart, []);
-    editor.setDecorations(this.formulaEnd, []);
-    editor.setDecorations(this.formulaLines, []);
-    for (const type of this.rangeStyles.values()) editor.setDecorations(type, []);
+    for (const type of this.slottedTypes()) for (const slot of type.created()) editor.setDecorations(slot, []);
+  }
+  slottedTypes() {
+    return [
+      this.hidden,
+      this.inlineImages,
+      this.blockImages,
+      this.blockBackgrounds,
+      this.solutionTitles,
+      this.solutionBodies,
+      this.solutionBlockBackgrounds,
+      this.errors,
+      this.insertions,
+      this.editPreview,
+      this.formulaStart,
+      this.formulaEnd,
+      this.formulaLines,
+      ...this.rangeStyles.values()
+    ];
   }
   /** Parsing an image's URI is not free, so each image keeps its Uri for as long as the renderer keeps the image. */
   uriFor(image) {
@@ -83598,17 +84038,36 @@ var LiveMathPreview = class {
 };
 var Decorations = class {
   items = [];
-  keys = [];
-  add(key, item) {
-    this.items.push(item);
-    if (this.keys[this.keys.length - 1] !== key) this.keys.push(key);
+  add(owner, start, end, item, shows = "") {
+    this.items.push({ owner, start, end, shows, item });
+  }
+};
+var SlottedType = class {
+  constructor(options, count = SLOT_COUNT) {
+    this.options = options;
+    this.count = count;
+  }
+  options;
+  count;
+  types = [];
+  slot(index) {
+    return this.types[index] ??= vscode16.window.createTextEditorDecorationType(this.options);
+  }
+  existing(index) {
+    return this.types[index];
+  }
+  created() {
+    return this.types.filter((type) => type !== void 0);
+  }
+  dispose() {
+    for (const type of this.types) type?.dispose();
   }
 };
 function editedFormula(regions, selection) {
-  const display = regions.display.findIndex((region) => regionIsActive({ start: region.linesStart, end: region.linesEnd }, [selection]));
-  if (display !== -1) return { region: regions.display[display], display: true, key: `d${display}` };
-  const inline = regions.inline.findIndex((region) => regionIsActive(region, [selection]));
-  return inline === -1 ? void 0 : { region: regions.inline[inline], display: false, key: `i${inline}` };
+  const display2 = regions.display.find((region) => regionIsActive({ start: region.linesStart, end: region.linesEnd }, [selection]));
+  if (display2) return { region: display2, display: true };
+  const inline = regions.inline.find((region) => regionIsActive(region, [selection]));
+  return inline && { region: inline, display: false };
 }
 function visualColumn(text, character, tabSize) {
   let column = 0;
