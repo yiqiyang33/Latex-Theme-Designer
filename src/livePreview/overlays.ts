@@ -1,5 +1,6 @@
 /** Styles a stretch of source can be drawn in while its commands are hidden. */
-export type RangeStyle = 'bold' | 'italic' | 'underline' | 'smallCaps' | 'dim' | 'chapter' | 'section' | 'subsection';
+export type RangeStyle = 'bold' | 'italic' | 'underline' | 'smallCaps' | 'dim' | 'chapter' | 'section' | 'subsection'
+  | 'key' | 'term' | 'warn';
 
 /** Text drawn in place of hidden source, or between visible parts of it. */
 export interface Insertion {

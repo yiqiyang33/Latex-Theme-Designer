@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMacroDefinitions } from '../src/livePreview/macros';
-import { findMathRegions, previewSource, regionIsActive, texWithCursor } from '../src/livePreview/mathRegions';
+import { findMathRegions, moveRegion, previewSource, regionIsActive, texWithCursor } from '../src/livePreview/mathRegions';
 import { decoratedLines } from '../src/livePreview/lineWindow';
 import { MathRenderer, sizeForEditor, sliceForLines, type MathRenderOptions } from '../src/livePreview/mathRenderer';
 
@@ -340,5 +340,38 @@ describe('sliceForLines', () => {
 
   it('scales a formula taller than its block down to fit', () => {
     expect(sliceForLines(svg, 1, sizing)).toMatchObject({ widthPx: 20, slices: [{ row: 0 }] });
+  });
+});
+
+describe('moveRegion', () => {
+  const edit = (offset: number, length: number, text: string) => ({ offset, length, inserted: text.length });
+  const apply = (text: string, offset: number, length: number, inserted: string) => text.slice(0, offset) + inserted + text.slice(offset + length);
+
+  it('follows typing in a formula, at either end of its TeX too, and moves it for edits before it', () => {
+    const text = 'Let $a+b$ be.';
+    const [region] = findMathRegions(text, 'latex').inline;
+    const typed = apply(text, 6, 0, 'xy');
+    expect(moveRegion(region, [edit(6, 0, 'xy')], typed)).toEqual({ start: 4, end: 11, tex: 'axy+b', texStart: 5, closeStart: 10 });
+    expect(moveRegion(region, [edit(5, 0, 'c')], apply(text, 5, 0, 'c'))?.tex).toBe('ca+b');
+    expect(moveRegion(region, [edit(8, 0, 'c')], apply(text, 8, 0, 'c'))?.tex).toBe('a+bc');
+    expect(moveRegion(region, [edit(6, 2, '')], apply(text, 6, 2, ''))?.tex).toBe('a');
+    expect(moveRegion(region, [edit(0, 3, 'Then')], apply(text, 0, 3, 'Then'))).toMatchObject({ start: 5, tex: 'a+b', closeStart: 9 });
+    expect(moveRegion(region, [edit(10, 0, '!')], apply(text, 10, 0, '!'))).toEqual(region);
+  });
+
+  it('gives up when an edit touches a delimiter, as the formula may have ended or merged', () => {
+    const text = 'Let $a+b$ be.';
+    const [region] = findMathRegions(text, 'latex').inline;
+    expect(moveRegion(region, [edit(4, 1, '')], apply(text, 4, 1, ''))).toBeUndefined();
+    expect(moveRegion(region, [edit(8, 1, '')], apply(text, 8, 1, ''))).toBeUndefined();
+    expect(moveRegion(region, [edit(4, 0, 'x')], apply(text, 4, 0, 'x'))).toBeUndefined();
+  });
+
+  it('keeps an environment whole, its TeX running to its end', () => {
+    const text = '\\begin{align}\n x &= 1\n\\end{align}';
+    const [region] = findMathRegions(text, 'latex').display;
+    const at = text.indexOf('1');
+    expect(moveRegion(region, [edit(at, 0, '0')], apply(text, at, 0, '0'))?.tex).toBe('\\begin{align}\n x &= 01\n\\end{align}');
+    expect(moveRegion(region, [edit(0, 0, 'x')], apply(text, 0, 0, 'x'))).toBeUndefined();
   });
 });

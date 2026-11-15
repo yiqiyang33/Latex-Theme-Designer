@@ -155,6 +155,11 @@ describe('theme commands', () => {
     expect(show('\\thm{A}{general}{B}', emptyTheoremSettings())).toBe('\\thm{A}{general}{B}');
   });
 
+  it('draws the theme\'s highlighted words in their colours, and leaves the commands of another to it', () => {
+    expect(show('A \\key{term} and \\warn{care}, \\term{word}.')).toBe('A <key>term</key> and <warn>care</warn>, <term>word</term>.');
+    expect(show('A \\key{term}.', emptyTheoremSettings())).toBe('A \\key{term}.');
+  });
+
   it('draws \\thm{title}{label}{body} as its theorem, numbered by the label with the theme\'s prefix', () => {
     expect(show('\\thm{Generalization}{general}{\nLet $x$ be.\n}'))
       .toBe('**Theorem\u00a02.1**\u00a0(Generalization).\u00a0<dim>general</dim>\nLet $x$ be.\n<dim>}</dim>');

@@ -229,20 +229,24 @@ describe('sliceForLines with numbers', () => {
   // 44 by 22 px, its baseline halfway down; the number is 22 by 11 px, 2.75 px of it below its baseline.
   const formula = '<svg style="vertical-align: -0.5ex;" xmlns="http://www.w3.org/2000/svg" width="4ex" height="2ex" viewBox="0 -500 1000 1000"><g></g></svg>';
   const number = '<svg style="vertical-align: -0.25ex;" xmlns="http://www.w3.org/2000/svg" width="2ex" height="1ex" viewBox="0 -750 500 1000"><i></i></svg>';
-  const strip = (tags: Parameters<typeof sliceForLines>[3]) => sliceForLines(formula, 3, sizing, tags)!.slices[0].svg;
+  const numbers = (tags: Parameters<typeof sliceForLines>[3]) => sliceForLines(formula, 3, sizing, tags)!.numbers;
 
-  it('right-aligns a number two ems from the formula, on the baseline of its row', () => {
-    expect(sliceForLines(formula, 3, sizing, [{ svg: number, baseline: 0 }])?.widthPx).toBeCloseTo(106, 5);
-    expect(strip([{ svg: number, baseline: 0 }])).toContain('<svg x="84.00" y="6.75" width="22.00" height="11.00" viewBox="0 -750 500 1000" overflow="visible"><i></i></svg>');
+  it('sets a number apart from the formula, on the baseline of its row', () => {
+    const sliced = sliceForLines(formula, 3, sizing, [{ svg: number, baseline: 0 }])!;
+    expect(sliced.widthPx).toBeCloseTo(44, 5);
+    expect(sliced.slices.every(slice => !slice.svg.includes('<i></i>'))).toBe(true);
+    expect(sliced.numbers).toMatchObject([{ widthPx: 22, heightPx: 11, topPx: 6.75 }]);
+    expect(sliced.numbers[0].svg).toContain('<svg x="0.00" y="0.00" width="22.00" height="11.00" viewBox="0 -750 500 1000" overflow="visible"><i></i></svg>');
+    expect(sliced.numbers[0].svg).toContain('style="color:#000"');
   });
 
   it('centres a number given no row', () => {
-    expect(strip([{ svg: number }])).toContain('<svg x="84.00" y="9.50" width="22.00" height="11.00"');
+    expect(numbers([{ svg: number }])).toMatchObject([{ topPx: 9.5 }]);
   });
 
-  it('lines numbers of different widths up on their right edges', () => {
+  it('keeps each number at its own width, for the editor to line up on the right', () => {
     const wide = number.replace('width="2ex"', 'width="3ex"');
-    expect(strip([{ svg: number, baseline: 0 }, { svg: wide, baseline: 0 }])).toContain('<svg x="95.00" y="6.75" width="22.00"');
+    expect(numbers([{ svg: number, baseline: 0 }, { svg: wide, baseline: 0 }]).map(item => item.widthPx)).toEqual([22, 33]);
   });
 });
 
@@ -258,20 +262,19 @@ describe('MathRenderer numbers', () => {
     const numbered = renderer.renderBlock(tex, 4, options, [{ tex: '\\text{(1)}', row: 0 }, { tex: '\\text{(2)}', row: 1 }]);
     expect(plain.ok && numbered.ok).toBe(true);
     if (!plain.ok || !numbered.ok) return;
-    expect(numbered.image.widthPx).toBeGreaterThan(plain.image.widthPx + 2 * options.fontSizePx);
-    const pieces = [...decode(numbered.image.slices[0].uri).matchAll(/<svg x="([\d.]+)" y="([-\d.]+)"/g)].map(match => match.slice(1).map(Number));
-    expect(pieces).toHaveLength(3);
-    const [, first, second] = pieces;
-    expect(first[0]).toBeCloseTo(second[0], 1);
+    expect(numbered.image.widthPx).toBeCloseTo(plain.image.widthPx, 5);
+    const [first, second] = numbered.image.numbers;
+    expect(numbered.image.numbers).toHaveLength(2);
+    expect(first.widthPx).toBeCloseTo(second.widthPx, 1);
+    expect(decode(first.uri)).toContain('style="color:#cccccc"');
     // The rows are about one line of math apart.
-    expect(second[1] - first[1]).toBeGreaterThan(options.fontSizePx);
+    expect(second.topPx - first.topPx).toBeGreaterThan(options.fontSizePx);
   });
 
   it('keeps a number for a row MathJax did not make only when it is the formula\'s one number', () => {
     const single = renderer.renderBlock('x = 1', 3, options, [{ tex: '\\text{(1)}', row: 5 }]);
     const several = renderer.renderBlock('x = 1', 3, options, [{ tex: '\\text{(1)}', row: 5 }, { tex: '\\text{(2)}', row: 6 }]);
-    const plain = renderer.renderBlock('x = 1', 3, options);
-    expect(single.ok && plain.ok && single.image.widthPx > plain.image.widthPx).toBe(true);
-    expect(several.ok && plain.ok && several.image.widthPx).toBeCloseTo(plain.ok ? plain.image.widthPx : 0, 5);
+    expect(single.ok && single.image.numbers).toHaveLength(1);
+    expect(several.ok && several.image.numbers).toEqual([]);
   });
 });

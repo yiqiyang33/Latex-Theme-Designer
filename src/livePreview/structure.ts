@@ -139,7 +139,9 @@ const ITEM = /\\item(?![A-Za-z])/g;
 /** homework.sty's environments that take [number][name]<word>, as problems and their parts. */
 const HOMEWORK_HEADINGS = new Set(['homeworkProblem', 'homeworkSection']);
 const LABEL = /\\(label)\s*(?=\{)/g;
-const FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal)\s*(?=\{)/g;
+const FORMAT = /\\(textbf|textit|emph|textsl|underline|texttt|textsc|textrm|textsf|textup|textnormal|key|term|warn)\s*(?=\{)/g;
+/** The theme's highlighted words, boxes of colour in its PDF, which only mean that where the theme is loaded. */
+const THEME_FORMATS = new Set(['key', 'term', 'warn']);
 /** The theme's commands and how many braced arguments each takes. */
 const THEME_ARGUMENTS: Record<string, number> = {
   defn: 3, thm: 3, lem: 3, cor: 3, prop: 3, clm: 3, fact: 3, assumption: 3, axiom: 3, lemp: 3, corp: 3,
@@ -248,7 +250,8 @@ const HOMEWORK_ENVIRONMENTS = new Set([...HOMEWORK_HEADINGS, 'solution']);
 /** LaTeX's itemize labels, by depth. */
 const BULLETS = ['•', '–', '∗', '·'];
 const FORMAT_STYLES: Record<string, RangeStyle | undefined> = {
-  textbf: 'bold', textit: 'italic', emph: 'italic', textsl: 'italic', underline: 'underline', textsc: 'smallCaps'
+  textbf: 'bold', textit: 'italic', emph: 'italic', textsl: 'italic', underline: 'underline', textsc: 'smallCaps',
+  key: 'key', term: 'term', warn: 'warn'
 };
 
 /**
@@ -322,6 +325,7 @@ export function structureOverlays(
   }
   for (const label of structure.labels) overlays.push(dimmed(label.start, label.end));
   for (const format of structure.formats) {
+    if (THEME_FORMATS.has(format.name) && !theorems.themeCommands) continue;
     const style = FORMAT_STYLES[format.name];
     overlays.push(overlay(format.start, format.end, {
       hide: [[format.start, format.contentStart], [format.contentEnd, format.end]],

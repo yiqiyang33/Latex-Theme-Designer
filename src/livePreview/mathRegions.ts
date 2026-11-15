@@ -1,3 +1,4 @@
+import type { Edit } from './sentDecorations';
 import {
   masksInlineCodeSpans,
   sanitizeLatexForParsing,
@@ -140,6 +141,27 @@ function blankRanges(text: string, ranges: Array<[number, number]>): string {
     copied = end;
   }
   return blanked + text.slice(copied);
+}
+
+/**
+ * The formula after one change event, whose edits are against the text before it, if they leave its
+ * delimiters alone: an edit within its TeX changes it, one before it moves it. `text` is the
+ * document after the event.
+ */
+export function moveRegion(region: MathRegion, edits: readonly Edit[], text: string): MathRegion | undefined {
+  const endsAtClose = region.texStart + region.tex.length === region.closeStart;
+  let shift = 0;
+  let grow = 0;
+  for (const edit of edits) {
+    const editEnd = edit.offset + edit.length;
+    if (editEnd < region.start) shift += edit.inserted - edit.length;
+    else if (edit.offset > region.start && edit.offset >= region.texStart && editEnd <= region.closeStart) grow += edit.inserted - edit.length;
+    else if (edit.offset <= region.end) return undefined;
+  }
+  const texStart = region.texStart + shift;
+  const closeStart = region.closeStart + shift + grow;
+  const end = region.end + shift + grow;
+  return { start: region.start + shift, end, tex: text.slice(texStart, endsAtClose ? closeStart : end), texStart, closeStart };
 }
 
 /** The formula's TeX with `marker` at the cursor, if the cursor is in the TeX rather than on a delimiter. */

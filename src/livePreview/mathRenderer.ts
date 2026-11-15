@@ -32,17 +32,29 @@ export interface BlockSlice {
   uri: string;
 }
 
+/** One of a display formula's numbers, an image of its own so that it can go to the right margin. */
+export interface BlockNumber {
+  uri: string;
+  widthPx: number;
+  heightPx: number;
+  /** Its top, below the top of the block. */
+  topPx: number;
+}
+
 /** A display formula cut into line-tall strips, one for each line of its block that it reaches. */
 export interface RenderedBlock {
   widthPx: number;
-  /** Width of the formula itself, without the numbers set after it. */
-  formulaWidthPx: number;
   slices: BlockSlice[];
+  numbers: BlockNumber[];
 }
 
 /** A formula's SVG sized for the editor, before it is stored. */
 export type SizedMath = Omit<RenderedMath, 'uri'> & { svg: string };
-export type SlicedBlock = Omit<RenderedBlock, 'slices'> & { slices: Array<{ row: number; svg: string }> };
+export interface SlicedBlock {
+  widthPx: number;
+  slices: Array<{ row: number; svg: string }>;
+  numbers: Array<Omit<BlockNumber, 'uri'> & { svg: string }>;
+}
 
 /** Keeps an image somewhere a decoration can show it from, and says where. */
 export type ImageWriter = (svg: string) => string;
@@ -70,8 +82,6 @@ const EXCLUDED_PACKAGES = new Set(['noerrors', 'noundefined']);
 /** Layout commands MathJax does not know but formulas carry. They draw nothing, so they render as nothing. */
 const DEFAULT_MACROS: MathJaxMacros = { qedhere: '' };
 const SVG_NAMESPACES = 'xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"';
-/** Space between a formula and its numbers, in editor ems. */
-const TAG_GAP_EM = 2;
 const NO_FIXED_SIZE = 'MathJax gave this formula no fixed size.';
 
 interface Engine {
@@ -180,8 +190,14 @@ export class MathRenderer {
       }
       const sliced = sliceForLines(formula.image.svg, rows, options, numbers);
       if (!sliced) return { ok: false, error: NO_FIXED_SIZE };
-      const { slices, ...size } = sliced;
-      return { ok: true, image: { ...size, slices: slices.map(slice => ({ row: slice.row, uri: this.store(slice.svg) })) } };
+      return {
+        ok: true,
+        image: {
+          widthPx: sliced.widthPx,
+          slices: sliced.slices.map(slice => ({ row: slice.row, uri: this.store(slice.svg) })),
+          numbers: sliced.numbers.map(({ svg, ...number }) => ({ ...number, uri: this.store(svg) }))
+        }
+      };
     });
   }
 
@@ -327,7 +343,8 @@ function cacheKey(macroId: number, formula: string, options: MathRenderOptions):
 }
 
 function imageSize(image: RenderedMath | RenderedBlock): number {
-  return 'slices' in image ? image.slices.reduce((total, slice) => total + slice.uri.length, 0) : image.uri.length;
+  if (!('slices' in image)) return image.uri.length;
+  return [...image.slices, ...image.numbers].reduce((total, part) => total + part.uri.length, 0);
 }
 
 /**
@@ -434,17 +451,14 @@ function place(part: Piece, x: number, y: number, width: number, height: number)
 
 /**
  * Lays a display formula out over the `rows` lines of its block, centred and scaled down if it is
- * taller, with its numbers right-aligned beside it as LaTeX sets them against the margin. It is
- * then cut into one strip per line: the editor only draws the lines on screen, so one tall image
- * hung from the first line would vanish as soon as that line scrolled away.
+ * taller, and cuts it into one strip per line: the editor only draws the lines on screen, so one
+ * tall image hung from the first line would vanish as soon as that line scrolled away. Its numbers
+ * are images of their own, each on the baseline of the row it numbers, for the editor to set
+ * against the right margin as LaTeX does.
  */
 export function sliceForLines(svg: string, rows: number, options: SizingOptions, tags: readonly TagImage[] = []): SlicedBlock | undefined {
   const formula = piece(svg);
   if (!formula) return undefined;
-  const numbers = tags.flatMap(tag => {
-    const part = piece(tag.svg);
-    return part ? [{ part, baseline: tag.baseline }] : [];
-  });
   const lineHeight = options.lineHeightPx;
   const boxHeight = rows * lineHeight;
   const exPx = options.fontSizePx * EX_PER_EM;
@@ -452,29 +466,28 @@ export function sliceForLines(svg: string, rows: number, options: SizingOptions,
   const unit = exPx * Math.min(1, boxHeight / (formula.height * exPx));
   const height = formula.height * unit;
   const top = (boxHeight - height) / 2;
-  const numbersWidth = Math.max(0, ...numbers.map(number => number.part.width * unit));
-  const width = formula.width * unit + (numbers.length ? TAG_GAP_EM * options.fontSizePx * unit / exPx + numbersWidth : 0);
-  let content = place(formula, 0, top, formula.width * unit, height);
-  let inkTop = top;
-  let inkBottom = top + height;
-  for (const { part, baseline } of numbers) {
-    const numberWidth = part.width * unit;
-    const numberHeight = part.height * unit;
-    // A number's vertical-align is its depth below the baseline, negated.
-    const y = baseline === undefined
-      ? top + (height - numberHeight) / 2
-      : top + (baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
-    content += place(part, width - numberWidth, y, numberWidth, numberHeight);
-    inkTop = Math.min(inkTop, y);
-    inkBottom = Math.max(inkBottom, y + numberHeight);
-  }
+  const width = formula.width * unit;
+  const content = place(formula, 0, top, width, height);
   const slices: SlicedBlock['slices'] = [];
   for (let row = 0; row < rows; row++) {
     const y = row * lineHeight;
-    if (inkTop >= y + lineHeight || inkBottom <= y) continue;
+    if (top >= y + lineHeight || top + height <= y) continue;
     const slice = `<svg ${SVG_NAMESPACES} width="${px(width)}px" height="${px(lineHeight)}px" `
       + `viewBox="0 ${px(y)} ${px(width)} ${px(lineHeight)}" style="color:${options.color}">${content}</svg>`;
     slices.push({ row, svg: slice });
   }
-  return { widthPx: width, formulaWidthPx: formula.width * unit, slices };
+  const numbers = tags.flatMap(tag => {
+    const part = piece(tag.svg);
+    if (!part) return [];
+    const numberWidth = part.width * unit;
+    const numberHeight = part.height * unit;
+    // A number's vertical-align is its depth below the baseline, negated.
+    const topPx = tag.baseline === undefined
+      ? top + (height - numberHeight) / 2
+      : top + (tag.baseline - formula.minY) / formula.viewHeight * height - numberHeight - part.verticalAlign * unit;
+    const number = `<svg ${SVG_NAMESPACES} width="${px(numberWidth)}px" height="${px(numberHeight)}px" `
+      + `viewBox="0 0 ${px(numberWidth)} ${px(numberHeight)}" style="color:${options.color}">${place(part, 0, 0, numberWidth, numberHeight)}</svg>`;
+    return [{ svg: number, widthPx: numberWidth, heightPx: numberHeight, topPx }];
+  });
+  return { widthPx: width, slices, numbers };
 }
